@@ -1,0 +1,4 @@
+name = "Hamster"
+uuid = "18155ac2-9efd-4ce8-82c3-162aa40282e9"
+authors = ["martin <ga63loc@mytum.de>"]
+version = "0.1.0"
