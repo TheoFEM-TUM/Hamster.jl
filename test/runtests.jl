@@ -1,3 +1,4 @@
 using Hamster, Test
 
-@test true
+
+include("conf/test_config.jl")
