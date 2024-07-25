@@ -1,4 +1,4 @@
-using Hamster, Test
+using Hamster, Test, LinearAlgebra
 
 
 include("conf/test_config.jl")
