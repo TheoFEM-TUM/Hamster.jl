@@ -1,7 +1,12 @@
 module Hamster
 
-include("conf/config.jl")
+using TensorOperations, LinearAlgebra, SparseArrays
 
-#export Config
+include("parse/utils.jl")
+include("conf/config.jl"); include("conf/read_config.jl")
+
+include("model/hamiltonian.jl")
+
+export Config, get_config
 
 end # module Hamster

@@ -13,19 +13,6 @@ struct Config
 end
 
 """
-    get_config(; filename="hconf")
-
-Retrieves the configuration from a file if it exists, or returns an empty configuration if the file does not exist.
-
-# Arguments
-- `filename` (optional): The name of the configuration file to check for existence. Defaults to `"hconf"`.
-
-# Returns
-- `Config`: A `Config` instance.
-"""
-get_config(;filename="hconf")::Config = filename in readdir() ? get_empty_config() : get_empty_config()
-
-"""
     get_empty_config()
 
 Returns an empty `Config` instance.
