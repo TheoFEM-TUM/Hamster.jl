@@ -27,7 +27,7 @@ begin Options
     POSCAR = POSCAR                         # (default) path to POSCAR file (PC)
     EIGENVAL = EIGENVAL_bands               # path to EIGENVAL file; provides k-points for bandstructure
     rcut = 6                                # cut-off radius for interactions
-    sp_geo = true
+    sp_geo=true
     sp_tol = 1e-5
     load_rllm = true
 end

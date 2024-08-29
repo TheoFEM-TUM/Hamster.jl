@@ -1,4 +1,4 @@
-using Hamster, Test, LinearAlgebra
+using Hamster, Test, LinearAlgebra, SparseArrays
 
 
 include("conf/test_config.jl")
