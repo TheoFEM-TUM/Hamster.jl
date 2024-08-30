@@ -1,3 +1,5 @@
+file_path = string(@__DIR__) * "/test_files/"
+
 @testset "Phase factor" begin
     # Test arrays
     R⃗ = rand(3)
@@ -52,5 +54,38 @@ end
     # Sparse Hr should lead to sparse Hk for sp_mode=true
     @test typeof(Hk[1]) == SparseMatrixCSC{ComplexF64, Int64}
     
+    kpoints = read_from_file(file_path*"kpoints.dat")
+    Es_correct = read_from_file(file_path*"Es_correct.dat")
+    Hr, Rs = read_hr(file_path*"gaas_hr.dat", verbose=0)
     
+    # Test dense mode
+    Hk1 = get_hamiltonian(Hr, Rs, kpoints)
+    Es_dense, vs_dense = diagonalize(Hk1)
+    @test Es_dense ≈ Es_correct
+
+    # Test sparse mode
+    Hr_sp, _ = read_hr(file_path*"gaas_hr.dat", sp_mode=true, verbose=0)
+    @test typeof(Hr_sp) <: Vector{SparseMatrixCSC{ComplexF64, Int64}}
+
+    Hk2 = get_hamiltonian(Hr_sp, Rs, kpoints)
+    @test typeof(Hk2) <: Vector{Matrix{ComplexF64}}
+    Es2, vs2 = diagonalize(Hk2)
+    @test Es2 ≈ Es_correct
+    @test vs_dense ≈ vs2
+
+    # Test Neig
+    Hk_sp = get_hamiltonian(Hr_sp, Rs, kpoints, sp_mode=true)
+    Es_sp, _ = diagonalize(Hk_sp, Neig=3, target=-15)
+    @test size(Es_sp) == (3, 80)
+    @test round.(Es_sp, digits=5) ≈ round.(Es_correct[1:3, :], digits=5)
+
+    # Test target
+    VBM = maximum(Es_dense[4, :]); CBM = minimum(Es_dense[5, :])
+    VBM_sp, _ = diagonalize(Hk_sp, target=VBM, Neig=1)
+    @test size(VBM_sp) == (1, 80)
+    @test VBM_sp[1, 20] ≈ VBM
+
+    CBM_sp, _ = diagonalize(Hk_sp, target=CBM, Neig=1)
+    @test size(CBM_sp) == (1, 80)
+    @test CBM_sp[1, 20] ≈ CBM
 end
