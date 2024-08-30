@@ -5,7 +5,11 @@ Hr1 = rand(N, N, 25)
 Hr2 = [Hr1[:, :, R] for R in axes(Hr1, 3)]
 Hr2 = [sprand(N, N, 0.001) for R in axes(Hr1, 3)]
 
+write_hr(Hr2, Rs)
+
 Rs = rand(3, 25); ks = rand(3, 80)
+
+@show Rs
 
 @time Hamster.get_hamiltonian(Hr1, Rs, ks)
 
@@ -16,3 +20,4 @@ Rs = rand(3, 25); ks = rand(3, 80)
 
 
 
+map()
