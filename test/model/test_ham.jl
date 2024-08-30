@@ -65,7 +65,7 @@ end
 
     # Test sparse mode
     Hr_sp, _ = read_hr(file_path*"gaas_hr.dat", sp_mode=true, verbose=0)
-    @test typeof(Hr_sp) <: Vector{SparseMatrixCSC{ComplexF64, Int64}}
+    @test typeof(Hr_sp) <: Vector{SparseMatrixCSC{Float64, Int64}}
 
     Hk2 = get_hamiltonian(Hr_sp, Rs, kpoints)
     @test typeof(Hk2) <: Vector{Matrix{ComplexF64}}
@@ -88,4 +88,12 @@ end
     CBM_sp, _ = diagonalize(Hk_sp, target=CBM, Neig=1)
     @test size(CBM_sp) == (1, 80)
     @test CBM_sp[1, 20] ≈ CBM
+
+    # Test write function
+    Hr, Rs = read_hr(file_path*"gaas_hr.dat", verbose=0)
+    write_hr(Hr, Rs, filename=file_path*"test_hr", verbose=0)
+    Hr_read, Rs_read = read_hr(file_path*"test_hr.dat", verbose=0)
+    @test all(Hr .≈ Hr_read)
+    @test Rs == Rs_read
+    rm(file_path*"test_hr.dat")
 end
