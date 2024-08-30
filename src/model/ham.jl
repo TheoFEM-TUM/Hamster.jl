@@ -1,9 +1,9 @@
 """
-    get_exp_ikR(k⃗, R⃗)
+    exp_2πi(k⃗, R⃗)
     
 Calculate the phase factor exp(2πik⃗⋅R⃗).
 """
-@inline exp_2πi(R⃗, k⃗) = @. exp(2π*im * $*(R⃗', k⃗))
+@inline exp_2πi(k⃗, R⃗) = @. exp(2π*im * $*(R⃗', k⃗))
 
 get_empty_hamiltonians(Nε, NkR; sp_mode=false, type=ComplexF64) = [ifelse(sp_mode, spzeros, zeros)(type, Nε, Nε) for _ in 1:NkR]
 
@@ -27,7 +27,7 @@ Constructs a vector of Hamiltonian matrices by combining a vector of matrices `H
 function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks; sp_mode=false, soc=false, alternating_order=false, weights=ones(size(Rs, 2)))
     Nε = soc ? size(Hr[1], 1) : 2*size(Hr[1], 1)
     Hk = get_empty_hamiltonians(Nε, size(ks, 2); sp_mode=sp_mode)
-    exp_2πiRk = exp_2πi(Rs, ks)
+    exp_2πiRk = exp_2πi(ks, Rs)
     Threads.@threads for k in eachindex(Hk)
         @views H_k = mapreduce(*, +, weights, Hr, exp_2πiRk[:, k])
         @views Hk[k] = soc ? apply_spin_basis(H_k, alternating_order=alternating_order) : H_k
