@@ -8,20 +8,6 @@ Calculate the phase factor exp(2πik⃗⋅R⃗).
 get_empty_hamiltonians(Nε, NkR; sp_mode=false) = [ifelse(sp_mode, spzeros, zeros)(ComplexF64, Nε, Nε) for _ in 1:NkR]
 
 """
-    get_hamiltonian(Hᴿ, Rs, ks)
-
-Calculate the Hamiltonian for the real-space Hamiltonian matrices `Hᴿ` at grid
-points `Rs` and the k-points `ks`.
-"""
-function get_hamiltonian(Hᴿ::Array{Float64, 3}, Rs, ks)
-    Nε = size(Hᴿ, 1); Nk = size(ks, 2)
-    Hᵏ = zeros(ComplexF64, Nε, Nε, Nk); Hᴿ = complex.(Hᴿ)
-    exp_2πiRk = exp_2πi(Rs, ks)
-    @tensor Hᵏ[i, j, k] = Hᴿ[i, j, R] * exp_2πiRk[R, k]
-    return Hᵏ
-end
-
-"""
     get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks; sp_mode=false)
 
 Constructs the Hamiltonian matrices `Hk` in k-space by summing over real-space Hamiltonians `Hr` weighted by phase factors derived from `Rs` and `ks`.
@@ -35,11 +21,11 @@ Constructs the Hamiltonian matrices `Hk` in k-space by summing over real-space H
 # Returns:
 - `Hk`: A vector of Hamiltonian matrices in momentum space. Each `Hk[k]` corresponds to the Hamiltonian for a specific k-vector `k`.
 """
-function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks; sp_mode=false)
+function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks; sp_mode=false, weights=ones(size(Rs, 2)))
     Hk = get_empty_hamiltonians(size(Hr[1], 1), size(ks, 2); sp_mode=sp_mode)
     exp_2πiRk = exp_2πi(Rs, ks)
     Threads.@threads for k in eachindex(Hk)
-        @views Hk[k] = sum(Hr .* exp_2πiRk[:, k])
+        @views Hk[k] = mapreduce(*, +, weights, Hr, exp_2πiRk[:, k])
     end
     return Hk
 end
@@ -110,5 +96,66 @@ function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0)
         return real.(Es[end-Neig:end]), hcat(vs[end-Neig:end]...)
     else
         return real.(Es[1:Neig]), hcat(vs[1:Neig]...)
+    end
+end
+
+"""
+    get_sparsity(H::AbstractArray; sp_tol=1e-10)
+
+Calculates the sparsity of a matrix or array by determining the fraction of elements that are considered effectively zero based on a specified numerical tolerance.
+
+# Arguments:
+- `H::AbstractArray`: The input matrix or array for which sparsity is to be calculated. It can be a dense or sparse matrix, or any array-like structure.
+- `sp_tol::Real=1e-10`: The numerical tolerance used to determine whether an element is considered zero. Elements with both real and imaginary parts less than `sp_tol` in magnitude are considered zero.
+
+# Returns:
+- `sparsity::Float64`: The fraction of elements in `H` that are considered zero according to the specified tolerance. This value lies between `0.0` (no zero elements) and `1.0` (all elements are effectively zero).
+"""
+function get_sparsity(H::AbstractArray; sp_tol=1e-10)
+    Ntot = prod(size(H))
+    Nzero = 0
+    for i in eachindex(H)
+        if (abs(real(H[i])) < sp_tol) && (abs(imag(H[i])) < sp_tol)
+            Nzero += 1
+        end
+    end
+    return Nzero / Ntot
+end
+
+"""
+    get_sparsity(H::Vector{AbstractArray}; sp_tol=1e-10)
+
+Calculates the sparsity of a vector of arrays by determining the fraction of elements across all arrays that are considered effectively zero based on a specified numerical tolerance.
+
+# Arguments:
+- `H::Vector{AbstractArray}`: A vector containing arrays (e.g., matrices) for which sparsity is to be calculated. Each element of `H` should be an array of the same size.
+- `sp_tol::Real=1e-10`: The numerical tolerance used to determine whether an element is considered zero. Elements with both real and imaginary parts less than `sp_tol` in magnitude are considered zero.
+
+# Returns:
+- `sparsity::Float64`: The fraction of elements across all arrays in `H` that are considered zero according to the specified tolerance. This value lies between `0.0` (no zero elements) and `1.0` (all elements are effectively zero).
+"""
+function get_sparsity(H::Vector{AbstractArray}; sp_tol=1e-10)
+    Ntot = prod(size(H[1])) * length(H)
+    Nzero = 0
+    for k in eachindex(H), inds in eachindex(H[k])
+        if (abs(real(H[k][inds])) < sp_tol) && (abs(imag(H[i][inds])) < sp_tol)
+            Nzero += 1
+        end
+    end
+    return Nzero / Ntot
+end
+
+"""
+    droptol!(H::Vector{AbstractSparseMatrix}, tol=1e-8)
+
+Applies a tolerance to drop small elements from a vector of sparse matrices, modifying the matrices in place.
+
+# Arguments:
+- `H::Vector{AbstractSparseMatrix}`: A vector of sparse matrices where small elements will be dropped. The matrices are modified in place.
+- `tol::Real=1e-8`: The numerical tolerance used to determine which elements are considered too small and should be dropped. Elements with absolute values less than `tol` are removed from the sparse matrices.
+"""
+function droptol!(H::Vector{AbstractSparseMatrix}, tol=1e-10)
+    for k in eachindex(H)
+        droptol!(H[k], tol)
     end
 end
