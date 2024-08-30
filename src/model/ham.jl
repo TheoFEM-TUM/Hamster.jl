@@ -5,7 +5,7 @@ Calculate the phase factor exp(2πik⃗⋅R⃗).
 """
 @inline exp_2πi(R⃗, k⃗) = @. exp(2π*im * $*(R⃗', k⃗))
 
-get_empty_hamiltonians(Nε, NkR; sp_mode=false) = [ifelse(sp_mode, spzeros, zeros)(ComplexF64, Nε, Nε) for _ in 1:NkR]
+get_empty_hamiltonians(Nε, NkR; sp_mode=false, type=ComplexF64) = [ifelse(sp_mode, spzeros, zeros)(type, Nε, Nε) for _ in 1:NkR]
 
 """
     get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks; sp_mode=false)
