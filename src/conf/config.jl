@@ -1,11 +1,11 @@
 """
-    struct Config{S1, S2, D}
+    struct Config
 
 A configuration structure that holds options and blocks of tags in dictionaries.
 
 # Fields
-- `options::Dict{S1, S2}`: A dictionary holding configuration options.
-- `blocks::Dict{S1, D}`: A dictionary holding configuration blocks.
+- `options::Dict{String, String}`: A dictionary holding configuration options.
+- `blocks::Dict{String, Dict{String, String}}`: A dictionary holding configuration blocks.
 """
 struct Config
     options :: Dict{String, String}
@@ -40,10 +40,10 @@ If no `typekey` is provided or it is set to `"none"`, it retrieves the value fro
 """
 function (conf::Config)(key::String, typekey="none")
     if haskey(conf.options, key) && typekey == "none"
-        return conf.options[key]
+        return convert_value(conf.options[key])
     elseif typekey ≠ "none" && haskey(conf, typekey)
         if haskey(conf.blocks[typekey], key)
-            return conf.blocks[typekey][key]
+            return convert_value(conf.blocks[typekey][key])
         else
             return "default"
         end
@@ -115,4 +115,56 @@ function set_value!(key, typekey, value, conf::Config)
     else
         conf.blocks[typekey] = Dict{String, String}(key=>value)
     end
+end
+
+"""
+    convert_value(value::String)
+
+Attempts to convert a string `value` into its most appropriate data type among `Int64`, `Float64`, and `Bool`. If the string represents a valid value for one of these types, it is parsed and returned as that type. If not, the original string is returned.
+
+# Arguments:
+- `value::String`: The string representation of a value to be converted.
+
+# Returns:
+- The converted value in its most appropriate type (either `Int64`, `Float64`, or `Bool`), or the original string if it cannot be converted.
+
+# Behavior:
+- The function splits the input `value` based on spaces into components using `split_line(value, char=' ')`.
+- It then attempts to parse these components into `Int64`, `Float64`, and `Bool` types.
+"""
+function convert_value(value)
+    n_semicolon = count(c -> c == ';', value)
+    values = split_line(value, char=[' ', ';'])
+    for type in [Int64, Float64, Bool]
+        if check_parse(type, values)
+            if n_semicolon > 0
+                return transpose(reshape(parse_value(type, values), (:, n_semicolon+1)))
+            else
+                return parse_value(type, values)
+            end
+        end
+    end
+    if length(values) == 1 
+        return values[1]
+    else
+        return values
+    end
+end
+
+"""
+    check_parse(type, line)
+
+Check if the string or vector of strings `line` can be converte to `type`.
+"""
+function check_parse(type, value)
+    valueparse = parse_value(type, value)
+    return all(x->x≠nothing, valueparse)
+end
+
+function parse_value(type, value)
+    valueparse = tryparse.(type, lowercase.(value))
+    if all(x->x≠nothing, valueparse)
+        if length(valueparse) == 1; return valueparse[1]; end
+    end
+    return valueparse
 end

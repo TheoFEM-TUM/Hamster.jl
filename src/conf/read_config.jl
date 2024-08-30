@@ -22,7 +22,6 @@ function read_config(file::String)
     conf = get_empty_config()
     if isfile(file)
         lines = open_and_read(file)
-        #lines = split_lines(lines)
         blocks = split_blocks(lines)
         for block in blocks
             read_config_block!(block, conf)
@@ -31,35 +30,6 @@ function read_config(file::String)
         @info "File $file not found. Using default values."
     end
     return conf
-end
-
-"""
-    ConfigBlock
-
-Block with options in config file enclosed by begin and end statement.
-"""
-struct ConfigBlock
-    header :: Vector{String}
-    content :: Vector{String}
-end
-
-"""
-    read_config_block(block; config=Dict())
-
-Read a `block` in the tbconfig file and store all options to the config
-dictionary.
-"""
-function read_config_block!(block::ConfigBlock, conf::Config)
-    for line in block.content
-        if occursin('=', line) && length(filter_comment(line)) > 0
-            option_key, option_value = read_config_line(filter_comment(line))
-            if block.header[end] == "Options"
-                set_value!(option_key, option_value, conf)
-            else
-                set_value!(option_key, block.header[end], option_value, conf)
-            end
-        end
-    end
 end
 
 """
@@ -105,9 +75,59 @@ function split_blocks(lines)
 end
 
 """
-    read_config_line(line)
+    ConfigBlock
 
-Read a `line` of the tbconfig file and extract `option_key` and `option_value`.
+A structure representing a block of configuration settings.
+
+The `ConfigBlock` struct is used to encapsulate a segment of a configuration file, typically consisting of a header and associated content lines. The header usually indicates the section or category of the configuration, while the content contains key-value pairs or other relevant settings.
+
+# Fields:
+- `header::Vector{String}`: A vector of strings representing the header of the configuration block. This typically identifies the section or category the block belongs to.
+- `content::Vector{String}`: A vector of strings representing the content of the configuration block. Each string usually corresponds to a line in the configuration file, often containing key-value pairs or other settings.
+"""
+struct ConfigBlock
+    header :: Vector{String}
+    content :: Vector{String}
+end
+
+"""
+    read_config_block!(block::ConfigBlock, conf::Config)
+
+Processes a configuration block and updates the configuration object with the parsed key-value pairs.
+
+This function iterates over the lines in a `ConfigBlock`, parses each line to extract configuration options and their values, and updates the provided `Config` object. The function handles lines containing the `=` character, while ignoring comments and empty lines. The updates are made based on whether the block's header ends with `"Options"` or some other string.
+
+# Arguments:
+- `block::ConfigBlock`: An object representing a block of configuration lines, typically containing a header and a list of content lines.
+- `conf::Config`: The configuration object that will be updated with the parsed key-value pairs from the block.
+"""
+function read_config_block!(block::ConfigBlock, conf::Config)
+    for line in block.content
+        if occursin('=', line) && length(filter_comment(line)) > 0
+            option_key, option_value = read_config_line(filter_comment(line))
+            if block.header[end] == "Options"
+                set_value!(option_key, option_value, conf)
+            else
+                set_value!(option_key, block.header[end], option_value, conf)
+            end
+        end
+    end
+end
+
+"""
+    read_config_line(line::String) -> Tuple{String, String}
+
+Parses a configuration line into a key-value pair.
+
+This function splits a configuration line at the first occurrence of the `=` character, separating the line into an option key and its corresponding value. Both the key and value are stripped of any leading or trailing whitespace.
+
+# Arguments:
+- `line::String`: A string representing a single line from a configuration file, typically in the form `"key = value"`.
+
+# Returns:
+- A tuple `(option_key, option_value)` where:
+  - `option_key::String`: The configuration option key, stripped of leading and trailing whitespace.
+  - `option_value::String`: The configuration option value, also stripped of leading and trailing whitespace.
 """
 function read_config_line(line)
     option_key, option_value = split_line(line, char="=")
@@ -116,18 +136,16 @@ function read_config_line(line)
     return option_key, option_value
 end
 
-function parse_line(type, line)
-    lineparse = tryparse.(type, lowercase.(line))
-    if all(x->x≠nothing, lineparse)
-        if length(lineparse) == 1; return lineparse[1]; end
-    end
-    return lineparse
-end
-
 """
-    filter_comment(line)
+    filter_comment(line::String)
 
-If `line` contains a comment, return the non-commented part of `line`.
+Removes comments from a line of text based on predefined comment symbols. The function scans for comment symbols, and if found, it removes the comment portion and returns the remaining part of the line.
+
+# Arguments:
+- `line::String`: The line of text from which comments need to be filtered out.
+
+# Returns:
+- A `String` that contains the line without comments. If the entire line is a comment or becomes empty after removing the comment, an empty string is returned.
 """
 function filter_comment(line)
     for comment_symbol in COMMENT_SYMBOLS
@@ -142,34 +160,3 @@ function filter_comment(line)
     end
     return line
 end
-
-"""
-    check_parse(type, line)
-
-Check if the string or vector of strings `line` can be converte to `type`.
-"""
-function check_parse(type, line)
-    lineparse = parse_line(type, line)
-    return all(x->x≠nothing, lineparse)
-end
-
-"""
-    convert_line(line)
-
-Convert `line` if possible to different type.
-"""
-function convert_line(line)
-    for type in [Int64, Float64, Bool]
-        if check_parse(type, line)
-            return parse_line(type, line)
-        end
-    end
-    if typeof(line) <: AbstractArray && length(line) == 1
-        return line[1]; else return line; end
-end
-
-
-
-
-
-
