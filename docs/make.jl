@@ -4,7 +4,8 @@ using Hamster
 makedocs(
     sitename = "Hamster",
     format = Documenter.HTML(),
-    modules = [Hamster]
+    modules = [Hamster],
+    pages = ["index.md"]
 )
 
 # Documenter can also automatically deploy documentation to gh-pages.

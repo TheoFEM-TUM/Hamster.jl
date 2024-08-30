@@ -1,0 +1,83 @@
+# A more powerful way to validate the model is to use temperature-dependent energy
+# eigenvalues directly. To this end, we use an MD trajectory.
+# Again, optimimal parameters are chosed from the validation minimum.
+#
+# To this end, we now need the following VASP inputs:
+#   - POSCAR (structure file)
+#   - EIGENVAL_DOS (training data, e.g., eigenvalues on k-point grid)
+#   - EIGENVAL_bands (k-point path)
+#   - SC_POSCAR (supercell equilibrium structure)
+#   - SC_XDATCAR (supercell MD trajectory)
+#   - SC_OUTCAR (MD VASP output file; contains energy eigenvalues)
+#
+# The following output files are generated:
+#   - dyntb.out (main DynTB output file)
+#   - params.dat (TB parameter file containing optimal parameter values)
+#   - Vs.dat (TB parameters for each iteration)
+#   - Ls_train.dat (training error for each iteration)
+#   - Ls_val.dat (validation error for each iteration)
+#   - Es.dat (energy eigenvalues from the bandstructure calculation)
+#
+# Options block: this is unchanged
+#
+begin Options
+    run_def = true                          # bandstructure calculation after parameter optimization
+    onsite = true                           # (default) introduce separate parameters for onsites
+    interpolate_rllm = true                 # interpolate distance dependence using cubic splines
+    POSCAR = POSCAR                         # (default) path to POSCAR file (PC)
+    EIGENVAL = EIGENVAL_bands               # path to EIGENVAL file; provides k-points for bandstructure
+    rcut = 6                                # cut-off radius for interactions
+    sp_geo=true
+    sp_tol = 1e-5
+    load_rllm = true
+end
+
+# This block now contains all information regarding the supercell
+begin Supercell
+    POSCAR = SC_POSCAR                      # path to SC POSCAR file (default)
+    XDATCAR = SC_XDATCAR                    # path to SC XDATCAR file (default)
+    Nconfig = 10                            # sample size for configurations
+    OUTCAR = SC_OUTCAR
+end
+
+# If an Optimizer block exists, parameter optimization is performed
+begin Optimizer
+    loss = MAE                              # Mean-Absolute Error
+    Niter = 50                              # number of gradient-descent iterations
+    lr = 0.001                              # learning rate for ADAM optimizer
+    validate = true                         # validation step is not performed
+    init_params = params.dat                # initialize TB parameters from file
+    mode = MD                               # training data consists of PC and MD/Multi data
+
+    train_data = EIGENVAL_DOS               # path to EIGENVAL file to fit TB model   
+    val_mode = MD 
+    grad_mode = analytic                    # gradients are calculated analytically (numeric is default)
+    wPC = 5
+end
+
+begin MLTB
+    optimize = true                         # Switch on optimization for ML model
+    ov_scale = 0.                           # Multiply overlap descriptor by 0
+    delta_ml = true                         # Switch on use of delta ML model
+    simtol = 0.1                            # Dissimilarity threshold
+    kernel_mode = normal
+end
+
+#
+# Finally, we need to specify atom-specific parameter. These are unchanged.
+# Each atom species needs its own block defined as given below. 
+# Block order has no influence.
+#
+
+begin atom Ga
+    n = 3                                  # principal quantum number for radial function
+    alpha = 9                              # effective core charge for radial function
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2 # sp3dr2 basis set
+end
+
+begin atom As
+    n = 3
+    alpha = 13
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+    NNaxes = true                          # orbitals are re-oriented towards nearest neighbors
+end
