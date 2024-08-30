@@ -8,24 +8,29 @@ Calculate the phase factor exp(2πik⃗⋅R⃗).
 get_empty_hamiltonians(Nε, NkR; sp_mode=false, type=ComplexF64) = [ifelse(sp_mode, spzeros, zeros)(type, Nε, Nε) for _ in 1:NkR]
 
 """
-    get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks; sp_mode=false)
+    get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks; sp_mode=false, soc=false, alternating_order=false, weights=ones(size(Rs, 2)))
 
-Constructs the Hamiltonian matrices `Hk` in k-space by summing over real-space Hamiltonians `Hr` weighted by phase factors derived from `Rs` and `ks`.
+Constructs a vector of Hamiltonian matrices by combining a vector of matrices `Hr` with phase factors determined by `Rs` and `ks`. The resulting Hamiltonians can optionally be transformed into a spin basis.
 
 # Arguments:
-- `Hr::Vector{<:AbstractMatrix}`: A vector of real-space Hamiltonian matrices. Each element in `Hr` corresponds to a Hamiltonian for a specific lattice vector `Rs`.
-- `Rs`: A collection of lattice vectors corresponding to the Hamiltonians in `Hr`. Typically, this is a matrix where each row is a lattice vector.
-- `ks`: A collection of momentum vectors `k` for which the Hamiltonian matrices `Hk` are to be computed. Typically, this is a matrix where each column is a momentum vector `k`.
-- `sp_mode::Bool=false`: A boolean flag indicating whether to use sparse matrices.
+- `Hr::Vector{<:AbstractMatrix}`: A vector of matrices where each matrix represents a component of the Hamiltonian. These matrices must be compatible in size for the operations performed.
+- `Rs`: A matrix or array containing positional information used to calculate phase factors.
+- `ks`: A matrix of momentum values used in conjunction with `Rs` to compute phase factors.
+- `sp_mode::Bool=false`: A boolean flag indicating whether to use special modes for constructing the Hamiltonian. Defaults to `false`.
+- `soc::Bool=false`: A boolean flag indicating whether to apply spin-orbit coupling (SOC). If `true`, the resulting Hamiltonians are modified to include spin basis transformations.
+- `alternating_order::Bool=false`: When `soc` is `true`, this flag determines the order of tensor product application. If `true`, the order is, e.g., up,down,up,down. If `false`, the order is, e.g., up,up,down,down.
+- `weights::Vector=ones(size(Rs, 2))`: A vector of weights used in the summation of phase factors. The length of this vector should match the number of columns in `Rs`. These are the degeneracies for the Wannier90 Hamiltonians.
 
 # Returns:
-- `Hk`: A vector of Hamiltonian matrices in momentum space. Each `Hk[k]` corresponds to the Hamiltonian for a specific k-vector `k`.
+- A vector of Hamiltonian matrices `Hk`, where each matrix is constructed by combining `Hr` with phase factors and optionally transformed into a spin basis.
 """
-function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks; sp_mode=false, weights=ones(size(Rs, 2)))
-    Hk = get_empty_hamiltonians(size(Hr[1], 1), size(ks, 2); sp_mode=sp_mode)
+function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks; sp_mode=false, soc=false, alternating_order=false, weights=ones(size(Rs, 2)))
+    Nε = soc ? size(Hr[1], 1) : 2*size(Hr[1], 1)
+    Hk = get_empty_hamiltonians(Nε, size(ks, 2); sp_mode=sp_mode)
     exp_2πiRk = exp_2πi(Rs, ks)
     Threads.@threads for k in eachindex(Hk)
-        @views Hk[k] = mapreduce(*, +, weights, Hr, exp_2πiRk[:, k])
+        @views H_k = mapreduce(*, +, weights, Hr, exp_2πiRk[:, k])
+        @views Hk[k] = soc ? apply_spin_basis(H_k, alternating_order=alternating_order) : H_k
     end
     return Hk
 end
@@ -157,5 +162,26 @@ Applies a tolerance to drop small elements from a vector of sparse matrices, mod
 function droptol!(H::Vector{AbstractSparseMatrix}, tol=1e-10)
     for k in eachindex(H)
         droptol!(H[k], tol)
+    end
+end
+
+"""
+    apply_spin_basis(H::AbstractMatrix; alternating_order=false)
+
+Extends a given matrix `H` to a spin basis (up/down) representation by applying the tensor product with the identity matrix. The order of the tensor product application is controlled by the `alternating_order` flag which affects the order of spin states in the basis.
+
+# Arguments:
+- `H::AbstractMatrix`: The input matrix to be extended to the spin basis. It should be a square matrix or generally a 2D array.
+- `alternating_order::Bool=false`: A boolean flag that determines the order of applying the spin basis. If `true`, the order is, e.g., up,down,up,down. If `false`, the order is, e.g., up,up,down,down.
+
+# Returns:
+- A matrix in the spin basis in the specified order.
+"""
+function apply_spin_basis(H::AbstractMatrix; alternating_order=false)
+    I_spin = Array{Int64}(I, 2, 2)
+    if !alternating_order
+        return kron(H, I_spin)
+    elseif alternating_order
+        return kron(I_spin, H)
     end
 end

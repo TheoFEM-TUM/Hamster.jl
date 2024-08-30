@@ -96,4 +96,29 @@ end
     @test all(Hr .≈ Hr_read)
     @test Rs == Rs_read
     rm(file_path*"test_hr.dat")
+
+    # Test spin basis
+    H = [1 0; 0 2]
+    H_soc1 = Hamster.apply_spin_basis(H)
+    @test size(H_soc1) == (4, 4)
+    @test diag(H_soc1) == [1, 1, 2, 2]
+    H_soc2 = Hamster.apply_spin_basis(H, alternating_order=true)
+    @test size(H_soc2) == (4, 4)
+    @test diag(H_soc2) == [1, 2, 1, 2]
+
+    H_sp = sparse(H)
+    H_soc_sp = Hamster.apply_spin_basis(H_sp)
+    @test size(H_soc_sp) == (4, 4)
+    @test typeof(H_soc_sp) <: typeof(H_sp)
+    @test nonzeros(H_soc_sp) == [1, 1, 2, 2]
+
+    # Test eigenvalues with soc, unchanged without soc matrix
+    kpoints = read_from_file(file_path*"kpoints.dat")
+    Es_correct = read_from_file(file_path*"Es_correct.dat")
+    Hr, Rs = read_hr(file_path*"gaas_hr.dat", verbose=0)    
+    Hk = get_hamiltonian(Hr, Rs, kpoints, soc=true)
+    Es, _ = diagonalize(Hk)
+    @test size(Es, 1) == 2*size(Es_correct, 1)
+    @test Es[1:2:16, :] ≈ Es_correct
+    @test Es[2:2:16, :] ≈ Es_correct
 end
