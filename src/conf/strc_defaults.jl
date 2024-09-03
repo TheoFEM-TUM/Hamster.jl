@@ -6,6 +6,13 @@ The parameter `rcut` sets the cut-off radius beyond which all interactions are n
 get_rcut(conf::Config)::Float64 = conf("rcut") == "default" ? 7. : conf("rcut")
 
 """
+    Rmax=1
+
+The parameter `Rmax` sets the maximum magnitude of a translation vector used for periodic boundaty conditions. Note that this is determined automatically if `rcut` is set.
+"""
+get_Rmax(conf::Config)::Int64 = conf("Rmax") == "default" ? 1 : conf("Rmax")
+
+"""
     poscar=POSCAR
 
 The parameter `poscar` sets the path to the POSCAR VASP file that defines the base system.
