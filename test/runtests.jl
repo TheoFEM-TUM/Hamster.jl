@@ -13,6 +13,7 @@ end
 @testset "Structure" begin
     include("strc/test_vec.jl")
     include("strc/test_grid.jl")
+    include("strc/test_lattice.jl")
 end
 
 @testset "model" begin
