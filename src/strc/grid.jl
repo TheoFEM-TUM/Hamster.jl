@@ -88,6 +88,32 @@ function get_grid_dict(rs, Ts, grid_size)
 end
 
 """
+    iterate_nn_grid_points(point_grid::PointGrid)
+
+Iterates over nearest-neighbor (NN) grid points in a given `PointGrid` and collects indices of ion pairs and translation vectors.
+
+# Arguments
+- `point_grid::PointGrid`: A `PointGrid` object containing the initial grid points and the corresponding indices of ions.
+
+# Returns
+- `all_inds::Vector{Tuple{Int64, Int64, Int64}}`: A vector of tuples where each tuple consists of:
+  - `iion1::Int64`: Index of the first ion in the current grid point.
+  - `iion2::Int64`: Index of the second ion in the neighboring grid point.
+  - `R::Int64`: Index of the translation vector between the current grid point and its nearest neighbor.
+"""
+function iterate_nn_grid_points(point_grid::PointGrid)
+    all_inds = Tuple{Int64, Int64, Int64}[]
+    for (grid_point, inds) in point_grid.dict0
+        for nn_grid_point in nn_grid_points(grid_point, point_grid.dictR)
+            for iion1 in inds, (iion2, R) in point_grid.dictR[nn_grid_point]
+                push!(all_inds, (iion1, iion2, R))
+            end
+        end
+    end
+    return all_inds
+end
+
+"""
     nn_grid_points(grid_point, grid_dict) -> Vector{SVector{3, Int64}}
 
 Returns a vector of grid points that are nearest neighbors to the given `grid_point`.
