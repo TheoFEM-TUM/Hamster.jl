@@ -116,7 +116,8 @@ end
     kpoints = read_from_file(file_path*"kpoints.dat")
     Es_correct = read_from_file(file_path*"Es_correct.dat")
     Hr, Rs = read_hr(file_path*"gaas_hr.dat", verbose=0)    
-    Hk = get_hamiltonian(Hr, Rs, kpoints, soc=true)
+    Hr = Hamster.apply_spin_basis.(Hr)
+    Hk = get_hamiltonian(Hr, Rs, kpoints)
     Es, _ = diagonalize(Hk)
     @test size(Es, 1) == 2*size(Es_correct, 1)
     @test Es[1:2:16, :] ≈ Es_correct
