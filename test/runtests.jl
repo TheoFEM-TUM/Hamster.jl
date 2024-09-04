@@ -14,6 +14,8 @@ end
     include("strc/test_vec.jl")
     include("strc/test_grid.jl")
     include("strc/test_lattice.jl")
+    include("strc/test_ion.jl")
+    include("strc//test_structure.jl")
 end
 
 @testset "model" begin
