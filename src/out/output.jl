@@ -1,0 +1,93 @@
+"""
+    generate_output(conf::Config)
+
+Generates the main output file `hamster.out` with initial run information.
+
+# Arguments
+- `conf::Config`: A configuration object containing parameters and settings for the current run.
+
+# Details
+This function performs the following tasks:
+1. Opens the file `hamster.out` for writing.
+2. Writes the current date and time to the file to record when the Hamster run started.
+3. Writes the number of threads being used by the current Julia session.
+4. Calls `write_separator(hamster_out)` to insert a separator line in the output file.
+5. Closes the `hamster.out` file.
+"""
+function generate_output(conf::Config=get_empty_config())
+    hamster_out = open("hamster.out", "w")
+    
+    # Write current date and time of day
+    dt = now(); date = Date(dt); time = Time(dt)
+    println(hamster_out, "Starting Hamster run on $date at $time.")
+    
+    # Write number of threads
+    nt = Threads.nthreads()
+    println(hamster_out, "   Running on $nt threads.")
+
+    write_separator(hamster_out)
+
+    close(hamster_out)
+end
+
+"""
+    write_separator(hamster_out)
+
+Write a separator line of 80 hyphens to the `hamster_out` file.
+
+# Arguments
+- `hamster_out::IO`: The output file stream to which the separator will be written.
+"""
+write_separator(hamster_out) = println(hamster_out, "-"^80)
+
+"""
+    append_output_block(block_title, block_tags, block_values; filename="hamster.out")
+
+Append a formatted block of output to the specified file, typically used for logging or report generation.
+
+# Arguments
+- `block_title::AbstractString`: The title of the block to be appended. This title will be written as a header.
+- `block_tags::AbstractVector{<:AbstractString}`: A vector of tags or labels corresponding to the block's values.
+- `block_values::AbstractVector{<:Any}`: A vector of values corresponding to the tags, representing the content to be written.
+- `filename::AbstractString`: The name of the file to which the block will be appended. Defaults to `"hamster.out"`.
+
+# Usage
+- This function checks if the specified file exists. If it does, it appends a titled block of information with tags and corresponding values.
+- Each tag-value pair is written on a new line using the `write_output_line` function.
+- A separator line is written after the block for clarity.
+"""
+function append_output_block(block_title, block_tags, block_values; filename="hamster.out")
+    if filename in readdir()
+        hamster_out = open("hamster.out", "a")
+        println(hamster_out, block_title)
+        for (tag, value) in zip(block_tags, block_values)
+            write_output_line(hamster_out, tag, value)
+        end
+        write_separator(hamster_out)
+        close(hamster_out)
+    end
+end
+
+"""
+    write_output_line(dyntb_out, key, value, L)
+
+Write a line with `key` and `value` pair to the output file `dyntb_out`.
+"""
+function write_output_line(hamster_out, key, value; L=25)
+    key_string = L-length(key) < 0 ? string(key[1:L]) : string(key)
+    value_string = L+15-length(value) < 0 ? string(value[1:L]) : string(value)
+    Lk = length(key_string); Lv = length(value_string)
+    println(hamster_out, "   ", key_string*" "^(L-Lk), " = ", " "^(L+15-Lv)*value_string)
+end
+
+"""
+    write_output_line(key, value, L)
+
+Append a line with `key` and `value` pair to the output file `dyntb.out`.
+"""
+function append_output_line(key, value; L=25)
+    hamster_out = open("hamster.out", "a")
+    Lk = length(key); Lv = length(value)
+    println(hamster_out, "   ", key*" "^(L-Lk), " = ", " "^(L+15-Lv)*value)
+    close(dyntb_out)
+end

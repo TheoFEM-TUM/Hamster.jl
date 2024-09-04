@@ -1,11 +1,13 @@
 module Hamster
 
-using TensorOperations, LinearAlgebra, SparseArrays, StaticArrays, KrylovKit
+using TensorOperations, LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Dates
 
 include("parse/utils.jl"); include("parse/poscar.jl")
 
 include("conf/config.jl"); include("conf/read_config.jl")
-include("conf/strc_defaults.jl")
+include("conf/defaults.jl"); include("conf/strc_defaults.jl")
+
+include("out/output.jl")
 
 include("strc/vec.jl"); include("strc/grid.jl"); include("strc/lattice.jl"); include("strc/ion.jl"); include("strc/structure.jl")
 
