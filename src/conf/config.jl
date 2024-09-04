@@ -87,7 +87,7 @@ Checks if a given key exists in either the `options` or `blocks` dictionary of a
 Base.haskey(conf::Config, key) = haskey(conf.options, key) || haskey(conf.blocks, key)
 
 """
-    set_value!(key, value, conf::Config)
+    set_value!(conf::Config, key, value)
 
 Sets the value of a given key in the `options` dictionary of a `Config` instance.
 
@@ -96,10 +96,10 @@ Sets the value of a given key in the `options` dictionary of a `Config` instance
 - `value`: The value to set for the specified key.
 - `conf::Config`: The `Config` instance where the key-value pair should be set.
 """
-set_value!(key, value, conf::Config) = conf.options[key] = value
+set_value!(conf::Config, key, value) = conf.options[key] = value
 
 """
-    set_value!(key, typekey, value, conf::Config)
+    set_value!(conf::Config, key, typekey, value)
 
 Sets the value of a given key in the specified block of the `blocks` dictionary of a `Config` instance. If the block does not exist, it creates a new block with the given key-value pair.
 
@@ -109,7 +109,7 @@ Sets the value of a given key in the specified block of the `blocks` dictionary 
 - `value`: The value to set for the specified key.
 - `conf::Config`: The `Config` instance where the key-value pair should be set.
 """
-function set_value!(key, typekey, value, conf::Config)
+function set_value!(conf::Config, key, typekey, value)
     if haskey(conf.blocks, typekey)
         conf.blocks[typekey][key] = value
     else

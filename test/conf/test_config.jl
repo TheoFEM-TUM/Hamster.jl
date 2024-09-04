@@ -17,14 +17,14 @@ conf = Hamster.get_empty_config()
     @test conf("rcut") == "default"
 
     # Test setting parameter values
-    Hamster.set_value!("rcut", "7.0", conf)
+    Hamster.set_value!(conf, "rcut", "7.0")
     @test conf("rcut") == 7.0
 
     # Value in non-existing block should be default
     @test conf("lr", "Optimizer") == "default"
 
     # Create block and set value in block
-    Hamster.set_value!("lr", "Optimizer", "0.1", conf)
+    Hamster.set_value!(conf, "lr", "Optimizer", "0.1")
     @test conf("lr", "Optimizer") == 0.1
 
     # Lookup multiple keys

@@ -12,6 +12,7 @@ Retrieves the configuration from a file if it exists, or returns an empty config
 - `Config`: A `Config` instance.
 """
 get_config(;filename="hconf")::Config = read_config(filename)
+Config(;filename="hconf") = read_config(filename)
 
 """
     read_config()
@@ -106,9 +107,9 @@ function read_config_block!(block::ConfigBlock, conf::Config)
         if occursin('=', line) && length(filter_comment(line)) > 0
             option_key, option_value = read_config_line(filter_comment(line))
             if block.header[end] == "Options"
-                set_value!(option_key, option_value, conf)
+                set_value!(conf, option_key, option_value)
             else
-                set_value!(option_key, block.header[end], option_value, conf)
+                set_value!(conf, option_key, block.header[end], option_value)
             end
         end
     end
