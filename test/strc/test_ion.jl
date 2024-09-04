@@ -41,4 +41,13 @@
     @test ions_single[1].type == "K"
     @test ions_single[1].pos == SVector{3}(7.0, 8.0, 9.0)
     @test ions_single[1].dist == SVector{3}(0.3, 0.3, 0.3)
+
+    rs_ion = rand(3, 5)
+    ion_types = ["H", "H", "O", "C", "Ge"]
+    
+    ions = Hamster.get_ions(rs_ion, ion_types)
+    @test Hamster.get_ion_types(ions) == ion_types
+    @test Hamster.get_ion_types(ions, uniq=true) == unique(ion_types)
+    @test Hamster.get_ion_types(ions, sorted=true) == sort(ion_types)
+    @test Hamster.get_ion_types(ions, uniq=true, sorted=true) == sort(unique(ion_types))
 end

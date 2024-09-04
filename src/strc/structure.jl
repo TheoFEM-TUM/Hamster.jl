@@ -30,10 +30,17 @@ Create a `Structure` object by reading a POSCAR file, which contains information
 # Returns
 - `Structure`: A `Structure` object that includes the lattice vectors, translation vectors, ions, and a point grid, initialized based on the POSCAR file.
 """
-function Structure(conf=get_empty_config(); poscar_path=get_poscar(conf), rcut=get_rcut(conf), grid_size=get_grid_size(conf))
-    poscar = read_poscar(poscar_path)
-
-    return Structure(frac_to_cart(poscar.rs_atom, poscar.lattice), poscar.atom_types, poscar.lattice, conf, rcut=rcut, grid_size=grid_size)
+function Structure(conf=get_empty_config(); poscar_path=get_poscar(conf), rcut=get_rcut(conf), grid_size=get_grid_size(conf), verbosity=get_verbosity(conf))
+    time = @elapsed begin
+        poscar = read_poscar(poscar_path)
+        strc = Structure(frac_to_cart(poscar.rs_atom, poscar.lattice), poscar.atom_types, poscar.lattice, conf, rcut=rcut, grid_size=grid_size)
+    end
+    if verbosity > 0
+        append_output_block("Structure Information:", 
+        ["POSCAR", "rcut", "grid_size", "Number of atoms", "Unique atom species", "Number of R vectors", "Ion interactions", "Ion interaction total", "Structure time"], 
+        [poscar_path, rcut, grid_size, length(strc.ions), get_ion_types(strc.ions, uniq=true), size(strc.Rs, 2), length(iterate_nn_grid_points(strc.point_grid)), length(strc.ions)^2 * size(strc.Rs, 2), time])
+    end
+    return strc
 end
 
 """

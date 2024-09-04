@@ -34,3 +34,26 @@ function get_ions(positions, types, distortions=zeros(3, size(positions, 2)))
     end
     return ions
 end
+
+"""
+    get_ion_types(ions::Vector{Ion}; uniq=false, sorted=false)
+
+Return an array containing the types of all ions in the vector `ions`.
+
+# Arguments
+- `ions::Vector{Ion}`: A vector of `Ion` instances, each containing information about an ion's type, position, and distortion.
+- `uniq::Bool=false`: If `true`, the returned array contains only unique ion types.
+- `sorted::Bool=false`: If `true`, the returned array is sorted in alphabetical order.
+
+# Returns
+- `Vector{String}`: An array of ion types. The array will contain all ion types present in the input vector `ions`. If `uniq` is set to `true`, only unique types will be included. If `sorted` is set to `true`, the types will be sorted alphabetically.
+"""
+function get_ion_types(ions::Vector{Ion}; uniq=false, sorted=false)
+    ion_types = Vector{String}(undef, length(ions))
+    for (iion, ion) in enumerate(ions)
+        ion_types[iion] = ion.type
+    end
+    if uniq; ion_types = unique(ion_types); end
+    if sorted; sort!(ion_types); end
+    return ion_types
+end
