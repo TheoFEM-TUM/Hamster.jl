@@ -53,48 +53,11 @@ Create a `Structure` object representing a crystal structure, including its latt
 # Returns
 - `Structure`: A `Structure` object that includes the lattice vectors, translation vectors, ions, and a point grid.
 """
-function Structure(rs_ion, δrs_ion=zeros(3, size(rs_ion, 2)), ion_types, lattice, conf=get_empty_config(); rcut=get_rcut(conf), grid_size=get_grid_size(conf))
+function Structure(rs_ion::Matrix{Float64}, ion_types, lattice::Matrix{Float64}, δrs_ion=zeros(3, size(rs_ion, 2)), conf=get_empty_config(); rcut=get_rcut(conf), grid_size=get_grid_size(conf))
     Rs = get_translation_vectors(rs_ion, lattice, rcut=rcut)
 
     point_grid = PointGrid(rs_ion, frac_to_cart(Rs, lattice), grid_size=grid_size)
     ions = get_ions(rs_ion, ion_types, δrs_ion)
 
     return Structure(lattice, Rs, ions, point_grid)
-end
-
-"""
-    Ion
-
-A mutable structure representing an ion in a crystal lattice.
-
-# Fields
-- `type::String`: The type or species of the ion, usually denoted by its chemical symbol (e.g., "Na" for sodium, "Cl" for chlorine).
-- `pos::StaticArray{3, Float64}`: A 3D static array representing the position of the ion in Cartesian coordinates.
-- `dist::StaticArray{3, Float64}`: A 3D static array representing any distortion applied to the ion's position.
-"""
-mutable struct Ion
-    type :: String
-    pos :: StaticArray{3, Float64}
-    dist :: StaticArray{3, Float64}
-end
-
-"""
-    get_ions(positions, types, distortions)
-
-Create a vector of `Ion` instances from given positions, types, and distortions.
-
-# Arguments
-- `positions::AbstractMatrix{T}`: A matrix where each column represents the 3D position of an ion in Cartesian coordinates.
-- `types::AbstractVector{String}`: A vector of strings representing the type or species of each ion, corresponding to the columns of `positions`.
-- `distortions::AbstractMatrix{T}`: A matrix where each column represents the 3D distortion vector applied to the corresponding ion's position.
-
-# Returns
-- `Vector{Ion}`: A vector of `Ion` instances, each containing the type, position, and distortion of an ion.
-"""
-function get_ions(positions, types, distortions)
-    ions = Ion[]
-    for iion in axes(rs_ion, 2)
-        push!(ions, Ion(types[iion], SVector{3}(positions[:, iion]), SVector{3}(distortions[:, iion])))
-    end
-    return ions
 end
