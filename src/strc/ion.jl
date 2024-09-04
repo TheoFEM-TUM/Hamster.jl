@@ -57,3 +57,16 @@ function get_ion_types(ions::Vector{Ion}; uniq=false, sorted=false)
     if sorted; sort!(ion_types); end
     return ion_types
 end
+
+"""
+    get_ion_positions(ions::Vector{Ion}) :: Vector{SVector{3, Float64}}
+
+Retrieve the positions of all ions in a given vector of `Ion` objects.
+
+# Arguments
+- `ions::Vector{Ion}`: A vector of `Ion` objects, where each `Ion` contains information about its type, position, and distortion.
+
+# Returns
+- `Vector{SVector{3, Float64}}`: A vector of `SVector{3, Float64}` where each element represents the 3D Cartesian coordinates of an ion.
+"""
+get_ion_positions(ions::Vector{Ion})::Vector{SVector{3, Float64}} = [ion.pos for ion in ions]
