@@ -15,21 +15,21 @@ mutable struct Ion
 end
 
 """
-    get_ions(positions, types, distortions)
+    get_ions(positions, types, distortions=zeros(3, size(positions, 2)))
 
 Create a vector of `Ion` instances from given positions, types, and distortions.
 
 # Arguments
 - `positions::AbstractMatrix{T}`: A matrix where each column represents the 3D position of an ion in Cartesian coordinates.
 - `types::AbstractVector{String}`: A vector of strings representing the type or species of each ion, corresponding to the columns of `positions`.
-- `distortions::AbstractMatrix{T}`: A matrix where each column represents the 3D distortion vector applied to the corresponding ion's position.
+- `distortions::AbstractMatrix{T}`: A matrix where each column represents the 3D distortion vector applied to the corresponding ion's position. Defaults to a matrix of zeros.
 
 # Returns
 - `Vector{Ion}`: A vector of `Ion` instances, each containing the type, position, and distortion of an ion.
 """
-function get_ions(positions, types, distortions)
+function get_ions(positions, types, distortions=zeros(3, size(positions, 2)))
     ions = Ion[]
-    for iion in axes(rs_ion, 2)
+    for iion in axes(positions, 2)
         push!(ions, Ion(types[iion], SVector{3}(positions[:, iion]), SVector{3}(distortions[:, iion])))
     end
     return ions
