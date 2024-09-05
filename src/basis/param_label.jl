@@ -1,4 +1,4 @@
-element_to_number(element) = elements[Symbol(element)]
+element_to_number(element) = elements[Symbol(element)].number
 number_to_element(number) = elements[number].symbol
 
 """
@@ -47,7 +47,7 @@ Converts an `IonLabel` object into a human-readable string representation, where
 # Returns
 - `String`: A string representation of the `IonLabel`, where the two element numbers are converted to their respective element symbols and concatenated with a `+` sign.
 """
-string(ion_label::IonLabel)::String = number_to_element(ion_label.types[1])*"+"*number_to_element(ion_label.types[2])
+Base.string(ion_label::IonLabel)::String = number_to_element(ion_label.types[1])*"+"*number_to_element(ion_label.types[2])
 
 """
     sameions(ion_label::IonLabel) -> Bool
@@ -89,7 +89,7 @@ struct ParamLabel
     overlap_label :: SVector{3, Int64}
 end
 
-==(label1::ParamLabel, label2::ParamLabel) = label1.nnlabel == label2.nnlabel && isequal(label1.ion_label, label2.ion_label) && label1.overlap_label == label2.overlap_label
+Base.isequal(label1::ParamLabel, label2::ParamLabel) = label1.nnlabel == label2.nnlabel && isequal(label1.ion_label, label2.ion_label) && label1.overlap_label == label2.overlap_label
 
 
 """

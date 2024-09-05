@@ -41,7 +41,7 @@ function get_orbitals(strc::Structure, conf=get_empty_config())
         orbital_list = str_to_orb.(get_orbitals(conf, strc.ions[iion].type))
         axes = get_axes(iion, strc, orbital_list, conf)
         for jorb in eachindex(orbital_list)
-            push!(orbitals, Orbital(elements_to_number(strc.ions[iion].type), orbital_list[jorb], axes[jorb]))
+            push!(orbitals, Orbital(element_to_number(strc.ions[iion].type), orbital_list[jorb], axes[jorb]))
         end
     end
 
