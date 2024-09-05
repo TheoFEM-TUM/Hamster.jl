@@ -25,11 +25,9 @@ function get_nearest_neighbors(r0, rs, Ts, point_grid::PointGrid; kNN=1)
     
     Δrs = Float64[]; inds = Tuple{Int64, Int64}[]
     
-    @views for nn_grid_point in nn_grid_points(grid_point, point_grid.dictR)
-        for (iion, t) in point_grid.dictR[nn_grid_point]
-            Δr = normdiff(r0, rs[iion], Ts[:, t])
-            push!(Δrs, Δr); push!(inds, (iion, t))
-        end
+    @views for (iion, t) in iterate_nn_grid_points(grid_point, point_grid)
+        Δr = normdiff(r0, rs[iion], Ts[:, t])
+        push!(Δrs, Δr); push!(inds, (iion, t))
     end
 
     sorted_inds = sortperm(Δrs)
