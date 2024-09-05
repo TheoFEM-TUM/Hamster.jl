@@ -1,0 +1,52 @@
+gaas_poscar = string(@__DIR__) * "/../parse/test_files/POSCAR_gaas"
+cspbbr_poscar = string(@__DIR__) * "/../strc/test_files/POSCAR_CsPbBr3"
+
+@testset "GaAs Orbitals" begin
+    conf = get_empty_config()
+    set_value!(conf, "orbitals", "Ga", "sp3dr2 sp3dr2 sp3dr2 sp3dr2")
+    set_value!(conf, "orbitals", "As", "sp3dr2 sp3dr2 sp3dr2 sp3dr2")
+    strc_gaas = Structure(conf, poscar_path=gaas_poscar)
+    
+    # Test 1: Default hybrid orbital orientation
+    default_hybrid_axes = [SVector{3}([1., 1., 1.]), SVector{3}([1., -1., -1.]), SVector{3}([-1., 1., -1.]), SVector{3}([-1., -1., 1.])]
+    orbitals_1 = Hamster.get_orbitals(strc_gaas, conf)
+
+    @test length(orbitals_1) == 8
+    @test [orbital.axis for orbital in orbitals_1[1:4]] == default_hybrid_axes
+    @test [orbital.axis for orbital in orbitals_1[5:8]] == default_hybrid_axes
+    @test all([typeof(orbital.type) == Hamster.sp3dr2 for orbital in orbitals_1])
+    @test all([orbital.ion_type == 31 for orbital in orbitals_1[1:4]])
+    @test all([orbital.ion_type == 33 for orbital in orbitals_1[5:8]])
+
+    # Test 2: NNaxes=true
+    set_value!(conf, "NNaxes", "Ga", "true")
+    set_value!(conf, "NNaxes", "As", "true")
+    orbitals_2 = Hamster.get_orbitals(strc_gaas, conf)
+    default_hybrid_axes_normalized = normalize.(default_hybrid_axes)
+    
+    @test count([Hamster.normdiff(normalize(orbital.axis), axis) < 1e-10 for orbital in orbitals_2[1:4] for axis in default_hybrid_axes_normalized]) == 4
+    @test count([Hamster.normdiff(normalize(orbital.axis), axis) < 1e-10 for orbital in orbitals_2[5:8] for axis in (-1).*default_hybrid_axes_normalized]) == 4
+end
+
+@testset "CsPbBr3 Orbitals" begin
+    conf = get_empty_config()
+    set_value!(conf, "orbitals", "Cs", "s")
+    set_value!(conf, "orbitals", "Pb", "s px py pz")
+    set_value!(conf, "orbitals", "Br", "px py pz")
+    strc_cspbbr3 = Structure(conf, poscar_path=cspbbr_poscar)
+    
+    # Test 1: Default hybrid orbital orientation
+    orbitals = Hamster.get_orbitals(strc_cspbbr3, conf)
+    expected_types = [Hamster.s, Hamster.px, Hamster.py, Hamster.pz, Hamster.s, Hamster.px, Hamster.py, Hamster.pz, Hamster.px, Hamster.py, Hamster.pz, Hamster.px, Hamster.py, Hamster.pz]
+    expected_axes = [SVector{3}([0., 0., 1.]), SVector{3}([1., 0., 0.]), SVector{3}([0., 1., 0.]), SVector{3}([0., 0., 1.]), 
+                    SVector{3}([0., 0., 1.]), 
+                    SVector{3}([1., 0., 0.]), SVector{3}([0., 1., 0.]), SVector{3}([0., 0., 1.]), 
+                    SVector{3}([1., 0., 0.]), SVector{3}([0., 1., 0.]), SVector{3}([0., 0., 1.]), 
+                    SVector{3}([1., 0., 0.]), SVector{3}([0., 1., 0.]), SVector{3}([0., 0., 1.])]
+    expected_ion_types = [82, 82, 82, 82, 55, 35, 35, 35, 35, 35, 35, 35, 35, 35]
+
+    @test length(orbitals) == 14
+    @test all([typeof(orbitals[jorb].type) == expected_types[jorb] for jorb in eachindex(orbitals)])
+    @test all([orbitals[jorb].axis == expected_axes[jorb] for jorb in eachindex(orbitals)])
+    @test all([orbitals[jorb].ion_type == expected_ion_types[jorb] for jorb in eachindex(orbitals)])
+end
