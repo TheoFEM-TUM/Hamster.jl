@@ -123,7 +123,7 @@ function get_nn_label(r, r_thresh, onsite, sepNN) :: Int64
     end
 end
 
-get_nn_label(r, r_thresh, conf::TBConfig) = get_nn_label(r, r_thresh, get_onsite(conf), get_sepNN(conf))
+get_nn_label(r, r_thresh, conf::Config) = get_nn_label(r, r_thresh, get_onsite(conf), get_sepNN(conf))
 
 """
     stringtype(param_label)
