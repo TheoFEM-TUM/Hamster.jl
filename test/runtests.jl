@@ -22,6 +22,7 @@ end
 @testset "Basis" begin
     include("basis/test_spher_harm.jl")
     include("basis/test_orbital.jl")
+    include("basis/test_param_label.jl")
 end
 
 @testset "model" begin

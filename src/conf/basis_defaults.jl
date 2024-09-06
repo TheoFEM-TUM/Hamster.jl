@@ -1,4 +1,18 @@
 """
+    onsite=true
+
+The `onsite` tag switches on the use of an extra parameter set for onsite interactions.
+"""
+get_onsite(conf::Config)::Bool = conf("onsite") == "default" ? true : conf("onsite")
+
+"""
+    sepNN=false
+
+The `sepNN` tag switches on the use of an extra parameter set for nearest-neighbor interactions (compared to further away interactions).
+"""
+get_sepNN(conf::Config)::Bool = conf("sepNN") == "default" ? false : conf("sepNN")
+
+"""
     alpha=0.7*Z
 
 The `alpha` value determines how rapid the orbital overlap for a specific ion type falls off with distance. Defaults to 70% of the core charge.
