@@ -26,9 +26,9 @@ println.(methodinstances(get_hamiltonian))
 
 @time Hr[1] + Hr[2]
 
-f(H1, H2) =  sum(Hr)
+f(Hr) =  sum(Hr)
 
-@btime f($Hr[1], $Hr[2])
+@btime f($Hr)
 
 for v in 1:NV, R in 1:NR
     @. Hr[R] += h[v, R] * V[v]
