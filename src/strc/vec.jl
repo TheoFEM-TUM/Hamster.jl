@@ -72,37 +72,42 @@ function transform_to_spherical(r⃗::AbstractArray{Float64, 2}; origin=[0,0,0])
 end
 
 """
-    normdiff(v::AbstractVector, w::AbstractVector)
+    normdiff(v⃗::AbstractVector, w⃗::AbstractVector)
+    normdiff(v⃗::AbstractVector, w⃗::AbstractVector, t⃗::AbstractVector)
+    normdiff(v⃗::AbstractVector, w⃗::AbstractVector, δv⃗::AbstractVector, δw⃗::AbstractVector, t⃗::AbstractVector)
 
-Compute the Euclidean norm (L2 distance) between two vectors `v` and `w`.
+Compute the Euclidean norm (L2 distance) between two vectors `v⃗` and `w⃗`, optionally with displacement vectors `δv⃗` and `δw⃗` and lattice translation vector `t⃗`.
 
 # Arguments
-- `v::AbstractVector`: The first vector.
-- `w::AbstractVector`: The second vector.
+- `v⃗::AbstractVector`: The first vector.
+- `w⃗::AbstractVector`: The second vector.
+- `δv⃗::AbstractVector`: The first displacement vector.
+- `δw⃗::AbstractVector`: The second displacement vector.
+- `t⃗::AbstractVector`: The lattice translation vector.
 
 # Returns
 - `Float64`: The Euclidean norm of the difference between vectors `v` and `w`.
 """
-function normdiff(v⃗::V, w⃗::W) where {V,W}
-    out = 0.
-    @inbounds @simd for i in eachindex(v⃗)
+function normdiff(v⃗::V, w⃗::W) where {V,W<:AbstractVector}
+    out = zero(promote_type(eltype(v⃗), eltype(w⃗))) 
+    @inbounds for i in eachindex(v⃗)
         @views out += (v⃗[i] - w⃗[i])^2
     end
     return √out
 end
 
-function normdiff(v⃗::V, w⃗::W, t⃗::T) where {V,W,T}
-    out = 0.
-    @views for (vi, wi, ti) in zip(v⃗, w⃗, t⃗)
-        out += (vi - (wi - ti))^2
+function normdiff(v⃗::V, w⃗::W, t⃗::T) where {V,W,T<:AbstractVector}
+    out = zero(promote_type(eltype(v⃗), eltype(w⃗), eltype(t⃗)))
+    @inbounds for (vi, wi, ti) in zip(v⃗, w⃗, t⃗)
+        @views out += (vi - (wi - ti))^2
     end
     return √out
 end
 
-function normdiff(v⃗, w⃗, δv⃗, δw⃗, t⃗)
-    out = 0.
-    @views for (vi, wi, δvi, δwi, ti) in zip(v⃗, w⃗, δv⃗, δw⃗, t⃗)
-        out += (vi - δvi - (wi - δwi - ti))^2
+function normdiff(v⃗::V, w⃗::W, δv⃗::DV, δw⃗::DW, t⃗::T) where {V,W,DV,DW,T<:AbstractVector}
+    out = zero(promote_type(eltype(v⃗), eltype(w⃗), eltype(δv⃗), eltype(δw⃗), eltype(t⃗)))
+    @inbounds for (vi, wi, δvi, δwi, ti) in zip(v⃗, w⃗, δv⃗, δw⃗, t⃗)
+        @views out += (vi - δvi - (wi - δwi - ti))^2
     end
     return √out
 end
