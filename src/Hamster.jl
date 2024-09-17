@@ -24,4 +24,7 @@ export findR0, Ion, Structure, get_nearest_neighbors
 export get_hamiltonian, diagonalize
 export write_hr, read_hr
 
+# Precompililation
+include("Hamster_precompile.jl")
+
 end # module Hamster
