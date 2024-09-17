@@ -1,14 +1,3 @@
-@testset "Element/Number conversion" begin
-    @test Hamster.element_to_number("Ga") == 31
-    @test Hamster.element_to_number("Si") == 14
-    @test Hamster.element_to_number("I") == 53
-
-
-    @test Hamster.number_to_element(55) == "Cs"
-    @test Hamster.number_to_element(115) == "Mc"
-    @test Hamster.number_to_element(83) == "Bi"
-end
-
 @testset "IonLabel" begin
     @test Hamster.IonLabel(5, 3).types == [3, 5] # types are sorted
     @test Hamster.IonLabel(5, 3, sorted=false).types == [5, 3] # types are not sorted

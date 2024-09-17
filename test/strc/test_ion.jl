@@ -1,3 +1,14 @@
+@testset "Element/Number conversion" begin
+    @test Hamster.element_to_number("Ga") == 31
+    @test Hamster.element_to_number("Si") == 14
+    @test Hamster.element_to_number("I") == 53
+
+
+    @test Hamster.number_to_element(55) == "Cs"
+    @test Hamster.number_to_element(115) == "Mc"
+    @test Hamster.number_to_element(83) == "Bi"
+end
+
 @testset "Ion" begin
     # Test 1: Creation of an Ion instance
     ion = Ion("Na", SVector{3}(1.0, 2.0, 3.0), SVector{3}(0.1, 0.1, 0.1))

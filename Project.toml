@@ -4,11 +4,15 @@ authors = ["martin <ga63loc@mytum.de>"]
 version = "0.1.0"
 
 [deps]
+Cthulhu = "f68482b8-f384-11e8-15f7-abe071a5a75f"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 HCubature = "19dc6840-f33b-545b-b366-655c7e3ffd49"
 KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MethodAnalysis = "85b6ec6f-f7df-4429-9514-a64bcd9ee824"
+OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
 PeriodicTable = "7b2266bf-644c-5ea3-82d8-af4bbd25a884"
+PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 TensorOperations = "6aa20fa7-93e2-5fca-9bc0-fbd0db3c71a2"

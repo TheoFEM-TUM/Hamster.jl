@@ -1,3 +1,6 @@
+element_to_number(element) = elements[Symbol(element)].number
+number_to_element(number) = elements[number].symbol
+
 """
     Ion
 
@@ -56,6 +59,27 @@ function get_ion_types(ions::Vector{Ion}; uniq=false, sorted=false)
     if uniq; ion_types = unique(ion_types); end
     if sorted; sort!(ion_types); end
     return ion_types
+end
+
+"""
+    findnext_ion_of_type(type, ions::Vector{Ion}) -> Int64
+
+Find the index of the next ion in the vector `Ions` that has the specified `type`.
+
+# Arguments:
+- `type`: The type of ion to search for. This could be a string, integer, or any other type that represents an ion type.
+- `Ions`: A vector of `Ion` objects, where each `Ion` has a `type` field that specifies its ion type.
+
+# Returns:
+- The index `iion` of the first ion in `ions` whose `type` matches the input `type`. 
+- If no ion with the specified `type` is found, the function returns `0`.
+"""
+function findnext_ion_of_type(type, ions::Vector{Ion})
+    typestring = type <: AbstractString ? type : number_to_element(type)
+    for iion in eachindex(ions)
+        if ions[iion].type == typestring; return iion; end
+    end
+    return 0
 end
 
 """

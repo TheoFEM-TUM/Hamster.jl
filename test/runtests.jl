@@ -23,6 +23,8 @@ end
     include("basis/test_spher_harm.jl")
     include("basis/test_orbital.jl")
     include("basis/test_param_label.jl")
+    include("basis/test_index.jl")
+    include("basis/test_overlap.jl")
 end
 
 @testset "model" begin

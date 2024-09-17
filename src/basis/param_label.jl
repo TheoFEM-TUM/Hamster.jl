@@ -1,6 +1,3 @@
-element_to_number(element) = elements[Symbol(element)].number
-number_to_element(number) = elements[number].symbol
-
 const ndict = Dict(1=>R1, 2=>R2, 3=>R3, 4=>R4, 5=>R5, 6=>R6)
 const mdict = Dict(0=>"σ", 1=>"π", 2=>"δ")
 const mdict_inv = Dict('σ'=>0, 'π'=>1, 'δ'=>2)

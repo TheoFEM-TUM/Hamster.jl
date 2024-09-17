@@ -35,18 +35,25 @@ Generate a list of orbitals for the ions in a given `Structure` object, using a 
 - It then stores the orbitals as `Orbital` objects in a vector.
 """
 function get_orbitals(strc::Structure, conf=get_empty_config())
-    orbitals = Orbital[]
+    orbitals = Vector{Orbital}[]
+
+    Norbs = Int64[]
 
     for iion in eachindex(strc.ions)
+        ion_orbitals = Orbital[]
         orbital_list = str_to_orb.(get_orbitals(conf, strc.ions[iion].type))
+        push!(Norbs, length(orbital_list))
         axes = get_axes(iion, strc, orbital_list, conf)
         for jorb in eachindex(orbital_list)
-            push!(orbitals, Orbital(element_to_number(strc.ions[iion].type), orbital_list[jorb], axes[jorb]))
+            push!(ion_orbitals, Orbital(element_to_number(strc.ions[iion].type), orbital_list[jorb], axes[jorb]))
         end
+        push!(orbitals, ion_orbitals)
     end
 
     return orbitals
 end
+
+get_number_of_orbitals(orbitals) = length.(orbitals)
 
 """
     get_axes(iion::Int64, strc::Structure, orbital_list::Vector{Angular}, conf=get_empty_config(); NNaxes=get_nnaxes(conf, type))
@@ -65,7 +72,7 @@ function get_axes(iion::Int64, strc::Structure, orbital_list, conf=get_empty_con
     if NNaxes
         rs_ion = get_ion_positions(strc.ions)
         rNNs = get_nearest_neighbors(strc.ions[iion].pos, rs_ion, frac_to_cart(strc.Rs, strc.lattice), strc.point_grid, kNN=length(orbital_list))
-        return [rNN - strc.ions[iion].pos for rNN in rNNs]
+        return sort([rNN - strc.ions[iion].pos for rNN in rNNs], rev=true)
     else
         if all(h->typeof(h)==sp3, orbital_list) || all(h->typeof(h)==sp3dr2, orbital_list)
             return get_axis(sp3())
