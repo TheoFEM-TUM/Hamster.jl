@@ -1,5 +1,5 @@
 """
-    get_nearest_neighbors(r0, rs, Ts, point_grid::PointGrid; kNN=1)
+    get_nearest_neighbors(r0, rs, Ts, point_grid::PointGrid; kNN=1, sorted=false)
 
 Find the nearest neighbors (NN) of a given point `r0` within a set of points `rs` and translation vectors `Ts`.
 
