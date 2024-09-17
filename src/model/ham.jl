@@ -5,10 +5,11 @@ Calculate the phase factor exp(2πik⃗⋅R⃗).
 """
 @inline exp_2πi(k⃗, R⃗) = @. exp(2π*im * $*(R⃗', k⃗))
 
-get_empty_hamiltonians(Nε, NkR; sp_mode=false, type=ComplexF64) = [ifelse(sp_mode, spzeros, zeros)(type, Nε, Nε) for _ in 1:NkR]
+get_empty_hamiltonians(Nε, NkR, mode=Val{:dense}, type=ComplexF64) = typeof(zeros(type, Nε, Nε))[zeros(type, Nε, Nε) for _ in 1:NkR]
+get_empty_hamiltonians(Nε, NkR, ::Type{Val{:sparse}}, type=ComplexF64) = typeof(spzeros(type, Nε, Nε))[spzeros(type, Nε, Nε) for _ in 1:NkR]
 
 """
-    get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks; sp_mode=false, weights=ones(size(Rs, 2)))
+    get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Val{:dense}, weights=ones(size(Rs, 2)))
 
 Constructs a vector of Hamiltonian matrices by combining a vector of matrices `Hr` with phase factors determined by `Rs` and `ks`.
 
@@ -16,16 +17,17 @@ Constructs a vector of Hamiltonian matrices by combining a vector of matrices `H
 - `Hr::Vector{<:AbstractMatrix}`: A vector of matrices where each matrix represents a component of the Hamiltonian. These matrices must be compatible in size for the operations performed.
 - `Rs`: A matrix or array containing positional information used to calculate phase factors.
 - `ks`: A matrix of momentum values used in conjunction with `Rs` to compute phase factors.
-- `sp_mode::Bool=false`: A boolean flag indicating whether to use special modes for constructing the Hamiltonian. Defaults to `false`.
+- `mode::Type{Symbol}=Val{:dense}`: Indicates whether to construct a sparse or dense Hamiltonian. Defaults to `dense`.
 - `weights::Vector=ones(size(Rs, 2))`: A vector of weights used in the summation of phase factors. The length of this vector should match the number of columns in `Rs`. These are the degeneracies for the Wannier90 Hamiltonians.
 
 # Returns:
 - A vector of Hamiltonian matrices `Hk`, where each matrix is constructed by combining `Hr` with phase factors and optionally transformed into a spin basis.
 """
-function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks; sp_mode=false, weights=ones(size(Rs, 2)))
+function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Val{:dense}; weights=ones(size(Rs, 2)))
     Nε = size(Hr[1], 1)
-    Hk = get_empty_hamiltonians(Nε, size(ks, 2); sp_mode=sp_mode)
+    Hk = get_empty_hamiltonians(Nε, size(ks, 2), mode)
     exp_2πiRk = exp_2πi(ks, Rs)
+
     Threads.@threads for k in eachindex(Hk)
         @views Hk[k] = mapreduce(*, +, weights, Hr, exp_2πiRk[:, k])
     end

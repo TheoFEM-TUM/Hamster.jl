@@ -77,7 +77,8 @@ function read_hr(filename="hamster_hr.dat"; sp_mode=false, verbose=1)
     lines = split_lines(lines)
     Nε = parse(Int64, lines[1][1])
     NR = parse(Int64, lines[2][1])
-    Hr = get_empty_hamiltonians(Nε, NR, sp_mode=sp_mode, type=Float64)
+    mode = sp_mode ? Val{:sparse} : Val{:dense}
+    Hr = get_empty_hamiltonians(Nε, NR, mode, Float64)
     Rs = zeros(Int64, 3, NR)
     R = 0
     old_R = zeros(3)
