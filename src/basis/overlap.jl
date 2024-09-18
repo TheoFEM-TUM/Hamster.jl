@@ -2,28 +2,6 @@ import Base.copy
 
 abstract type MatrixElement end
 
-function get_overlaps(ions, orbitals, conf=get_empty_config())
-    overlaps = TBOverlap[]
-
-    unique_ion_types = get_ion_types(ions, uniq=true)
-
-    for iion in eachindex(unique_ion_types), jion in iion:length(unique_ion_types)
-        iindex = findnext_ion_of_type(unique_ion_types[iion], ions)
-        jindex = findnext_ion_of_type(unique_ion_types[jion], ions)
-        interaction_overlaps = get_matrix_element_labels(orbitals[iindex], orbitals[jindex])
-        append!(overlaps, interaction_overlaps)
-    end
-
-    return overlaps
-end
-
-function get_overlap_labels(orbitals_1, orbitals_2)
-    interaction_overlaps = TBOverlap[]
-    for iorb in eachindex(orbitals_1), jorb in eachindex(orbitals_2)
-
-    end
-end
-
 """
     TBOverlap{T<:MatrixElement, OC<:OrbitalConfiguration}
 
@@ -38,6 +16,69 @@ struct TBOverlap{T<:MatrixElement, OC<:OrbitalConfiguration}
     type :: T
     orbconfig :: OC
     ion_label :: IonLabel
+end
+
+"""
+    get_overlaps(ions, orbitals, conf=get_empty_config())
+
+Compute all tight-binding (TB) overlaps between pairs of orbitals for a given list of ions.
+
+# Arguments
+- `ions`: A vector of ions from which overlaps are to be computed.
+- `orbitals`: A vector of orbitals corresponding to each ion in `ions`.
+- `conf`: Optional configuration parameter (default: `get_empty_config()`).
+
+# Returns
+- `Vector{TBOverlap}`: A vector containing all computed `TBOverlap` instances for the ion and orbital pairs.
+"""
+function get_overlaps(ions, orbitals, conf=get_empty_config())
+    overlaps = TBOverlap[]
+
+    unique_ion_types = get_ion_types(ions, uniq=true)
+
+    for iion in eachindex(unique_ion_types), jion in iion:length(unique_ion_types)
+        ion_label = IonLabel(unique_ion_types[iion], unique_ion_types[jion])
+        ionswap = areswapped(unique_ion_types[iion], unique_ion_types[jion])
+        iindex = findnext_ion_of_type(unique_ion_types[iion], ions)
+        jindex = findnext_ion_of_type(unique_ion_types[jion], ions)
+        interaction_overlaps = get_overlaps_for_orbitals(orbitals[iindex], orbitals[jindex], ion_label, ionswap)
+        append!(overlaps, interaction_overlaps)
+    end
+
+    return overlaps
+end
+
+"""
+    get_overlaps_for_orbitals(orbitals_1, orbitals_2, ion_label, ionswap)
+
+Compute the list of tight-binding (TB) overlaps for pairs of orbitals from two ions (`orbitals_1` and `orbitals_2`) based on the given `ion_label` and whether the ions are swapped (`ionswap`).
+
+# Arguments
+- `orbitals_1`: A collection of orbitals from the first ion.
+- `orbitals_2`: A collection of orbitals from the second ion.
+- `ion_label`: An `IonLabel` instance representing the ion types involved in the interaction.
+- `ionswap`: A boolean flag indicating if the ions are swapped in the interaction.
+
+# Returns
+- `Vector{TBOverlap}`: A unique list of `TBOverlap` instances describing the possible overlaps between the orbitals of the two ions, taking into account symmetry and ion swaps.
+"""
+function get_overlaps_for_orbitals(orbitals_1, orbitals_2, ion_label, ionswap)
+    sameions = aresameions(ion_label)
+    interaction_overlaps = TBOverlap[]
+    
+    for (iorb, orb_i) in enumerate(orbitals_1), orb_j in orbitals_2[ifelse(sameions, iorb, 1):end]
+        Ys_i = get_orbital_list(orb_i.type)
+        Ys_j = get_orbital_list(orb_j.type)
+        baseorb = ionswap ? Tuple([orb_j.type, orb_i.type]) : Tuple([orb_i.type, orb_j.type])
+        for Y_i in Ys_i, Y_j in Ys_j
+            me_label = get_me_label(Y_i, Y_j, baseorb)
+            if !(typeof(me_label) <: ZeroOverlap)
+                orbconfig = OrbitalConfiguration(Y_i, Y_j, Ys_i, Ys_j, sameions=sameions, ionswap=ionswap)
+                push!(interaction_overlaps, TBOverlap(me_label, orbconfig, ion_label))
+            end
+        end
+    end
+    return unique(interaction_overlaps)
 end
 
 """
@@ -69,12 +110,29 @@ function same_ion_label(Vllm::TBOverlap, ion_label::IonLabel)
 end
 
 (p::TBOverlap)(x...)::Float64 = p.type(x...)
-function Base.isequal(param1::TBOverlap, param2::TBOverlap)
-    cond1 = typeof(param1.type)==typeof(param2.type)
-    cond2 = typeof(param1.orbconfig)==typeof(param2.orbconfig)
-    cond3 = param1.ion_label == param2.ion_label
+
+"""
+    Base.isequal(ov1::TBOverlap, ov2::TBOverlap)
+
+Compare two `TBOverlap` objects, `ov1` and `ov2`, for equality.
+
+# Arguments
+- `ov1::TBOverlap`: The first `TBOverlap` instance.
+- `ov2::TBOverlap`: The second `TBOverlap` instance.
+
+# Returns
+- `Bool`: `true` if the two `TBOverlap` instances are considered equal, `false` otherwise.
+"""
+function Base.isequal(ov1::TBOverlap, ov2::TBOverlap)
+    cond1 = typeof(ov1.type)==typeof(ov2.type)
+    cond2 = typeof(ov1.orbconfig)==typeof(ov2.orbconfig)
+    cond3 = ov1.ion_label == vo2.ion_label
     return cond1 && cond2 && cond3
 end
+
+struct ZeroOverlap<:MatrixElement; end
+#(me::MatrixElement)(x...) = me(x...)
+get_me_label(::Angular, ::Angular, base)::MatrixElement = ZeroOverlap()
 
 """
     decide_orbconfig(Vllm, ion_label)
@@ -85,30 +143,6 @@ actual ion overlap label `ion_label` of the respective Hamiltonian matrix elemen
 function decide_orbconfig(Vllm::TBOverlap, ion_label::IonLabel)
     if ion_label == Vllm.ion_label; return Vllm.orbconfig, NormalMode();
     else return conjugate(Vllm.orbconfig), ConjugateMode(); end
-end
-
-abstract type OCMode; end
-struct NormalMode<:OCMode; end
-struct ConjugateMode<:OCMode; end
-
-conjugate(::NormalMode) = ConjugateMode()
-conjugate(::ConjugateMode) = NormalMode()
-
-struct ZeroOverlap<:MatrixElement; end
-#(me::MatrixElement)(x...) = me(x...)
-get_me_label(::Angular, ::Angular, base)::MatrixElement = ZeroOverlap()
-
-function distance_dependence(ME::MatrixElement, orbconfig::OrbitalConfiguration, r, ns, αs)
-    R₁ = ndict[ns[1]](αs[1]); R₂ = ndict[ns[2]](αs[2])
-    xmin = [-10, -10, -10]; xmax = [15+r/3, 15+r/3, r+15]
-    param = stringtype(ME)
-    m = mdict_inv[param[3]]
-    l₁, l₂ = typeof(orbconfig) == MirrOrb ? (ldict_inv[param[2]], ldict_inv[param[1]]) : (ldict_inv[param[1]], ldict_inv[param[2]])
-    sign = l₁ > l₂ ? (-1)^(l₁+l₂) : 1
-    Y₁, Y₂ = get_spherical.([l₁, l₂], m)
-    f = Overlap(Y₁, R₁, zeros(3), Y₂, R₂, [0., 0., r])
-    I, _ = hcubature(f, xmin, xmax, rtol=1e-5, maxevals=1000000, initdiv=5)
-    return sign*I
 end
 
 """
@@ -138,7 +172,7 @@ get_me_label(Y₁::s, Y₂::s, base)::MatrixElement = Vssσ(get_base_orb(base))
 
 copy(v::Vssσ) = Vssσ(v.base)
 
-stringtype(::Vssσ) = "ssσ"
+Base.string(::Vssσ) = "ssσ"
 
 (v::Vssσ)(orbconfig, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 0, 0) * 1.
 
@@ -154,7 +188,7 @@ get_me_label(::pz, ::s, base)::MatrixElement = Vspσ(get_base_orb(base))
 
 copy(v::Vspσ) = Vspσ(v.base)
 
-stringtype(::Vspσ) = "spσ"
+Base.string(::Vspσ) = "spσ"
 
 (v::Vspσ)(::SymOrb, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 0, 1)*fpz(θ₂, φ₂) - NConst(mode, v.base, 1, 0)*fpz(θ₁, φ₁)
 (v::Vspσ)(::DefOrb, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 0, 1)*fpz(θ₂, φ₂)
@@ -171,7 +205,7 @@ get_me_label(::pz, ::pz, base)::MatrixElement = Vppσ(get_base_orb(base))
 
 copy(v::Vppσ) = Vppσ(v.base)
 
-stringtype(::Vppσ) = "ppσ"
+Base.string(::Vppσ) = "ppσ"
 
 (v::Vppσ)(orbconfig, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 1, 1)*fpz(θ₁, φ₁) * fpz(θ₂, φ₂)
 
@@ -187,7 +221,7 @@ get_me_label(::py, ::py, base)::MatrixElement = Vppπ(get_base_orb(base))
 
 copy(v::Vppπ) = Vppπ(v.base)
 
-stringtype(::Vppπ) = "ppπ"
+Base.string(::Vppπ) = "ppπ"
 
 (v::Vppπ)(orbconfig, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 1, 1)*fpx(θ₁, φ₁)*fpx(θ₂, φ₂) + NConst(mode, v.base, 1, 1)*fpy(θ₁, φ₁)*fpy(θ₂, φ₂)
 
@@ -203,7 +237,7 @@ get_me_label(::dz2, ::s, base)::MatrixElement = Vsdσ(get_base_orb(base))
 
 copy(v::Vsdσ) = Vsdσ(v.base)
 
-stringtype(::Vsdσ) = "sdσ"
+Base.string(::Vsdσ) = "sdσ"
 
 (v::Vsdσ)(::SymOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 0, 2)*fdz2(v.base[2], θ₂, φ₂) + NConst(mode, v.base, 2, 0)*fdz2(v.base[1], θ₁, φ₁)
 (v::Vsdσ)(::SymOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 0, 2)*fdz2(v.base[1], θ₂, φ₂) + NConst(mode, v.base, 2, 0)*fdz2(v.base[2], θ₁, φ₁)
@@ -226,7 +260,7 @@ get_me_label(::dz2, ::pz, base)::MatrixElement = Vpdσ(get_base_orb(base))
 
 copy(v::Vpdσ) = Vpdσ(v.base)
 
-stringtype(::Vpdσ) = "pdσ"
+Base.string(::Vpdσ) = "pdσ"
 
 (v::Vpdσ)(::SymOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 1, 2)*fpz(θ₁, φ₁)*fdz2(v.base[2], θ₂, φ₂) - NConst(mode, v.base, 2, 1)*fdz2(v.base[1], θ₁, φ₁)*fpz(θ₂, φ₂)
 (v::Vpdσ)(::SymOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 1, 2)*fpz(θ₁, φ₁)*fdz2(v.base[1], θ₂, φ₂) - NConst(mode, v.base, 2, 1)*fdz2(v.base[2], θ₁, φ₁)*fpz(θ₂, φ₂)
@@ -251,7 +285,7 @@ get_me_label(::dyz, ::py, base)::MatrixElement = Vpdπ(get_base_orb(base))
 
 copy(v::Vpdπ) = Vpdπ(v.base)
 
-stringtype(::Vpdπ) = "pdπ"
+Base.string(::Vpdπ) = "pdπ"
 
 (v::Vpdπ)(::SymOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 1, 2)*fpx(θ₁, φ₁)*fdxz(v.base[2], θ₂, φ₂) - NConst(mode, v.base, 2, 1)*fdxz(v.base[1], θ₁, φ₁)*fpx(θ₂, φ₂) + NConst(mode, v.base, 1, 2)*fpy(θ₁, φ₁)*fdyz(v.base[2], θ₂, φ₂) - NConst(mode, v.base, 2, 1)*fdyz(v.base[1], θ₁, φ₁)*fpy(θ₂, φ₂)
 (v::Vpdπ)(::SymOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 1, 2)*fpx(θ₁, φ₁)*fdxz(v.base[1], θ₂, φ₂) - NConst(mode, v.base, 2, 1)*fdxz(v.base[2], θ₁, φ₁)*fpx(θ₂, φ₂) + NConst(mode, v.base, 1, 2)*fpy(θ₁, φ₁)*fdyz(v.base[1], θ₂, φ₂) - NConst(mode, v.base, 2, 1)*fdyz(v.base[2], θ₁, φ₁)*fpy(θ₂, φ₂)
@@ -275,7 +309,7 @@ get_me_label(::dz2, ::dz2, base)::MatrixElement = Vddσ(get_base_orb(base))
 
 copy(v::Vddσ) = Vddσ(v.base)
 
-stringtype(::Vddσ) = "ddσ"
+Base.string(::Vddσ) = "ddσ"
 
 (v::Vddσ)(orbconfig, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 2)*fdz2(v.base[1], θ₁, φ₁)*fdz2(v.base[2], θ₂, φ₂)
 (v::Vddσ)(orbconfig, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 2)*fdz2(v.base[2], θ₁, φ₁)*fdz2(v.base[1], θ₂, φ₂)
@@ -294,7 +328,7 @@ get_me_label(::dyz, ::dyz, base)::MatrixElement = Vddπ(get_base_orb(base))
 
 copy(v::Vddπ) = Vddπ(v.base)
 
-stringtype(::Vddπ) = "ddπ"
+Base.string(::Vddπ) = "ddπ"
 
 (v::Vddπ)(orbconfig, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 2)*fdxz(v.base[1], θ₁, φ₁)*fdxz(v.base[2], θ₂, φ₂) + NConst(mode, v.base, 2, 2)*fdyz(v.base[1], θ₁, φ₁)*fdyz(v.base[2], θ₂, φ₂)
 (v::Vddπ)(orbconfig, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 2)*fdxz(v.base[2], θ₁, φ₁)*fdxz(v.base[1], θ₂, φ₂) + NConst(mode, v.base, 2, 2)*fdyz(v.base[2], θ₁, φ₁)*fdyz(v.base[1], θ₂, φ₂)
@@ -313,7 +347,7 @@ get_me_label(::dx2_y2, ::dx2_y2, base)::MatrixElement = Vddδ(get_base_orb(base)
 
 copy(v::Vddδ) = Vddδ(v.base)
 
-stringtype(::Vddδ) = "ddδ"
+Base.string(::Vddδ) = "ddδ"
 
 (v::Vddδ)(orbconfig, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 2)*fdxy(v.base[1], θ₁, φ₁)*fdxy(v.base[2], θ₂, φ₂) + NConst(mode, v.base, 2, 2)*fdx2_y2(v.base[1], θ₁, φ₁)*fdx2_y2(v.base[2], θ₂, φ₂)
 (v::Vddδ)(orbconfig, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 2)*fdxy(v.base[2], θ₁, φ₁)*fdxy(v.base[1], θ₂, φ₂) + NConst(mode, v.base, 2, 2)*fdx2_y2(v.base[2], θ₁, φ₁)*fdx2_y2(v.base[1], θ₂, φ₂)
