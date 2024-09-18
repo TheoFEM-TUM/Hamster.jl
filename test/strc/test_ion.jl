@@ -61,4 +61,17 @@ end
     @test Hamster.get_ion_types(ions, uniq=true) == unique(ion_types)
     @test Hamster.get_ion_types(ions, sorted=true) == sort(ion_types)
     @test Hamster.get_ion_types(ions, uniq=true, sorted=true) == sort(unique(ion_types))
+
+    # Test 5: findnext_ion_of_type
+    rs_ion = rand(3, 5)
+    ion_types = ["Ga", "Ga", "As", "Ga", "Si", "As"]
+    ions = Hamster.get_ions(rs_ion, ion_types)
+
+    @test Hamster.findnext_ion_of_type(31, ions) == 1
+    @test Hamster.findnext_ion_of_type("Ga", ions) == 1
+    @test Hamster.findnext_ion_of_type("As", ions) == 3
+    @test Hamster.findnext_ion_of_type(33, ions) == 3
+    @test Hamster.findnext_ion_of_type("Si", ions) == 5
+    @test Hamster.findnext_ion_of_type(14, ions) == 5
+    @test Hamster.findnext_ion_of_type("Ge", ions) == 0
 end

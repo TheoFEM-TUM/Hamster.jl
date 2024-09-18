@@ -74,8 +74,8 @@ Find the index of the next ion in the vector `Ions` that has the specified `type
 - The index `iion` of the first ion in `ions` whose `type` matches the input `type`. 
 - If no ion with the specified `type` is found, the function returns `0`.
 """
-function findnext_ion_of_type(type, ions::Vector{Ion})
-    typestring = type <: AbstractString ? type : number_to_element(type)
+function findnext_ion_of_type(ion_type, ions::Vector{Ion})
+    typestring = typeof(ion_type) <: AbstractString ? ion_type : number_to_element(ion_type)
     for iion in eachindex(ions)
         if ions[iion].type == typestring; return iion; end
     end
