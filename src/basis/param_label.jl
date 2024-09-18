@@ -63,7 +63,23 @@ Checks if both ions in the given `IonLabel` are of the same type.
 # Returns
 - `Bool`: Returns `true` if both ions in the `IonLabel` have the same atomic number, meaning they are the same type of ion; otherwise, returns `false`.
 """
-sameions(ion_label::IonLabel) = ion_label.types[1] == ion_label.types[2]
+aresameions(ion_label::IonLabel) = ion_label.types[1] == ion_label.types[2]
+
+"""
+    areswapped(type1, type2) -> Bool
+
+Determines whether the two ion types `type1` and `type2` are swapped when creating an `IonLabel`. 
+This function returns `true` if the unsorted `IonLabel(type1, type2, sorted=false)` differs from the sorted `IonLabel(type1, type2)`, 
+indicating that the order of `type1` and `type2` was altered during sorting. Otherwise, it returns `false`.
+
+# Arguments
+- `type1`: The first ion type.
+- `type2`: The second ion type.
+
+# Returns
+- `Bool`: `true` if the order of `type1` and `type2` is swapped in the sorted `IonLabel`, `false` otherwise.
+"""
+areswapped(type1, type2) = IonLabel(type1, type2) == IonLabel(type1, type2, sorted=false) ? false : true
 
 #"""
 #    get_ion_label_for_matrix_element(ion_types, iion, jion, sorted)

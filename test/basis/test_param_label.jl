@@ -14,7 +14,12 @@
     @test string(ion_label1) == "Pb+Br"
     @test string(ion_label2) == "Br+Pb"
 
-    @test Hamster.sameions(Hamster.IonLabel("Si", "Si"))
+    @test Hamster.aresameions(Hamster.IonLabel("Si", "Si"))
+
+    @test Hamster.areswapped("Ga", "As") == false
+    @test Hamster.areswapped("Ge", "Si") == true
+    @test Hamster.areswapped(1, 2) == false
+    @test Hamster.areswapped(5, 2) == true
 end
 
 @testset "NN Label" begin
