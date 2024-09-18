@@ -5,8 +5,10 @@ Calculate the phase factor exp(2πik⃗⋅R⃗).
 """
 @inline exp_2πi(k⃗, R⃗) = @. exp(2π*im * $*(R⃗', k⃗))
 
-get_empty_hamiltonians(Nε, NkR, mode=Val{:dense}, type=ComplexF64) = typeof(zeros(type, Nε, Nε))[zeros(type, Nε, Nε) for _ in 1:NkR]
-get_empty_hamiltonians(Nε, NkR, ::Type{Val{:sparse}}, type=ComplexF64) = typeof(spzeros(type, Nε, Nε))[spzeros(type, Nε, Nε) for _ in 1:NkR]
+get_empty_complex_hamiltonians(Nε, NkR, mode=Val{:dense}) = Matrix{ComplexF64}[zeros(ComplexF64, Nε, Nε) for _ in 1:NkR]
+get_empty_complex_hamiltonians(Nε, NkR, ::Type{Val{:sparse}}) = SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for _ in 1:NkR]
+get_empty_real_hamiltonians(Nε, NkR, mode=Val{:dense}) = Matrix{Float64}[zeros(Float64, Nε, Nε) for _ in 1:NkR]
+get_empty_real_hamiltonians(Nε, NkR, ::Type{Val{:sparse}}) = SparseMatrixCSC{Float64, Int64}[spzeros(Float64, Nε, Nε) for _ in 1:NkR]
 
 """
     get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Val{:dense}, weights=ones(size(Rs, 2)))
@@ -25,11 +27,13 @@ Constructs a vector of Hamiltonian matrices by combining a vector of matrices `H
 """
 function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Val{:dense}; weights=ones(size(Rs, 2)))
     Nε = size(Hr[1], 1)
-    Hk = get_empty_hamiltonians(Nε, size(ks, 2), mode)
+    Hk = get_empty_complex_hamiltonians(Nε, size(ks, 2), mode)
     exp_2πiRk = exp_2πi(ks, Rs)
 
     Threads.@threads for k in eachindex(Hk)
-        @views Hk[k] = mapreduce(*, +, weights, Hr, exp_2πiRk[:, k])
+        @views @inbounds for R in eachindex(Hr)
+            @. Hk[k] += Hr[R] * exp_2πiRk[R, k] * weights[R]
+        end
     end
     return Hk
 end

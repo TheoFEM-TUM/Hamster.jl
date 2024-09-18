@@ -6,7 +6,7 @@ using PrecompileTools: @compile_workload, @setup_workload
     Rs = rand(1:3, 3, 5)
     Rs_float = rand(3, 5)
     ks = rand(3, 5)
-    Hrs = [rand(4, 4) for R in 1:5]
+    Hrs = Matrix{Float64}[rand(4, 4) for R in 1:5]
     Hr_sp = [sprand(4, 4, 0.1) for R in 1:5]
     Hks = [rand(ComplexF64, 4, 4) for i in 1:5]
     @compile_workload begin
