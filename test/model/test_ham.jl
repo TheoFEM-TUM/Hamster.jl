@@ -35,12 +35,12 @@ end
     Hr_sp = [sprand(N, N, 0.01) for R in axes(Rs, 2)]
 
     # Test empty Hamiltonians
-    Hk_empty = Hamster.get_empty_hamiltonians(N, Nk)
+    Hk_empty = Hamster.get_empty_complex_hamiltonians(N, Nk)
     @test length(Hk_empty) == Nk
     @test size(Hk_empty[1]) == (N, N)
     @test typeof(Hk_empty[1]) == Matrix{ComplexF64}
 
-    Hk_empty = Hamster.get_empty_hamiltonians(N, Nk, Val{:sparse})
+    Hk_empty = Hamster.get_empty_complex_hamiltonians(N, Nk, Val{:sparse})
     @test length(Hk_empty) == Nk
     @test size(Hk_empty[1]) == (N, N)
     @test typeof(Hk_empty[1]) == SparseMatrixCSC{ComplexF64, Int64}
