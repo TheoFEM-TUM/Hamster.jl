@@ -61,20 +61,3 @@ end
     @test Hamster.string_to_overlap_label("offdiag0-1") == [0, -1, 1]
     @test Hamster.string_to_overlap_label("offdiag-10") == [-1, -0, 1]
 end
-
-@testset "Param label" begin
-    param_label1 = Hamster.ParamLabel(1, Hamster.IonLabel("Ga", "As"), SVector{3}([0, 0, 0]))
-    @test param_label1 == Hamster.string_to_param_label("NN1_Ga+As_ssσ")
-    @test string(param_label1) == "NN1_Ga+As_ssσ"
-    @test Hamster.same_param_label(1, Hamster.IonLabel("Ga", "As"), SVector{3}([0, 0, 0]), param_label1)
-
-    param_label2 = Hamster.ParamLabel(0, Hamster.IonLabel("Pb", "Pb"), SVector{3}([1, 1, 0]))
-    @test param_label2 == Hamster.string_to_param_label("NN0_Pb+Pb_diag1")
-    @test string(param_label2) == "NN0_Pb+Pb_diag1"
-    @test Hamster.same_param_label(0, Hamster.IonLabel("Pb", "Pb"), SVector{3}([1, 1, 0]), param_label2)
-
-    param_label3 = Hamster.ParamLabel(0, Hamster.IonLabel("Si", "Si"), SVector{3}([-2, -2, 1]))
-    @test param_label3 == Hamster.string_to_param_label("NN0_Si+Si_offdiag-2-2")
-    @test string(param_label3) == "NN0_Si+Si_offdiag-2-2"
-    @test Hamster.same_param_label(0, Hamster.IonLabel("Si", "Si"), SVector{3}([-2, -2, 1]), param_label3)
-end

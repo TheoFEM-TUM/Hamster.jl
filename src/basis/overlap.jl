@@ -101,6 +101,29 @@ function Base.string(p::TBOverlap; apply_oc=false)::String
 end
 
 """
+    me_to_overlap_label(me::MatrixElement) -> SVector{3, Int64}
+
+Converts the matrix element `me` to an overlap label with l, l', m as a static array.
+"""
+me_to_overlap_label(me) = string_to_overlap_label(string(me))
+
+"""
+    get_baseorb_ls(overlap::TBOverlap) -> Tuple{Int, Int}
+
+Extract the orbital angular momentum quantum numbers `l` for the two orbitals in the `baseorb` field of 
+the given `TBOverlap` object.
+
+# Arguments
+- `overlap::TBOverlap`: A `TBOverlap` object representing the overlap between two orbitals in a tight-binding model. 
+  The `baseorb` field contains information about the two orbitals.
+
+# Returns
+- A tuple `(l1, l2)` where `l1` is the angular momentum quantum number of the first orbital and 
+  `l2` is that of the second orbital.
+"""
+get_baseorb_ls(overlap::TBOverlap) = overlap.type.base[1].l, overlap.type.base[2].l
+
+"""
     same_ion_label(Vllm, ion_label)
 
 Return `true` if the TB parameter `Vllm` has the ion overlap ion label `ion_label` independently if either is sorted.
