@@ -37,7 +37,6 @@ const int_tol = 1e-3
     
     xs3, ys3 = Hamster.interpolate_f(intp, f3)
     f3_int = CubicSpline(xs3, ys3)
-    @show length(xs3)
 
     x_trial = 15 .* rand(100)
     @test mean(abs.(f3_int.(x_trial) .- f3.(x_trial))) < int_tol
