@@ -1,4 +1,4 @@
-using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature
+using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Statistics
 
 @testset "Parse" begin
     include("parse/test_utils.jl")
@@ -21,6 +21,8 @@ end
 
 @testset "Basis" begin
     include("basis/test_spher_harm.jl")
+    include("basis/test_orbconfig.jl")
+    include("basis/test_adaptive_intp.jl")
     include("basis/test_orbital.jl")
     include("basis/test_label.jl")
     include("basis/test_index.jl")

@@ -41,8 +41,14 @@ end
     # Test 2: Test NN parameters
     Hamster.get_parameter_for_nn_label!(parameters, overlaps_gaas, 1)
     @test length(parameters) == 34
+    parameters_c, Vs = read_params(string(@__DIR__)*"/test_files/gaas_params_nn1.dat")
+    @test sort(string.(parameters)) == sort(string.(parameters_c))
 
     # Test 3: Test NN2 parameters
+    Hamster.get_parameter_for_nn_label!(parameters, overlaps_gaas, 2)
+    @test length(parameters) == 64
+    parameters_c, Vs = read_params(string(@__DIR__)*"/test_files/gaas_params_nn2.dat")
+    @test sort(string.(parameters)) == sort(string.(parameters_c))
 
     # Test 4: Test parameter read and write
     Vs = rand(length(parameters))
@@ -76,4 +82,10 @@ end
     @test Hamster.ParameterLabel(0, Hamster.IonLabel("Pb", "Pb"), SVector{3, Int64}([1, 1, 1])) ∈ parameters
     @test Hamster.ParameterLabel(0, Hamster.IonLabel("Br", "Br"), SVector{3, Int64}([1, 1, 0])) ∈ parameters
     @test Hamster.ParameterLabel(0, Hamster.IonLabel("Br", "Br"), SVector{3, Int64}([1, 1, 1])) ∈ parameters
+
+    # Test 2: Test NN parameters
+    Hamster.get_parameter_for_nn_label!(parameters, overlaps_cspbbr3, 1)
+    @test length(parameters) == 20
+    parameters_c, Vs = read_params(string(@__DIR__)*"/test_files/cspbbr3_params.dat")
+    @test sort(string.(parameters)) == sort(string.(parameters_c))
 end
