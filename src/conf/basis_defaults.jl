@@ -50,3 +50,38 @@ function get_orbitals(conf::Config, type)::Vector{String}
         end
     end
 end
+
+"""
+    itp_xmin=0.
+
+The `itp_xmin` tag sets the minimal x value used for the adaptive interpolation.
+"""
+get_itp_xmin(conf::Config)::Float64 = conf("itp_xmin") == "default" ? 0. : conf("itp_xmin")
+
+"""
+    itp_xmax=rcut+1
+
+The `itp_xmax` tag sets the maximal x value used for the adaptive interpolation.
+"""
+get_itp_xmax(conf::Config)::Float64 = conf("itp_xmax") == "default" ? get_rcut(conf)+1 : conf("itp_xmax")
+
+"""
+    itp_Ninit=10
+
+The `itp_Ninit` tag sets the number of initial points used for the adaptive interpolation.
+"""
+get_itp_Ninit(conf::Config)::Int64 = conf("itp_Ninit") == "default" ? 20 : conf("itp_Ninit")
+
+"""
+    itp_Nmax=1000
+
+The `itp_Nmax` tag sets the maximum number of points used for the adaptive interpolation.                            
+"""
+get_itp_Nmax(conf::Config)::Int64 = conf("itp_Nmax") == "default" ? 400 : conf("itp_Nmax")
+
+"""
+    itp_tol=1e-7
+
+The `itp_tol` tag sets the numerical tolerance for the adaptive interpolation
+"""
+get_itp_tol(conf::Config)::Float64 = conf("itp_tol") == "default" ? 1e-6 : conf("itp_tol")
