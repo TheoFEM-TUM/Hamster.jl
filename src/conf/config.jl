@@ -96,7 +96,7 @@ Sets the value of a given key in the `options` dictionary of a `Config` instance
 - `value`: The value to set for the specified key.
 - `conf::Config`: The `Config` instance where the key-value pair should be set.
 """
-set_value!(conf::Config, key, value) = conf.options[key] = value
+set_value!(conf::Config, key, value) = conf.options[key] = string(value)
 
 """
     set_value!(conf::Config, key, typekey, value)
@@ -111,9 +111,9 @@ Sets the value of a given key in the specified block of the `blocks` dictionary 
 """
 function set_value!(conf::Config, key, typekey, value)
     if haskey(conf.blocks, typekey)
-        conf.blocks[typekey][key] = value
+        conf.blocks[typekey][key] = string(value)
     else
-        conf.blocks[typekey] = Dict{String, String}(key=>value)
+        conf.blocks[typekey] = Dict{String, String}(key=>string(value))
     end
 end
 
