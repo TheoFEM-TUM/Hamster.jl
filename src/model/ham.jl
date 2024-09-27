@@ -96,7 +96,7 @@ Diagonalizes a sparse Hermitian matrix `Hk` to find a specified number of eigenv
 
 # Returns:
 - `eigenvalues::Vector{Float64}`: A vector of the real parts of the computed eigenvalues, focusing on those closest to the target. The number of eigenvalues returned is equal to `Neig`.
-- `eigenvectors::Matrix{Float64}`: A matrix where each column is an eigenvector corresponding to one of the computed eigenvalues.
+- `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to one of the computed eigenvalues.
 """
 function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0)
     Es, vs = eigsolve(Hk, Neig, EigSorter(λ->abs(target-λ), rev=false), ishermitian=true)
