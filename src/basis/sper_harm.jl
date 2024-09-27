@@ -16,6 +16,21 @@ function str_to_orb(str)::Angular
     return orbdict[str]
 end
 
+"""
+    get_spherical(l, m)
+
+Returns the spherical harmonic function for a given orbital angular momentum quantum number `l` and magnetic quantum number `m`.
+
+# Arguments
+- `l::Int`: The orbital angular momentum quantum number (`l = 0` for `s`, `l = 1` for `p`, `l = 2` for `d`, etc.).
+- `m::Int`: The magnetic quantum number, which ranges from `-l` to `l`.
+
+# Returns
+- The corresponding spherical harmonic function as a vector, based on the values of `l` and `m`.
+"""
+get_spherical(l, m)::Angular = [[s()], [pz(), px()], [dz2(), dxz(), dx2_y2()]][l+1][m+1]
+
+
 # Angular parts produce 0/0 for r = [0, 0, 0]
 nan_to_zero(x) = isnan(x) ? zero(x) : x
 
@@ -268,7 +283,7 @@ end
 Struct to calculate the overlap integral between two wavefunctions with centers
 `r⃗₁` and `r⃗₂`.
 """
-struct Overlap{F1,F2<:Function, A1,A2<:Array{Float64, 1}}<:Function
+struct Overlap{F1,F2,A1,A2}<:Function
     Ψ₁ :: F1
     r⃗₁ :: A1
     Ψ₂ :: F2
