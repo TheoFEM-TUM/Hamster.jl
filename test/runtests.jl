@@ -28,6 +28,7 @@ end
     include("basis/test_index.jl")
     include("basis/test_overlap.jl")
     include("basis/test_param.jl")
+    include("basis/test_rllm.jl")
 end
 
 @testset "model" begin

@@ -1,4 +1,4 @@
-using CubicSplines, Plots
+using CubicSplines
 
 const int_tol = 1e-3
 
@@ -21,7 +21,6 @@ const int_tol = 1e-3
 
     x_trial = 15 .* rand(100)
     @test mean(abs.(f1_int.(x_trial) .- f1.(x_trial))) < int_tol
-    scatter(xs, ys)
 
     # Test 2: test function 2
     f2(x) = (3x^4 - 2x^3 + 5x^2 - 7x + 1) * exp(-x^2)

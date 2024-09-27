@@ -14,7 +14,7 @@ include("strc/vec.jl"); include("strc/grid.jl"); include("strc/lattice.jl"); inc
 
 include("basis/index.jl"); include("basis/sper_harm.jl"); include("basis/sh_transforms.jl"); include("basis/orbconfig.jl")
 include("basis/adaptive_intp.jl")
-include("basis/label.jl"); include("basis/orbital.jl"); include("basis/overlap.jl"); include("basis/param.jl")
+include("basis/label.jl"); include("basis/orbital.jl"); include("basis/overlap.jl"); include("basis/param.jl"); include("basis/rllm.jl")
 
 include("model/ham.jl"); include("model/ham_write.jl")
 

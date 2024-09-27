@@ -5,6 +5,7 @@ cspbbr_poscar = string(@__DIR__) * "/../strc/test_files/POSCAR_CsPbBr3"
     conf = get_empty_config()
     set_value!(conf, "orbitals", "Ga", "sp3dr2 sp3dr2 sp3dr2 sp3dr2")
     set_value!(conf, "orbitals", "As", "sp3dr2 sp3dr2 sp3dr2 sp3dr2")
+    set_value!(conf, "interpolate_rllm", false)
     
     strc_gaas = Structure(conf, poscar_path=gaas_poscar)
     orbitals_gaas = Hamster.get_orbitals(strc_gaas, conf)
@@ -19,6 +20,7 @@ end
     set_value!(conf, "orbitals", "Cs", "s")
     set_value!(conf, "orbitals", "Pb", "s px py pz")
     set_value!(conf, "orbitals", "Br", "px py pz")
+    set_value!(conf, "interpolate_rllm", false)
     
     strc_cspbbr3 = Structure(conf, poscar_path=cspbbr_poscar)
     orbitals_cspbbr3 = Hamster.get_orbitals(strc_cspbbr3, conf)

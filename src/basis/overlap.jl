@@ -19,6 +19,25 @@ struct TBOverlap{T<:MatrixElement, OC<:OrbitalConfiguration}
 end
 
 """
+    Base.isequal(ov1::TBOverlap, ov2::TBOverlap)
+
+Compare two `TBOverlap` objects, `ov1` and `ov2`, for equality.
+
+# Arguments
+- `ov1::TBOverlap`: The first `TBOverlap` instance.
+- `ov2::TBOverlap`: The second `TBOverlap` instance.
+
+# Returns
+- `Bool`: `true` if the two `TBOverlap` instances are considered equal, `false` otherwise.
+"""
+function Base.isequal(ov1::OV1, ov2::OV2) where {OV1,OV2<:TBOverlap}
+    cond1 = typeof(ov1.type) == typeof(ov2.type)
+    cond2 = typeof(ov1.orbconfig) == typeof(ov2.orbconfig)
+    cond3 = ov1.ion_label == ov2.ion_label
+    return cond1 && cond2 && cond3
+end
+
+"""
     get_overlaps(ions, orbitals, conf=get_empty_config())
 
 Compute all tight-binding (TB) overlaps between pairs of orbitals for a given list of ions.
@@ -35,7 +54,6 @@ function get_overlaps(ions, orbitals, conf=get_empty_config())
     overlaps = TBOverlap[]
 
     unique_ion_types = get_ion_types(ions, uniq=true)
-
     for iion in eachindex(unique_ion_types), jion in iion:length(unique_ion_types)
         ion_label = IonLabel(unique_ion_types[iion], unique_ion_types[jion])
         ionswap = areswapped(unique_ion_types[iion], unique_ion_types[jion])
@@ -133,25 +151,6 @@ function same_ion_label(Vllm::TBOverlap, ion_label::IonLabel)
 end
 
 (p::TBOverlap)(x...)::Float64 = p.type(x...)
-
-"""
-    Base.isequal(ov1::TBOverlap, ov2::TBOverlap)
-
-Compare two `TBOverlap` objects, `ov1` and `ov2`, for equality.
-
-# Arguments
-- `ov1::TBOverlap`: The first `TBOverlap` instance.
-- `ov2::TBOverlap`: The second `TBOverlap` instance.
-
-# Returns
-- `Bool`: `true` if the two `TBOverlap` instances are considered equal, `false` otherwise.
-"""
-function Base.isequal(ov1::TBOverlap, ov2::TBOverlap)
-    cond1 = typeof(ov1.type)==typeof(ov2.type)
-    cond2 = typeof(ov1.orbconfig)==typeof(ov2.orbconfig)
-    cond3 = ov1.ion_label == vo2.ion_label
-    return cond1 && cond2 && cond3
-end
 
 struct ZeroOverlap<:MatrixElement; end
 #(me::MatrixElement)(x...) = me(x...)
