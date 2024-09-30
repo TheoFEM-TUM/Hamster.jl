@@ -12,6 +12,7 @@ cspbbr_poscar = string(@__DIR__) * "/../strc/test_files/POSCAR_CsPbBr3"
     set_value!(conf, "alpha", "As", 13)
     set_value!(conf, "interpolate_rllm", true)
     set_value!(conf, "rllm_file", string(@__DIR__)*"/test_files/rllm.dat")
+    set_value!(conf, "verbosity", 0)
 
     strc_gaas = Structure(conf, poscar_path=gaas_poscar)
     orbitals_gaas = Hamster.get_orbitals(strc_gaas, conf)
@@ -23,7 +24,6 @@ cspbbr_poscar = string(@__DIR__) * "/../strc/test_files/POSCAR_CsPbBr3"
 
     is_correct = Bool[]
     for key in keys(rllm)
-        println(key)
         f1 = rllm[key]
         f2 = rllm_correct[key]
         xs = rand(100) .* 5.

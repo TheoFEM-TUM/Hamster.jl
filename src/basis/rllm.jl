@@ -1,16 +1,35 @@
-function get_rllm(overlaps, conf=get_empty_config(); load_rllm=get_load_rllm(conf), rllm_file=get_rllm_file(conf), interpolate_rllm=get_interpolate_rllm(conf))
+"""
+    get_rllm(overlaps, conf=get_empty_config(); load_rllm=get_load_rllm(conf), rllm_file=get_rllm_file(conf), interpolate_rllm=get_interpolate_rllm(conf))
+
+Retrieves or computes the radial orbital integral look-up table (RLLM) for a given set of overlaps, based on configuration settings.
+
+# Arguments
+- `overlaps::Vector`: A list of overlap objects for which RLLM data is required.
+- `conf::Config`: Configuration object controlling the behavior of RLLM retrieval or generation. Defaults to an empty configuration.
+- `load_rllm::Bool`: (Keyword argument) If `true`, load the RLLM data from a file. The file location is provided by `rllm_file`. Defaults to the value from `conf`.
+- `rllm_file::String`: (Keyword argument) Filename for loading or saving the RLLM data. Defaults to the value from `conf`.
+- `interpolate_rllm::Bool`: (Keyword argument) If `true`, interpolate new RLLM data based on the overlaps and save it to a file. Defaults to the value from `conf`.
+
+# Returns
+- `rllm_dict::Dict{String, CubicSpline}`: A dictionary mapping overlap string representations to cubic spline interpolations of the radial integrals. If `load_rllm` is `true`, the data is read from the file. If `interpolate_rllm` is `true`, it is interpolated and saved.
+"""
+function get_rllm(overlaps, conf=get_empty_config(); load_rllm=get_load_rllm(conf), rllm_file=get_rllm_file(conf), interpolate_rllm=get_interpolate_rllm(conf), verbosity=get_verbosity(conf))
     if load_rllm
-        rllm_dict = read_rllm(rllm_file)
+        if verbosity > 0; println(" Reading distance dependence from file..."); end
+        time = @elapsed rllm_dict = read_rllm(rllm_file)
+        if verbosity > 0; println(" Finished in $time s."); end
         return rllm_dict
     elseif interpolate_rllm
         rllm_dict = Dict{String, CubicSpline{Float64}}()
         i = 0
         Nover = length(overlaps)
-        Threads.@threads for overlap in overlaps
+        if verbosity > 0; println(" Interpolating distance dependence..."); end
+        time = @elapsed Threads.@threads for overlap in overlaps
             rllm_dict[string(overlap, apply_oc=true)] = interpolate_overlap(overlap, conf)
             i += 1
-            println("   ($i / $Nover)")
+            if verbosity > 0; println("   ($i / $Nover) ", string(overlap, apply_oc=true)); end
         end
+        if verbosity > 0; println(" Finished in $time s."); end
         save_rllm(rllm_dict, filename=rllm_file)
         return rllm_dict
     end
