@@ -95,3 +95,79 @@ end
 
     @test Hamster.normdiff(v1, v2, dv1, dv2, t) ≈ norm(v1 - dv1 - v2 + dv2 + t)
 end
+
+@testset "Projection" begin
+    import Hamster: proj
+    # Test 1: Basic test for orthogonal projection
+    u = [1, 0]
+    v = [0, 1]
+    @test proj(u, v) ≈ [0, 0] # should be 0
+
+    # Test 2: Projection of a vector onto itself
+    u = [2, 3]
+    v = [2, 3]
+    @test proj(u, v) ≈ v
+
+    # Test 3: Projection of a non-orthogonal vector
+    u = [1, 0]
+    v = [3, 4]
+    @test proj(u, v) ≈ [3, 0]
+
+    # Test 4: Projection of a vector onto a different dimension vector
+    u = [1, 2]
+    v = [3, 4]
+    @test proj(u, v) ≈ (11/5) * u
+
+    # Test 5: Zero vector projection
+    u = [0, 0]
+    v = [1, 1]
+    @test proj(u, v) == [0, 0]  # Projection onto a zero vector should return a zero vector
+
+    # Test 6: Zero projection when v is zero
+    u = [1, 2]
+    v = [0, 0]
+    @test proj(u, v) == [0, 0]  # Projection of a zero vector onto any vector should return a zero vector
+
+    # Test 7: Higher dimension test (3D vectors)
+    u = [1, 0, 0]
+    v = [2, 3, 4]
+    @test proj(u, v) ≈ [2, 0, 0]
+end
+
+@testset "Angle tests" begin
+    import Hamster: calc_angle
+    # Test 1: Angle between two perpendicular vectors (90 degrees or π/2 radians)
+    v1 = [1.0, 0.0]
+    v2 = [0.0, 1.0]
+    @test isapprox(calc_angle(v1, v2), π/2, atol=1e-5)
+
+    # Test 2: Angle between two parallel vectors (0 degrees or 0 radians)
+    v1 = [1.0, 0.0]
+    v2 = [2.0, 0.0]
+    @test isapprox(calc_angle(v1, v2), 0.0, atol=1e-5)
+
+    # Test 3: Angle between two opposite vectors (180 degrees or π radians)
+    v1 = [1.0, 0.0]
+    v2 = [-1.0, 0.0]
+    @test isapprox(calc_angle(v1, v2), π, atol=1e-5)
+
+    # Test 4: Test with zero vector (should return 0 due to ϵ threshold)
+    v1 = [0.0, 0.0]
+    v2 = [1.0, 1.0]
+    @test calc_angle(v1, v2) == 0.0
+
+    # Test 5: Test with nearly identical vectors (should return a very small angle)
+    v1 = [1.0, 1.0]
+    v2 = [1.0001, 1.0001]
+    @test isapprox(calc_angle(v1, v2), 0.0, atol=1e-5)
+
+    # Test 6: Test with a large ϵ value (should return 0 as vectors are considered too small)
+    v1 = [1e-6, 1e-6]
+    v2 = [1e-6, 1e-6]
+    @test calc_angle(v1, v2; ϵ=1e-4) == 0.0
+
+    # Test 7: Test with two random vectors
+    v1 = rand(3)
+    v2 = rand(3)
+    @test isapprox(calc_angle(v1, v2), acos(round(v1 ⋅ v2 / (norm(v1)*norm(v2)), digits=5)), atol=1e-5)
+end

@@ -111,3 +111,45 @@ function normdiff(v⃗::V, w⃗::W, δv⃗::DV, δw⃗::DW, t⃗::T) where {V,W,
     end
     return √out
 end
+
+"""
+    proj(u⃗, v⃗)
+
+Calculate the projection of the vector `v⃗` onto the vector `u⃗`.
+
+# Arguments
+- `u⃗::AbstractVector`: The vector onto which the projection is calculated.
+- `v⃗::AbstractVector`: The vector being projected onto `u⃗`.
+
+# Returns
+- `AbstractVector`: The projection of `v⃗` onto `u⃗`.
+"""
+function proj(u⃗, v⃗)
+    if !(norm(u⃗) ≈ 0)
+        return (u⃗⋅v⃗)/(u⃗⋅u⃗) .* u⃗
+    else
+        return zero(u⃗)        
+    end
+end
+
+"""
+    calc_angle(v1, v2; ϵ=1e-5)
+
+Calculate the angle between two vectors `v1` and `v2` in radians. 
+
+# Arguments:
+- `v1`: First vector (can be any dimensionality as long as it matches `v2`).
+- `v2`: Second vector (same dimensionality as `v1`).
+- `ϵ`: Small tolerance value to ensure that the norm of the vectors is sufficiently large to avoid division by zero (default: `1e-5`).
+
+# Returns:
+- The angle in radians between `v1` and `v2`, calculated using the dot product. 
+  If either vector's norm is less than `ϵ`, the function returns `0.`.
+"""
+function calc_angle(v1, v2; ϵ=1e-5)
+    if norm(v1) > ϵ && norm(v2) > ϵ
+        return acos(round(v1 ⋅ v2 / (norm(v1)*norm(v2)), digits=5))
+    else
+        return 0.
+    end
+end
