@@ -10,7 +10,8 @@ include("conf/defaults.jl"); include("conf/strc_defaults.jl"); include("conf/bas
 
 include("out/output.jl")
 
-include("strc/vec.jl"); include("strc/grid.jl"); include("strc/lattice.jl"); include("strc/ion.jl"); include("strc/structure.jl"); include("strc/methods.jl")
+include("strc/vec.jl"); include("strc/grid.jl"); include("strc/lattice.jl"); include("strc/ion.jl"); include("strc/sk_transform.jl")
+include("strc/structure.jl"); include("strc/methods.jl")
 
 include("basis/index.jl"); include("basis/sper_harm.jl"); include("basis/sh_transforms.jl"); include("basis/orbconfig.jl")
 include("basis/adaptive_intp.jl")

@@ -15,6 +15,7 @@ end
     include("strc/test_grid.jl")
     include("strc/test_lattice.jl")
     include("strc/test_ion.jl")
+    include("strc/test_sk_transform.jl")
     include("strc//test_structure.jl")
     include("strc/test_methods.jl")
 end
