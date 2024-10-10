@@ -1,4 +1,4 @@
-using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Statistics
+using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Statistics, FiniteDiff
 
 @testset "Parse" begin
     include("parse/test_utils.jl")
@@ -30,8 +30,10 @@ end
     include("basis/test_overlap.jl")
     include("basis/test_param.jl")
     include("basis/test_rllm.jl")
+    include("basis/test_basis.jl")
 end
 
 @testset "model" begin
     include("model/test_ham.jl")
+    include("model/test_model.jl")
 end

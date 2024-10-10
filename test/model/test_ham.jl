@@ -122,4 +122,10 @@ end
     @test size(Es, 1) == 2*size(Es_correct, 1)
     @test Es[1:2:16, :] ≈ Es_correct
     @test Es[2:2:16, :] ≈ Es_correct
+
+    dHr = [rand(8, 8) for R in 1:25]
+    dHr_1 = Hamster.gradient_apply_spin_basis.(dHr)
+    @test all(H->size(H)==(4, 4), dHr_1)
+    dHr_2 = Hamster.gradient_apply_spin_basis.(dHr, alternating_order=true)
+    @test all(H->size(H)==(4, 4), dHr_2)
 end

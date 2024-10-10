@@ -182,9 +182,29 @@ Extends a given matrix `H` to a spin basis (up/down) representation by applying 
 """
 function apply_spin_basis(H::AbstractMatrix; alternating_order=false)
     I_spin = Array{Int64}(I, 2, 2)
+    return alternating_order ? kron(I_spin, H) : kron(H, I_spin)
+end
+
+"""
+    gradient_apply_spin_basis(dHr::AbstractMatrix; alternating_order=false)
+
+Calculate the gradient of the spin basis applied to a given matrix `dHr`. The output matrix is of size `(Nε/2, Nε/2)`.
+
+This function reshapes the input matrix `dHr`, which is expected to represent a gradient in a spin system, into a form suitable for applying the spin basis transformation. The transformation is performed using the Kronecker product, and the output is computed depending on the specified order of application.
+
+# Arguments
+- `dHr::AbstractMatrix`: An abstract matrix containing the gradient data to be transformed. It should have a shape that is compatible with the spin basis operations.
+- `alternating_order::Bool`: A flag that determines the order of the spin basis application. If `false`, the function applies the transformation as `kron(H, I_spin)`. If `true`, it applies the transformation as `kron(I_spin, H)`.
+"""
+function gradient_apply_spin_basis(dHr::AbstractMatrix; alternating_order=false)
+    Nε = size(dHr, 1) ÷ 2
     if !alternating_order
-        return kron(H, I_spin)
-    elseif alternating_order
-        return kron(I_spin, H)
+        # Case 1: kron(H, I_spin)
+        dHr_out = sum(reshape(dHr, 2, Nε, 2, Nε), dims=(1, 3))
+        return dropdims(dHr_out, dims=(1, 3))
+    else
+        # Case 2: kron(I_spin, H)
+        dHr_out = sum(reshape(dHr, Nε, 2, Nε, 2), dims=(2, 4))
+        return dropdims(dHr_out, dims=(2, 4))
     end
 end
