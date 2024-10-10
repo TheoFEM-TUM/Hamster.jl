@@ -110,7 +110,7 @@ function iterate_nn_grid_points(point_grid::PointGrid)
             end
         end
     end
-    return all_inds
+    return unique(all_inds)
 end
 
 """

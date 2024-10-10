@@ -153,3 +153,23 @@ function calc_angle(v1, v2; ϵ=1e-5)
         return 0.
     end
 end
+
+"""
+    get_rotated_angles(Û, r⃗)
+
+Calculate the spherical angles (θ, φ) for a vector `r⃗` after it is rotated by the matrix `Û`.
+
+# Arguments
+- `Û::AbstractMatrix{T}`: A 3x3 rotation matrix that transforms the vector `r⃗`.
+- `r⃗::AbstractVector{T}`: A 3D vector to be rotated, where `T` is a numeric type.
+
+# Returns
+- `θ::T`: The polar (zenith) angle, measured from the z-axis, in radians.
+- `φ::T`: The azimuthal angle, measured from the x-axis in the xy-plane, in radians.
+"""
+function get_rotated_angles(Û, r⃗)
+    x, y, z = Û * r⃗
+    φ = atan(y, x)
+    θ = atan(√(x^2 + y^2), z)
+    return θ, φ
+end

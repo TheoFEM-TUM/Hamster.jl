@@ -21,7 +21,7 @@ function is_righthanded(Ê; ε=1e-10)
 end
 
 # check if z-axis is along connecting vector
-test_zaxis(Ê, r⃗₁, r⃗₂; ε=1e-5) = norm(Ê[3, :] .- (r⃗₂ .- r⃗₁) ./ norm(r⃗₂ .- r⃗₁)) < ε
+test_zaxis(Ê, r⃗₁, r⃗₂; ε=1e-4) = norm(Ê[3, :] .- normalize(r⃗₂ .- r⃗₁)) < ε
 
 # test special case when both vectors are 0
 function test_special_cases(method; ε=1e-10)

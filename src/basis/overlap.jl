@@ -144,7 +144,7 @@ get_baseorb_ls(overlap::TBOverlap) = overlap.type.base[1].l, overlap.type.base[2
 """
     same_ion_label(Vllm, ion_label)
 
-Return `true` if the TB parameter `Vllm` has the ion overlap ion label `ion_label` independently if either is sorted.
+Return `true` if the TB overlap `Vllm` has the ion overlap ion label `ion_label` independently if either is sorted.
 """
 function same_ion_label(Vllm::TBOverlap, ion_label::IonLabel)
     return sort(Vllm.ion_label.types) == sort(ion_label.types)
@@ -162,7 +162,7 @@ get_me_label(::Angular, ::Angular, base)::MatrixElement = ZeroOverlap()
 Conjugate the orbital configuration if the sorted ion overlap label of the TB parameter `Vllm` is the conjugate of the
 actual ion overlap label `ion_label` of the respective Hamiltonian matrix element.
 """
-function decide_orbconfig(Vllm::TBOverlap, ion_label::IonLabel)
+function decide_orbconfig(Vllm::TBOverlap, ion_label::IonLabel)::Tuple{Union{SymOrb, MirrOrb, DefOrb}, Union{NormalMode, ConjugateMode}}
     if ion_label == Vllm.ion_label; return Vllm.orbconfig, NormalMode();
     else return conjugate(Vllm.orbconfig), ConjugateMode(); end
 end

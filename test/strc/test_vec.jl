@@ -170,4 +170,9 @@ end
     v1 = rand(3)
     v2 = rand(3)
     @test isapprox(calc_angle(v1, v2), acos(round(v1 ⋅ v2 / (norm(v1)*norm(v2)), digits=5)), atol=1e-5)
+
+    # Test 8: Test rotated angle method
+    r⃗ = rand(3); Û = rand(3, 3)
+    _, θ, φ = Hamster.transform_to_spherical(Û*r⃗)
+    @test (θ, φ) == Hamster.get_rotated_angles(Û, r⃗)
 end

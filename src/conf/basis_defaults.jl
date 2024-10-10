@@ -106,3 +106,10 @@ get_interpolate_rllm(conf::Config)::Bool = conf("interpolate_rllm") == "default"
 The `rllm_file` tag sets the name of the file where the distance dependence is stored.
 """
 get_rllm_file(conf::Config)::String = conf("rllm_file") == "default" ? "rllm.dat" : conf("rllm_file")
+
+"""
+    tmethod=Rotation
+
+The `tmethod` tag sets the method that is used to calculate the Slater-Koster transform matrix.
+"""
+get_tmethod(conf::Config)::String = conf("tmethod") == "default" ? "Rotation" : conf("tmethod")

@@ -8,7 +8,7 @@ cspbbr_poscar = string(@__DIR__) * "/../strc/test_files/POSCAR_CsPbBr3"
     strc_gaas = Structure(conf, poscar_path=gaas_poscar)
     
     # Test 1: Default hybrid orbital orientation
-    default_hybrid_axes = [SVector{3}([1., 1., 1.]), SVector{3}([1., -1., -1.]), SVector{3}([-1., 1., -1.]), SVector{3}([-1., -1., 1.])]
+    default_hybrid_axes = normalize.([SVector{3}([1., 1., 1.]), SVector{3}([1., -1., -1.]), SVector{3}([-1., 1., -1.]), SVector{3}([-1., -1., 1.])])
     orbitals_1 = Hamster.get_orbitals(strc_gaas, conf)
 
     @test sum(Hamster.get_number_of_orbitals(orbitals_1)) == 8

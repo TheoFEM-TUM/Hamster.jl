@@ -85,3 +85,59 @@ struct ConjugateMode<:OCMode; end
 
 conjugate(::NormalMode) = ConjugateMode()
 conjugate(::ConjugateMode) = NormalMode()
+
+"""
+    get_mode(mode_dicts, kparam, ion_label, iorb, jorb)
+
+Retrieve the mode (`mode`) for a given ion label and orbital indices.
+
+# Arguments
+- `mode_dicts`: A vector of dictionaries where each dictionary maps `IonLabel`s to their respective mode (e.g., `NormalMode`, `ConjugateMode`). Each entry corresponds to a different k-point parameter (`kparam`).
+- `kparam`: The k-point parameter index indicating which dictionary in `mode_dicts` to use.
+- `ion_label`: The label identifying the ion pair for which the mode is needed.
+- `iorb`: The index of the first orbital in the pair.
+- `jorb`: The index of the second orbital in the pair.
+
+# Returns
+- `mode`: The mode corresponding to the given `ion_label`, after potentially checking for a conjugate mode using `check_for_conjugate_mode`.
+"""
+function get_mode(mode_dicts, kparam, ion_label, iorb, jorb)
+    mode = check_for_conjugate_mode(mode_dicts[kparam][ion_label], ion_label, iorb, jorb)
+    return mode
+end
+
+function check_for_conjugate_mode(mode, ion_label, iorb, jorb)::Union{NormalMode, ConjugateMode}
+    if aresameions(ion_label) && jorb < iorb
+        return conjugate(mode)
+    else
+        return mode
+    end
+end
+
+"""
+    get_orbconfig(oc_dicts, kparam, ion_label, iorb, jorb)
+
+Retrieve the orbital configuration (`orbconfig`) for a given ion label and orbital indices.
+
+# Arguments
+- `oc_dicts`: A vector of dictionaries where each dictionary maps `IonLabel`s to their respective orbital configurations (`orbconfig`). Each entry in the dictionary corresponds to a different k-point parameter (`kparam`).
+- `kparam`: The k-point parameter index indicating which dictionary in `oc_dicts` to use.
+- `ion_label`: The label identifying the ion pair for which the orbital configuration is needed.
+- `iorb`: The index of the first orbital in the pair.
+- `jorb`: The index of the second orbital in the pair.
+
+# Returns
+- `orbconfig`: The orbital configuration (`orbconfig`) after potentially checking for a conjugate configuration using `check_for_conjugate_orbconfig`.
+"""
+function get_orbconfig(oc_dicts, kparam, ion_label, iorb, jorb)
+    orbconfig = check_for_conjugate_orbconfig(oc_dicts[kparam][ion_label], ion_label, iorb, jorb)
+    return orbconfig
+end
+
+function check_for_conjugate_orbconfig(orbconfig, ion_label, iorb, jorb)::Union{SymOrb, DefOrb, MirrOrb}
+    if aresameions(ion_label) && jorb < iorb
+        return conjugate(orbconfig)
+    else
+        return orbconfig
+    end
+end

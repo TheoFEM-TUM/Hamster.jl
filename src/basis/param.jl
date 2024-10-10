@@ -307,9 +307,9 @@ Checks the consistency of configuration values from a file with the given `Confi
 """
 function check_consistency(conf_values, conf::Config)
     consistent = Bool[]
-    push!(consistent, conf_values["rcut"] == string(get_rcut(conf)))
-    push!(consistent, conf_values["onsite"] == string(get_onsite(conf)))
-    push!(consistent, conf_values["sepNN"] == string(get_sepNN(conf)))
+    if haskey(conf_values, "rcut"); push!(consistent, conf_values["rcut"] == string(get_rcut(conf))); end
+    if haskey(conf_values, "onsite"); push!(consistent, conf_values["onsite"] == string(get_onsite(conf))); end
+    if haskey(conf_values, "sepNN"); push!(consistent, conf_values["sepNN"] == string(get_sepNN(conf))); end
     for (key, value) in conf_values
         if occursin("_n", key)
             ion_type = string(split(key, "_")[1])
