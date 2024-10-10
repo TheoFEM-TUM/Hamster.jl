@@ -1,9 +1,18 @@
-using Hamster, LinearAlgebra, BenchmarkTools, SparseArrays, OhMyThreads, Distributed, MethodAnalysis
+using Hamster, LinearAlgebra, BenchmarkTools, SparseArrays, OhMyThreads, Distributed, MethodAnalysis, CubicSplines
+using StaticArrays
 
 
-for v in 1:NV, R in 1:NR
-    @. Hr[R] += h[v, R] * V[v]
+h = rand(34, 25)
+
+for ind in CartesianIndices(h)
+    h[ind]
 end
+
+ehm = Hamster.EffectiveHamiltonian(rand(3), rand(3))
+
+Hr = [rand(8, 8) for i in 1:25]
+
+@show size.(Hamster.apply_spin_basis.(Hr))
 
 func1(Hks) = map(eigvals, Hks)
 
@@ -30,3 +39,33 @@ H = rand(64, 64)
 
 @show length(eachindex(H_sp))
 @show length(eachindex(H))
+
+
+
+vs = rand(8, 8, 80)
+ex = rand(25, 80)
+
+Threads.@threads for k in axes(ex, 2)
+    Threads.@threads for R in axes(ex, 1)
+        for m in axes(vs, 2)
+            product = @. conj(vs[:, m, k])' * ex[R, k] * vs[:, m, k]
+            @show size(product)
+        end
+    end
+end
+
+v = sprand(8, 0.1)
+product = @. conj(v)' * ex[1, 1] * v
+
+sparse(zeros(8))
+
+Array{SparseVector{Float64, Int64}, 3} <: AbstractArray{<:SparseVector}
+
+
+t1 = (1, 1.0)
+push!(t1, 1im)
+@show typeof(t1)
+
+t = (1)
+t2 = (t..., 1im)
+@show typeof(t2)
