@@ -1,3 +1,4 @@
 [deps]
 CubicSplines = "9c784101-8907-5a6d-9be6-98f00873c89b"
+FiniteDiff = "6a86dc24-6348-571c-b903-95158fe2bd41"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
