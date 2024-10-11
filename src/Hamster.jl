@@ -6,7 +6,8 @@ using TensorOperations, LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Da
 include("parse/utils.jl"); include("parse/poscar.jl")
 
 include("conf/config.jl"); include("conf/read_config.jl")
-include("conf/defaults.jl"); include("conf/strc_defaults.jl"); include("conf/basis_defaults.jl"); include("conf/optim_defaults.jl")
+include("conf/defaults.jl"); include("conf/strc_defaults.jl"); include("conf/basis_defaults.jl"); include("conf/model_defaults.jl")
+include("conf/optim_defaults.jl")
 
 include("out/output.jl")
 
@@ -34,7 +35,7 @@ export ParameterLabel, read_params, write_params, Basis, get_geometry_tensor
 export get_hamiltonian, diagonalize, get_hr, TBModel, init_params!
 export write_hr, read_hr
 
-export update!
+export Loss, Regularization, update!
 
 # Precompililation
 include("Hamster_precompile.jl")

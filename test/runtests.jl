@@ -37,3 +37,7 @@ end
     include("model/test_ham.jl")
     include("model/test_model.jl")
 end
+
+@testset "optim" begin
+    include("optim/test_loss.jl")
+end

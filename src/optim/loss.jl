@@ -1,178 +1,157 @@
-abstract type AbstractLoss<:Function end
-
-(l::AbstractLoss)(y, ŷ) = forward(l, y, ŷ)
-"""
-    (mse::MSE)(y, ŷ)
-
-Calculate the mean-square error of predictions y given the ground truth ŷ.
-"""
-struct MSE <: AbstractLoss; end
-forward(::MSE, y, ŷ) = mean((y .- ŷ).^2)
-gradient(::MSE, y, ŷ) = 1 ./ prod(size(y)) .* 2 .*(y .- ŷ)
+const loss_to_n = Dict{String, Int64}("MAE" => 1, "MSE" => 2)
 
 """
+    struct Loss
 
-    (mae::MAE)(y, ŷ)
+A structure representing a (weighted) loss function for evaluating the difference between predicted and true values. The loss is calculated based on a given norm, with optional weights applied to the errors along the prediction and observation dimensions.
 
-Calculate the mean-absolute error of predictions y given the ground truth ŷ.
+# Fields
+- `wE::Vector{Float64}`: A vector of weights applied to the error terms along the `y` dimension (true values).
+- `wk::Vector{Float64}`: A vector of weights applied to the error terms along the `ŷ` dimension (predicted values).
+- `N::Float64`: Normalization factor, typically the product of the sums of `wE` and `wk`.
+- `n::Int64`: The order of the norm used for the loss function (e.g., 1 for L1 norm, 2 for L2 norm, etc.).
 """
-struct MAE <: AbstractLoss; end
-forward(mae::MAE, y, ŷ) = mean(@. abs(y - ŷ))
-gradient(mae::MAE, y, ŷ) = 1 ./ prod(size(y)) .* @. ifelse(y - ŷ > 0, 1, -1)
-
-"""
-    (nmse::nMSE)(y, ŷ)
-
-Calculate the mean-squared error of predictions `y` given the ground truth `ŷ` and normalize the result by the
-absolute value of `ŷ`.
-"""
-struct nMSE <: AbstractLoss; end
-forward(nmse::nMSE, y, ŷ) = mean(@. (y - ŷ)^2 / abs(ŷ))
-gradient(nmse::nMSE, y, ŷ) = @. 2 * (y - ŷ) / abs(ŷ)
-
-"""
-    (nmae::nMAE)(y, ŷ)
-
-    Calculate the mean-absolute error of predictions `y` given the ground truth `ŷ` and normalize the result by the
-    absolute value of `ŷ`.
-"""
-struct nMAE <: AbstractLoss; end
-forward(nmae::nMAE, y, ŷ) = mean(@. abs(y - ŷ) / abs(ŷ))
-gradient(nmae::nMAE, y, ŷ) = @. ifelse(y - ŷ > 0, 1, -1) / abs(ŷ)
-
-"""
-
-    (wmse::wMSE)(ε, Ê)
-
-Calculate the weighted mean-square error of the energy band predictions `ε`
-given the ground truth `Ê` with band weights `wε` and k-point weigths `wk`.
-"""
-struct wMSE <: AbstractLoss
-    wk :: Array{Float64, 1}
-    wε :: Array{Float64, 1}
+struct Loss
+    wE :: Vector{Float64}
+    wk :: Vector{Float64}
+    N :: Float64
+    n :: Int64
 end
 
-function forward(l::wMSE, ε, Ê)
-    L = 1/(sum(l.wk) * sum(l.wε))*( (ε .- Ê).^2 * l.wk ) ⋅ l.wε
-end
-function forward(l::wMSE, ε::A31, Ê::A32) where {A31, A32 <: AbstractArray{Float64, 3}}
-    N = size(Ê, 3); L = 0
-    for n in 1:N
-        L += forward(l, ε[:, :, n], Ê[:, :, n])
-    end
-    return L ./ N
-end
-
-function gradient(l::wMSE, ε, Ê)
-    dL = 1/(sum(l.wk) * sum(l.wε))*(2 .*(ε .- Ê) .* l.wk' .* l.wε)
-end
-
-function gradient(l::wMSE, ε::A31, Ê::A32) where {A31, A32 <: AbstractArray{Float64, 3}}
-    N = size(Ê, 3); dL = similar(ε)
-    for n in 1:N
-        dL[:, :, n] = gradient(l, ε[:, :, n], Ê[:, :, n])
-    end
-    return dL ./ N
-end
+Loss(wE::Vector{Float64}, wk::Vector{Float64}, n::Int64) = Loss(wE, wk, sum(wE)*sum(wk), n)
 
 """
+    Loss(Nε, Nk; conf=get_empty_config(), loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk))
 
-    (wmse::wMAE)(ε, Ê)
+Create a `Loss` object with band weights, k-point weights, and loss norm based on a given configuration.
 
-Calculate the weighted mean-absolute error of the energy band predictions `ε`
-given the ground truth `Ê` with band weights `wε` and k-point weigths `wk`.
+# Arguments
+- `Nε::Int64`: Number of energy bands (dimension of `wE`).
+- `Nk::Int64`: Number of k-points (dimension of `wk`).
+- `conf`: Configuration object (default: `get_empty_config()`). This is used to retrieve parameters for customizing the loss function.
+- `loss`: A string that specifies the type of loss function. The default value is obtained from `get_loss(conf)`.
+- `wE`: Vector of weights for the energy bands, defaulted to `get_band_weights(conf, Nε)`.
+- `wk`: Vector of weights for the k-points, defaulted to `get_kpoint_weights(conf, Nk)`.
+
+# Keyword Arguments
+- `wE`: The band weights, used to scale the errors over energy bands (default provided by configuration).
+- `wk`: The k-point weights, used to scale the errors over k-points (default provided by configuration).
+
+# Returns
+- A `Loss` object initialized with the appropriate band weights (`wE`), k-point weights (`wk`), normalization factor, and loss norm (`n`).
 """
-struct wMAE <: AbstractLoss
-    wk :: Array{Float64, 1}
-    wε :: Array{Float64, 1}
-end
+function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk))
+    n = loss_to_n[loss]
 
-function forward(l::wMAE, ε, Ê)
-    L = 1/(sum(l.wk) * sum(l.wε))*( abs.(ε .- Ê) * l.wk ) ⋅ l.wε
-end
-function forward(l::wMAE, ε::A31, Ê::A32) where {A31, A32 <: AbstractArray{Float64, 3}}
-    N = size(Ê, 3); L = 0
-    for n in 1:N
-        L += forward(l, ε[:, :, n], Ê[:, :, n])
-    end
-    return L ./ N
-end
-
-function gradient(l::wMAE, ε, Ê)
-    dL = 1/(sum(l.wk) * sum(l.wε))*(ifelse.(ε .> Ê, 1, -1) .* l.wk' .* l.wε)
-end
-
-function gradient(l::wMAE, ε::A31, Ê::A32) where {A31, A32 <: AbstractArray{Float64, 3}}
-    N = size(Ê, 3); dL = similar(ε)
-    for n in 1:N
-        dL[:, :, n] = gradient(l, ε[:, :, n], Ê[:, :, n])
-    end
-    return dL ./ N
-end
-
-abstract type AbstractRegularization; end
-
-struct L1Regularization <: AbstractLoss
-    λ :: Real
-end
-
-forward(Rl1::L1Regularization, x) = Rl1.λ * sum(x)
-gradient(Rl1::L1Regularization, x) = Rl1.λ * ones(x)
-
-struct L2Regularization{R<:Real} <: AbstractRegularization
-    λ :: R
-end
-
-forward(Rl2::L2Regularization, x) = Rl2.λ * sum(x.^2)
-gradient(Rl2::L2Regularization, x) = Rl2.λ .* x
-
-struct L2Barrier{R1,R2<:Real} <: AbstractRegularization
-    b :: R1
-    λ :: R2
-end
-
-(f::L2Barrier)(x) = f.λ*mapreduce(y -> abs(y) > f.b ? (f.b-y)^2 : 0., +, x)
-gradient(f::L2Barrier, x) = f.λ .* map(y -> abs(y) > f.b ? 2*(y-f.b) : 0, x)
-
-const loss_dict = Dict{String, Any}("MSE"=>MSE, "MAE"=>MAE, "wMAE"=>wMAE, "wMSE"=>wMSE, "nMSE"=>nMSE, "nMAE"=>nMAE)
-
-"""
-    init_loss(data, conf)
-
-Obtain the loss function from `conf`.
-"""
-function init_loss(data::Tuple, l_conf::AbstractString, conf)
-    Nε, Nk = size(data[2])
-    if l_conf[1] == 'w'
-        wε_conf = conf("wE", "Optimizer")
-        wk_conf = conf("wk", "Optimizer")
-        wε = ifelse(wε_conf=="default", ones(Nε), wε_conf)
-        wk = ones(Nk); if wk_conf ≠ "default"; wk = wk .* wk_conf; end
-        for key in keys(conf("Optimizer"))
-            if occursin("wk_", key)
-                index = parse(Int64, key[4:end])
-                wk[index] = conf(key, "Optimizer")
-            end
+    for key in keys(conf.blocks["Optimizer"])
+        if occursin("wk_", key)
+            index = parse(Int64, key[4:end])
+            wk[index] = conf(key, "Optimizer")
+        elseif occursin("wE_", key)
+            index = parse(Int64, key[4:end])
+            wE[index] = conf(key, "Optimizer")
         end
-        return loss_dict[l_conf](wk, wε)
-    else
-        return loss_dict[l_conf]()
-    end
+    end  
+
+    return Loss(wE, wk, n)
 end
 
-init_loss(data::Tuple, conf::TBConfig) = init_loss(data, get_loss(conf), conf)
+(l::Loss)(y, ŷ) = forward(l, y, ŷ)
 
 """
-    get_regularization(constants, conf)
+    forward(l::Loss, y, ŷ)
 
-Read the specified regularization function from the config file.
+Compute the forward pass of the loss function given the true values `y` and the predicted values `ŷ`.
+
+# Arguments
+- `l::Loss`: A `Loss` object which specifies how the loss is calculated.
+- `y::AbstractVector`: The predicted for each band and k-point.
+- `ŷ::AbstractVector`: The true values (ground truth) for each band and k-point.
+
+# Returns
+-`L::Float64`: The loss between `y` and `ŷ`.
 """
-function get_regularization(conf::TBConfig)
-    λ = get_lambda(conf)
-    b = get_barrier(conf)
-    if conf("barrier", "Optimizer") == "default"
-        return L2Regularization(λ)
-    else
-        return L2Barrier(b, λ)
-    end
+function forward(l::Loss, y, ŷ)
+    L = @. abs(y - ŷ)^l.n
+    return 1/l.N * (l.wE' * L * l.wk)
 end
+
+"""
+    backward(l::Loss, y, ŷ)
+
+Compute the gradient of the loss function with respect to the predicted values `ŷ`.
+
+# Arguments
+- `l::Loss`: A `Loss` object which specifies how the loss is calculated.
+- `y::AbstractVector`: The predicted for each band and k-point.
+- `ŷ::AbstractVector`: The true values (ground truth) for each band and k-point.
+
+# Returns
+- `dL::AbstractArray`: The gradient of the loss with respect to the predicted values `y`.
+"""
+function backward(l::Loss, y, ŷ)
+    dL = @. 1/l.N * sign.(y - ŷ) * l.wk' * l.wE * l.n * abs(y - ŷ)^(l.n - 1)
+end
+
+"""
+    struct Regularization
+
+A data structure that defines the regularization parameters used to penalize model complexity during optimization. Regularization is used to penalize large model parameters to avoid overfitting.
+
+# Fields
+- `b::Float64`: The barrier for the regularization term. Regularization is only applied if parameter values surpass this barrier.
+- `λ::Float64`: The regularization coefficient (lambda), which controls the intensity of regularization. A higher value leads to stronger regularization.
+- `n::Int64`: The norm type used for the regularization term, typically corresponding to L1 (`n=1`), L2 (`n=2`), or other norm types.
+"""
+struct Regularization
+    b :: Float64
+    λ :: Float64
+    n :: Int64
+end
+
+"""
+    Regularization([conf]; lambda=get_lambda(conf), barrier=get_barrier(conf), lreg=get_lreg(conf)) -> Regularization
+
+Create a `Regularization` struct using configuration parameters from the provided configuration or default values.
+
+# Arguments
+- `conf`: A configuration object (optional). Default values are used if not provided.
+
+# Returns
+- A `Regularization` struct initialized with the provided or default configuration values for `barrier`, `lambda`, and `lreg`.
+"""
+function Regularization(conf=get_empty_config(); lambda=get_lambda(conf), barrier=get_barrier(conf), lreg=get_lreg(conf))
+    return Regularization(barrier, lambda, lreg)
+end
+
+(R::Regularization)(x) = forward(R, x)
+
+"""
+    forward(R::Regularization, x::AbstractVector) -> Float64
+
+Compute the regularization penalty for the given input `x` using the regularization parameters 
+defined in the `Regularization` struct.
+
+# Arguments
+- `R::Regularization`: A `Regularization` object.
+- `x::AbstractVector`: The input (parameter) vector over which the regularization penalty is applied.
+
+# Returns
+- `Float64`: The total regularization penalty
+"""
+forward(R::Regularization, x) = R.λ * mapreduce(y -> abs(y) > R.b ? (y-R.b)^R.n : 0., +, x)
+
+"""
+    backward(R::Regularization, x::AbstractVector) -> AbstractVector
+
+Compute the gradient of the regularization penalty with respect to the input (parameter) vector `x`.
+
+# Arguments
+- `R::Regularization`: A `Regularization` object.
+- `x::AbstractVector`: The input (parameter) vector for which the gradient of the regularization penalty is computed.
+
+# Returns
+- `AbstractVector`: A vector of the same size as `x`, where each element is the gradient of the penalty
+  with respect to the corresponding element in `x`.
+"""
+backward(R::Regularization, x) = R.λ .* map(y -> abs(y) > R.b ? R.n * (y-R.b)^(R.n-1) : 0., x)
