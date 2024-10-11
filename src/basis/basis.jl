@@ -79,7 +79,7 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config(); tmethod=get_t
 
     Ts = frac_to_cart(strc.Rs, strc.lattice)
     nn_grid_points = iterate_nn_grid_points(strc.point_grid)
-    Threads.@threads for (chunk_id, index_range) in enumerate(chunks(nn_grid_points, n=npar))
+    for (chunk_id, index_range) in enumerate(chunks(nn_grid_points, n=npar))
         for (iion1, iion2, R) in nn_grid_points[index_range]
             ion_label = IonLabel(ion_types[iion1], ion_types[iion2], sorted=false)
             r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
