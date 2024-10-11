@@ -20,7 +20,6 @@ jobs:
           julia --project=. -e '
             import Pkg
             Pkg.instantiate()
-            Pkg.develop(PackageSpec(path="."))
             '
     - name: Install test dependencies
       run: |
@@ -29,4 +28,4 @@ jobs:
             Pkg.instantiate()'
     - name: Run tests
       run: |
-        julia --project=test test/runtests.jl
+        julia --project=. test/runtests.jl
