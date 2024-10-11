@@ -35,16 +35,43 @@ end
 
 get_hr(model::TBModel, mode; apply_soc=false) = get_hr(model, model.V, mode, apply_soc=apply_soc)
 
-function update!(model::TBModel, opt, dHr)
+"""
+    update!(model::TBModel, opt, dL_dHr)
+
+Updates the parameters of the given tight-binding model `model` using the provided optimization method `opt` and the derivative of the loss function with respect to the Hamiltonian `dL_dHr`.
+
+# Arguments
+- `model`: A `TBModel` object that contains the parameters to be updated.
+- `opt`: An optimization algorithm or method used to update the model's parameters.
+- `dL_dHr`: A matrix or array representing the derivative of the loss function with respect to the Hamiltonian.
+"""
+function update!(model::TBModel, opt, dL_dHr)
     if model.update    
-        dV = zeros(length(model.V))
-        for v in axes(model.h, 1)
-            for R in eachindex(dHr)
-                dV[v] += sum(model.h[v, R] * dHr[R])
-            end
-        end
+        dV = get_model_gradient(model, dL_dHr)
         update!(model.V, opt, dV)
     end
+end
+
+"""
+    get_model_gradient(model, dHr)
+
+Calculates the gradient of the model's parameters based on the provided derivative of the Hamiltonian `dHr`.
+
+# Arguments
+- `model`: A model object containing the parameters `V` and the geometry tensor `h`.
+- `dHr`: A matrix or array representing the derivative of the loss w.r.t. real-space Hamiltonian matrix elements.
+
+# Returns
+- The gradients for each parameter in `model.V`.
+"""
+function get_model_gradient(model, dL_dHr)
+    dV = zeros(length(model.V))
+    for v in axes(model.h, 1)
+        for R in eachindex(dHr)
+            dV[v] += sum(model.h[v, R] * dL_dHr[R])
+        end
+    end
+    return dV
 end
 
 """

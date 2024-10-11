@@ -1,7 +1,7 @@
 module Hamster
 
 using TensorOperations, LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Dates, PeriodicTable, 
-    CubicSplines, HCubature, Statistics, ChunkSplitters, Distributed
+    CubicSplines, HCubature, Statistics, ChunkSplitters, Distributed, FiniteDiff
 
 include("parse/utils.jl"); include("parse/poscar.jl")
 
