@@ -9,6 +9,7 @@ end
 function EffectiveHamiltonian(conf=get_empty_conf(); tb_model=get_tb_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), soc=get_soc(conf))
     strc = Structure(conf)
     basis = Basis(strc, conf)
+    
     models = ()
     if tb_model
         models = (models..., TBModel(strc, basis, conf))

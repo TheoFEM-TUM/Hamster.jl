@@ -15,7 +15,7 @@ jobs:
       with:
         julia-version: ${{ matrix.julia-version }}
         arch: x64
-    - name: Install Hamster dependencies
+    - name: Install dependencies
       run: |
           julia --project=. -e '
             import Pkg

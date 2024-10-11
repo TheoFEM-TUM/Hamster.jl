@@ -60,12 +60,3 @@ product = @. conj(v)' * ex[1, 1] * v
 sparse(zeros(8))
 
 Array{SparseVector{Float64, Int64}, 3} <: AbstractArray{<:SparseVector}
-
-
-t1 = (1, 1.0)
-push!(t1, 1im)
-@show typeof(t1)
-
-t = (1)
-t2 = (t..., 1im)
-@show typeof(t2)
