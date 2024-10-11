@@ -1,13 +1,39 @@
+"""
+    TBModel
+
+A mutable struct representing a tight-binding model.
+
+# Fields
+- `h::Matrix{SparseMatrixCSC{Float64, Int64}}`: A matrix where each element is a sparse matrix representing the geometry tensor.
+- `V::Vector{Float64}`: A vector containing the model's parameters.
+- `update::Bool`: A boolean flag indicating whether the model's parameters `V` should be updated during optimization or kept fixed.
+"""
 mutable struct TBModel
     h :: Matrix{SparseMatrixCSC{Float64, Int64}}
     V :: Vector{Float64}
     update :: Bool
 end
 
-function TBModel(strc::Structure, basis::Basis, conf=get_empty_config(); update_tb=get_update_tb(conf))
+"""
+    TBModel(strc::Structure, basis::Basis, conf=get_empty_config(); update_tb, initas)
+
+Constructs a `TBModel` for the given structure `strc` and basis `basis`, based on the configuration `conf`.
+
+# Arguments
+- `strc::Structure`: The structure of the material or system being modeled.
+- `basis::Basis`: The basis functions or orbitals used to describe the electronic states in the tight-binding model.
+- `conf`: (Optional) A configuration object that contains various settings and parameters for building the model.
+- `update_tb`: (Optional) A flag indicating whether the model's parameters should be updated during optimization. Defaults to `get_update_tb(conf)`.
+- `initas`: (Optional) Initialization parameters for the model. Defaults to `get_init_params(conf)`.
+
+# Returns
+- A `TBModel` object with the geometry tensor `h` and the model's parameters set via `init_params!`.
+"""
+function TBModel(strc::Structure, basis::Basis, conf=get_empty_config(); update_tb=get_update_tb(conf), initas=get_init_params(conf))
     h = get_geometry_tensor(strc, basis, conf)
-    V = ones(size(h, 1))
-    return TBModel(h, V, update_tb)
+    model = TBModel(h, ones(size(h, 1)), update_tb)
+    init_params!(model, basis, conf, initas=initas)
+    return model
 end
 
 """

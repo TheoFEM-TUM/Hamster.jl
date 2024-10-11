@@ -16,8 +16,7 @@ gaas_poscar = string(@__DIR__) * "/../parse/test_files/POSCAR_gaas"
 
     strc = Structure(conf, poscar_path=gaas_poscar)
     basis = Basis(strc, conf)
-    model = TBModel(strc, basis, conf)
-    init_params!(model, basis, initas=string(@__DIR__)*"/test_files/params.dat")
+    model = TBModel(strc, basis, conf, initas=string(@__DIR__)*"/test_files/params.dat")
     Hr = get_hr(model, model.V)
     ks = read_from_file(string(@__DIR__)*"/test_files/kpoints.dat")
     Hk = get_hamiltonian(Hr, strc.Rs, ks)
