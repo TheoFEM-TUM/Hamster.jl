@@ -69,7 +69,7 @@ Constructs the geometry tensor based on the structure of the system, the orbital
 - The reshaped geometry tensor, represented as a matrix of sparse matrices, which encodes the overlap contributions for the system's orbital interactions for each parameter.
 """
 function get_geometry_tensor(strc, basis, conf=get_empty_config(); tmethod=get_tmethod(conf), rcut=get_rcut(conf), sp_tol=get_sp_tol(conf))
-    npar = 16  
+    npar = Threads.nthreads() 
     
     ij_map = get_ion_orb_to_index_map(length.(basis.orbitals))
     ion_types = element_to_number.(get_ion_types(strc.ions))
@@ -79,8 +79,8 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config(); tmethod=get_t
 
     Ts = frac_to_cart(strc.Rs, strc.lattice)
     nn_grid_points = iterate_nn_grid_points(strc.point_grid)
-    for (chunk_id, index_range) in enumerate(chunks(nn_grid_points, n=npar))
-        for (iion1, iion2, R) in nn_grid_points[index_range]
+    Threads.@threads for (chunk_id, indices) in enumerate(chunks(nn_grid_points, n=npar))
+        for (iion1, iion2, R) in indices
             ion_label = IonLabel(ion_types[iion1], ion_types[iion2], sorted=false)
             r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
             r⃗₂ = strc.ions[iion2].pos - strc.ions[iion2].dist - Ts[:, R]
