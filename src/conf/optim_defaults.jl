@@ -26,8 +26,23 @@ The `wk` tag sets the weight of each kpoint for the calculation of the loss. Ind
 """
 get_kpoint_weights(conf::Config, Nk)::Vector{Float64} = conf("wk", "Optimizer") == "default" ? ones(Nk) : conf("wk", "Optimizer")
 
+"""
+    lreg=2
+
+The `lreg` tag determines which norm is used to calculate the regularization, e.g., L2 for `lreg=2`.
+"""
 get_lreg(conf::Config)::Int64 = conf("lreg", "Optimizer") == "default" ? 2 : conf("lreg", "Optimizer")
 
+"""
+    lambda=0.
+
+The `lambda` parameter determines the regularization constant.
+"""
 get_lambda(conf::Config)::Float64 = conf("lambda", "Optimizer") == "default" ? 0. : conf("lambda", "Optimizer")
 
+"""
+    barrier=0.
+
+The `barrier` parameter determines at which magnitude the regularization kicks in.
+"""
 get_barrier(conf::Config)::Float64 = conf("barrier", "Optimizer") == "default" ? 0. : conf("barrier", "Optimizer")
