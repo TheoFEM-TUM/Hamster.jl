@@ -57,6 +57,6 @@ end
 v = sprand(8, 0.1)
 product = @. conj(v)' * ex[1, 1] * v
 
-sparse(zeros(8))
 
-Array{SparseVector{Float64, Int64}, 3} <: AbstractArray{<:SparseVector}
+using Statistics
+reduce(mean, [1, 2, 3])
