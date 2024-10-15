@@ -18,6 +18,7 @@ end
     include("strc/test_sk_transform.jl")
     include("strc//test_structure.jl")
     include("strc/test_methods.jl")
+    include("strc/test_supercell.jl")
 end
 
 @testset "Basis" begin
@@ -40,4 +41,5 @@ end
 
 @testset "optim" begin
     include("optim/test_loss.jl")
+    include("optim/test_data.jl")
 end
