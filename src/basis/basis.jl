@@ -50,6 +50,19 @@ Compute the total number of orbitals in the `basis`.
 Base.length(basis::Basis) = sum(length.(basis.orbitals))
 
 """
+    nparams(basis::Basis) -> Int
+
+Return the number of TB overlap parameters defined in `basis`.
+
+# Arguments
+- `basis::Basis`: The `Basis` object containing orbitals for each ion in the system.
+
+# Returns
+- `Int`: The total number of parameters.
+"""
+nparams(basis::Basis) = length(basis.parameters)
+
+"""
     get_geometry_tensor(strc, basis, conf=get_empty_config(); tmethod=get_tmethod(conf), rcut=get_rcut(conf))
 
 Constructs the geometry tensor based on the structure of the system, the orbital basis, and configuration settings.

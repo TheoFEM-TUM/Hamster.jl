@@ -8,10 +8,10 @@ A mutable struct representing a tight-binding model.
 - `V::Vector{Float64}`: A vector containing the model's parameters.
 - `update::Bool`: A boolean flag indicating whether the model's parameters `V` should be updated during optimization or kept fixed.
 """
-mutable struct TBModel
-    h :: Matrix{SparseMatrixCSC{Float64, Int64}}
+mutable struct TBModel{G}
+    hs :: G
     V :: Vector{Float64}
-    update :: Bool
+    update :: Vector{Bool}
 end
 
 """
@@ -29,11 +29,19 @@ Constructs a `TBModel` for the given structure `strc` and basis `basis`, based o
 # Returns
 - A `TBModel` object with the geometry tensor `h` and the model's parameters set via `init_params!`.
 """
-function TBModel(strc::Structure, basis::Basis, conf=get_empty_config(); update_tb=get_update_tb(conf), initas=get_init_params(conf))
+function TBModel(strc::Structure, basis::Basis, conf=get_empty_config(); update_tb=get_update_tb(conf, nparams(basis)), initas=get_init_params(conf))
     h = get_geometry_tensor(strc, basis, conf)
     model = TBModel(h, ones(size(h, 1)), update_tb)
     init_params!(model, basis, conf, initas=initas)
     return model
+end
+
+function TBModel(strcs, bases, conf=get_empty_config(); update_tb=get_update_tb(conf, nparams(bases[1])), initas=get_init_params(conf))
+    hs = map(eachindex(strcs)) do n
+        get_geometry_tensor(strcs[n], bases[n], conf)
+    end
+    model = TBModel(hs, ones(), update_tb)
+    init_params!(model, basis, conf, initas=initas)
 end
 
 """
@@ -49,17 +57,19 @@ Construct the real-space Hamiltonian (`Hr`) by multiplying the geometry tensor `
 # Returns
 - `Hr`: The resulting real-space Hamiltonian matrix (or array of matrices), constructed by summing the weighted Hamiltonian blocks for each lattice vector `R`.
 """
-function get_hr(model::TBModel, V::AbstractVector, mode=Val{:dense}; apply_soc=false)
-    Hr = get_empty_real_hamiltonians(size(model.h[1, 1], 1), size(model.h, 2), mode)
-    Threads.@threads for R in axes(model.h, 2)
-        for v in axes(model.h, 1)
-            @. Hr[R] += model.h[v, R] * V[v]
+function get_hr(h::AbstractMatrix, V::AbstractVector, mode=Val{:dense}; apply_soc=false)
+    Hr = get_empty_real_hamiltonians(size(h[1, 1], 1), size(h, 2), mode)
+    Threads.@threads for R in axes(h, 2)
+        for v in axes(h, 1)
+            @. Hr[R] += h[v, R] * V[v]
         end
     end
     return apply_soc ? apply_spin_basis.(Hr) : Hr
 end
 
-get_hr(model::TBModel, mode; apply_soc=false) = get_hr(model, model.V, mode, apply_soc=apply_soc)
+get_hr(model, mode, index::Int64; apply_soc=false) = get_hr(model.hs[index], model.V, mode, apply_soc=apply_soc)
+get_hr(model, mode; apply_soc=false) = get_hr(model.hs, model.V, mode, apply_soc=apply_soc)
+get_hr(model, V, mode; apply_soc=false) = get_hr(model.hs, V, mode, apply_soc=apply_soc)
 
 """
     update!(model::TBModel, opt, dL_dHr)
@@ -69,35 +79,47 @@ Updates the parameters of the given tight-binding model `model` using the provid
 # Arguments
 - `model`: A `TBModel` object that contains the parameters to be updated.
 - `opt`: An optimization algorithm or method used to update the model's parameters.
+- `reg`: The regularization term to penalize parameter values according to its definition.
 - `dL_dHr`: A matrix or array representing the derivative of the loss function with respect to the Hamiltonian.
 """
-function update!(model::TBModel, opt, dL_dHr)
-    if model.update    
-        dV = get_model_gradient(model, dL_dHr)
-        update!(model.V, opt, dV)
+function update!(model::TBModel, indices, opt, reg, dL_dHr)
+    if any(model.update)
+        dV_grad = get_model_gradient(model, indices, dL_dHr)
+        dV_penal = backward(reg, model.V)
+        dV = @. ifelse(model.update, dV_grad + dV_penal, 0.)
+        update!(opt, model.V, dV)
     end
 end
 
 """
-    get_model_gradient(model, dHr)
+    get_model_gradient(model, dL_dHr)
 
-Calculates the gradient of the model's parameters based on the provided derivative of the Hamiltonian `dHr`.
+Computes the gradient of the model's parameters using the given derivative of the Hamiltonian dL_dHr. If dL_dHr is not a vector of matrices (i.e., it represents multiple structures), 
+the function assumes it contains gradients for multiple structures and returns the average gradient across these structures.
 
 # Arguments
 - `model`: A model object containing the parameters `V` and the geometry tensor `h`.
-- `dHr`: A matrix or array representing the derivative of the loss w.r.t. real-space Hamiltonian matrix elements.
+- `dL_dHr`: A matrix or array representing the derivative of the loss w.r.t. real-space Hamiltonian matrix elements.
 
 # Returns
 - The gradients for each parameter in `model.V`.
 """
-function get_model_gradient(model, dL_dHr)
-    dV = zeros(length(model.V))
-    for v in axes(model.h, 1)
+function get_model_gradient(h, dL_dHr::Vector{<:AbstractMatrix})
+    dV = zeros(size(h, 1))
+    for v in axes(h, 1)
         for R in eachindex(dHr)
-            dV[v] += sum(model.h[v, R] * dL_dHr[R])
+            dV[v] += sum(h[v, R] * dL_dHr[R])
         end
     end
     return dV
+end
+
+function get_model_gradient(model::TBModel, indices, dL_dHr)
+    dV = zeros(length(model.V), length(dL_dHr))
+    for (n, index) in enumerate(indices)
+        @views dV[:, n] = get_model_gradient(model.hs[index], dL_dHr[n])
+    end
+    return dropdims(mean(dV, dims=2), dims=2)
 end
 
 """
