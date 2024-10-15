@@ -1,9 +1,21 @@
 """
     update_tb=haskey(conf, "Optimizer")
 
-The `update_tb` tag determines whether the parameters of the TB model are updated during the optimization. Defaults to `true` if an `Optimizer` block is provided.
+The `update_tb` tag determines whether/which parameters of the TB model are updated during the optimization. Defaults to `true` if an `Optimizer` block is provided.
 """
-get_update_tb(conf::Config)::Bool = conf("update_tb", "Optimizer") == "default" ? haskey(conf, "Optimizer") : conf("update_tb", "Optimizer")
+function get_update_tb(conf::Config, NV)::Vector{Bool}
+    update_tb = Vector{Bool}(undef, NV)
+    if conf("update_tb", "Optimizer") == "default" 
+        update_tb .= haskey(conf, "Optimizer") ? true : false
+    else
+        if typeof(conf("update_tb", "Optimizer")) <: Bool
+            update_tb .= conf("update_tb", "Optimizer") ? true : false
+        else
+            update_tb .= map(index ∈ update_tb, eachindex(update_tb))
+        end
+    end
+    return update_tb
+end
 
 """
     loss=MAE
@@ -46,3 +58,51 @@ get_lambda(conf::Config)::Float64 = conf("lambda", "Optimizer") == "default" ? 0
 The `barrier` parameter determines at which magnitude the regularization kicks in.
 """
 get_barrier(conf::Config)::Float64 = conf("barrier", "Optimizer") == "default" ? 0. : conf("barrier", "Optimizer")
+
+"""
+    nbatch=1
+
+The `nbatch` tag detemines into how many batches the training structures are split for stochastic gradient optimization.
+"""
+get_nbatch(conf::Config)::Int64 = conf("nbatch", "Optimizer") == "default" ? 1 : conf("nbatch", "Optimizer")
+
+"""
+    train_data=EIGENVAL
+
+The `train_data` tag sets the path (filename) that contains the training data.
+"""
+get_train_data(conf::Config)::String = conf("train_data", "Optimizer") == "default" ? "EIGENVAL" : conf("train_data", "Optimizer")
+
+"""
+    val_data=EIGENVAL
+
+The `val_data` tag sets the path (filename) that contains the validation data.
+"""
+get_val_data(conf::Config)::String = conf("val_data", "Optimizer") == "default" ? "EIGENVAL" : conf("val_data", "Optimizer")
+
+"""
+    bandmin=1
+
+The `bandmin` tag sets the index of the lowest band that is included in the fitting.
+"""
+get_bandmin(conf::Config)::Int64 = conf("bandmin", "Optimizer") == "default" ? 1 : conf("bandmin", "Optimizer")
+
+"""
+    validate=false
+
+The `validate` tag switches on model validation.
+"""
+get_validate(conf::Config)::Bool = conf("validate", "Optimizer") == "default" ? false : conf("validate", "Optimizer")
+
+"""
+    val_ratio=0.2 (if validate; 0 else)
+
+The `val_ratio` tag sets the ratio between the training set size and the validation set size.
+"""
+function get_val_ratio(conf::Config)::Float64
+    if conf("val_ratio", "Optimizer") == "default"
+        return get_validate(conf) ? 0.2 : 0.
+    else
+        return conf("val_ratio", "Optimizer")
+    end
+end
