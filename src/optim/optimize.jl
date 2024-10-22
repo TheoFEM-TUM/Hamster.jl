@@ -10,9 +10,9 @@ function optimize_model!(ham_train, ham_val, optim, conf; nbatch=get_nbatch(conf
             end
             update!(ham, indices, optim.opt, optim.reg, dL_dHr)
         end
-        L_val = mapreduce(1:ham_val.Nstrc) do index
+        L_val = mapreduce(+, 1:ham_val.Nstrc) do index
             ks, ground_truth = val_data[index]
-            forward(ham_val, index, loss, ground_truth, fit_eigenvalues=fit_eigenvalues)
+            forward(ham_val, index, loss, ground_truth, fit_eigenvalues=fit_eigenvalues) / ham_val.Nstrc
         end
     end
 end
