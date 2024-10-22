@@ -1,22 +1,68 @@
-@testset "Test Config indices" begin
-    # Test 1: no validation, no Nconf_min
+@testset "DataLoader PC" begin
+    path = joinpath(@__DIR__, "test_files")
     conf = get_empty_config()
-    set_value!(conf, "Nconf", "Supercell", 100)
-    set_value!(conf, "Nconf_min", "Supercell", 1)
-    config_indices, _ = Hamster.get_config_index_sample(1000, conf)
-    @test length(unique(config_indices)) == 100
-    @test all(i->1 ≤ i ≤ 1000, config_indices)
+    kp, Es = Hamster.read_eigenval(joinpath(path, "EIGENVAL_gaas"))
+    
+    set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
 
-    # Test 2: no validation, Nconf_min set to 100, no Config
-    config_indices, _ = Hamster.get_config_index_sample(1000, Nconf=100, Nconf_min=100)
-    @test length(unique(config_indices)) == 100
-    @test all(i->100 ≤ i ≤ 1000, config_indices)
+    # Test 1: test PC training data with no validation
+    dl = DataLoader([1], [1], 8, 8, conf)
+    @test typeof(dl.val_data) == typeof(dl.train_data)
+    @test length(dl.val_data) == 0
+    @test length(dl.train_data) == 1
+    
+    @test dl.train_data[1].kp ≈ kp
+    @test dl.train_data[1].Es ≈ Es
 
-    # Test 3: validation with ratio 0.2, Nconf_min set to 100
-    train_indices, val_indices = Hamster.get_config_index_sample(1000, Nconf=100, Nconf_min=75, val_ratio=0.2)
-    @test length(unique(train_indices)) == 100
-    @test length(unique(val_indices)) == 20
-    @test all(i->75 ≤ i ≤ 1000, train_indices)
-    @test all(i->75 ≤ i ≤ 1000, val_indices)
-    @test isempty(intersect(train_indices, val_indices))
+    # Test 2: test PC training data with validation
+    set_value!(conf, "val_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
+    dl = DataLoader([1], [1], 8, 8, conf)
+    @test length(dl.val_data) == 1
+    @test dl.val_data[1].kp ≈ kp
+    @test dl.val_data[1].Es ≈ Es
+end
+
+@testset "DataLoader MD" begin
+    path = joinpath(@__DIR__, "test_files")
+    conf = get_empty_config()
+    kp = h5read(joinpath(path, "eigenvalues_md.h5"), "kpoints")
+    Es = h5read(joinpath(path, "eigenvalues_md.h5"), "eigenvalues")
+
+    set_value!(conf, "train_data", "Optimizer", joinpath(path, "eigenvalues_md.h5"))
+    set_value!(conf, "train_mode", "Optimizer", "MD")
+
+    # Test 1: test MD training data with no validation
+    dl = DataLoader([2, 3, 4], [1], 8, 32, conf)
+    
+    @test typeof(dl.val_data) == typeof(dl.train_data)
+    @test length(dl.val_data) == 0
+    @test length(dl.train_data) == 3
+    @test all([data.kp ≈ kp for data in dl.train_data])
+    @test all([dl.train_data[i1].Es ≈ Es[:, :, i2] for (i1, i2) in zip(eachindex(dl.train_data), [2, 3, 4])])
+
+    # Test 2: test MD training data with pc validation
+    kp2, Es2 = Hamster.read_eigenval(joinpath(path, "EIGENVAL_gaas"), 8)
+    set_value!(conf, "val_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
+    dl = DataLoader([2, 3, 4], [1], 8, 32, conf)
+    
+    @test typeof(dl.val_data) == typeof(dl.train_data)
+    @test length(dl.val_data) == 1
+    @test length(dl.train_data) == 3
+    @test dl.val_data[1].kp ≈ kp2
+    @test dl.val_data[1].Es ≈ Es2
+
+    # Test 3: test MD training data MD validation
+    set_value!(conf, "val_data", "Optimizer", joinpath(path, "eigenvalues_md.h5"))
+    set_value!(conf, "val_mode", "Optimizer", "MD")
+    dl = DataLoader([2, 3, 4], [1, 6, 8], 8, 32, conf)
+
+    @test typeof(dl.val_data) == typeof(dl.train_data)
+    @test length(dl.val_data) == 3
+    @test length(dl.train_data) == 3
+    @test all([data.kp ≈ kp for data in dl.val_data])
+    @test all([dl.val_data[i1].Es ≈ Es[:, :, i2] for (i1, i2) in zip(eachindex(dl.val_data), [1, 6, 8])])
+end
+
+@testset "DataLoader Mixed" begin
+
 end

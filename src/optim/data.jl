@@ -1,37 +1,44 @@
 struct DataLoader{A, B}
-    train_data :: A
-    val_data :: B
+    train_data :: Vector{A}
+    val_data :: Vector{B}
 end
 
-function DataLoader(conf=get_empty_config(); train_path=get_train_data(conf), val_path=get_val_data(conf))
-    if lowercase(train_mode) == "pc"
-        kp, Es = read_eigenval(train_path)
-    
-    elseif lowercase(train_mode) == "md"
-        train_config_inds, val_config_inds = get_config_index_sample(Nconf_max, conf)
+struct EigData
+    kp :: Matrix{Float64}
+    Es :: Matrix{Float64}
+end
+
+struct HrData{M}
+    Rs :: Matrix{Float64}
+    Hr :: Vector{M}
+end
+
+function DataLoader(train_config_inds, val_config_inds, PC_Nε, SC_Nε, conf=get_empty_config(); train_path=get_train_data(conf), val_path=get_val_data(conf), validate=get_validate(conf), bandmin=get_bandmin(conf), train_mode=get_train_mode(conf), val_mode=get_val_mode(conf))
+    train_data = get_data(train_mode, train_path, PC_Nε, SC_Nε, inds=train_config_inds, bandmin=bandmin)
+    val_data = validate ? get_data(val_mode, val_path, PC_Nε, SC_Nε, inds=val_config_inds, bandmin=bandmin) : eltype(train_data)[]
+    return DataLoader(train_data, val_data)
+end
+
+function get_data(mode, path, PC_Nε, SC_Nε; inds=Int64[], bandmin=1)
+    data = EigData[]
+    if mode == "pc" || mode == "mixed"
+        kp, Es = read_eigenval(path)
+        push!(data, EigData(kp, Es[bandmin:bandmin+PC_Nε-1, :]))
     end
+    if mode == "md" || mode == "mixed"
+        append!(data, read_eigenvalue_data_from_path(path, inds, bandmin, SC_Nε))
+    end
+    return data
 end
 
-"""
-    get_config_index_sample(Nconf_max, conf=get_empty_config(); Nconf=get_Nconf(conf), Nconf_min=get_Nconf_min(conf), val_ratio=get_val_ratio(conf))
-
-Randomly selects training and validation configuration indices from a given range of configurations.
-
-# Arguments
-- `Nconf_max`: The maximum configuration index.
-- `conf`: (Optional) A configuration object from which additional parameters are obtained. Defaults to an empty configuration.
-- `Nconf`: (Optional) The number of configurations to sample for training, fetched from the configuration object if not provided.
-- `Nconf_min`: (Optional) The minimum configuration index, fetched from the configuration object if not provided.
-- `val_ratio`: (Optional) The ratio of validation data size to training data size, fetched from the configuration object if not provided.
-
-# Returns
-- `train_config_inds`: A vector of indices for training configurations.
-- `val_config_inds`: A vector of indices for validation configurations.
-"""
-function get_config_index_sample(Nconf_max, conf=get_empty_config(); Nconf=get_Nconf(conf), Nconf_min=get_Nconf_min(conf), val_ratio=get_val_ratio(conf))
-    Nval = round(Int64, Nconf * val_ratio)
-    train_config_inds = sample(Nconf_min:Nconf_max, Nconf, replace=false, ordered=true)
-    remaining_indices = setdiff(Nconf_min:Nconf_max, train_config_inds)
-    val_config_inds = sample(remaining_indices, Nval, replace=false, ordered=true)
-    return train_config_inds, val_config_inds
+function read_eigenvalue_data_from_path(path, inds, bandmin, Nε)
+    if occursin(".h5", path)
+        kp = h5read(path, "kpoints")
+        Es = h5read(path, "eigenvalues")
+        data = [EigData(kp, Es[bandmin:bandmin+Nε-1, :, n]) for n in inds]
+        return data
+    else
+        kp, Es = read_eigenval(path)
+        return [EigData(kp, Es[bandmin:bandmin+Nε-1, :])]
+    end
 end

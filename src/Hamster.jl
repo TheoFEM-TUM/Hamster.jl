@@ -1,7 +1,7 @@
 module Hamster
 
 using TensorOperations, LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Dates, PeriodicTable, 
-    CubicSplines, HCubature, Statistics, ChunkSplitters, Distributed, FiniteDiff, StatsBase
+    CubicSplines, HCubature, Statistics, ChunkSplitters, Distributed, FiniteDiff, StatsBase, HDF5
 
 include("parse/utils.jl"); include("parse/poscar.jl"); include("parse/eigenval.jl"); include("parse/xdatcar.jl")
 
@@ -35,7 +35,7 @@ export ParameterLabel, read_params, write_params, Basis, get_geometry_tensor
 export get_hamiltonian, diagonalize, get_hr, TBModel, init_params!
 export write_hr, read_hr
 
-export Loss, Regularization, update!
+export Loss, Regularization, update!, DataLoader
 
 # Precompililation
 include("Hamster_precompile.jl")

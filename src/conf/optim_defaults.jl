@@ -88,11 +88,51 @@ The `bandmin` tag sets the index of the lowest band that is included in the fitt
 get_bandmin(conf::Config)::Int64 = conf("bandmin", "Optimizer") == "default" ? 1 : conf("bandmin", "Optimizer")
 
 """
-    validate=false
+    hr_fit=false
+
+The `hr_fit` tag switches on fitting the effective Hamiltonian model to Hamiltonian data.
+"""
+get_hr_fit(conf::Config)::Bool = conf("hr_fit", "Optimizer") == "default" ? false : conf("hr_fit", "Optimizer")
+
+"""
+    eig_fit=true (false if hr_fit)
+
+The `eig_fit` tag switches on fitting the effective Hamiltonian to eigenvalue data. If both `hr_fit` and `eig_fit` are true, the model is first fit to Hamiltonian data and then to eigenvalue data.
+"""
+function get_eig_fit(conf::Config)::Bool
+    if conf("eig_fit", "Optimizer") == "default"
+        return get_hr_fit(conf) ? false : true
+    else
+        return conf("eig_fit", "Optimizer")
+    end
+end
+
+"""
+    train_mode=PC
+
+The `train_mode` flag switches between different optimization modes (PC, MD, mixed, multi; not case sensitive).
+"""
+get_train_mode(conf)::String = conf("train_mode", "Optimizer") == "default" ? "pc" : lowercase(conf("train_mode", "Optimizer"))
+
+"""
+    val_mode=PC
+
+The `val_mode` flag switches between different modes for model validation (PC, MD, mixed, multi; not case sensitive).
+"""
+get_val_mode(conf::Config) = conf("val_mode", "Optimizer") == "default" ? "pc" : lowercase(conf("val_mode", "Optimizer"))
+
+"""
+    validate=false (true if `val_mode` is set)
 
 The `validate` tag switches on model validation.
 """
-get_validate(conf::Config)::Bool = conf("validate", "Optimizer") == "default" ? false : conf("validate", "Optimizer")
+function get_validate(conf::Config)::Bool
+    if conf("validate", "Optimizer") == "default"
+       return conf("val_mode", "Optimizer") == "default" && conf("val_data", "Optimizer") == "default" ? false : true
+    else
+        conf("validate", "Optimizer")
+    end
+end
 
 """
     val_ratio=0.2 (if validate; 0 else)
