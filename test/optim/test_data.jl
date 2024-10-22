@@ -1,7 +1,7 @@
 @testset "DataLoader PC" begin
     path = joinpath(@__DIR__, "test_files")
     conf = get_empty_config()
-    kp, Es = Hamster.read_eigenval(joinpath(path, "EIGENVAL_gaas"))
+    kp, Es = Hamster.read_eigenval(joinpath(path, "EIGENVAL_gaas"), 8)
     
     set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
 
