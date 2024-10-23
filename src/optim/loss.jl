@@ -19,6 +19,7 @@ struct Loss
 end
 
 Loss(wE::Vector{Float64}, wk::Vector{Float64}, n::Int64) = Loss(wE, wk, sum(wE)*sum(wk), n)
+Loss(n::Int64) = Loss(Float64[], Float64[], 0, n)
 
 """
     Loss(Nε, Nk; conf=get_empty_config(), loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk))
@@ -51,7 +52,7 @@ function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band
             index = parse(Int64, key[4:end])
             wE[index] = conf(key, "Optimizer")
         end
-    end  
+    end
 
     return Loss(wE, wk, n)
 end
@@ -72,8 +73,12 @@ Compute the forward pass of the loss function given the true values `y` and the 
 -`L::Float64`: The loss between `y` and `ŷ`.
 """
 function forward(l::Loss, y, ŷ)
-    L = @. abs(y - ŷ)^l.n
-    return 1/l.N * (l.wE' * L * l.wk)
+    if isempty(l.wE) && isempty(l.wk)
+        return mean(@. abs(y - ŷ)^l.n)
+    else
+        L = @. abs(y - ŷ)^l.n
+        return 1/l.N * (l.wE' * L * l.wk)
+    end
 end
 
 """
@@ -90,7 +95,12 @@ Compute the gradient of the loss function with respect to the predicted values `
 - `dL::AbstractArray`: The gradient of the loss with respect to the predicted values `y`.
 """
 function backward(l::Loss, y, ŷ)
-    dL = @. 1/l.N * sign.(y - ŷ) * l.wk' * l.wE * l.n * abs(y - ŷ)^(l.n - 1)
+    if isempty(l.wE) && isempty(l.wk)
+        N = length(y)
+        return @. 1/N * sign(y - ŷ) * l.n * abs(y - ŷ)^(l.n - 1)
+    else
+        return @. 1/l.N * sign(y - ŷ) * l.wk' * l.wE * l.n * abs(y - ŷ)^(l.n - 1)
+    end
 end
 
 """

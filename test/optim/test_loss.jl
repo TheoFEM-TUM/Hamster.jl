@@ -6,7 +6,7 @@
     mse(y, ŷ) = mean(@. (y - ŷ)^2)
     mae(y, ŷ) = mean(@. abs(y - ŷ))
 
-    loss_1 = Loss(ones(2), ones(4), 2)
+    loss_1 = Loss(2)
     @test loss_1(y, ŷ) ≈ mse(y, ŷ)
     @test Hamster.backward(loss_1, y, ŷ) ≈ FiniteDiff.finite_difference_gradient(y->loss_1(y, ŷ), y)
 
@@ -14,7 +14,7 @@
     y = rand(2, 4)
     ŷ = rand(2, 4)
 
-    loss_2 = Loss(ones(2), ones(4), 1)
+    loss_2 = Loss(1)
     @test loss_2(y, ŷ) ≈ mae(y, ŷ)
     @test Hamster.backward(loss_2, y, ŷ) ≈ FiniteDiff.finite_difference_gradient(y->loss_2(y, ŷ), y)
 
