@@ -108,6 +108,13 @@ function get_eig_fit(conf::Config)::Bool
 end
 
 """
+    eig_val=eig_fit
+
+The `eig_val` tag switches on validating the effective Hamiltonian model with eigenvalue data.
+"""
+get_eig_val(conf::Config)::Bool = conf("eig_val", "Optimizer") == "default" ? get_eig_fit(conf) : conf("eig_val", "Optimizer")
+
+"""
     train_mode=PC
 
 The `train_mode` flag switches between different optimization modes (PC, MD, mixed, multi; not case sensitive).
@@ -119,7 +126,7 @@ get_train_mode(conf)::String = conf("train_mode", "Optimizer") == "default" ? "p
 
 The `val_mode` flag switches between different modes for model validation (PC, MD, mixed, multi; not case sensitive).
 """
-get_val_mode(conf::Config) = conf("val_mode", "Optimizer") == "default" ? "pc" : lowercase(conf("val_mode", "Optimizer"))
+get_val_mode(conf::Config)::String = conf("val_mode", "Optimizer") == "default" ? "pc" : lowercase(conf("val_mode", "Optimizer"))
 
 """
     validate=false (true if `val_mode` is set)

@@ -1,4 +1,4 @@
-@testset "DataLoader PC" begin
+@testset "DataLoader PC Eigs" begin
     path = joinpath(@__DIR__, "test_files")
     conf = get_empty_config()
     kp, Es = Hamster.read_eigenval(joinpath(path, "EIGENVAL_gaas"), 8)
@@ -22,7 +22,7 @@
     @test dl.val_data[1].Es ≈ Es
 end
 
-@testset "DataLoader MD" begin
+@testset "DataLoader MD Eigs" begin
     path = joinpath(@__DIR__, "test_files")
     conf = get_empty_config()
     kp = h5read(joinpath(path, "eigenvalues_md.h5"), "kpoints")
@@ -63,6 +63,19 @@ end
     @test all([dl.val_data[i1].Es ≈ Es[:, :, i2] for (i1, i2) in zip(eachindex(dl.val_data), [1, 6, 8])])
 end
 
-@testset "DataLoader Mixed" begin
+@testset "DataLoader Mixed Eigs" begin
 
+end
+
+@testset "DataLoader PC Hr" begin
+    path = joinpath(@__DIR__, "test_files")
+    conf = get_empty_config()
+    kp, Es = Hamster.read_hrdat(joinpath(path, "wannier90_hr.dat"))
+    
+    set_value!(conf, "train_data", "Optimizer", joinpath(path, "wannier90_hr.dat"))
+    set_value!(conf, "hr_fit", "Optimizer", true)
+
+    # Test 1: test PC training data with no validation
+    dl = DataLoader([], [], 8, 8, conf)
+    @show typeof(dl)
 end

@@ -1,32 +1,71 @@
+"""
+    DataLoader{A, B}
+
+A struct to store and manage training and validation datasets.
+
+# Fields
+- `train_data::Vector{A}`: A vector containing the training dataset. The type `A` represents the data type of the training set.
+- `val_data::Vector{B}`: A vector containing the validation dataset. The type `B` represents the data type of the validation set.
+"""
 struct DataLoader{A, B}
     train_data :: Vector{A}
     val_data :: Vector{B}
 end
 
+function DataLoader(train_config_inds, val_config_inds, PC_Nε, SC_Nε, conf=get_empty_config(); train_path=get_train_data(conf), val_path=get_val_data(conf), validate=get_validate(conf), bandmin=get_bandmin(conf), train_mode=get_train_mode(conf), val_mode=get_val_mode(conf), hr_fit=get_hr_fit(conf), hr_val=hr_fit)
+    train_data = hr_fit ? get_hr_data(train_mode, train_path, inds=train_config_inds) : get_eig_data(train_mode, train_path, PC_Nε, SC_Nε, inds=train_config_inds, bandmin=bandmin)
+    val_data = hr_val ? get_hr_data(val_mode, val_path, inds=val_config_inds, empty=!validate) : get_eig_data(val_mode, val_path, PC_Nε, SC_Nε, inds=val_config_inds, bandmin=bandmin, empty=!validate)
+    return DataLoader(train_data, val_data)
+end
+
+"""
+    EigData
+
+A struct for storing eigenvalue data associated with k-points.
+
+# Fields
+- `kp::Matrix{Float64}`: A matrix where each column represents a k-point. 
+- `Es::Matrix{Float64}`: A matrix where each column represents the eigenvalues corresponding to the respective k-point.
+"""
 struct EigData
     kp :: Matrix{Float64}
     Es :: Matrix{Float64}
 end
 
+"""
+    HrData{M}
+
+A struct for storing Hamiltonian data `Hr` and the associated lattice translation vectors `Rs` for a system, typically from Wannier90.
+
+# Fields
+- `Rs::Matrix{Float64}`: A matrix where each column represents a lattice translation vector.
+- `Hr::Vector{M}`: A vector of Hamiltonian matrices `Hr`, where each entry corresponds to a lattice translation vector in `Rs`. Each element in this vector is a Hamiltonian matrix, with `M` representing the matrix type (e.g., dense or sparse).
+"""
 struct HrData{M}
     Rs :: Matrix{Float64}
     Hr :: Vector{M}
 end
 
-function DataLoader(train_config_inds, val_config_inds, PC_Nε, SC_Nε, conf=get_empty_config(); train_path=get_train_data(conf), val_path=get_val_data(conf), validate=get_validate(conf), bandmin=get_bandmin(conf), train_mode=get_train_mode(conf), val_mode=get_val_mode(conf))
-    train_data = get_data(train_mode, train_path, PC_Nε, SC_Nε, inds=train_config_inds, bandmin=bandmin)
-    val_data = validate ? get_data(val_mode, val_path, PC_Nε, SC_Nε, inds=val_config_inds, bandmin=bandmin) : eltype(train_data)[]
-    return DataLoader(train_data, val_data)
-end
-
-function get_data(mode, path, PC_Nε, SC_Nε; inds=Int64[], bandmin=1)
+function get_eig_data(mode, path, PC_Nε, SC_Nε; inds=Int64[], bandmin=1, empty=false)
     data = EigData[]
-    if mode == "pc" || mode == "mixed"
+    if (mode == "pc" || mode == "mixed") && !empty
         kp, Es = read_eigenval(path)
         push!(data, EigData(kp, Es[bandmin:bandmin+PC_Nε-1, :]))
     end
-    if mode == "md" || mode == "mixed"
+    if (mode == "md" || mode == "mixed") && !empty
         append!(data, read_eigenvalue_data_from_path(path, inds, bandmin, SC_Nε))
+    end
+    return data
+end
+
+function get_hr_data(mode, path; inds=Int64[], empty=false)
+    data = HrData[]
+    if (mode == "pc" || mode == "mixed") && !empty
+        Hr, Rs, _ = read_hrdat(path)
+        push!(data, HrData(Rs, Hr))
+    end
+    if (mode == "md" || mode == "mixed") && !empty
+        append!(data, read_hr_data_from_path(path, inds))
     end
     return data
 end
@@ -40,5 +79,20 @@ function read_eigenvalue_data_from_path(path, inds, bandmin, Nε)
     else
         kp, Es = read_eigenval(path)
         return [EigData(kp, Es[bandmin:bandmin+Nε-1, :])]
+    end
+end
+
+function read_hr_data_from_path(path, inds)
+    if occursin(".h5", path)
+        Rs = h5read(path, "Rs")
+        Hrs = h5read(path, "Hr")
+        data = map(inds) do n
+            @views Hr = [Hr[:, :, R, n] for R in axes(Hrs, 3)]
+            HrData(Rs, Hr)
+        end
+        return data
+    else
+        Hr, Rs, _ = read_hrdat(path)
+        return [HrData(Rs, Hr)]
     end
 end
