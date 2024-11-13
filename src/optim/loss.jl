@@ -66,8 +66,8 @@ Compute the forward pass of the loss function given the true values `y` and the 
 
 # Arguments
 - `l::Loss`: A `Loss` object which specifies how the loss is calculated.
-- `y::AbstractVector`: The predicted for each band and k-point.
-- `ŷ::AbstractVector`: The true values (ground truth) for each band and k-point.
+- `y::AbstractArray`: The predicted for each band and k-point.
+- `ŷ::AbstractArray`: The true values (ground truth) for each band and k-point.
 
 # Returns
 -`L::Float64`: The loss between `y` and `ŷ`.
@@ -79,6 +79,11 @@ function forward(l::Loss, y, ŷ)
         L = @. abs(y - ŷ)^l.n
         return 1/l.N * (l.wE' * L * l.wk)
     end
+end
+
+function forward(l::Loss, Hr, Ĥrs)
+    total_loss = mean([mean(@. abs(H - Ĥ)^l.n) for (H, Ĥ) in zip(Hr, Ĥrs)])
+    return total_loss 
 end
 
 """
@@ -101,6 +106,12 @@ function backward(l::Loss, y, ŷ)
     else
         return @. 1/l.N * sign(y - ŷ) * l.wk' * l.wE * l.n * abs(y - ŷ)^(l.n - 1)
     end
+end
+
+function backward(l::Loss, Hr::Vector{Matrix}, Ĥrs::Vector{Matrix})
+    N = sum([length(H) for H in Hr])
+    dL = [@. 1/N * sign(Ĥ - H) * l.n * abs(Ĥ - H)^(l.n - 1) for (H, Ĥ) in zip(Hr, Ĥrs)]
+    return dL
 end
 
 """
