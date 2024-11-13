@@ -16,7 +16,7 @@ Generates a list of `Structure` objects based on the configurations from an XDAT
 function get_structures(conf=get_empty_config(); mode="md", index_file="config_inds.dat", xdatcar=get_xdatcar(conf), sc_poscar=get_sc_poscar(conf), poscar=get_poscar(conf))
     if lowercase(mode) == "md" || lowercase(mode) == "mixed"
         poscar = read_poscar(sc_poscar)
-        lattice, configs = occursin(".h5", xdatcar) ? read_xdatcar(xdatcar, frac=false) : h5read(xdatcar, "lattice"), h5read(xdatcar, "positions") 
+        lattice, configs = occursin(".h5", xdatcar) ? (h5read(xdatcar, "lattice"), h5read(xdatcar, "positions")) : read_xdatcar(xdatcar, frac=false)
         
         # Check that POSCAR lattice and XDATCAR lattice are compatible
         @assert poscar.lattice ≈ lattice
