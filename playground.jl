@@ -1,6 +1,9 @@
 using Hamster, LinearAlgebra, BenchmarkTools, SparseArrays, OhMyThreads, Distributed, MethodAnalysis, CubicSplines
 using StaticArrays
 
+w = Float64[]
+
+@show isempty(w)
 
 h = rand(34, 25)
 

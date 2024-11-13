@@ -84,10 +84,10 @@ end
 
 function read_hr_data_from_path(path, inds)
     if occursin(".h5", path)
-        Rs = h5read(path, "Rs")
+        Rs = h5read(path, "Rs")[:, :, 1]
         Hrs = h5read(path, "Hr")
         data = map(inds) do n
-            @views Hr = [Hr[:, :, R, n] for R in axes(Hrs, 3)]
+            @views Hr = [Hrs[:, :, R, n] for R in axes(Hrs, 3)]
             HrData(Rs, Hr)
         end
         return data

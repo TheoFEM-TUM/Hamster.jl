@@ -70,12 +70,35 @@ end
 @testset "DataLoader PC Hr" begin
     path = joinpath(@__DIR__, "test_files")
     conf = get_empty_config()
-    kp, Es = Hamster.read_hrdat(joinpath(path, "wannier90_hr.dat"))
+    Hr, Rs, deg = Hamster.read_hrdat(joinpath(path, "wannier90_hr.dat"))
     
     set_value!(conf, "train_data", "Optimizer", joinpath(path, "wannier90_hr.dat"))
     set_value!(conf, "hr_fit", "Optimizer", true)
 
     # Test 1: test PC training data with no validation
     dl = DataLoader([], [], 8, 8, conf)
-    @show typeof(dl)
+    @test all([dl.train_data[1].Hr[R] == Hr[R] for R in eachindex(Hr)])
+    @test length(dl.val_data) == 0
+    @test typeof(dl.train_data) == typeof(dl.val_data)
+
+    # Test 2: test PC training data with validation
+    set_value!(conf, "val_data", "Optimizer", joinpath(path, "wannier90_hr.dat"))
+    dl = DataLoader([], [], 8, 8, conf)
+    @test length(dl.val_data) == 1
+    @test all([dl.val_data[1].Hr[R] == Hr[R] for R in eachindex(Hr)])
+end
+
+@testset "DataLoader MD Hr" begin
+    path = joinpath(@__DIR__, "test_files")
+    conf = get_empty_config()
+    Hr = h5read(joinpath(path, "md_hr.h5"), "Hr")
+    
+    set_value!(conf, "train_data", "Optimizer", joinpath(path, "md_hr.h5"))
+    set_value!(conf, "hr_fit", "Optimizer", true)
+    set_value!(conf, "train_mode", "Optimizer", "MD")
+
+    dl = DataLoader([1, 3], [], 8, 8, conf)
+    @test length(dl.train_data) == 2
+    @test all([dl.train_data[1].Hr[R] == Hr[:, :, R, 1] for R in axes(Hr, 3)])
+    @test all([dl.train_data[2].Hr[R] == Hr[:, :, R, 3] for R in axes(Hr, 3)])
 end
