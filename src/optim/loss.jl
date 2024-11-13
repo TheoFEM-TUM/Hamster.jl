@@ -81,7 +81,7 @@ function forward(l::Loss, y, ŷ)
     end
 end
 
-function forward(l::Loss, Hr, Ĥrs)
+function forward(l::Loss, Hr::Vector{<:AbstractMatrix}, Ĥrs::Vector{<:AbstractMatrix})
     total_loss = mean([mean(@. abs(H - Ĥ)^l.n) for (H, Ĥ) in zip(Hr, Ĥrs)])
     return total_loss 
 end
@@ -108,9 +108,11 @@ function backward(l::Loss, y, ŷ)
     end
 end
 
-function backward(l::Loss, Hr::Vector{Matrix}, Ĥrs::Vector{Matrix})
+function backward(l::Loss, Hr::Vector{<:AbstractMatrix}, Ĥrs::Vector{<:AbstractMatrix})
     N = sum([length(H) for H in Hr])
-    dL = [@. 1/N * sign(Ĥ - H) * l.n * abs(Ĥ - H)^(l.n - 1) for (H, Ĥ) in zip(Hr, Ĥrs)]
+    dL = map(zip(Hr, Ĥrs)) do (H, Ĥ)
+        @. 1/N * sign(H - Ĥ) * l.n * abs(H - Ĥ)^(l.n - 1)
+    end
     return dL
 end
 

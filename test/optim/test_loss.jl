@@ -1,4 +1,4 @@
-@testset "loss" begin
+@testset "Normal loss" begin
     # Test 1: MSE
     y = rand(2, 4)
     ŷ = rand(2, 4)
@@ -122,4 +122,28 @@
     @test reg.λ == 1e-5
     @test reg.b == 1
     @test reg.n == 1
+end
+
+@testset "Hr loss" begin
+    mse(y, ŷ) = mean(@. (y - ŷ)^2)
+    mae(y, ŷ) = mean(@. abs(y - ŷ))
+    Hr_mse(Hr_1, Hr_2) = mean([mse(H1, H2) for (H1, H2) in zip(Hr_1, Hr_2)])
+    Hr_mae(Hr_1, Hr_2) = mean([mae(H1, H2) for (H1, H2) in zip(Hr_1, Hr_2)])
+
+    Hr_1 = [rand(4, 4) for _ in 1:4]
+    Hr_2 = [rand(4, 4) for _ in 1:4]
+    
+    # Test 1: test MAE loss
+    loss = Loss(1)
+    @test Hr_mae(Hr_1, Hr_2) ≈ loss(Hr_1, Hr_2)
+    dL_dHr = Hamster.backward(loss, Hr_1, Hr_2)
+    dL_dHr_true = [FiniteDiff.finite_difference_gradient(Hr->mae(Hr, Hr_2[i]), Hr_1[i])/length(Hr_1) for i in eachindex(Hr_1)]
+    @test all([dL_dHr ≈ dL_dHr_true for i in eachindex(dL_dHr)])
+
+    # Test 2: test MSE loss
+    loss = Loss(2)
+    @test Hr_mse(Hr_1, Hr_2) ≈ loss(Hr_1, Hr_2)
+    dL_dHr = Hamster.backward(loss, Hr_1, Hr_2)
+    dL_dHr_true = [FiniteDiff.finite_difference_gradient(Hr->mse(Hr, Hr_2[i]), Hr_1[i])/length(Hr_1) for i in eachindex(Hr_1)]
+    @test all([dL_dHr ≈ dL_dHr_true for i in eachindex(dL_dHr)])
 end
