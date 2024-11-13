@@ -1,7 +1,7 @@
 """
     get_structures(conf=get_empty_config(); index_file="config_inds.dat", xdatcar=get_xdatcar(conf), sc_poscar=get_sc_poscar(conf))
 
-Generates a list of `Structure` objects based on the configurations from an XDATCAR file and the initial POSCAR structure. 
+Generates a list of `Structure` objects based on the configurations from an XDATCAR file (or an h5 file) and the initial POSCAR structure. 
 
 # Arguments
 - `conf`: A configuration object, typically used to store simulation parameters. By default, it calls `get_empty_config()`.
@@ -16,7 +16,7 @@ Generates a list of `Structure` objects based on the configurations from an XDAT
 function get_structures(conf=get_empty_config(); mode="md", index_file="config_inds.dat", xdatcar=get_xdatcar(conf), sc_poscar=get_sc_poscar(conf), poscar=get_poscar(conf))
     if lowercase(mode) == "md" || lowercase(mode) == "mixed"
         poscar = read_poscar(sc_poscar)
-        lattice, configs = read_xdatcar(xdatcar, frac=false)
+        lattice, configs = occursin(".h5", xdatcar) ? read_xdatcar(xdatcar, frac=false) : h5read(xdatcar, "lattice"), h5read(xdatcar, "positions") 
         
         # Check that POSCAR lattice and XDATCAR lattice are compatible
         @assert poscar.lattice ≈ lattice
