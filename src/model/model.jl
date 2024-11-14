@@ -36,12 +36,13 @@ function TBModel(strc::Structure, basis::Basis, conf=get_empty_config(); update_
     return model
 end
 
-function TBModel(strcs, bases, conf=get_empty_config(); update_tb=get_update_tb(conf, nparams(bases[1])), initas=get_init_params(conf))
+function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, conf=get_empty_config(); update_tb=get_update_tb(conf, nparams(bases[1])), initas=get_init_params(conf))
     hs = map(eachindex(strcs)) do n
         get_geometry_tensor(strcs[n], bases[n], conf)
     end
-    model = TBModel(hs, ones(), update_tb)
+    model = TBModel(hs, ones(length(update_tb)), update_tb)
     init_params!(model, basis, conf, initas=initas)
+    return model
 end
 
 """

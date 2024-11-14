@@ -4,12 +4,13 @@ struct EffectiveHamiltonian{T, S1, S2}
     sp_mode :: S1
     sp_diag :: S2
     soc :: Bool
-    Rs :: Vector{Matrix{Int64}}
+    Rs :: Vector{Matrix{Float64}}
 end
 
-function EffectiveHamiltonian(conf=get_empty_conf(); tb_model=get_tb_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), soc=get_soc(conf))
-    strcs = get_structures(conf) # TODO: What happens if there is only one Structure? PC/Mixed?
-    bases = Basis.(strcs, conf)
+function EffectiveHamiltonian(conf=get_empty_conf(); mode="pc", index_file="config_inds.dat", tb_model=get_tb_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), soc=get_soc(conf))
+    
+    strcs, config_indices = get_structures(conf, mode=mode, index_file=index_file) # TODO: What happens if there is only one Structure? PC/Mixed?
+    bases = [Basis(strc, conf) for strc in strcs]
     Rs = [strc.Rs for strc in strcs]
 
     models = ()
@@ -17,7 +18,7 @@ function EffectiveHamiltonian(conf=get_empty_conf(); tb_model=get_tb_model(conf)
         models = (models..., TBModel(strcs, bases, conf))
     end
 
-    return EffectiveHamiltonian(Nstrc, models, sp_mode, sp_diag, soc, Rs)
+    return EffectiveHamiltonian(length(strcs), models, sp_mode, sp_diag, soc, Rs)
 end
 
 """

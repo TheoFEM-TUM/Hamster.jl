@@ -63,3 +63,13 @@ product = @. conj(v)' * ex[1, 1] * v
 
 using Statistics
 reduce(mean, [1, 2, 3])
+
+using BenchmarkTools
+
+f1(x) = cos(x)^2
+f2(x) = cos(x) * cos(x)
+
+x = rand(10000)
+
+@btime f1.($x)
+@btime f2.($x)
