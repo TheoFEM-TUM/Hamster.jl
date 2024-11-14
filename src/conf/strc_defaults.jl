@@ -17,7 +17,7 @@ get_Rmax(conf::Config)::Int64 = conf("Rmax") == "default" ? 1 : conf("Rmax")
 
 The parameter `poscar` sets the path to the POSCAR VASP file that defines the base system.
 """
-get_poscar(conf::Config)::String = conf("poscar") == "default" ? "POSCAR" : conf("POSCAR")
+get_poscar(conf::Config)::String = conf("poscar") == "default" ? "POSCAR" : conf("poscar")
 
 """
     grid_size=rcut

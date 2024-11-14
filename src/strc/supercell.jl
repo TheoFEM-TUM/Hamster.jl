@@ -13,7 +13,7 @@ Generates a list of `Structure` objects based on the configurations from an XDAT
 - `strcs`: A vector of `Structure` objects. Each structure represents the ion positions and their displacements relative to the initial configuration.
 - `config_indices`: The indices of the configurations used to create the structures.
 """
-function get_structures(conf=get_empty_config(); mode="md", index_file="config_inds.dat", xdatcar=get_xdatcar(conf), sc_poscar=get_sc_poscar(conf), poscar=get_poscar(conf))
+function get_structures(conf=get_empty_config(); mode="pc", index_file="config_inds.dat", xdatcar=get_xdatcar(conf), sc_poscar=get_sc_poscar(conf), poscar=get_poscar(conf))
     if lowercase(mode) == "md" || lowercase(mode) == "mixed"
         poscar = read_poscar(sc_poscar)
         lattice, configs = occursin(".h5", xdatcar) ? (h5read(xdatcar, "lattice"), h5read(xdatcar, "positions")) : read_xdatcar(xdatcar, frac=false)

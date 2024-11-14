@@ -11,8 +11,7 @@ function optimize_model!(ham_train, ham_val, optim, dl, conf; nbatch=get_nbatch(
             update!(ham, indices, optim.opt, optim.reg, dL_dHr)
         end
         L_val = mapreduce(+, 1:ham_val.Nstrc) do index
-            ks, ground_truth = dl.val_data[index]
-            forward(ham_val, index, loss, ground_truth) / ham_val.Nstrc
+            forward(ham_val, index, loss, dl.val_data[index]) / ham_val.Nstrc
         end
     end
 end
@@ -33,8 +32,8 @@ The behavior of the function depends on the type of `data`, which can be either 
 - `L_train::Float64`: The calculated loss.
 - `cache`: A preliminary result that is needed to compute the gradient.
 """
-function forward(ham::EffectiveHamiltonian, index, loss, train_data::EigData)
-    ks, ground_truth = train_data
+function forward(ham::EffectiveHamiltonian, index, loss, data::EigData)
+    ks, ground_truth = data
     Hk = get_hamiltonian(ham, index, ks)
     Es, vs = diagonalize(Hk)
     L_train = loss(Es, ground_truth)
