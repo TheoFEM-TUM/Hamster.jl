@@ -1,6 +1,6 @@
 path = string(@__DIR__) * "/test_files/"
 
-@testset "Multiple Structures" begin
+@testset "Multiple Structures from XDATCAR" begin
     conf = get_empty_config()
     set_value!(conf, "XDATCAR", "Supercell", path*"XDATCAR_gaas")
     set_value!(conf, "POSCAR", "Supercell", path*"SC_POSCAR_gaas")
