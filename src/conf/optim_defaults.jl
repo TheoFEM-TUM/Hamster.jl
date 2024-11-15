@@ -25,6 +25,27 @@ The `loss` tag sets the loss function to be used for the optimization.
 get_loss(conf::Config)::String = conf("loss", "Optimizer") == "default" ? "MAE" : conf("loss", "Optimizer")
 
 """
+    lr=0.1
+
+The `lr` parameter defines the learning rate for the gradient descent parameter optimization.
+"""
+get_lr(conf::Config)::Float64 = conf("lr", "Optimizer") == "default" ? 0.1 : conf("lr", "Optimizer")
+
+"""
+    niter=1
+
+The `niter` parameter sets the maximum number of iterations (through the training data set).
+"""
+get_niter(conf::Config)::Int64 = conf("niter", "Optimizer") == "default" ? 1 : conf("niter", "Optimizer")
+
+"""
+    nbatch=1
+
+The `nbatch` tag detemines into how many batches the training structures are split for stochastic gradient optimization.
+"""
+get_nbatch(conf::Config)::Int64 = conf("nbatch", "Optimizer") == "default" ? 1 : conf("nbatch", "Optimizer")
+
+"""
     wE=ones
 
 The `wE` tag sets the weight of each energy band for the calculation of the loss. Individual weights can also be set with, e.g., `wE_3 = 2`.
@@ -58,13 +79,6 @@ get_lambda(conf::Config)::Float64 = conf("lambda", "Optimizer") == "default" ? 0
 The `barrier` parameter determines at which magnitude the regularization kicks in.
 """
 get_barrier(conf::Config)::Float64 = conf("barrier", "Optimizer") == "default" ? 0. : conf("barrier", "Optimizer")
-
-"""
-    nbatch=1
-
-The `nbatch` tag detemines into how many batches the training structures are split for stochastic gradient optimization.
-"""
-get_nbatch(conf::Config)::Int64 = conf("nbatch", "Optimizer") == "default" ? 1 : conf("nbatch", "Optimizer")
 
 """
     train_data=EIGENVAL
