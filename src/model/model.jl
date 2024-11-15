@@ -41,7 +41,7 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, conf=get_empt
         get_geometry_tensor(strcs[n], bases[n], conf)
     end
     model = TBModel(hs, ones(length(update_tb)), update_tb)
-    init_params!(model, basis, conf, initas=initas)
+    init_params!(model, bases[1], conf, initas=initas)
     return model
 end
 

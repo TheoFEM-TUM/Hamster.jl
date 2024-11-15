@@ -22,7 +22,7 @@ include("basis/basis.jl")
 include("model/ham.jl"); include("model/ham_grad.jl"); include("model/ham_write.jl"); include("model/model.jl")
 include("model/eff_ham.jl")
 
-include("optim/adam.jl"); include("optim/loss.jl"); include("optim/data.jl")
+include("optim/adam.jl"); include("optim/loss.jl"); include("optim/data.jl"); include("optim/gd_optimizer.jl")
 
 export write_to_file, read_from_file
 
@@ -36,7 +36,7 @@ export TBModel, EffectiveHamiltonian
 export get_hamiltonian, diagonalize, get_hr, init_params!
 export write_hr, read_hr
 
-export Loss, Regularization, update!, DataLoader
+export Loss, Regularization, update!, DataLoader, GDOptimizer
 
 # Precompililation
 include("Hamster_precompile.jl")

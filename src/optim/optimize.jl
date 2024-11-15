@@ -1,5 +1,5 @@
 
-function optimize_model!(ham_train, ham_val, optim, dl, conf; nbatch=get_nbatch(conf))
+function optimize_model!(ham_train, ham_val, optim, dl, conf=get_empty_config(); nbatch=get_nbatch(conf))
 
     for iter in 1:Niter
         for (chunk_id, indices) in enumerate(chunks(1:ham_train.Nstrc, n=nbatch))
