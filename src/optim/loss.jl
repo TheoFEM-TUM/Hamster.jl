@@ -57,6 +57,8 @@ function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band
     return Loss(wE, wk, n)
 end
 
+Loss(conf=get_empty_config()) = Loss(loss_to_n[get_loss(conf)])
+
 (l::Loss)(y, ŷ) = forward(l, y, ŷ)
 
 """
