@@ -1,6 +1,6 @@
 path = string(@__DIR__) * "/test_files/"
 
-@testset "EffectiveHamiltonian" begin
+@testset "EffectiveHamiltonian for PC" begin
     conf = get_empty_config()
     set_value!(conf, "poscar", joinpath(path, "POSCAR_gaas"))
     set_value!(conf, "orbitals", "Ga", "sp3dr2 sp3dr2 sp3dr2 sp3dr2")
@@ -22,6 +22,4 @@ path = string(@__DIR__) * "/test_files/"
     Hk = get_hamiltonian(eff_ham, 1, ks)
     Es, vs = diagonalize(Hk)
     @test mean(abs.(Es .- Es_correct)) < 0.01
-
-    dl = DataLoader()
 end
