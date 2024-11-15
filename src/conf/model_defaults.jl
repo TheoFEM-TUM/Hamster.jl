@@ -38,7 +38,7 @@ The `sp_mode` tag switches between dense and sparse matrix methods.
 """
 function get_sp_mode(conf::Config)::Union{Sparse, Dense}
     if conf("sp_mode") == "default"
-        return Sparse()
+        return Dense()
     else
         conf("sp_mode") ? Sparse() : Dense()
     end
@@ -51,7 +51,7 @@ The `sp_diag` tag switches between dense and sparse methods for matrix diagonali
 """
 function get_sp_diag(conf::Config)::Union{Sparse, Dense}
     if conf("sp_mode") == "default"
-        return Sparse()
+        return Dense()
     else
         conf("sp_mode") ? Sparse() : Dense()
     end
