@@ -48,7 +48,7 @@ function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band
         if occursin("wk_", key)
             index = parse(Int64, key[4:end])
             wk[index] = conf(key, "Optimizer")
-        elseif occursin("wE_", key)
+        elseif occursin("we_", key)
             index = parse(Int64, key[4:end])
             wE[index] = conf(key, "Optimizer")
         end

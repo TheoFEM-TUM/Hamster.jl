@@ -6,11 +6,11 @@ path = string(@__DIR__) * "/test_files/"
     set_value!(conf, "POSCAR", "Supercell", path*"SC_POSCAR_gaas")
     set_value!(conf, "Nconf", "Supercell", 10)
     set_value!(conf, "Nconfmin", "Supercell", 100)
-    
+
     poscar = Hamster.read_poscar(Hamster.get_sc_poscar(conf))
     lattice, configs = Hamster.read_xdatcar(Hamster.get_xdatcar(conf), frac=false)
 
-    strcs, config_inds = get_structures(conf)
+    strcs, config_inds = get_structures(conf, mode="md")
 
     @test length(strcs) == 10
 
