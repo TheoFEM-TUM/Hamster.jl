@@ -45,31 +45,23 @@ H = rand(64, 64)
 
 
 
-vs = rand(8, 8, 80)
+vs = Hamster.reshape_and_sparsify_eigenvectors(rand(8, 8, 80), Hamster.Dense())
 ex = rand(25, 80)
 
 Threads.@threads for k in axes(ex, 2)
     Threads.@threads for R in axes(ex, 1)
-        for m in axes(vs, 2)
-            product = @. conj(vs[:, m, k])' * ex[R, k] * vs[:, m, k]
+        for m in axes(vs, 1)
+            product = @. conj(vs[m, k])' * ex[R, k] * vs[m, k]
             @show size(product)
         end
     end
 end
 
 v = sprand(8, 0.1)
+
+v = rand(8)
+
+@show size(v')
 product = @. conj(v)' * ex[1, 1] * v
 
 
-using Statistics
-reduce(mean, [1, 2, 3])
-
-using BenchmarkTools
-
-f1(x) = cos(x)^2
-f2(x) = cos(x) * cos(x)
-
-x = rand(10000)
-
-@btime f1.($x)
-@btime f2.($x)
