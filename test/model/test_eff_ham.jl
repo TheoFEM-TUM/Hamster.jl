@@ -14,7 +14,7 @@ path = string(@__DIR__) * "/test_files/"
     set_value!(conf, "rllm_file", joinpath(path, "rllm_true.dat"))
     set_value!(conf, "rcut", 5)
     set_value!(conf, "init_params", joinpath(path, "params.dat"))
-    set_value!(conf, "verbose", 0)
+    set_value!(conf, "verbosity", 0)
 
     # Test that effective Hamiltonian model gives correct eigenvalues
     eff_ham = EffectiveHamiltonian(conf)
