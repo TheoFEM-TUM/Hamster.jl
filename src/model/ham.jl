@@ -3,7 +3,7 @@
     
 Calculate the phase factor exp(2πik⃗⋅R⃗).
 """
-@inline exp_2πi(k⃗, R⃗) = @. exp(2π*im * $*(R⃗', k⃗))
+@inline exp_2πi(R⃗, k⃗) = @. exp(2π*im * $*(R⃗', k⃗))
 
 get_empty_complex_hamiltonians(Nε, NkR, mode=Dense()) = Matrix{ComplexF64}[zeros(ComplexF64, Nε, Nε) for _ in 1:NkR]
 get_empty_complex_hamiltonians(Nε, NkR, ::Sparse) = SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for _ in 1:NkR]
@@ -28,7 +28,7 @@ Constructs a vector of Hamiltonian matrices by combining a vector of matrices `H
 function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Dense(); weights=ones(size(Rs, 2)))
     Nε = size(Hr[1], 1)
     Hk = get_empty_complex_hamiltonians(Nε, size(ks, 2), mode)
-    exp_2πiRk = exp_2πi(ks, Rs)
+    exp_2πiRk = exp_2πi(Rs, ks)
 
     Threads.@threads for k in eachindex(Hk)
         @views @inbounds for R in eachindex(Hr)
@@ -162,7 +162,7 @@ Applies a tolerance to drop small elements from a vector of sparse matrices, mod
 - `H::Vector{AbstractSparseMatrix}`: A vector of sparse matrices where small elements will be dropped. The matrices are modified in place.
 - `tol::Real=1e-8`: The numerical tolerance used to determine which elements are considered too small and should be dropped. Elements with absolute values less than `tol` are removed from the sparse matrices.
 """
-function droptol!(H::Vector{AbstractSparseMatrix}, tol=1e-10)
+function SparseArrays.droptol!(H::Vector{AbstractSparseMatrix}, tol=1e-10)
     for k in eachindex(H)
         droptol!(H[k], tol)
     end
@@ -207,4 +207,49 @@ function gradient_apply_spin_basis(dHr::AbstractMatrix; alternating_order=false)
         dHr_out = sum(reshape(dHr, Nε, 2, Nε, 2), dims=(2, 4))
         return dropdims(dHr_out, dims=(2, 4))
     end
+end
+
+"""
+    reshape_and_sparsify_eigenvectors(vs, mode::SparsityMode; sp_tol=1e-10) -> Matrix
+
+Reshapes and optionally sparsifies a 3D array of eigenvectors `vs` into a 2D matrix of vectors, 
+depending on the specified `SparsityMode`. 
+
+The input `vs` is assumed to have dimensions `(n, m, k)`, where:
+- `n` represents the size of each eigenvector.
+- `m` and `k` represent the number of eigenvector groups along two axes.
+
+# Arguments
+- `vs::Array`: A 3D array of eigenvectors, where `vs[:, m, k]` corresponds to the eigenvector at position `(m, k)`.
+- `mode::SparsityMode`: Specifies the sparsity mode. Must be either:
+  - `Dense`: Produces a dense matrix where each element is a dense vector.
+  - `Sparse`: Produces a sparse matrix where each element is a sparse vector.
+- `sp_tol::Float64=1e-10`: (Optional) The tolerance below which elements of the eigenvectors are dropped when 
+  `Sparse` mode is selected. Defaults to `1e-10`.
+
+# Returns
+- `Matrix{Vector{ComplexF64}}` if `mode` is `Dense`: A 2D matrix of dense vectors corresponding to eigenvectors in `vs`.
+- `Matrix{SparseVector{ComplexF64, Int64}}` if `mode` is `Sparse`: A 2D matrix of sparse vectors, where elements smaller 
+  than `sp_tol` are removed.
+"""
+function reshape_and_sparsify_eigenvectors(vs, ::Dense; sp_tol=1e-10)
+    vs_out = Matrix{Vector{ComplexF64}}(undef, size(vs, 2), size(vs, 3))
+    for k in axes(vs, 3)
+        for m in axes(vs, 2)
+            @views vs_out[m, k] = vs[:, m, k]
+        end
+    end
+    return vs_out
+end
+
+function reshape_and_sparsify_eigenvectors(vs, ::Sparse; sp_tol=1e-10)
+    vs_out = Matrix{SparseVector{ComplexF64, Int64}}(undef, size(vs, 2), size(vs, 3))
+    for k in axes(vs, 3)
+        for m in axes(vs, 2)
+            sparse_vec = sparse(vs[:, m, k])
+            droptol!(sparse_vec, sp_tol)
+            @views vs_out[m, k] = sparse_vec
+        end
+    end
+    return vs_out
 end

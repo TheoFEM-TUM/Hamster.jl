@@ -108,8 +108,8 @@ the function assumes it contains gradients for multiple structures and returns t
 function get_model_gradient(h, dL_dHr::Vector{<:AbstractMatrix})
     dV = zeros(size(h, 1))
     for v in axes(h, 1)
-        for R in eachindex(dHr)
-            dV[v] += sum(h[v, R] * dL_dHr[R])
+        for R in eachindex(dL_dHr)
+            dV[v] += sum(h[v, R] .* dL_dHr[R])
         end
     end
     return dV

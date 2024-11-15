@@ -1,17 +1,20 @@
 
-function optimize_model!(ham_train, ham_val, optim, dl, conf=get_empty_config(); nbatch=get_nbatch(conf))
+function optimize_model!(ham_train, ham_val, optim, dl, conf=get_empty_config(); nbatch=get_nbatch(conf), validate=get_validate(conf))
 
-    for iter in 1:Niter
+    for iter in 1:optim.Niter
         for (chunk_id, indices) in enumerate(chunks(1:ham_train.Nstrc, n=nbatch))
 
             dL_dHr = map(indices) do index
-                L_train, cache = forward(ham_train, index, loss, dl.train_data[index])
-                backward(ham_train, index, loss, dl.train_data[index], cache)
+                L_train, cache = forward(ham_train, index, optim.loss, dl.train_data[index])
+                @show L_train
+                backward(ham_train, index, optim.loss, dl.train_data[index], cache)
             end
-            update!(ham, indices, optim.opt, optim.reg, dL_dHr)
+            update!(ham_train, indices, optim.adam, optim.reg, dL_dHr)
         end
-        L_val = mapreduce(+, 1:ham_val.Nstrc) do index
-            forward(ham_val, index, loss, dl.val_data[index]) / ham_val.Nstrc
+        if validate
+            L_val = mapreduce(+, 1:ham_val.Nstrc) do index
+                forward(ham_val, index, optim.loss, dl.val_data[index]) / ham_val.Nstrc
+            end
         end
     end
 end
@@ -33,11 +36,11 @@ The behavior of the function depends on the type of `data`, which can be either 
 - `cache`: A preliminary result that is needed to compute the gradient.
 """
 function forward(ham::EffectiveHamiltonian, index, loss, data::EigData)
-    ks, ground_truth = data
-    Hk = get_hamiltonian(ham, index, ks)
+    Hk = get_hamiltonian(ham, index, data.kp)
     Es, vs = diagonalize(Hk)
-    L_train = loss(Es, ground_truth)
-    return L_train, (Es, vs)
+    vs_out = reshape_and_sparsify_eigenvectors(vs, ham.sp_mode)
+    L_train = loss(Es, data.Es)
+    return L_train, (Es, vs_out)
 end
 
 function forward(ham::EffectiveHamiltonian, index, loss, data::HrData)
@@ -65,8 +68,8 @@ The function behavior varies depending on the type of `data`, which can be eithe
 function backward(ham::EffectiveHamiltonian, index, loss, data::EigData, cache)
     Es_tb, vs = cache
     dL_dE = backward(loss, Es_tb, data.Es)
-    dE_dHr = get_eigenvalue_gradient(vs, ham_train.Rs[index], data.ks)
-    return chain_rule(dL_dE, dE_dHr, ham.mode)
+    dE_dHr = get_eigenvalue_gradient(vs, ham.Rs[index], data.kp)
+    return chain_rule(dL_dE, dE_dHr, ham.sp_mode)
 end
 
-backward(ham::EffectiveHamiltonian, index, loss, data::EigData, cache) = backward(loss, cache[1], data.Hr)
+backward(ham::EffectiveHamiltonian, index, loss, data::HrData, cache) = backward(loss, cache[1], data.Hr)

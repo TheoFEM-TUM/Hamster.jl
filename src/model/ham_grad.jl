@@ -14,14 +14,14 @@ Compute the gradient `dE_dHr` of each energy eigenvalue at each k-point w.r.t. t
 """
 function get_eigenvalue_gradient(vs, Rs, ks)
     Nε = size(vs, 1); NR = size(Rs, 2); Nk = size(ks, 2)
-    dE_dHr = Array{Vector{Float64}}(undef, NR, Nε, Nk)
+    dE_dHr = Array{Matrix{Float64}}(undef, NR, Nε, Nk)
     hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks))
     return dE_dHr
 end
 
 function get_eigenvalue_gradient(vs::AbstractArray{<:SparseVector}, Rs, ks)
     Nε = size(vs, 1); NR = size(Rs, 2); Nk = size(ks, 2)
-    dE_dHr = Array{SparseVector{Float64, Int64}}(undef, NR, Nε, Nk)
+    dE_dHr = Array{SparseMatrixCSC{Float64, Int64}}(undef, NR, Nε, Nk)
     hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks))
     return dE_dHr
 end
@@ -43,11 +43,11 @@ For each k-point `k` and eigenstate `m`, this function computes the matrix eleme
 
 and stores the real part of this value in `dE_dλ[R, m, k]`. This is done for each lattice vector `R`, eigenstate `m`, and k-point `k`.
 """
-function hellman_feynman!(dE_dλ, Ψ_i, dHk_ij)
-    Threads.@threads for k in 1:axes(dHk_ij, 2)
-        Threads.@threads for m in axes(Ψ_i, 1)
-            for R in axes(dHk_ij, 1)
-                @views dE_dλ[R, m, k] = real.(conj(vs[m, k])' * dHk_ij[R, k] * vs[m, k])
+function hellman_feynman!(dE_dλ, Ψ_i, dHk_dHr)
+    for k in axes(Ψ_i, 2)
+        for m in axes(Ψ_i, 1)
+            for R in axes(dHk_dHr, 1)
+                @views dE_dλ[R, m, k] = @. real(conj(Ψ_i[m, k])' * dHk_dHr[R, k] * Ψ_i[m, k])
             end
         end
     end

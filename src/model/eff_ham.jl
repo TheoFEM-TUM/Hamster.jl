@@ -3,12 +3,12 @@ struct EffectiveHamiltonian{T, S1, S2}
     models :: T
     sp_mode :: S1
     sp_diag :: S2
+    sp_tol :: Float64
     soc :: Bool
     Rs :: Vector{Matrix{Float64}}
 end
 
-function EffectiveHamiltonian(conf=get_empty_conf(); mode="pc", index_file="config_inds.dat", tb_model=get_tb_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), soc=get_soc(conf))
-    
+function EffectiveHamiltonian(conf=get_empty_conf(); mode="pc", index_file="config_inds.dat", tb_model=get_tb_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), sp_tol = get_sp_tol(conf), soc=get_soc(conf))
     strcs, config_indices = get_structures(conf, mode=mode, index_file=index_file) # TODO: What happens if there is only one Structure? PC/Mixed?
     bases = [Basis(strc, conf) for strc in strcs]
     Rs = [strc.Rs for strc in strcs]
@@ -18,8 +18,10 @@ function EffectiveHamiltonian(conf=get_empty_conf(); mode="pc", index_file="conf
         models = (models..., TBModel(strcs, bases, conf))
     end
 
-    return EffectiveHamiltonian(length(strcs), models, sp_mode, sp_diag, soc, Rs)
+    return EffectiveHamiltonian(length(strcs), models, sp_mode, sp_diag, sp_tol, soc, Rs)
 end
+
+get_empty_effective_hamiltonian() = EffectiveHamiltonian(0, nothing, Dense(), Dense(), 1e-10, false, [zeros(3, 1)])
 
 """
     get_hamiltonian(ham::EffectiveHamiltonian, index, ks)
@@ -66,15 +68,16 @@ Update the parameters of each model within the `EffectiveHamiltonian` object usi
 
 # Arguments
 - `ham::EffectiveHamiltonian`: The effective Hamiltonian object containing multiple models.
+- `indices`: The indices of the structures that the gradient belongs to.
 - `opt`: An optimizer object specifying the update rule (e.g., ADAM).
 - `dL_dHr`: The derivative of the loss w.r.t. to each matrix element of the real-space Hamiltonian.
 
 # Returns
 - This function modifies the `ham` object in place, updating the parameters of each model it contains.
 """
-function update!(ham::EffectiveHamiltonian, opt, reg, dL_dHr)
+function update!(ham::EffectiveHamiltonian, indices, opt, reg, dL_dHr)
     for model in ham.models
-        update!(model, opt, reg, dL_dHr)
+        update!(model, indices, opt, reg, dL_dHr)
     end
 end
 
@@ -93,11 +96,10 @@ Applies the chain rule to compute the gradient of the loss with respect to the r
 """
 function chain_rule(dL_dE, dE_dHr, mode)
     dL_dHr = get_empty_real_hamiltonians(size(dE_dHr, 2), size(dE_dHr, 1), mode)
-
     for k in axes(dE_dHr, 3)
         for m in axes(dE_dHr, 2)
             for R in axes(dE_dHr, 1)
-                @views dL_dHr[R] += dL_dE[m , k] * dE_dHr[R, m, k]
+                @views @. dL_dHr[R] += dL_dE[m , k] * dE_dHr[R, m, k]
             end
         end
     end
