@@ -5,13 +5,13 @@ Calculate the phase factor exp(2πik⃗⋅R⃗).
 """
 @inline exp_2πi(k⃗, R⃗) = @. exp(2π*im * $*(R⃗', k⃗))
 
-get_empty_complex_hamiltonians(Nε, NkR, mode=Val{:dense}) = Matrix{ComplexF64}[zeros(ComplexF64, Nε, Nε) for _ in 1:NkR]
-get_empty_complex_hamiltonians(Nε, NkR, ::Type{Val{:sparse}}) = SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for _ in 1:NkR]
-get_empty_real_hamiltonians(Nε, NkR, mode=Val{:dense}) = Matrix{Float64}[zeros(Float64, Nε, Nε) for _ in 1:NkR]
-get_empty_real_hamiltonians(Nε, NkR, ::Type{Val{:sparse}}) = SparseMatrixCSC{Float64, Int64}[spzeros(Float64, Nε, Nε) for _ in 1:NkR]
+get_empty_complex_hamiltonians(Nε, NkR, mode=Dense()) = Matrix{ComplexF64}[zeros(ComplexF64, Nε, Nε) for _ in 1:NkR]
+get_empty_complex_hamiltonians(Nε, NkR, ::Sparse) = SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for _ in 1:NkR]
+get_empty_real_hamiltonians(Nε, NkR, mode=Dense()) = Matrix{Float64}[zeros(Float64, Nε, Nε) for _ in 1:NkR]
+get_empty_real_hamiltonians(Nε, NkR, ::Sparse) = SparseMatrixCSC{Float64, Int64}[spzeros(Float64, Nε, Nε) for _ in 1:NkR]
 
 """
-    get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Val{:dense}, weights=ones(size(Rs, 2)))
+    get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Dense(), weights=ones(size(Rs, 2)))
 
 Constructs a vector of Hamiltonian matrices by combining a vector of matrices `Hr` with phase factors determined by `Rs` and `ks`.
 
@@ -19,13 +19,13 @@ Constructs a vector of Hamiltonian matrices by combining a vector of matrices `H
 - `Hr::Vector{<:AbstractMatrix}`: A vector of matrices where each matrix represents a component of the Hamiltonian. These matrices must be compatible in size for the operations performed.
 - `Rs`: A matrix or array containing positional information used to calculate phase factors.
 - `ks`: A matrix of momentum values used in conjunction with `Rs` to compute phase factors.
-- `mode::Type{Symbol}=Val{:dense}`: Indicates whether to construct a sparse or dense Hamiltonian. Defaults to `dense`.
+- `mode::Dense()`: Indicates whether to construct a sparse or dense Hamiltonian. Defaults to `Dense`.
 - `weights::Vector=ones(size(Rs, 2))`: A vector of weights used in the summation of phase factors. The length of this vector should match the number of columns in `Rs`. These are the degeneracies for the Wannier90 Hamiltonians.
 
 # Returns:
 - A vector of Hamiltonian matrices `Hk`, where each matrix is constructed by combining `Hr` with phase factors and optionally transformed into a spin basis.
 """
-function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Val{:dense}; weights=ones(size(Rs, 2)))
+function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Dense(); weights=ones(size(Rs, 2)))
     Nε = size(Hr[1], 1)
     Hk = get_empty_complex_hamiltonians(Nε, size(ks, 2), mode)
     exp_2πiRk = exp_2πi(ks, Rs)

@@ -40,7 +40,7 @@ end
     @test size(Hk_empty[1]) == (N, N)
     @test typeof(Hk_empty[1]) == Matrix{ComplexF64}
 
-    Hk_empty = Hamster.get_empty_complex_hamiltonians(N, Nk, Val{:sparse})
+    Hk_empty = Hamster.get_empty_complex_hamiltonians(N, Nk, Hamster.Sparse())
     @test length(Hk_empty) == Nk
     @test size(Hk_empty[1]) == (N, N)
     @test typeof(Hk_empty[1]) == SparseMatrixCSC{ComplexF64, Int64}
@@ -50,7 +50,7 @@ end
     # Sparse Hr should be converted to dense Hk for sp_mode=false
     @test typeof(Hk[1]) == Matrix{ComplexF64}
 
-    Hk = get_hamiltonian(Hr_sp, Rs, ks, Val{:sparse})
+    Hk = get_hamiltonian(Hr_sp, Rs, ks, Hamster.Sparse())
     # Sparse Hr should lead to sparse Hk for sp_mode=true
     @test typeof(Hk[1]) == SparseMatrixCSC{ComplexF64, Int64}
     
@@ -74,7 +74,7 @@ end
     @test vs_dense ≈ vs2
 
     # Test Neig
-    Hk_sp = get_hamiltonian(Hr_sp, Rs, kpoints, Val{:sparse})
+    Hk_sp = get_hamiltonian(Hr_sp, Rs, kpoints, Hamster.Sparse())
     Es_sp, _ = diagonalize(Hk_sp, Neig=3, target=-15)
     @test size(Es_sp) == (3, 80)
     @test round.(Es_sp, digits=5) ≈ round.(Es_correct[1:3, :], digits=5)

@@ -1,4 +1,16 @@
 """
+Abstract type `SparsityMode` serves as a base for indicating the sparsity of matrices.
+These types enable dispatching based on the sparsity mode.
+
+# Subtypes
+- `Sparse <: SparsityMode`: Represents matrices with sparse storage.
+- `Dense <: SparsityMode`: Represents matrices with dense storage.
+"""
+abstract type SparsityMode end
+struct Sparse<:SparsityMode end
+struct Dense<:SparsityMode end
+
+"""
     tb_model=true
 
 The `tb_model` tag switches on the use of a TB model in the effective Hamiltonian model.
@@ -24,11 +36,11 @@ get_sp_tol(conf::Config)::Float64 = conf("sp_tol") == "default" ? 1e-10 : conf("
 
 The `sp_mode` tag switches between dense and sparse matrix methods.
 """
-function get_sp_mode(conf::Config)::Union{Type{Val{:sparse}}, Type{Val{:dense}}}
+function get_sp_mode(conf::Config)::Union{Sparse, Dense}
     if conf("sp_mode") == "default"
-        return Val{:dense}
+        return Sparse()
     else
-        conf("sp_mode") ? Val{:sparse} : Val{:dense}
+        conf("sp_mode") ? Sparse() : Dense()
     end
 end
 
@@ -37,10 +49,10 @@ end
 
 The `sp_diag` tag switches between dense and sparse methods for matrix diagonalization.
 """
-function get_sp_diag(conf::Config)::Union{Type{Val{:sparse}}, Type{Val{:dense}}}
-    if conf("sp_diag") == "default"
-        return Val{:dense}
+function get_sp_diag(conf::Config)::Union{Sparse, Dense}
+    if conf("sp_mode") == "default"
+        return Sparse()
     else
-        conf("sp_diag") ? Val{:sparse} : Val{:dense}
+        conf("sp_mode") ? Sparse() : Dense()
     end
 end
