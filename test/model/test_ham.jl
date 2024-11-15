@@ -4,7 +4,7 @@ file_path = string(@__DIR__) * "/test_files/"
     # Test arrays
     R⃗ = rand(3)
     k⃗ = rand(3)
-    result = Hamster.exp_2πi(k⃗, R⃗)
+    result = Hamster.exp_2πi(R⃗, k⃗)
     expected = exp(2π * im * dot(k⃗, R⃗))
     @test isapprox(result, expected, rtol=1e-10)
     @test typeof(result) == ComplexF64
@@ -12,18 +12,18 @@ file_path = string(@__DIR__) * "/test_files/"
     # Test matrices
     Rs = rand(3, 5)
     ks = rand(3, 7)
-    result = Hamster.exp_2πi(ks, Rs)
+    result = Hamster.exp_2πi(Rs, ks)
     @test size(result) == (5, 7)
 
     # Test matrix-vector
     Rs = rand(3)
     ks = rand(3, 7)
-    result = Hamster.exp_2πi(ks, Rs)
+    result = Hamster.exp_2πi(Rs, ks)
     @test size(result) == (1, 7)
 
     Rs = rand(3, 5)
     ks = rand(3)
-    result = Hamster.exp_2πi(ks, Rs)
+    result = Hamster.exp_2πi(Rs, ks)
     @test size(result) == (5,)
 end
 
@@ -128,4 +128,19 @@ end
     @test all(H->size(H)==(4, 4), dHr_1)
     dHr_2 = Hamster.gradient_apply_spin_basis.(dHr, alternating_order=true)
     @test all(H->size(H)==(4, 4), dHr_2)
+
+    # Test reshape dense eigenvectors
+    vs = rand(ComplexF64, 3, 4, 5)
+    result = Hamster.reshape_and_sparsify_eigenvectors(vs, Hamster.Dense())
+    @test size(result) == (4, 5)
+    @test all(result[i, j] == vs[:, i, j] for i in 1:4, j in 1:5)
+
+    # Test reshape into sparse eigenvectors
+    vs = rand(ComplexF64, 3, 4, 5)
+    vs[1, 1, 1] = 1e-5
+    result = Hamster.reshape_and_sparsify_eigenvectors(vs, Hamster.Sparse(), sp_tol=1e-4)
+    @test size(result) == (4, 5)
+    @test all(result[i, j] isa SparseVector{ComplexF64, Int64} for i in 1:4, j in 1:5)
+    @test all(isapprox(result[i, j][:], vs[:, i, j], atol=1e-4) for i in 1:4, j in 1:5)
+    @test result[1, 1][1] == 0
 end
