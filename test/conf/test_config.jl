@@ -1,6 +1,6 @@
-conf = Hamster.get_empty_config()
-
 @testset "Config" begin
+    conf = Hamster.get_empty_config()
+
     # Test convert value
     convert_value = Hamster.convert_value
     @test convert_value("7.0") == 7.0
@@ -17,16 +17,25 @@ conf = Hamster.get_empty_config()
     @test conf("rcut") == "default"
 
     # Test setting parameter values
-    Hamster.set_value!(conf, "rcut", "7.0")
+    set_value!(conf, "rcut", "7.0")
     @test conf("rcut") == 7.0
 
     # Value in non-existing block should be default
     @test conf("lr", "Optimizer") == "default"
 
     # Create block and set value in block
-    Hamster.set_value!(conf, "lr", "Optimizer", "0.1")
+    set_value!(conf, "lr", "Optimizer", "0.1")
     @test conf("lr", "Optimizer") == 0.1
 
     # Lookup multiple keys
     @test conf(["rcut", "interpolate_rllm"]) == [7.0, "default"]
+
+    # Keys should no be case sensitive
+    set_value!(conf, "POSCAR", "POSCAR_gaas")
+    @test conf("poscar") == "POSCAR_gaas"
+    @test conf("POSCAR") == conf("poscar")
+
+    set_value!(conf, "poScAr", "Supercell", "SC_POSCAR")
+    @test conf("poscar", "Supercell") == "SC_POSCAR"
+    @test conf("POSCAR", "Supercell") == "SC_POSCAR"
 end
