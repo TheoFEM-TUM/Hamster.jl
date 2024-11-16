@@ -80,28 +80,3 @@ function update!(ham::EffectiveHamiltonian, indices, opt, reg, dL_dHr)
         update!(model, indices, opt, reg, dL_dHr)
     end
 end
-
-"""
-    chain_rule(dL_dE, dE_dHr, mode)
-
-Applies the chain rule to compute the gradient of the loss with respect to the real-space Hamiltonian matrix elements by combining partial derivatives `dL_dE` and `dE_dHr`.
-
-# Arguments
-- `dL_dE`: An array containing the partial derivatives of the loss with respect to the eigenvalues, with shape `(m, k)`, where `m` is the eigenvalue index and `k` is the k-point index.
-- `dE_dHr`: A 3D array of Matrices containing the partial derivatives of the eigenvalues with respect to the Hamiltonian in real-space coordinates, with shape `(R, m, k)`, where `R` is the lattice vector index.
-- `mode`: Specifies whether the Hamiltonian is sparse or dense, determining the data structure of the result.
-
-# Returns
-- `dL_dHr`: A real-space Hamiltonian gradient array, where each element contains the accumulated gradient for a specific lattice vector in `R`. Its shape is determined by the Hamiltonian structure and `mode`.
-"""
-function chain_rule(dL_dE, dE_dHr, mode)
-    dL_dHr = get_empty_real_hamiltonians(size(dE_dHr, 2), size(dE_dHr, 1), mode)
-    for k in axes(dE_dHr, 3)
-        for m in axes(dE_dHr, 2)
-            for R in axes(dE_dHr, 1)
-                @views @. dL_dHr[R] += dL_dE[m , k] * dE_dHr[R, m, k]
-            end
-        end
-    end
-    return dL_dHr
-end
