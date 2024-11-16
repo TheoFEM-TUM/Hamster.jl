@@ -1,0 +1,36 @@
+"""
+    get_eigenvalue_gradient(vs::Array{ComplexF64, 3}, Rs::Matrix{Float64}, ks::Matrix{Float64}) -> Array{Float64, 5}
+
+Computes the gradient of energy eigenvalues with respect to the Hamiltonian matrix elements by performing explicit loops.
+"""
+function get_eigenvalue_gradient(vs::Array{ComplexF64, 3}, Rs::Matrix{Float64}, ks::Matrix{Float64})
+    Nε = size(vs, 1); NR = size(Rs, 2); Nk = size(ks, 2)
+    exp_2πiRk = Hamster.exp_2πi(Rs, ks)
+    dε = zeros(Nε, Nε, NR, Nε, Nk)
+    for k in 1:Nk
+        for m in 1:Nε, R in 1:NR, i in 1:Nε, j in 1:Nε
+            @views dε[i, j, R, m, k] = real(sum(@. conj(vs[i, m, k]) * exp_2πiRk[R, k] * vs[j, m, k]))
+        end
+    end
+    return dε
+end
+
+@testset "Eigenvalue gradient (Hellmann-Feynman theorem)" begin
+    # Test that the gradient dE_dHr is the same as with explicit loops
+    Hr_1 = [Hermitian(rand(4, 4)) for _ in 1:5]
+    Rs = 2 .* rand(3, 5) .- 1
+    ks = rand(3, 3) .- 0.5
+
+    vs = diagonalize(get_hamiltonian(Hr_1, Rs, ks))[2]
+    vs_ = Hamster.reshape_and_sparsify_eigenvectors(vs, Hamster.Dense())
+    dE_dHr_an = Hamster.get_eigenvalue_gradient(vs_, Rs, ks)
+    dE_dHr_old = get_eigenvalue_gradient(vs, Rs, ks) # i, j, R, m, k
+
+    same_as_old = Bool[]
+    for R in axes(dE_dHr_old, 3), j in axes(dE_dHr_old, 2), i in axes(dE_dHr_old, 1)
+        for k in axes(dE_dHr_old, 5), m in axes(dE_dHr_old, 4)
+            push!(same_as_old, dE_dHr_an[R, m, k][i, j] ≈ dE_dHr_old[i, j, R, m, k])
+        end
+    end
+    @test all(same_as_old)
+end

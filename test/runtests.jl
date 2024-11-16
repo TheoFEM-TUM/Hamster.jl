@@ -36,6 +36,7 @@ end
 
 @testset "model" begin
     include("model/test_ham.jl")
+    include("model/test_ham_grad.jl")
     include("model/test_model.jl")
     include("model/test_eff_ham.jl")
 end

@@ -7,7 +7,7 @@ file_path = string(@__DIR__) * "/test_files/"
     result = Hamster.exp_2πi(R⃗, k⃗)
     expected = exp(2π * im * dot(k⃗, R⃗))
     @test isapprox(result, expected, rtol=1e-10)
-    @test typeof(result) == ComplexF64
+    @test result isa ComplexF64
 
     # Test matrices
     Rs = rand(3, 5)
@@ -38,21 +38,21 @@ end
     Hk_empty = Hamster.get_empty_complex_hamiltonians(N, Nk)
     @test length(Hk_empty) == Nk
     @test size(Hk_empty[1]) == (N, N)
-    @test typeof(Hk_empty[1]) == Matrix{ComplexF64}
+    @test Hk_empty[1] isa Matrix{ComplexF64}
 
     Hk_empty = Hamster.get_empty_complex_hamiltonians(N, Nk, Hamster.Sparse())
     @test length(Hk_empty) == Nk
     @test size(Hk_empty[1]) == (N, N)
-    @test typeof(Hk_empty[1]) == SparseMatrixCSC{ComplexF64, Int64}
+    @test Hk_empty[1] isa SparseMatrixCSC{ComplexF64, Int64}
 
     # Test get_hamiltonian
     Hk = get_hamiltonian(Hr_sp, Rs, ks)
     # Sparse Hr should be converted to dense Hk for sp_mode=false
-    @test typeof(Hk[1]) == Matrix{ComplexF64}
+    @test Hk[1] isa Matrix{ComplexF64}
 
     Hk = get_hamiltonian(Hr_sp, Rs, ks, Hamster.Sparse())
     # Sparse Hr should lead to sparse Hk for sp_mode=true
-    @test typeof(Hk[1]) == SparseMatrixCSC{ComplexF64, Int64}
+    @test Hk[1] isa SparseMatrixCSC{ComplexF64, Int64}
     
     kpoints = read_from_file(file_path*"kpoints.dat")
     Es_correct = read_from_file(file_path*"Es_correct.dat")
@@ -65,10 +65,10 @@ end
 
     # Test sparse mode
     Hr_sp, _ = read_hr(file_path*"gaas_hr.dat", sp_mode=true, verbose=0)
-    @test typeof(Hr_sp) <: Vector{SparseMatrixCSC{Float64, Int64}}
+    @test Hr_sp isa Vector{SparseMatrixCSC{Float64, Int64}}
 
     Hk2 = get_hamiltonian(Hr_sp, Rs, kpoints)
-    @test typeof(Hk2) <: Vector{Matrix{ComplexF64}}
+    @test Hk2 isa Vector{Matrix{ComplexF64}}
     Es2, vs2 = diagonalize(Hk2)
     @test Es2 ≈ Es_correct
     @test vs_dense ≈ vs2
