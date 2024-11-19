@@ -18,8 +18,9 @@ jobs:
     - name: Install dependencies
       run: |
           julia --project=. -e '
-            import Pkg
+            using Pkg
+            Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()'
     - name: Run tests
       run: |
-        julia --project=. test/runtests.jl
+        julia 'using Pkg; Pkg.test("Hamster")'
