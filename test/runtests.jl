@@ -44,4 +44,5 @@ end
 @testset "optim" begin
     include("optim/test_loss.jl")
     include("optim/test_data.jl")
+    include("optim/test_optimize.jl")
 end
