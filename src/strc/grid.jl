@@ -110,6 +110,30 @@ function iterate_nn_grid_points(point_grid::PointGrid)
             end
         end
     end
+    return unique(all_inds)
+end
+
+"""
+    iterate_nn_grid_points(grid_point, point_grid::PointGrid)
+
+Find and return all neighboring grid points of a given `grid_point` within the specified point grid and gather the associated ion indices and translation vectors.
+
+# Arguments
+- `grid_point`: A grid point represented as a tuple (or similar structure), indicating the current grid position for which neighboring points are being queried.
+- `point_grid::PointGrid`: A `PointGrid` object containing information about the point grid, including the ions' positions and the translation vectors.
+
+# Returns
+- `all_inds::Vector{Tuple{Int64, Int64}}`: A vector of tuples, where each tuple contains:
+  - The index of the ion (`iion`) corresponding to a nearby grid point.
+  - The translation vector (`R`) for that ion.
+"""
+function iterate_nn_grid_points(grid_point, point_grid::PointGrid)
+    all_inds = Tuple{Int64, Int64}[]
+    for nn_grid_point in nn_grid_points(grid_point, point_grid.dictR)
+        for (iion, R) in point_grid.dictR[nn_grid_point]
+            push!(all_inds, (iion, R))
+        end
+    end
     return all_inds
 end
 

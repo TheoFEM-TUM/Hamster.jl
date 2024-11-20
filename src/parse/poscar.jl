@@ -34,7 +34,7 @@ Extract all data from the POSCAR file at `poscar`.
     - `lattice`: The 3x3 array of lattice vectors.
     - `atom_names`: An array of atom names.
     - `atom_numbers`: An array of the number of each type of atom.
-    - `Rs`: A 3xNion array of atomic positions.
+    - `rs_atom`: A 3xNion array of atomic positions.
     - `atom_types`: An array of atom types corresponding to each atom position.
 """
 function read_poscar(poscar)

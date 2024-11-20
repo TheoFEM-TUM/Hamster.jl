@@ -3,12 +3,15 @@
     
 Calculate the phase factor exp(2πik⃗⋅R⃗).
 """
-@inline exp_2πi(k⃗, R⃗) = @. exp(2π*im * $*(R⃗', k⃗))
+@inline exp_2πi(R⃗, k⃗) = @. exp(2π*im * $*(R⃗', k⃗))
 
-get_empty_hamiltonians(Nε, NkR; sp_mode=false, type=ComplexF64) = [ifelse(sp_mode, spzeros, zeros)(type, Nε, Nε) for _ in 1:NkR]
+get_empty_complex_hamiltonians(Nε, NkR, mode=Dense()) = Matrix{ComplexF64}[zeros(ComplexF64, Nε, Nε) for _ in 1:NkR]
+get_empty_complex_hamiltonians(Nε, NkR, ::Sparse) = SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for _ in 1:NkR]
+get_empty_real_hamiltonians(Nε, NkR, mode=Dense()) = Matrix{Float64}[zeros(Float64, Nε, Nε) for _ in 1:NkR]
+get_empty_real_hamiltonians(Nε, NkR, ::Sparse) = SparseMatrixCSC{Float64, Int64}[spzeros(Float64, Nε, Nε) for _ in 1:NkR]
 
 """
-    get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks; sp_mode=false, weights=ones(size(Rs, 2)))
+    get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Dense(), weights=ones(size(Rs, 2)))
 
 Constructs a vector of Hamiltonian matrices by combining a vector of matrices `Hr` with phase factors determined by `Rs` and `ks`.
 
@@ -16,18 +19,21 @@ Constructs a vector of Hamiltonian matrices by combining a vector of matrices `H
 - `Hr::Vector{<:AbstractMatrix}`: A vector of matrices where each matrix represents a component of the Hamiltonian. These matrices must be compatible in size for the operations performed.
 - `Rs`: A matrix or array containing positional information used to calculate phase factors.
 - `ks`: A matrix of momentum values used in conjunction with `Rs` to compute phase factors.
-- `sp_mode::Bool=false`: A boolean flag indicating whether to use special modes for constructing the Hamiltonian. Defaults to `false`.
+- `mode::Dense()`: Indicates whether to construct a sparse or dense Hamiltonian. Defaults to `Dense`.
 - `weights::Vector=ones(size(Rs, 2))`: A vector of weights used in the summation of phase factors. The length of this vector should match the number of columns in `Rs`. These are the degeneracies for the Wannier90 Hamiltonians.
 
 # Returns:
 - A vector of Hamiltonian matrices `Hk`, where each matrix is constructed by combining `Hr` with phase factors and optionally transformed into a spin basis.
 """
-function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks; sp_mode=false, weights=ones(size(Rs, 2)))
+function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Dense(); weights=ones(size(Rs, 2)))
     Nε = size(Hr[1], 1)
-    Hk = get_empty_hamiltonians(Nε, size(ks, 2); sp_mode=sp_mode)
-    exp_2πiRk = exp_2πi(ks, Rs)
+    Hk = get_empty_complex_hamiltonians(Nε, size(ks, 2), mode)
+    exp_2πiRk = exp_2πi(Rs, ks)
+
     Threads.@threads for k in eachindex(Hk)
-        @views Hk[k] = mapreduce(*, +, weights, Hr, exp_2πiRk[:, k])
+        @views @inbounds for R in eachindex(Hr)
+            @. Hk[k] += Hr[R] * exp_2πiRk[R, k] * weights[R]
+        end
     end
     return Hk
 end
@@ -90,7 +96,7 @@ Diagonalizes a sparse Hermitian matrix `Hk` to find a specified number of eigenv
 
 # Returns:
 - `eigenvalues::Vector{Float64}`: A vector of the real parts of the computed eigenvalues, focusing on those closest to the target. The number of eigenvalues returned is equal to `Neig`.
-- `eigenvectors::Matrix{Float64}`: A matrix where each column is an eigenvector corresponding to one of the computed eigenvalues.
+- `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to one of the computed eigenvalues.
 """
 function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0)
     Es, vs = eigsolve(Hk, Neig, EigSorter(λ->abs(target-λ), rev=false), ishermitian=true)
@@ -156,7 +162,7 @@ Applies a tolerance to drop small elements from a vector of sparse matrices, mod
 - `H::Vector{AbstractSparseMatrix}`: A vector of sparse matrices where small elements will be dropped. The matrices are modified in place.
 - `tol::Real=1e-8`: The numerical tolerance used to determine which elements are considered too small and should be dropped. Elements with absolute values less than `tol` are removed from the sparse matrices.
 """
-function droptol!(H::Vector{AbstractSparseMatrix}, tol=1e-10)
+function SparseArrays.droptol!(H::Vector{AbstractSparseMatrix}, tol=1e-10)
     for k in eachindex(H)
         droptol!(H[k], tol)
     end
@@ -176,9 +182,74 @@ Extends a given matrix `H` to a spin basis (up/down) representation by applying 
 """
 function apply_spin_basis(H::AbstractMatrix; alternating_order=false)
     I_spin = Array{Int64}(I, 2, 2)
+    return alternating_order ? kron(I_spin, H) : kron(H, I_spin)
+end
+
+"""
+    gradient_apply_spin_basis(dHr::AbstractMatrix; alternating_order=false)
+
+Calculate the gradient of the spin basis applied to a given matrix `dHr`. The output matrix is of size `(Nε/2, Nε/2)`.
+
+This function reshapes the input matrix `dHr`, which is expected to represent a gradient in a spin system, into a form suitable for applying the spin basis transformation. The transformation is performed using the Kronecker product, and the output is computed depending on the specified order of application.
+
+# Arguments
+- `dHr::AbstractMatrix`: An abstract matrix containing the gradient data to be transformed. It should have a shape that is compatible with the spin basis operations.
+- `alternating_order::Bool`: A flag that determines the order of the spin basis application. If `false`, the function applies the transformation as `kron(H, I_spin)`. If `true`, it applies the transformation as `kron(I_spin, H)`.
+"""
+function gradient_apply_spin_basis(dHr::AbstractMatrix; alternating_order=false)
+    Nε = size(dHr, 1) ÷ 2
     if !alternating_order
-        return kron(H, I_spin)
-    elseif alternating_order
-        return kron(I_spin, H)
+        # Case 1: kron(H, I_spin)
+        dHr_out = sum(reshape(dHr, 2, Nε, 2, Nε), dims=(1, 3))
+        return dropdims(dHr_out, dims=(1, 3))
+    else
+        # Case 2: kron(I_spin, H)
+        dHr_out = sum(reshape(dHr, Nε, 2, Nε, 2), dims=(2, 4))
+        return dropdims(dHr_out, dims=(2, 4))
     end
+end
+
+"""
+    reshape_and_sparsify_eigenvectors(vs, mode::SparsityMode; sp_tol=1e-10) -> Matrix
+
+Reshapes and optionally sparsifies a 3D array of eigenvectors `vs` into a 2D matrix of vectors, 
+depending on the specified `SparsityMode`. 
+
+The input `vs` is assumed to have dimensions `(n, m, k)`, where:
+- `n` represents the size of each eigenvector.
+- `m` and `k` represent the number of eigenvector groups along two axes.
+
+# Arguments
+- `vs::Array`: A 3D array of eigenvectors, where `vs[:, m, k]` corresponds to the eigenvector at position `(m, k)`.
+- `mode::SparsityMode`: Specifies the sparsity mode. Must be either:
+  - `Dense`: Produces a dense matrix where each element is a dense vector.
+  - `Sparse`: Produces a sparse matrix where each element is a sparse vector.
+- `sp_tol::Float64=1e-10`: (Optional) The tolerance below which elements of the eigenvectors are dropped when 
+  `Sparse` mode is selected. Defaults to `1e-10`.
+
+# Returns
+- `Matrix{Vector{ComplexF64}}` if `mode` is `Dense`: A 2D matrix of dense vectors corresponding to eigenvectors in `vs`.
+- `Matrix{SparseVector{ComplexF64, Int64}}` if `mode` is `Sparse`: A 2D matrix of sparse vectors, where elements smaller 
+  than `sp_tol` are removed.
+"""
+function reshape_and_sparsify_eigenvectors(vs, ::Dense; sp_tol=1e-10)
+    vs_out = Matrix{Vector{ComplexF64}}(undef, size(vs, 2), size(vs, 3))
+    for k in axes(vs, 3)
+        for m in axes(vs, 2)
+            @views vs_out[m, k] = vs[:, m, k]
+        end
+    end
+    return vs_out
+end
+
+function reshape_and_sparsify_eigenvectors(vs, ::Sparse; sp_tol=1e-10)
+    vs_out = Matrix{SparseVector{ComplexF64, Int64}}(undef, size(vs, 2), size(vs, 3))
+    for k in axes(vs, 3)
+        for m in axes(vs, 2)
+            sparse_vec = sparse(vs[:, m, k])
+            droptol!(sparse_vec, sp_tol)
+            @views vs_out[m, k] = sparse_vec
+        end
+    end
+    return vs_out
 end

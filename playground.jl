@@ -1,23 +1,67 @@
-using Hamster, LinearAlgebra, BenchmarkTools, SparseArrays
+using Hamster, LinearAlgebra, BenchmarkTools, SparseArrays, OhMyThreads, Distributed, MethodAnalysis, CubicSplines
+using StaticArrays
 
-N = 32
-Hr1 = rand(N, N, 25)
-Hr2 = [Hr1[:, :, R] for R in axes(Hr1, 3)]
-Hr2 = [sprand(N, N, 0.001) for R in axes(Hr1, 3)]
+w = Float64[]
 
-write_hr(Hr2, Rs)
+@show isempty(w)
 
-Rs = rand(3, 25); ks = rand(3, 80)
+h = rand(34, 25)
 
-@show Rs
+for ind in CartesianIndices(h)
+    h[ind]
+end
 
-@time Hamster.get_hamiltonian(Hr1, Rs, ks)
+ehm = Hamster.EffectiveHamiltonian(rand(3), rand(3))
+
+Hr = [rand(8, 8) for i in 1:25]
+
+@show size.(Hamster.apply_spin_basis.(Hr))
+
+func1(Hks) = map(eigvals, Hks)
+
+func2(Hks) = pmap(eigvals, Hks)
+
+func3(Hks) = tmap(eigvals, Hks)
+
+Hks = [rand(64, 64) for k in 1:80]
+
+addprocs(16)
+@show nworkers()
+
+@btime func1($Hks)
+@btime func2($Hks)
+@btime func3($Hks)
+
+rmprocs(workers())
+
+mapslices
+StructArray
+
+H_sp = sprand(64, 64, 0.01)
+H = rand(64, 64)
+
+@show length(eachindex(H_sp))
+@show length(eachindex(H))
 
 
-@time Hk = Hamster.get_hamiltonian(Hr2, Rs, ks, sp_mode=true)
 
-@time diagonalize(Hk, Neig=6)
+vs = Hamster.reshape_and_sparsify_eigenvectors(rand(8, 8, 80), Hamster.Dense())
+ex = rand(25, 80)
+
+Threads.@threads for k in axes(ex, 2)
+    Threads.@threads for R in axes(ex, 1)
+        for m in axes(vs, 1)
+            product = @. conj(vs[m, k])' * ex[R, k] * vs[m, k]
+            @show size(product)
+        end
+    end
+end
+
+v = sprand(8, 0.1)
+
+v = rand(8)
+
+@show size(v')
+product = @. conj(v)' * ex[1, 1] * v
 
 
-
-map()

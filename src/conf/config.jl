@@ -39,11 +39,12 @@ If no `typekey` is provided or it is set to `"none"`, it retrieves the value fro
 - The string "default" if the key does not exist in the relevant dictionary or block.
 """
 function (conf::Config)(key::String, typekey="none")
-    if haskey(conf.options, key) && typekey == "none"
-        return convert_value(conf.options[key])
+    lowercase_key = lowercase(key)
+    if haskey(conf.options, lowercase_key) && typekey == "none"
+        return convert_value(conf.options[lowercase_key])
     elseif typekey ≠ "none" && haskey(conf, typekey)
-        if haskey(conf.blocks[typekey], key)
-            return convert_value(conf.blocks[typekey][key])
+        if haskey(conf.blocks[typekey], lowercase_key)
+            return convert_value(conf.blocks[typekey][lowercase_key])
         else
             return "default"
         end
@@ -84,7 +85,7 @@ Checks if a given key exists in either the `options` or `blocks` dictionary of a
 # Returns
 - `Bool`: `true` if the key exists in either the `options` or `blocks` dictionary, `false` otherwise.
 """
-Base.haskey(conf::Config, key) = haskey(conf.options, key) || haskey(conf.blocks, key)
+Base.haskey(conf::Config, key) = haskey(conf.options, lowercase(key)) || haskey(conf.blocks, key)
 
 """
     set_value!(conf::Config, key, value)
@@ -96,12 +97,13 @@ Sets the value of a given key in the `options` dictionary of a `Config` instance
 - `value`: The value to set for the specified key.
 - `conf::Config`: The `Config` instance where the key-value pair should be set.
 """
-set_value!(conf::Config, key, value) = conf.options[key] = value
+set_value!(conf::Config, key, value) = conf.options[lowercase(key)] = string(value)
 
 """
     set_value!(conf::Config, key, typekey, value)
 
 Sets the value of a given key in the specified block of the `blocks` dictionary of a `Config` instance. If the block does not exist, it creates a new block with the given key-value pair.
+Keys are always stored in lowercase.
 
 # Arguments
 - `key`: The key to set in the specified block.
@@ -110,10 +112,11 @@ Sets the value of a given key in the specified block of the `blocks` dictionary 
 - `conf::Config`: The `Config` instance where the key-value pair should be set.
 """
 function set_value!(conf::Config, key, typekey, value)
+    lowercase_key = lowercase(key)
     if haskey(conf.blocks, typekey)
-        conf.blocks[typekey][key] = value
+        conf.blocks[typekey][lowercase_key] = string(value)
     else
-        conf.blocks[typekey] = Dict{String, String}(key=>value)
+        conf.blocks[typekey] = Dict{String, String}(lowercase_key=>string(value))
     end
 end
 

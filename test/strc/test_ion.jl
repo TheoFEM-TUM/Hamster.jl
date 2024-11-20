@@ -1,3 +1,14 @@
+@testset "Element/Number conversion" begin
+    @test Hamster.element_to_number("Ga") == 31
+    @test Hamster.element_to_number("Si") == 14
+    @test Hamster.element_to_number("I") == 53
+
+
+    @test Hamster.number_to_element(55) == "Cs"
+    @test Hamster.number_to_element(115) == "Mc"
+    @test Hamster.number_to_element(83) == "Bi"
+end
+
 @testset "Ion" begin
     # Test 1: Creation of an Ion instance
     ion = Ion("Na", SVector{3}(1.0, 2.0, 3.0), SVector{3}(0.1, 0.1, 0.1))
@@ -50,4 +61,17 @@
     @test Hamster.get_ion_types(ions, uniq=true) == unique(ion_types)
     @test Hamster.get_ion_types(ions, sorted=true) == sort(ion_types)
     @test Hamster.get_ion_types(ions, uniq=true, sorted=true) == sort(unique(ion_types))
+
+    # Test 5: findnext_ion_of_type
+    rs_ion = rand(3, 5)
+    ion_types = ["Ga", "Ga", "As", "Ga", "Si", "As"]
+    ions = Hamster.get_ions(rs_ion, ion_types)
+
+    @test Hamster.findnext_ion_of_type(31, ions) == 1
+    @test Hamster.findnext_ion_of_type("Ga", ions) == 1
+    @test Hamster.findnext_ion_of_type("As", ions) == 3
+    @test Hamster.findnext_ion_of_type(33, ions) == 3
+    @test Hamster.findnext_ion_of_type("Si", ions) == 5
+    @test Hamster.findnext_ion_of_type(14, ions) == 5
+    @test Hamster.findnext_ion_of_type("Ge", ions) == 0
 end

@@ -1,0 +1,23 @@
+begin Options
+    rcut = 5
+    load_rllm = true
+end
+
+begin Optimizer
+    lr = 0.1
+    niter = 1000
+    loss = MAE
+end
+
+begin atom Ga
+    n = 3
+    alpha = 13
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+end
+
+begin atom As
+    n = 3
+    alpha = 13
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+    nnaxes = true
+end

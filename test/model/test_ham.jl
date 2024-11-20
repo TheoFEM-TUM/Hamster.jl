@@ -4,26 +4,26 @@ file_path = string(@__DIR__) * "/test_files/"
     # Test arrays
     R⃗ = rand(3)
     k⃗ = rand(3)
-    result = Hamster.exp_2πi(k⃗, R⃗)
+    result = Hamster.exp_2πi(R⃗, k⃗)
     expected = exp(2π * im * dot(k⃗, R⃗))
     @test isapprox(result, expected, rtol=1e-10)
-    @test typeof(result) == ComplexF64
+    @test result isa ComplexF64
 
     # Test matrices
     Rs = rand(3, 5)
     ks = rand(3, 7)
-    result = Hamster.exp_2πi(ks, Rs)
+    result = Hamster.exp_2πi(Rs, ks)
     @test size(result) == (5, 7)
 
     # Test matrix-vector
     Rs = rand(3)
     ks = rand(3, 7)
-    result = Hamster.exp_2πi(ks, Rs)
+    result = Hamster.exp_2πi(Rs, ks)
     @test size(result) == (1, 7)
 
     Rs = rand(3, 5)
     ks = rand(3)
-    result = Hamster.exp_2πi(ks, Rs)
+    result = Hamster.exp_2πi(Rs, ks)
     @test size(result) == (5,)
 end
 
@@ -35,24 +35,24 @@ end
     Hr_sp = [sprand(N, N, 0.01) for R in axes(Rs, 2)]
 
     # Test empty Hamiltonians
-    Hk_empty = Hamster.get_empty_hamiltonians(N, Nk)
+    Hk_empty = Hamster.get_empty_complex_hamiltonians(N, Nk)
     @test length(Hk_empty) == Nk
     @test size(Hk_empty[1]) == (N, N)
-    @test typeof(Hk_empty[1]) == Matrix{ComplexF64}
+    @test Hk_empty[1] isa Matrix{ComplexF64}
 
-    Hk_empty = Hamster.get_empty_hamiltonians(N, Nk, sp_mode=true)
+    Hk_empty = Hamster.get_empty_complex_hamiltonians(N, Nk, Hamster.Sparse())
     @test length(Hk_empty) == Nk
     @test size(Hk_empty[1]) == (N, N)
-    @test typeof(Hk_empty[1]) == SparseMatrixCSC{ComplexF64, Int64}
+    @test Hk_empty[1] isa SparseMatrixCSC{ComplexF64, Int64}
 
     # Test get_hamiltonian
     Hk = get_hamiltonian(Hr_sp, Rs, ks)
     # Sparse Hr should be converted to dense Hk for sp_mode=false
-    @test typeof(Hk[1]) == Matrix{ComplexF64}
+    @test Hk[1] isa Matrix{ComplexF64}
 
-    Hk = get_hamiltonian(Hr_sp, Rs, ks, sp_mode=true)
+    Hk = get_hamiltonian(Hr_sp, Rs, ks, Hamster.Sparse())
     # Sparse Hr should lead to sparse Hk for sp_mode=true
-    @test typeof(Hk[1]) == SparseMatrixCSC{ComplexF64, Int64}
+    @test Hk[1] isa SparseMatrixCSC{ComplexF64, Int64}
     
     kpoints = read_from_file(file_path*"kpoints.dat")
     Es_correct = read_from_file(file_path*"Es_correct.dat")
@@ -65,16 +65,16 @@ end
 
     # Test sparse mode
     Hr_sp, _ = read_hr(file_path*"gaas_hr.dat", sp_mode=true, verbose=0)
-    @test typeof(Hr_sp) <: Vector{SparseMatrixCSC{Float64, Int64}}
+    @test Hr_sp isa Vector{SparseMatrixCSC{Float64, Int64}}
 
     Hk2 = get_hamiltonian(Hr_sp, Rs, kpoints)
-    @test typeof(Hk2) <: Vector{Matrix{ComplexF64}}
+    @test Hk2 isa Vector{Matrix{ComplexF64}}
     Es2, vs2 = diagonalize(Hk2)
     @test Es2 ≈ Es_correct
     @test vs_dense ≈ vs2
 
     # Test Neig
-    Hk_sp = get_hamiltonian(Hr_sp, Rs, kpoints, sp_mode=true)
+    Hk_sp = get_hamiltonian(Hr_sp, Rs, kpoints, Hamster.Sparse())
     Es_sp, _ = diagonalize(Hk_sp, Neig=3, target=-15)
     @test size(Es_sp) == (3, 80)
     @test round.(Es_sp, digits=5) ≈ round.(Es_correct[1:3, :], digits=5)
@@ -122,4 +122,25 @@ end
     @test size(Es, 1) == 2*size(Es_correct, 1)
     @test Es[1:2:16, :] ≈ Es_correct
     @test Es[2:2:16, :] ≈ Es_correct
+
+    dHr = [rand(8, 8) for R in 1:25]
+    dHr_1 = Hamster.gradient_apply_spin_basis.(dHr)
+    @test all(H->size(H)==(4, 4), dHr_1)
+    dHr_2 = Hamster.gradient_apply_spin_basis.(dHr, alternating_order=true)
+    @test all(H->size(H)==(4, 4), dHr_2)
+
+    # Test reshape dense eigenvectors
+    vs = rand(ComplexF64, 3, 4, 5)
+    result = Hamster.reshape_and_sparsify_eigenvectors(vs, Hamster.Dense())
+    @test size(result) == (4, 5)
+    @test all(result[i, j] == vs[:, i, j] for i in 1:4, j in 1:5)
+
+    # Test reshape into sparse eigenvectors
+    vs = rand(ComplexF64, 3, 4, 5)
+    vs[1, 1, 1] = 1e-5
+    result = Hamster.reshape_and_sparsify_eigenvectors(vs, Hamster.Sparse(), sp_tol=1e-4)
+    @test size(result) == (4, 5)
+    @test all(result[i, j] isa SparseVector{ComplexF64, Int64} for i in 1:4, j in 1:5)
+    @test all(isapprox(result[i, j][:], vs[:, i, j], atol=1e-4) for i in 1:4, j in 1:5)
+    @test result[1, 1][1] == 0
 end
