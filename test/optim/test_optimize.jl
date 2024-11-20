@@ -4,6 +4,7 @@
     set_value!(conf, "poscar", joinpath(path, "POSCAR_gaas"))
     set_value!(conf, "rllm_file", joinpath(path, "rllm.dat"))
     set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
+    set_value!(conf, "verbosity", 0)
 
     # Test that effective Hamiltonian model gives correct eigenvalues
     ham_train = EffectiveHamiltonian(conf)
