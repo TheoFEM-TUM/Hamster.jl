@@ -1,4 +1,4 @@
-begin
+@testset "Fit for GaAs" begin
     path = joinpath(@__DIR__, "test_files")
     conf = get_config(filename = joinpath(path, "hconf"))
     set_value!(conf, "poscar", joinpath(path, "POSCAR_gaas"))
@@ -7,8 +7,10 @@ begin
 
     # Test that effective Hamiltonian model gives correct eigenvalues
     ham_train = EffectiveHamiltonian(conf)
-    optim = GDOptimizer(conf)
+    optim = GDOptimizer(8, 56, conf)
     dl = DataLoader([1], [1], 8, 8, conf)
     ham_val = Hamster.get_empty_effective_hamiltonian()
-    optimize_model!(ham_train, ham_val, optim, dl, conf)
+    prof = HamsterProfiler(3, conf, printeachiter=50)
+    optimize_model!(ham_train, ham_val, optim, dl, prof, conf)
+    @test mean(prof.L_train[:, end]) < 0.15
 end
