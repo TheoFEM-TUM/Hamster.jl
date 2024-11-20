@@ -25,3 +25,36 @@ gaas_poscar = string(@__DIR__) * "/../parse/test_files/POSCAR_gaas"
     Es_correct = read_from_file(string(@__DIR__)*"/test_files/Es.dat")
     @test mean(abs.(Es .- Es_correct)) < 0.002
 end
+
+@testset "Test model gradient" begin
+    # Test dense implementation
+    dL_dHr = [rand(4, 4) for _ in 1:5]
+    dL_dHr_t = cat(dL_dHr..., dims=3)
+    hs_t = rand(5, 4, 4, 5)
+    hs = Matrix{Matrix{Float64}}(undef, 5, 5)
+    for v in 1:5, R in 1:5
+        hs[v, R] = hs_t[v, :, :, R]
+    end
+    @tensor dV_t[v] := hs_t[v, i, j, R] * dL_dHr_t[i, j, R]
+    dV = Hamster.get_model_gradient(hs, dL_dHr)
+    @test dV ≈ dV_t
+
+    # Test sparse implementation
+    dL_dHr = [sparse(dL_dHr[i]) for i in 1:5]
+    hs = Matrix{SparseMatrixCSC{Float64, Int64}}(undef, 5, 5)
+    for v in 1:5, R in 1:5
+        hs[v, R] = sparse(hs_t[v, :, :, R])
+    end
+    dV = Hamster.get_model_gradient(hs, dL_dHr)
+    @test dV ≈ dV_t
+end
+
+@testset "Test init_params" begin
+    # Test parameter initialization
+    model = TBModel(nothing, zeros(3), [true, true, true])
+    basis = nothing
+    Hamster.init_params!(model, basis, initas="ones")
+    @test model.V == ones(3)
+    Hamster.init_params!(model, basis, initas="random")
+    @test all(0 .< model.V .< 1)
+end
