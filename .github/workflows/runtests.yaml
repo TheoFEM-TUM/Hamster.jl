@@ -1,6 +1,12 @@
-name: Run Tests
+name: CI
 
-on: [push]
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build:
@@ -11,16 +17,24 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Set up Julia ${{ matrix.julia-version }}
-      uses: julia-actions/setup-julia@v1
+      uses: julia-actions/setup-julia@v2
       with:
         julia-version: ${{ matrix.julia-version }}
         arch: x64
-    - name: Install dependencies
-      run: |
-          julia --project=. -e '
-            import Pkg
-            Pkg.instantiate()
-            '
-    - name: Run tests
-      run: |
-        julia --project=. test/runtests.jl
+
+    - name: Build pkg
+      uses: julia-actions/julia-buildpkg@v1
+
+    - name: Run test
+      uses: julia-actions/julia-runtest@v1
+
+    - name: Process coverage
+      uses: julia-actions/julia-processcoverage@v1
+    
+    - name: Upload coverage to codecov
+      uses: codecov/codecov-action@v4
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_ORG_TOKEN }}
+      with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: lcov.info
