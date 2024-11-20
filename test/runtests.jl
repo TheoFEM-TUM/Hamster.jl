@@ -1,4 +1,4 @@
-using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Statistics, FiniteDiff, HDF5
+using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Statistics, FiniteDiff, HDF5, TensorOperations
 
 @testset "Parse" begin
     include("parse/test_utils.jl")
