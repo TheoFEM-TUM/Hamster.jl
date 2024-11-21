@@ -77,6 +77,7 @@ function print_train_status(prof, iter, batch_id; verbosity=1)
         print_iteration_status(iter, Niter, 0, 0, mean(prof.L_train[:, iter]), time_iter, time_left)
     end
 end
+
 """
     print_val_start(; verbosity=1)
 
@@ -85,7 +86,10 @@ Prints a message indicating the start of the model validation process.
 # Arguments
 - `verbosity`: (optional) An integer controlling the level of output. If `verbosity > 0`, the message "Validating model..." will be printed. Default is `1`.
 """
-print_val_start(; verbosity=1) = if verbosity > 0; println("Validating model..."); end
+function print_val_start(prof, iter; verbosity=1)
+    printit = decide_printit(1, 1, iter, prof.printeachbatch, prof.printeachiter; verbosity=verbosity)
+    if printit; println("Validating model..."); end
+end
 
 """
     print_val_status(prof, iter; verbosity=1)
@@ -99,7 +103,8 @@ Prints the validation loss and the time taken for validation at a specific itera
 """
 function print_val_status(prof, iter; verbosity=1)
     _, Niter = size(prof.L_train)
-    if verbosity > 0
+    printit = decide_printit(1, 1, iter, prof.printeachbatch, prof.printeachiter; verbosity=verbosity)
+    if printit
         println(@sprintf("Iteration: %d / %d | Val Loss: %.4f | Time: %.5f s", iter, Niter, prof.L_val[iter], prof.val_times[iter]))
     end
 end
@@ -178,7 +183,7 @@ function print_final_status(prof; verbosity=1)
         println("========================================")
         println("Run Finished!")
         println(@sprintf("Final Train Loss: %.6f", final_train_loss))
-        if final_val_loss ≠ 0; println(@sprintf("Final Val Loss: %.6f", final_loss)); end
+        if final_val_loss ≠ 0; println(@sprintf("Final Val Loss: %.6f", final_val_loss)); end
         println(@sprintf("Total Time: %.2f seconds", total_time))
         println("========================================")
     end

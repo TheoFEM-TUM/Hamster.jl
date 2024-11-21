@@ -50,11 +50,17 @@ end
 end
 
 @testset "Test init_params" begin
-    # Test parameter initialization
+    # Test 1: Test parameter initialization
     model = TBModel(nothing, zeros(3), [true, true, true])
     basis = nothing
     Hamster.init_params!(model, basis, initas="ones")
     @test model.V == ones(3)
+    @test get_params(model) == ones(3)
     Hamster.init_params!(model, basis, initas="random")
     @test all(0 .< model.V .< 1)
+
+    # Test 2: test setting parameters
+    set_params!(model, [1, 2, 3])
+    @test get_params(model) == [1, 2, 3]
+    @test_throws ErrorException set_params!(model, [1, 2, 3, 4])
 end

@@ -34,9 +34,9 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, conf=get_empty_con
             print_train_status(prof, iter, batch_id, verbosity=verbosity)
         end
         if validate
-            # TODO: ham_val currently gets no parameter information
-            print_val_start(verbosity=verbosity)
-            val_step!(ham_val, optim.loss, val_data, prof, iter)
+            print_val_start(prof, iter, verbosity=verbosity)
+            copy_params!(ham_val, ham_train)
+            val_step!(ham_val, optim.val_loss, dl.val_data, prof, iter)
             print_val_status(prof, iter, verbosity=verbosity)
         end
     end
