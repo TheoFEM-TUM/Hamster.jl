@@ -207,7 +207,7 @@ Determines whether to print status updates based on the current iteration, batch
    - The current batch is the last batch (`batch_id == Nbatch`), and
    - The current iteration number (`iter`) is a multiple of `printeachiter`.
 """
-function decide_printit(batch_id, Nbatch, iter, printeachbatch, printeachiter; verbosity=verbosity)
+function decide_printit(batch_id, Nbatch, iter, printeachbatch, printeachiter; verbosity=1)
     if verbosity < 1
         return false
     else
