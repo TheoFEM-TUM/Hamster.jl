@@ -1,4 +1,31 @@
+"""
+    optimize_model!(ham_train, ham_val, optim, dl, prof, conf=get_empty_config(); verbosity=get_verbosity(conf), Nbatch=get_nbatch(conf), validate=get_validate(conf))
 
+Optimizes the model by performing training and optional validation steps.
+
+# Arguments
+- `ham_train`: The Hamiltonian model used for training.
+- `ham_val`: The Hamiltonian model used for validation (optional).
+- `optim`: An optimization configuration, including the optimizer and its settings.
+- `dl`: A data loader object containing the training data.
+- `prof`: A profiler object used to store training and validation information.
+- `conf`: A configuration object containing additional settings (default is an empty config).
+- `verbosity`: The level of verbosity for logging (default is set by `get_verbosity(conf)`).
+- `Nbatch`: The number of batches per training iteration (default is set by `get_nbatch(conf)`).
+- `validate`: A flag indicating whether to perform validation during training (default is set by `get_validate(conf)`).
+
+# Description
+This function optimizes a model by iterating through training steps and optionally validating the model after each training iteration. It reports the progress of training and validation via printing functions at each iteration. The training step involves computing the loss, performing backpropagation, and updating the model parameters. If `validate` is set to true, the model is evaluated on a validation dataset after each training iteration.
+
+# Workflow
+1. Print the start message.
+2. For each training iteration, split the training data into batches and perform training steps.
+3. Optionally validate the model after each training iteration.
+4. Print the final status once training is complete.
+
+# Returns
+- This function does not return any value but updates the `prof` object with training and validation statistics and updates model parameters.
+"""
 function optimize_model!(ham_train, ham_val, optim, dl, prof, conf=get_empty_config(); verbosity=get_verbosity(conf), Nbatch=get_nbatch(conf), validate=get_validate(conf))
     print_start_message(prof; verbosity=verbosity)
     for iter in 1:optim.Niter
