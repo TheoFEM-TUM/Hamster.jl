@@ -33,7 +33,7 @@ export findR0, Ion, Structure, get_nearest_neighbors, get_structures
 
 export ParameterLabel, read_params, write_params, Basis, get_geometry_tensor
 
-export TBModel, EffectiveHamiltonian
+export TBModel, EffectiveHamiltonian, get_params, set_params!, copy_params!
 export get_hamiltonian, diagonalize, get_hr, init_params!
 export write_hr, read_hr
 

@@ -140,13 +140,9 @@ Initialize the parameters of a `model` based on the provided configuration and i
 """
 function init_params!(model, basis, conf=get_empty_config(); initas=get_init_params(conf))
     if initas[1] == 'o'
-        for v in eachindex(model.V)
-            model.V[v] = 1.
-        end
+        set_params!(model, ones(length(model.V)))
     elseif initas[1] == 'r'
-        for v in eachindex(model.V)
-            model.V[v] = rand()
-        end
+        set_params!(model, rand(length(model.V)))
     else
         parameters, parameter_values, _, _, conf_values = read_params(initas)
         check_consistency(conf_values, conf)
@@ -158,3 +154,39 @@ function init_params!(model, basis, conf=get_empty_config(); initas=get_init_par
     end
 end
 
+"""
+    get_params(model::TBModel)
+
+Retrieve the parameters associated with a `TBModel`.
+
+# Arguments
+- `model::TBModel`: The tight-binding model instance from which to extract parameters.
+
+# Returns
+- The parameters stored in the `V` field of the given `TBModel` instance.
+"""
+get_params(model::TBModel) = model.V
+
+"""
+    set_params!(model::TBModel, V)
+
+Set the parameters of a `TBModel` instance while ensuring consistency with the model's structure.
+
+# Arguments
+- `model::TBModel`: The tight-binding model whose parameters are to be updated.
+- `V`: The new parameter vector to assign to the model's `V` field.
+
+# Error Conditions
+- Throws an error if the parameter vector `V` is not of the correct size.
+
+# Returns
+- Updates the `V` field of the `model` in place if the consistency checks pass.
+"""
+function set_params!(model::TBModel, V)
+    throw_error = size(model.V) ≠ size(V)
+    if throw_error
+        error("Parameter vector is not of correct size!")
+    else
+        model.V = V        
+    end
+end
