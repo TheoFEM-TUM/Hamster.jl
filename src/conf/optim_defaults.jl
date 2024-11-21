@@ -167,3 +167,17 @@ function get_val_ratio(conf::Config)::Float64
         return conf("val_ratio", "Optimizer")
     end
 end
+
+"""
+    printeachbatch=false (true if verbosity > 1)
+
+The `printeachbatch` tag switches on printing profiler information at every batch.
+"""
+get_printeachbatch(conf::Config)::Bool = conf("printeachbatch", "Optimizer") == "default" ? get_verbosity(conf) > 1 : conf("printeachbatch", "Optimizer")
+
+"""
+    printeachiter=1
+
+The `printeachiter` tag determines at what iteration interval profiler information is printed.
+"""
+get_printeachiter(conf::Config)::Int64 = conf("printeachiter", "Optimizer") == "default" ? 1 : conf("printeachiter", "Optimizer")

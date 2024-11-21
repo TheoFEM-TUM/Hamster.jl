@@ -142,11 +142,11 @@ Calculates the sparsity of a vector of arrays by determining the fraction of ele
 # Returns:
 - `sparsity::Float64`: The fraction of elements across all arrays in `H` that are considered zero according to the specified tolerance. This value lies between `0.0` (no zero elements) and `1.0` (all elements are effectively zero).
 """
-function get_sparsity(H::Vector{AbstractArray}; sp_tol=1e-10)
+function get_sparsity(H::Vector{<:AbstractArray}; sp_tol=1e-10)
     Ntot = prod(size(H[1])) * length(H)
     Nzero = 0
     for k in eachindex(H), inds in eachindex(H[k])
-        if (abs(real(H[k][inds])) < sp_tol) && (abs(imag(H[i][inds])) < sp_tol)
+        if (abs(real(H[k][inds])) < sp_tol) && (abs(imag(H[k][inds])) < sp_tol)
             Nzero += 1
         end
     end
@@ -162,7 +162,7 @@ Applies a tolerance to drop small elements from a vector of sparse matrices, mod
 - `H::Vector{AbstractSparseMatrix}`: A vector of sparse matrices where small elements will be dropped. The matrices are modified in place.
 - `tol::Real=1e-8`: The numerical tolerance used to determine which elements are considered too small and should be dropped. Elements with absolute values less than `tol` are removed from the sparse matrices.
 """
-function SparseArrays.droptol!(H::Vector{AbstractSparseMatrix}, tol=1e-10)
+function SparseArrays.droptol!(H::Vector{<:AbstractSparseMatrix}, tol=1e-10)
     for k in eachindex(H)
         droptol!(H[k], tol)
     end

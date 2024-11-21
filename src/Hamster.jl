@@ -1,7 +1,7 @@
 module Hamster
 
 using TensorOperations, LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Dates, PeriodicTable, 
-    CubicSplines, HCubature, Statistics, ChunkSplitters, Distributed, FiniteDiff, StatsBase, HDF5
+    CubicSplines, HCubature, Statistics, ChunkSplitters, Distributed, FiniteDiff, StatsBase, HDF5, Printf
 
 include("parse/utils.jl"); include("parse/poscar.jl"); include("parse/eigenval.jl"); include("parse/xdatcar.jl"); include("parse/wannier90.jl")
 
@@ -22,7 +22,7 @@ include("basis/basis.jl")
 include("model/ham.jl"); include("model/ham_grad.jl"); include("model/ham_write.jl"); include("model/model.jl")
 include("model/eff_ham.jl")
 
-include("optim/adam.jl"); include("optim/loss.jl"); include("optim/data.jl"); include("optim/gd_optimizer.jl")
+include("optim/adam.jl"); include("optim/loss.jl"); include("optim/data.jl"); include("optim/gd_optimizer.jl"); include("optim/profiler.jl")
 include("optim/optimize.jl")
 
 export write_to_file, read_from_file
@@ -33,11 +33,11 @@ export findR0, Ion, Structure, get_nearest_neighbors, get_structures
 
 export ParameterLabel, read_params, write_params, Basis, get_geometry_tensor
 
-export TBModel, EffectiveHamiltonian
+export TBModel, EffectiveHamiltonian, get_params, set_params!, copy_params!
 export get_hamiltonian, diagonalize, get_hr, init_params!
 export write_hr, read_hr
 
-export Loss, Regularization, update!, DataLoader, GDOptimizer, optimize_model!
+export Loss, Regularization, update!, DataLoader, GDOptimizer, optimize_model!, HamsterProfiler
 
 # Precompililation
 include("Hamster_precompile.jl")

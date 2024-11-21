@@ -80,3 +80,18 @@ function update!(ham::EffectiveHamiltonian, indices, opt, reg, dL_dHr)
         update!(model, indices, opt, reg, dL_dHr)
     end
 end
+
+"""
+    copy_params!(receiving_ham::H1, sending_ham::H2) where {H1,H2<:EffectiveHamiltonian}
+
+Copy parameters from one EffectiveHamiltonian (`sending_ham`) to another (`receiving_ham`).
+
+# Arguments
+- `receiving_ham`: The Hamiltonian object that will receive the parameters.
+- `sending_ham`: The Hamiltonian object providing the parameters to be copied.
+"""
+function copy_params!(receiving_ham::H1, sending_ham::H2) where {H1,H2<:EffectiveHamiltonian}
+    for (receiving_model, sending_model) in zip(receiving_ham.models, sending_ham.models) 
+        set_params!(receiving_model, get_params(sending_model))
+    end
+end

@@ -43,3 +43,28 @@ split_line = Hamster.split_line
     # Test with long string
     @test split_line("This is a very long string to test the splitting function with a default space delimiter") == ["This", "is", "a", "very", "long", "string", "to", "test", "the", "splitting", "function", "with", "a", "default", "space", "delimiter"]
 end
+
+@testset "Write and read to/from file" begin
+    # Test 1: test random vector
+    M = rand(8)
+    write_to_file(M, "testfile")
+    @test read_from_file("testfile.dat") == M
+
+
+    # Test 2: test random matrix
+    M = rand(8, 8)
+    write_to_file(M, "testfile")
+    @test read_from_file("testfile.dat") == M
+
+    # Test 3: test random tensor
+    M = rand(2, 2, 2)
+    write_to_file(M, "testfile")
+    @test read_from_file("testfile.dat") == M
+
+    # Test 3: test another random tensor
+    M = rand(2, 2, 2, 2)
+    write_to_file(M, "testfile")
+    @test read_from_file("testfile.dat") == M
+
+    rm("testfile.dat")
+end

@@ -144,3 +144,50 @@ end
     @test all(isapprox(result[i, j][:], vs[:, i, j], atol=1e-4) for i in 1:4, j in 1:5)
     @test result[1, 1][1] == 0
 end
+
+@testset "Sparsity" begin
+    # Test 1: test sparse matrix
+    H = sprand(100, 100, 0.1)
+    @test isapprox(Hamster.get_sparsity(H), 1-0.1, atol=0.01)
+
+    # Test 2: test matrix of zeros
+    H = zeros(4, 4)
+    @test Hamster.get_sparsity(H) == 1.0
+
+    # Test 3: test matrix of ones
+    H = ones(4, 4)
+    @test Hamster.get_sparsity(H) == 0
+
+    # Test 4: test dense matrix with 2 values below tol (1e-10)
+    H = ones(2, 2); H[1, 1] = 1e-11; H[2, 2] = 1e-11
+    @test Hamster.get_sparsity(H) == 0.5
+
+    # Test 5: test dense matrix with 2 values below custom tol
+    H = ones(2, 2); H[1, 1] = 1e-6; H[2, 2] = 1e-6
+    @test Hamster.get_sparsity(H, sp_tol=1e-5) == 0.5
+
+    # Test 6: test vector of matrices
+    Hs = [sprand(100, 100, 0.1) for _ in 1:5]
+    @test isapprox(Hamster.get_sparsity(Hs), 1-0.1, atol=0.01)
+
+    # Test 7: test vector of zeros
+    Hs = [zeros(4, 4) for _ in 1:5]
+    @test Hamster.get_sparsity(Hs) == 1.0
+
+    # Test 8: test vector of ones
+    Hs = [ones(4, 4) for _ in 1:5]
+    @test Hamster.get_sparsity(Hs) == 0
+
+    # Test 9: test dense matrix with 2 values below tol (1e-10)
+    Hs = [1 1e-11; 1 1e-11]
+    @test Hamster.get_sparsity(Hs) == 0.5
+
+    # Test 10: test dense matrix with 2 values below custom tol
+    Hs = [1 1e-6; 1 1e-6]
+    @test Hamster.get_sparsity(H, sp_tol=1e-5) == 0.5
+
+    # Test 11: test droptol for vector of matrices
+    Hs = [sparse([1 1e-6; 1 1e-6]) for _ in 1:2]
+    droptol!(Hs, 1e-5)
+    @test Hamster.get_sparsity(Hs) == 0.5
+end

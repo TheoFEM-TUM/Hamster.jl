@@ -1,4 +1,4 @@
-using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Statistics, FiniteDiff, HDF5
+using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Statistics, FiniteDiff, HDF5, TensorOperations, Suppressor
 
 @testset "Parse" begin
     include("parse/test_utils.jl")
@@ -44,4 +44,6 @@ end
 @testset "optim" begin
     include("optim/test_loss.jl")
     include("optim/test_data.jl")
+    include("optim/test_profiler.jl")
+    include("optim/test_optimize.jl")
 end

@@ -1,5 +1,21 @@
+"""
+    GDOptimizer
+
+A gradient descent optimizer for training Hamiltonian models, incorporating loss functions, regularization, and an Adam optimizer for parameter updates.
+
+# Fields
+- `loss::Loss`: The loss function used for training. Determines how the model's error is measured and minimized during training.
+- `val_loss::Loss`: The loss function used for validation. Evaluates the model's performance on unseen data.
+- `reg::Regularization`: Regularization strategy applied during training to prevent overfitting.
+- `adam::Adam`: The Adam optimizer instance used for updating model parameters with gradient-based methods.
+- `Niter::Int64`: The number of training iterations.
+
+# Usage
+This structure encapsulates all components required for optimizing a Hamiltonian model. It is typically passed to training functions, such as `train_step!` or `optimize_model!`, to guide the optimization process.
+"""
 struct GDOptimizer
     loss :: Loss
+    val_loss :: Loss
     reg :: Regularization
     adam :: Adam
     Niter :: Int64
@@ -21,7 +37,7 @@ function GDOptimizer(Nε, Nk, conf=get_empty_config(); lr=get_lr(conf), Niter=ge
     loss = Nε == 0 && Nk == 0 ? Loss(conf) : Loss(Nε, Nk, conf)
     reg = Regularization(conf)
     adam = Adam(lr)
-    return GDOptimizer(loss, reg, adam, Niter)
+    return GDOptimizer(loss, Loss(conf), reg, adam, Niter)
 end
 
 GDOptimizer(conf=get_empty_config()) = GDOptimizer(0, 0, conf)

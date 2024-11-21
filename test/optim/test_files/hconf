@@ -5,8 +5,10 @@ end
 
 begin Optimizer
     lr = 0.1
-    niter = 1000
+    niter = 300
     loss = MAE
+    wE = 1 1 1 1 1 1 0.1 0.1
+    wk_1 = 5
 end
 
 begin atom Ga
