@@ -1,14 +1,14 @@
 @testset "Profiler validation prints" begin
+    prof = HamsterProfiler(3)
     # Test 1: verbosity > 0
-    val_print = @capture_out Hamster.print_val_start(verbosity=1)
+    val_print = @capture_out Hamster.print_val_start(prof, 1, verbosity=1)
     @test val_print == "Validating model...\n"
     
     #Test 2: verbosity = 0
-    val_print = @capture_out Hamster.print_val_start(verbosity=0)
+    val_print = @capture_out Hamster.print_val_start(prof, 1, verbosity=0)
     @test val_print == ""
 
     # Test 3: verbosity > 0
-    prof = HamsterProfiler(3)
     val_print = @capture_out Hamster.print_val_status(prof, 1)
     @test val_print == "Iteration: 1 / 1 | Val Loss: 0.0000 | Time: 0.00000 s\n"
 
@@ -63,6 +63,4 @@ end
     # Test 3: true for every batch and ignores iter interval
     @test all([Hamster.decide_printit(batch_id, 1, iter, true, 1) for iter in 1:3 for batch_id in 1:4])
     @test all([Hamster.decide_printit(batch_id, 1, iter, true, 2) for iter in 1:3 for batch_id in 1:4])
-
-    # Test 4
 end
