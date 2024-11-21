@@ -81,16 +81,6 @@ indicating that the order of `type1` and `type2` was altered during sorting. Oth
 """
 areswapped(type1, type2) = IonLabel(type1, type2) == IonLabel(type1, type2, sorted=false) ? false : true
 
-#"""
-#    get_ion_label_for_matrix_element(ion_types, iion, jion, sorted)
-
-#Return `IonLabel` for the interactions between the `iion`-th and `jion`-th ion.
-#"""
-#function get_ion_label_for_matrix_element(basis, i, j; sorted=true)
-#    iion, _ = get_iion_and_iorb(basis, i); jion, _ = get_iion_and_iorb(basis, j)
-#    return IonLabel(basis.ion_types[iion], basis.ion_types[jion], sorted=sorted)
-#end
-
 """
     get_nn_label(r, r_thresh, onsite, sepNN) :: Int64
 
@@ -190,28 +180,5 @@ function string_to_overlap_label(overlap_string)
         l2 = ldict_inv[overlap_string[2]]
         m = mdict_inv[overlap_string[3]]
         return @SVector [l1, l2, m]
-    end
-end
-
-"""
-    get_mode(type1, type2)
-
-Return `NormalMode` if the sorted ion label is equal to the not-sorted one. Otherwise, return
-`ConjugateMode`.
-"""
-function get_mode(type1::String, type2::String, igreaterj::Bool)
-    if type1 ≠ type2
-        if IonLabel(type1, type2) == IonLabel(type1, type2, sorted=false)
-            return NormalMode()
-        else
-            return ConjugateMode()
-        end
-    else
-        return NormalMode()
-        #if igreaterj 
-        #    return ConjugateMode()
-        #else
-        #    return NormalMode()
-        #end
     end
 end

@@ -107,7 +107,7 @@ the function assumes it contains gradients for multiple structures and returns t
 """
 function get_model_gradient(h, dL_dHr::Vector{<:AbstractMatrix})
     dV = zeros(size(h, 1))
-    for v in axes(h, 1)
+    @tasks for v in axes(h, 1)
         for R in eachindex(dL_dHr)
             dV[v] += sum(h[v, R] .* dL_dHr[R])
         end
@@ -116,10 +116,10 @@ function get_model_gradient(h, dL_dHr::Vector{<:AbstractMatrix})
 end
 
 function get_model_gradient(model::TBModel, indices, dL_dHr)
-    dV = zeros(length(model.V), length(dL_dHr))
-    for (n, index) in enumerate(indices)
-        @views dV[:, n] = get_model_gradient(model.hs[index], dL_dHr[n])
+    @views dVs = pmap(enumerate(indices)) do (n, index)
+        get_model_gradient(model.hs[index], dL_dHr[n])
     end
+    dV = cat(dVs..., dims=2)
     return dropdims(mean(dV, dims=2), dims=2)
 end
 

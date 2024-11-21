@@ -13,6 +13,7 @@ HCubature = "19dc6840-f33b-545b-b366-655c7e3ffd49"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
 KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
 PeriodicTable = "7b2266bf-644c-5ea3-82d8-af4bbd25a884"
 PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
@@ -24,4 +25,5 @@ TensorOperations = "6aa20fa7-93e2-5fca-9bc0-fbd0db3c71a2"
 
 [compat]
 HDF5 = "0.17.2"
+OhMyThreads = "0.7.0"
 Printf = "1.11.0"

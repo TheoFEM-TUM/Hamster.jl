@@ -30,7 +30,7 @@ function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Dense(); wei
     Hk = get_empty_complex_hamiltonians(Nε, size(ks, 2), mode)
     exp_2πiRk = exp_2πi(Rs, ks)
 
-    Threads.@threads for k in eachindex(Hk)
+    @tasks for k in eachindex(Hk)
         @views @inbounds for R in eachindex(Hr)
             @. Hk[k] += Hr[R] * exp_2πiRk[R, k] * weights[R]
         end

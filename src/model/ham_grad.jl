@@ -12,17 +12,17 @@ Compute the gradient `dE_dHr` of each energy eigenvalue at each k-point w.r.t. t
 # Returns
 - `dE_dHr`: An array of shape `(NR, Nε, Nk)` that contains (sparse) matrices of shape `(Nε, Nε)`.
 """
-function get_eigenvalue_gradient(vs, Rs, ks)
+function get_eigenvalue_gradient(vs, Rs, ks; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads())
     Nε = size(vs, 1); NR = size(Rs, 2); Nk = size(ks, 2)
     dE_dHr = Array{Matrix{Float64}}(undef, NR, Nε, Nk)
-    hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks))
+    hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks), nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands)
     return dE_dHr
 end
 
-function get_eigenvalue_gradient(vs::AbstractArray{<:SparseVector}, Rs, ks)
+function get_eigenvalue_gradient(vs::AbstractArray{<:SparseVector}, Rs, ks; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads())
     Nε = size(vs, 1); NR = size(Rs, 2); Nk = size(ks, 2)
     dE_dHr = Array{SparseMatrixCSC{Float64, Int64}}(undef, NR, Nε, Nk)
-    hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks))
+    hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks), nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands)
     return dE_dHr
 end
 
@@ -43,9 +43,9 @@ For each k-point `k` and eigenstate `m`, this function computes the matrix eleme
 
 and stores the real part of this value in `dE_dλ[R, m, k]`. This is done for each lattice vector `R`, eigenstate `m`, and k-point `k`.
 """
-function hellman_feynman!(dE_dλ, Ψ_i, dHk_dHr)
-    for k in axes(Ψ_i, 2)
-        for m in axes(Ψ_i, 1)
+function hellman_feynman!(dE_dλ, Ψ_i, dHk_dHr; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads())
+    tforeach(axes(Ψ_i, 2), nchunks=nthreads_kpoints) do k
+        tforeach(axes(Ψ_i, 1), nchunks=nthreads_bands) do m
             for R in axes(dHk_dHr, 1)
                 @views dE_dλ[R, m, k] = real.(conj.(Ψ_i[m, k]) * dHk_dHr[R, k] * transpose(Ψ_i[m, k]))
             end
@@ -66,10 +66,10 @@ Applies the chain rule to compute the gradient of the loss with respect to the r
 # Returns
 - `dL_dHr`: A real-space Hamiltonian gradient array, where each element contains the accumulated gradient for a specific lattice vector in `R`. Its shape is determined by the Hamiltonian structure and `mode`.
 """
-function chain_rule(dL_dE, dE_dHr, mode)
+function chain_rule(dL_dE, dE_dHr, mode; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads())
     dL_dHr = get_empty_real_hamiltonians(size(dE_dHr, 2), size(dE_dHr, 1), mode)
-    for k in axes(dE_dHr, 3)
-        for m in axes(dE_dHr, 2)
+    tforeach(axes(dE_dHr, 3), nchunks=nthreads_kpoints) do k
+        tforeach(axes(dE_dHr, 2), nchunks=nthreads_bands) do m
             for R in axes(dE_dHr, 1)
                 @views @. dL_dHr[R] += dL_dE[m , k] * dE_dHr[R, m, k]
             end

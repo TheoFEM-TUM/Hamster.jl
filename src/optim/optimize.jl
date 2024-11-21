@@ -30,7 +30,7 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, conf=get_empty_con
     print_start_message(prof; verbosity=verbosity)
     for iter in 1:optim.Niter
         for (batch_id, indices) in enumerate(chunks(1:ham_train.Nstrc, n=Nbatch))
-            train_step!(ham_train, indices, optim, dl.train_data, prof, iter, batch_id)
+            train_step!(ham_train, indices, optim, dl.train_data, prof, iter, batch_id, conf)
             print_train_status(prof, iter, batch_id, verbosity=verbosity)
         end
         if validate
@@ -62,13 +62,13 @@ Performs a single training step on a Hamiltonian model by computing gradients an
 # Side Effects
 - Updates the model parameters in-place within `ham_train`.
 """
-function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id)
+function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id, conf=get_empty_config())
     forward_times = Float64[]
     backward_times = Float64[]
     Ls_train = Float64[]
-    dL_dHr = map(indices) do index
+    dL_dHr = pmap(indices) do index
         forward_time = @elapsed L_train, cache = forward(ham_train, index, optim.loss, train_data[index])
-        backward_time = @elapsed dL_dHr_index = backward(ham_train, index, optim.loss, train_data[index], cache)
+        backward_time = @elapsed dL_dHr_index = backward(ham_train, index, optim.loss, train_data[index], cache, conf)
         push!(forward_times, forward_time); push!(backward_times, backward_time); push!(Ls_train, L_train)
         return dL_dHr_index
     end
@@ -96,8 +96,10 @@ Evaluates the validation loss for a Hamiltonian model over a given validation da
 - Updates to `prof.val_times`: The elapsed time for the validation step is stored in `prof.val_times[iter]`.
 """
 function val_step!(ham_val, loss, val_data, prof, iter)
-    val_time = @elapsed L_val = mapreduce(+, 1:ham_val.Nstrc) do index
-        forward(ham_val, index, loss, val_data[index])[1] / ham_val.Nstrc
+    val_time = @elapsed begin 
+        L_val = @distributed (+) for index in 1:ham_val.Nstrc
+            forward(ham_val, index, loss, val_data[index])[1] / ham_val.Nstrc
+        end
     end
     prof.val_times[iter] = val_time
     prof.L_val[iter] = L_val
@@ -149,11 +151,12 @@ The function behavior varies depending on the type of `data`, which can be eithe
 # Returns
 - `gradient`: The computed gradient of the loss with respect to the parameters of `ham`.
 """
-function backward(ham::EffectiveHamiltonian, index, loss, data::EigData, cache)
+function backward(ham::EffectiveHamiltonian, index, loss, data::EigData, cache, conf=get_empty_config(); nthreads_kpoints=get_nthreads_kpoints(conf), nthreads_bands=get_nthreads_bands(conf))
     Es_tb, vs = cache
     dL_dE = backward(loss, Es_tb, data.Es)
-    dE_dHr = get_eigenvalue_gradient(vs, ham.Rs[index], data.kp)
-    return chain_rule(dL_dE, dE_dHr, ham.sp_mode)
+    dE_dHr = get_eigenvalue_gradient(vs, ham.Rs[index], data.kp, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands)
+    out = chain_rule(dL_dE, dE_dHr, ham.sp_mode, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands)
+    return out
 end
 
 backward(ham::EffectiveHamiltonian, index, loss, data::HrData, cache) = backward(loss, cache[1], data.Hr)

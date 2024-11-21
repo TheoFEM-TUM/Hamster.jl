@@ -53,8 +53,7 @@ function read_poscar(poscar)
     # Atom names and numbers
     atom_names = lines[6]
     atom_numbers = parse.(Int64, lines[7])
-    if !(length(atom_names) == length(atom_numbers))
-        @info "Length of atom_names and atom_numbers not equal!"; end
+
     atom_types = String[]
     for (k, atom_number) in enumerate(atom_numbers), _ in 1:atom_number
         push!(atom_types, atom_names[k])

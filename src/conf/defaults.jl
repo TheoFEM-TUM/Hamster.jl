@@ -17,4 +17,25 @@ get_system(conf::Config)::String = conf("system") == "default" ? "unknown" : con
 
 The `init_params` tag determines how the TB parameters are initialized. Possible optiones are `ones`, `random` or a file of `name`.
 """
-get_init_params(conf::Config)::String = conf("init_params") == "default" ? "ones" : conf("init_params") 
+get_init_params(conf::Config)::String = conf("init_params") == "default" ? "ones" : conf("init_params")
+
+"""
+    nthreads_kpoints=JULIA_NUM_THREADS
+
+The `nthreads_kpoints` tag sets the number of tasks to work on kpoints simultaneously.
+"""
+get_nthreads_kpoints(conf::Config)::Int64 = conf("nthreads_kpoints") == "default" ? Threads.nthreads() : conf("nthreads_kpoints") 
+
+"""
+    nthreads_bands=JULIA_NUM_THREADS
+
+The `nthreads_bands` tag sets the number of tasks to work on energy bands simultaneously.
+"""
+get_nthreads_bands(conf::Config)::Int64 = conf("nthreads_bands") == "default" ? Threads.nthreads() : conf("nthreads_bands")
+
+"""
+    number_of_hamsters=1
+
+The `number_of_hamsters` tag sets the number of `Hamster` processes to be spawned for parallel tasks.
+"""
+get_number_of_hamsters(conf::Config)::Int64 = conf("number_of_hamsters") == "default" ? 1 : conf("number_of_hamsters")
