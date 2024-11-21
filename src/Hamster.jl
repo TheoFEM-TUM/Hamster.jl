@@ -1,8 +1,5 @@
 module Hamster
 
-# Set number of BLAS threads to 1 to avoid conflicts
-BLAS.set_num_threads(1)
-
 using TensorOperations, LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Dates, PeriodicTable, 
     CubicSplines, HCubature, Statistics, ChunkSplitters, Distributed, FiniteDiff, StatsBase, HDF5, Printf, OhMyThreads
 
