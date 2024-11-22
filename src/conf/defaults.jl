@@ -34,8 +34,8 @@ The `nthreads_bands` tag sets the number of tasks to work on energy bands simult
 get_nthreads_bands(conf::Config)::Int64 = conf("nthreads_bands") == "default" ? Threads.nthreads() : conf("nthreads_bands")
 
 """
-    number_of_hamsters=1
+    nhamster=1
 
-The `number_of_hamsters` tag sets the number of `Hamster` processes to be spawned for parallel tasks.
+The `nhamster` tag sets the number of `Hamster` processes to be spawned for parallel tasks.
 """
-get_number_of_hamsters(conf::Config)::Int64 = conf("number_of_hamsters") == "default" ? 1 : conf("number_of_hamsters")
+get_nhamster(conf::Config)::Int64 = conf("nhamster") == "default" ? 1 : conf("nhamster")
