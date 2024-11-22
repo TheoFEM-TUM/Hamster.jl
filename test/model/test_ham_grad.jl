@@ -7,7 +7,7 @@ function get_eigenvalue_gradient(vs::Array{ComplexF64, 3}, Rs::Matrix{Float64}, 
     Nε = size(vs, 1); NR = size(Rs, 2); Nk = size(ks, 2)
     exp_2πiRk = Hamster.exp_2πi(Rs, ks)
     dε = zeros(Nε, Nε, NR, Nε, Nk)
-    @tasks for k in 1:Nk
+    for k in 1:Nk
         for m in 1:Nε, R in 1:NR, i in 1:Nε, j in 1:Nε
             @views dε[i, j, R, m, k] = real(sum(@. conj(vs[i, m, k]) * exp_2πiRk[R, k] * vs[j, m, k]))
         end
