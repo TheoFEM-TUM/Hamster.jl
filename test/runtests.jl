@@ -8,6 +8,7 @@ end
 @testset "Config" begin
     include("conf/test_config.jl")
     include("conf/test_read_config.jl")
+    include("conf/test_defaults.jl")
 end
 
 @testset "Structure" begin

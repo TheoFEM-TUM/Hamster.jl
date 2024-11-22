@@ -14,13 +14,12 @@ Retrieves or computes the radial orbital integral look-up table (RLLM) for a giv
 - `rllm_dict::Dict{String, CubicSpline}`: A dictionary mapping overlap string representations to cubic spline interpolations of the radial integrals. If `load_rllm` is `true`, the data is read from the file. If `interpolate_rllm` is `true`, it is interpolated and saved.
 """
 function get_rllm(overlaps, conf=get_empty_config(); load_rllm=get_load_rllm(conf), rllm_file=get_rllm_file(conf), interpolate_rllm=get_interpolate_rllm(conf), verbosity=get_verbosity(conf))
+    rllm_dict = Dict{String, CubicSpline{Float64}}()
     if load_rllm
         if verbosity > 0; println(" Reading distance dependence from file..."); end
-        time = @elapsed rllm_dict = read_rllm(rllm_file)
+        time = @elapsed read_rllm(rllm_dict, filename=rllm_file)
         if verbosity > 0; println(" Finished in $time s."); end
-        return rllm_dict
     elseif interpolate_rllm
-        rllm_dict = Dict{String, CubicSpline{Float64}}()
         i = 0
         Nover = length(overlaps)
         if verbosity > 0; println(" Interpolating distance dependence..."); end
@@ -31,8 +30,8 @@ function get_rllm(overlaps, conf=get_empty_config(); load_rllm=get_load_rllm(con
         end
         if verbosity > 0; println(" Finished in $time s."); end
         save_rllm(rllm_dict, filename=rllm_file)
-        return rllm_dict
     end
+    return rllm_dict
 end
 
 """
@@ -118,15 +117,14 @@ Reads the `rllm.dat` file and returns a dictionary mapping overlap labels to tup
 # Returns
 - A dictionary where each key is an overlap label, and each value a tuple of x/y value vectors.
 """
-function read_rllm(filename="rllm.dat")
-    Rllm_dict = Dict{String, CubicSpline{Float64}}()
+function read_rllm(rllm_dict=Dict{String, CubicSpline{Float64}}(); filename="rllm.dat")
     lines = open_and_read(filename)
     lines = split_lines(lines)
     for i in 1:3:length(lines)
         overlap = lines[i][1]
         xs = parse.(Float64, lines[i+1])
         ys = parse.(Float64, lines[i+2])
-        Rllm_dict[overlap] = CubicSpline(xs, ys)
+        rllm_dict[overlap] = CubicSpline(xs, ys)
     end
-    return Rllm_dict
+    return rllm_dict
 end

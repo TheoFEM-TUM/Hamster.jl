@@ -1,7 +1,5 @@
 gaas_poscar = string(@__DIR__) * "/../parse/test_files/POSCAR_gaas"
 
-#@testset "Basis GaAs" 
-
 @testset "Basis GaAs" begin
     conf = get_empty_config()
     set_value!(conf, "orbitals", "Ga", "sp3dr2 sp3dr2 sp3dr2 sp3dr2")
@@ -18,4 +16,5 @@ gaas_poscar = string(@__DIR__) * "/../parse/test_files/POSCAR_gaas"
     basis = Basis(strc, conf)
 
     @test length(basis) == 8
+    @test nparams(basis) == length(basis.parameters)
 end
