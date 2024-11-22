@@ -59,78 +59,15 @@ StructArray
 H_sp = sprand(64, 64, 0.01)
 H = rand(64, 64)
 
-function func1(dL_dE, dE_dHr, mode)
-    dL_dHr = Hamster.get_empty_real_hamiltonians(size(dE_dHr, 2), size(dE_dHr, 1), mode)
-    tforeach(axes(dE_dHr, 3), nchunks=16) do k
-        for m in axes(dE_dHr, 2)
-            for R in axes(dE_dHr, 1)
-                @views @. dL_dHr[R] += dL_dE[m , k] * dE_dHr[R, m, k]
-            end
-        end
+function hellman_feynman_step(Ψ_mk::AbstractVector, dHk_dHr)
+    dE_dHr = zeros(length(Ψ_mk), length(Ψ_mk))
+    for i in eachindex(Ψ_mk), j in eachindex(Ψ_mk)
+        dE_dHr[i, j] = real(conj(Ψ_mk[i]) * dHk_dHr * Ψ_mk[j])
     end
-    return dL_dHr
+    return dE_dHr
 end
 
-function func2(dL_dE, dE_dHr, mode; kpar=Threads.nthreads(), mpar=Threads.nthreads())
-    dL_dHr = Hamster.get_empty_real_hamiltonians(size(dE_dHr, 2), size(dE_dHr, 1), mode)
-    tforeach(axes(dE_dHr, 3), nchunks=kpar) do k
-        tforeach(axes(dE_dHr, 2), nchunks=mpar) do m
-            for R in axes(dE_dHr, 1)
-                @views @. dL_dHr[R] += dL_dE[m , k] * dE_dHr[R, m, k]
-            end
-        end
-    end
-    return dL_dHr
-end
+vs = rand(ComplexF64, 1024)
+dHk_dHr = rand()
 
-function func3(dL_dE, dE_dHr, mode)
-    dL_dHr = Hamster.get_empty_real_hamiltonians(size(dE_dHr, 2), size(dE_dHr, 1), mode)
-    @tasks for k in axes(dE_dHr, 3)
-        @tasks for m in axes(dE_dHr, 2)
-            for R in axes(dE_dHr, 1)
-                @views @. dL_dHr[R] += dL_dE[m , k] * dE_dHr[R, m, k]
-            end
-        end
-    end
-    return dL_dHr
-end
-
-Nε = 128; Nk = 1; NR = 25
-
-dL_dE = zeros(Nε, Nk)
-dE_dHr = Array{Matrix{Float64}, 3}(undef, NR, Nε, Nk)
-for k in 1:Nk, m in 1:Nε, R in 1:NR
-    dE_dHr[R, m, k] = rand(Nε, Nε)
-end
-
-BLAS.set_num_threads(1)
-@show BLAS.get_num_threads()
-GC.gc()
-@btime func1($dL_dE, $dE_dHr, $Hamster.Dense())
-@btime func2($dL_dE, $dE_dHr, $Hamster.Dense(), kpar=1, mpar=16)
-@btime func3($dL_dE, $dE_dHr, $Hamster.Dense())
-
-
-@btime func3($dL_dE3, $dE_dHr3, $Hamster.Dense())
-
-dL_dE3 = zeros(Nk, Nε)
-dE_dHr3 = Array{Matrix{Float64}, 3}(undef, NR, Nk, Nε)
-for k in 1:Nk, m in 1:Nε, R in 1:NR
-    dE_dHr3[R, k, m] = rand(Nε, Nε)
-end
-
-function func3(dL_dE, dE_dHr, mode)
-    dL_dHr = Hamster.get_empty_real_hamiltonians(size(dE_dHr, 3), size(dE_dHr, 1), mode)
-    @tasks for m in axes(dE_dHr, 3)
-        for k in axes(dE_dHr, 2)
-            for R in axes(dE_dHr, 1)
-                @views @. dL_dHr[R] += dL_dE[k, m] * dE_dHr[R, k, m]
-            end
-        end
-    end
-    return dL_dHr
-end
-
-map(enumerate(5:10)) do (i, ind)
-    println(i," ", ind)
-end
+@btime hellman_feynman_step($vs, $dHk_dHr)
