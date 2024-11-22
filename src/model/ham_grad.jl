@@ -67,13 +67,13 @@ Applies the chain rule to compute the gradient of the loss with respect to the r
 - `dL_dHr`: A real-space Hamiltonian gradient array, where each element contains the accumulated gradient for a specific lattice vector in `R`. Its shape is determined by the Hamiltonian structure and `mode`.
 """
 function chain_rule(dL_dE, dE_dHr, mode; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads())
-    dL_dHr = get_empty_real_hamiltonians(size(dE_dHr, 2), size(dE_dHr, 1), mode)
+    dL_dHr = [get_empty_real_hamiltonians(size(dE_dHr, 2), size(dE_dHr, 1), mode) for _ in 1:Threads.nthreads()]
     tforeach(axes(dE_dHr, 3), nchunks=nthreads_kpoints) do k
         tforeach(axes(dE_dHr, 2), nchunks=nthreads_bands) do m
             for R in axes(dE_dHr, 1)
-                @views @. dL_dHr[R] += dL_dE[m , k] * dE_dHr[R, m, k]
+                @views @. dL_dHr[Threads.threadid()][R] += dL_dE[m , k] * dE_dHr[R, m, k]
             end
         end
     end
-    return dL_dHr
+    return sum(dL_dHr)
 end
