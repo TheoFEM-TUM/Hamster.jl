@@ -43,14 +43,30 @@ For each k-point `k` and eigenstate `m`, this function computes the matrix eleme
 
 and stores the real part of this value in `dE_dλ[R, m, k]`. This is done for each lattice vector `R`, eigenstate `m`, and k-point `k`.
 """
-function hellman_feynman!(dE_dλ, Ψ_i, dHk_dHr; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads())
-    tforeach(axes(Ψ_i, 2), nchunks=nthreads_kpoints) do k
-        tforeach(axes(Ψ_i, 1), nchunks=nthreads_bands) do m
+function hellman_feynman!(dE_dHr, Ψ, dHk_dHr; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads())
+    tforeach(axes(Ψ, 2), nchunks=nthreads_kpoints) do k
+        tforeach(axes(Ψ, 1), nchunks=nthreads_bands) do m
             for R in axes(dHk_dHr, 1)
-                @views dE_dλ[R, m, k] = real.(conj.(Ψ_i[m, k]) * dHk_dHr[R, k] * transpose(Ψ_i[m, k]))
+                @views dE_dHr[R, m, k] = _hellman_feynman_step(Ψ[m, k], dHk_dHr[R, k])
             end
         end
     end
+end
+
+function _hellman_feynman_step(Ψ_mk::AbstractVector, dHk_dHr)
+    dE_dHr = zeros(length(Ψ_mk), length(Ψ_mk))
+    for i in eachindex(Ψ_mk), j in eachindex(Ψ_mk)
+        dE_dHr[i, j] = real(conj(Ψ_mk[i]) * dHk_dHr * Ψ_mk[j])
+    end
+    return dE_dHr
+end
+
+function _hellman_feynman_step(Ψ_mk::SparseVector, dHk_dHr)
+    dE_dHr = spzeros(length(Ψ_mk), length(Ψ_mk))
+    for i in nzrange(Ψ_mk, 1), j in nzrange(Ψ_mk, 1)
+        dE_dHr[i, j] = real(conj(Ψ_mk[i]) * dHk_dHr * Ψ_mk[j])
+    end
+    return dE_dHr
 end
 
 """
@@ -67,13 +83,13 @@ Applies the chain rule to compute the gradient of the loss with respect to the r
 - `dL_dHr`: A real-space Hamiltonian gradient array, where each element contains the accumulated gradient for a specific lattice vector in `R`. Its shape is determined by the Hamiltonian structure and `mode`.
 """
 function chain_rule(dL_dE, dE_dHr, mode; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads())
-    dL_dHr = get_empty_real_hamiltonians(size(dE_dHr, 2), size(dE_dHr, 1), mode)
+    dL_dHr = [get_empty_real_hamiltonians(size(dE_dHr, 2), size(dE_dHr, 1), mode) for _ in 1:Threads.nthreads()]
     tforeach(axes(dE_dHr, 3), nchunks=nthreads_kpoints) do k
         tforeach(axes(dE_dHr, 2), nchunks=nthreads_bands) do m
             for R in axes(dE_dHr, 1)
-                @views @. dL_dHr[R] += dL_dE[m , k] * dE_dHr[R, m, k]
+                @views @. dL_dHr[Threads.threadid()][R] += dL_dE[m , k] * dE_dHr[R, m, k]
             end
         end
     end
-    return dL_dHr
+    return sum(dL_dHr)
 end
