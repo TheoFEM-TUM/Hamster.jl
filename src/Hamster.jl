@@ -26,6 +26,8 @@ include("model/eff_ham.jl")
 include("optim/adam.jl"); include("optim/loss.jl"); include("optim/data.jl"); include("optim/gd_optimizer.jl"); include("optim/profiler.jl")
 include("optim/optimize.jl")
 
+include("main.jl")
+
 export write_to_file, read_from_file
 
 export Config, get_config, get_empty_config, set_value!

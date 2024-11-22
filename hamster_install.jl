@@ -69,7 +69,7 @@ if !isfile(exec_file)
     println("Generating Hamster.jl executable...")
     open(exec_file, "w+") do file
         println(file, "#!/bin/bash")
-        println(file, "julia --project=$hamster_path $hamster_path/hamster_main.jl \"\$@\"")
+        println(file, "julia --project=$hamster_path -e 'using Hamster; Hamster.main(ARGS)' \"\$@\"")
     end
     println("")
     run(`chmod +x $exec_file`)

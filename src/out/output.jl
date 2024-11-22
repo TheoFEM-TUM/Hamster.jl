@@ -38,7 +38,7 @@ Write a separator line of 80 hyphens to the `hamster_out` file.
 # Arguments
 - `hamster_out::IO`: The output file stream to which the separator will be written.
 """
-write_separator(hamster_out) = println(hamster_out, "-"^80)
+write_separator(hamster_out) = println(hamster_out, "="^80)
 
 """
     append_output_block(block_title, block_tags, block_values; filename="hamster.out")
