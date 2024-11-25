@@ -63,15 +63,12 @@ Performs a single training step on a Hamiltonian model by computing gradients an
 - Updates the model parameters in-place within `ham_train`.
 """
 function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id, conf=get_empty_config())
-    forward_times = Float64[]
-    backward_times = Float64[]
-    Ls_train = Float64[]
-    dL_dHr = pmap(indices) do index
+    results = pmap(indices) do index
         forward_time = @elapsed L_train, cache = forward(ham_train, index, optim.loss, train_data[index])
         backward_time = @elapsed dL_dHr_index = backward(ham_train, index, optim.loss, train_data[index], cache, conf)
-        push!(forward_times, forward_time); push!(backward_times, backward_time); push!(Ls_train, L_train)
-        return dL_dHr_index
+        return (forward_time, backward_time, L_train, dL_dHr_index)
     end
+    forward_times, backward_times, Ls_train, dL_dHr = map(x -> [r[x] for r in results], 1:4)
     update_time = @elapsed update!(ham_train, indices, optim.adam, optim.reg, dL_dHr)
     prof.L_train[batch_id, iter] = mean(Ls_train)
     prof.timings[batch_id, iter, 1] = sum(forward_times)

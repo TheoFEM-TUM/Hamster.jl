@@ -20,7 +20,7 @@ cspbbr_poscar = string(@__DIR__) * "/../strc/test_files/POSCAR_CsPbBr3"
     overlaps_gaas = Hamster.get_overlaps(strc_gaas.ions, orbitals_gaas, conf)
 
     rllm = Hamster.get_rllm(overlaps_gaas, conf)
-    rllm_correct = Hamster.read_rllm(string(@__DIR__)*"/test_files/rllm_true.dat")
+    rllm_correct = Hamster.read_rllm(filename=string(@__DIR__)*"/test_files/rllm_true.dat")
 
     is_correct = Bool[]
     for key in keys(rllm)

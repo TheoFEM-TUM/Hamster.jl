@@ -3,11 +3,13 @@ using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Stati
 @testset "Parse" begin
     include("parse/test_utils.jl")
     include("parse/test_poscar.jl")
+    include("parse/test_commandline.jl")
 end
 
 @testset "Config" begin
     include("conf/test_config.jl")
     include("conf/test_read_config.jl")
+    include("conf/test_defaults.jl")
 end
 
 @testset "Structure" begin

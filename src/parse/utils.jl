@@ -1,4 +1,31 @@
 """
+    print_hamster(io_stream=stdout)
+
+Prints an ASCII art Hamster logo and description.
+
+# Arguments
+- `io_stream::IO`: The output stream to which the text should be printed. Defaults to `stdout`.
+"""
+function print_hamster(io_stream=stdout)
+    println(io_stream, """
+
+    Welcome to
+    ===========================================================================
+    ||   _   _                             _                         _   _   ||
+    ||  | | | |   __ _   _ __ ___    ___  | |_    ___   _ __        (_) | |  ||
+    ||  | |_| |  / _` | | '_ ` _ \\  / __| | __|  / _ \\ | '__|       | | | |  ||
+    ||  |  _  | | (_| | | | | | | | \\__ \\ | |_  |  __/ | |     _    | | | |  ||
+    ||  |_| |_|  \\__,_| |_| |_| |_| |___/  \\__|  \\___| |_|    (_)  _/ | |_|  ||
+    ||                                                            |__/       ||
+    ===========================================================================
+    Hamiltonian-learning
+        Approach for Multiscale Simulations 
+            using a Transferable and Efficient Representation.
+    
+    """)
+end
+
+"""
     open_and_read(file::AbstractString) -> Vector{String}
 
 Open a file, read all lines, and return them as a vector of strings.

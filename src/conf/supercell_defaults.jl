@@ -3,14 +3,14 @@
 
 The `Nconf` tag sets the number of samples that are sampled from the total number of configuration.
 """
-get_Nconf(conf::Config)::Int64 = conf("Nconf", "Supercell") == "default" ? 10 : conf("Nconf", "Supercell")
+get_Nconf(conf::Config)::Int64 = get(conf, "Nconf", "Supercell", 10)
 
 """
     Nconfig=10
 
 The `Nconf_min` tag sets the minimum index that can be sampled from the total number of configurations.
 """
-get_Nconf_min(conf::Config)::Int64 = conf("Nconf_min", "Supercell") == "default" ? 1 : conf("Nconf_min", "Supercell")
+get_Nconf_min(conf::Config)::Int64 = get(conf, "Nconf_min", "Supercell", 1)
 
 """
     sc_poscar=SC_POSCAR
