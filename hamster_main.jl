@@ -9,16 +9,13 @@ for (key, value) in args
 end
 nhamster = Hamster.get_nhamster(conf)
 num_nodes = parse(Int64, get(ENV, "SLURM_JOB_NUM_NODES", "1"))
+num_threads = Int(Sys.CPU_THREADS / nhamster)
 
 if haskey(ENV, "SLURM_JOB_NODELIST")
-    nodelist = split(ENV["SLURM_JOB_NODELIST"], ',')
-    nworker_per_node = floor(Int64, nhamster / length(nodelist))
-    @show nworker_per_node
-    redirect_stdout(Base.DevNull()) do
-        addprocs(SlurmManager(96), distribution="cyclic", output="hamster.out")
-    end
+    nworker_total = nhamster * num_nodes
+    addprocs(SlurmManager(nworker_total), distribution="cyclic", exeflags=["--project", "-t $num_threads"])
 else
-    addprocs(nhamster)
+    addprocs(nhamster, exeflags=["--project", "-t $num_threads"])
 end
 
 @everywhere using Hamster
