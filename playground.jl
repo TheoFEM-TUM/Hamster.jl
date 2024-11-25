@@ -78,3 +78,5 @@ for i in 1:10
 end |> y
 
 result = (x for x in 1:10) |> Tuple
+
+@time Hamster.get_rcut(conf)

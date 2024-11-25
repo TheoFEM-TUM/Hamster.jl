@@ -3,7 +3,7 @@
 
 The parameter `rcut` sets the cut-off radius beyond which all interactions are neglected. A cut-off radius of zero means all interactions are considered.
 """
-get_rcut(conf::Config)::Float64 = conf("rcut") == "default" ? 7. : conf("rcut")
+get_rcut(conf::Config)::Float64 = get(conf, "rcut", 7.0)
 
 """
     Rmax=1

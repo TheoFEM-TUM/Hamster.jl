@@ -48,9 +48,33 @@ function (conf::Config)(key::String, typekey="none")
         else
             return "default"
         end
-    else 
+    else
         return "default"
     end
+end
+
+"""
+    Base.get(conf::Config, key, default::T) :: T where {T}
+     Base.get(conf::Config, key, typekey, default::T) :: T where {T}
+
+Retrieve a value associated with `key` (and `typekey`) from a configuration object `conf`. If the value
+returned by `conf(key)` is `"default"`, the fallback value `default` is returned instead.
+
+# Arguments
+- `conf::Config`: A configuration object, typically implementing callable behavior for key lookups.
+- `key`: The key to look up in the configuration. Its type depends on the `Config` implementation.
+- `default::T`: A fallback value of type `T` to return if the configuration value for `key` is `"default"`.
+
+# Returns
+- `::T`: The value associated with `key` in `conf`, unless that value is `"default"`, in which case
+  `default` is returned.
+"""
+function Base.get(conf::Config, key, default::T)::T where {T}
+    return conf(key) == "default" ? default : conf(key)
+end
+
+function Base.get(conf::Config, key, typekey, default::T)::T where {T}
+    return conf(key, typekey) == "default" ? default : conf(key, typekey)
 end
 
 """
