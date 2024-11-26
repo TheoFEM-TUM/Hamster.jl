@@ -20,6 +20,9 @@
     @test length(dl.val_data) == 1
     @test dl.val_data[1].kp ≈ kp
     @test dl.val_data[1].Es ≈ Es
+
+    # Test 3: test get nk and neig
+    @test Hamster.get_neig_and_nk(dl.train_data) == (8, 56)
 end
 
 @testset "DataLoader MD Eigs" begin
@@ -86,6 +89,9 @@ end
     dl = DataLoader([], [], 8, 8, conf)
     @test length(dl.val_data) == 1
     @test all([dl.val_data[1].Hr[R] == Hr[R] for R in eachindex(Hr)])
+    
+    # Test 3: test get nk and neig
+    @test Hamster.get_neig_and_nk(dl.train_data) == (0, 0)
 end
 
 @testset "DataLoader MD Hr" begin
