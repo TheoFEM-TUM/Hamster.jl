@@ -27,6 +27,12 @@ path = string(@__DIR__) * "/test_files/"
     train_indices, val_indices = Hamster.get_config_index_sample()
     @test train_indices == [1]
     @test isempty(val_indices)
+    
+    # Test 5: If validate and Nconf=1 should return [1] for val_indices
+    conf = get_empty_config()
+    set_value!(conf, "validate", "Optimizer", true)
+    train_indices, val_indices = Hamster.get_config_index_sample(conf)
+    @test train_indices == val_indices == [1]
 end
 
 @testset "Multiple Structures from XDATCAR" begin

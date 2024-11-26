@@ -14,7 +14,6 @@ Generate a set of translation vectors based on ion positions `rs_ion`, the latti
 - `AbstractMatrix`: A matrix containing the translation vectors as columns. The vectors are filtered based on the `rcut` value to include only those within the specified interatomic distance.
 """
 function get_translation_vectors(rs_ion, lattice, conf=get_empty_config(); Rmax=get_Rmax(lattice, conf), rcut=get_rcut(conf))
-
     # Get an initial set of lattice translation vectors
     Rs = get_translation_vectors(Rmax)
     if rcut == 0.; return Rs; end

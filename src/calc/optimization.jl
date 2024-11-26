@@ -1,15 +1,42 @@
+"""
+run_optimization(conf::Config)
+
+Runs the optimization process for an effective Hamiltonian model using the specified configuration.
+
+# Arguments
+- `conf::Config`: A configuration instance.
+
+# Workflow
+1. **Configuration Sampling**:
+   - Splits the configuration indices into training (`train_config_inds`) and validation (`val_conf_inds`) sets.
+2. **Translation Vectors**:
+   - Reads translation vectors `Rs` (if `hr_fit`).
+3. **Training Data Preparation**:
+   - Retrieves training structures (`train_strcs`) and constructs basis functions (`train_bases`).
+   - Initializes the effective Hamiltonian (`ham_train`) for the training data.
+4. **Validation Data Preparation**:
+   - Retrieves validation structures (`val_strcs`) and constructs basis functions (`val_bases`).
+   - Initializes the effective Hamiltonian (`ham_val`) for the validation data.
+5. **Data Loader and Optimizer**:
+   - Initializes a `DataLoader` (`dl`) with the training and validation configuration indices.
+   - Sets up a gradient descent optimizer (`optim`) with the extracted parameters.
+6. **Profiler**:
+   - Creates a `HamsterProfiler` (`prof`) for profiling the optimization process.
+7. **Model Optimization**:
+   - Performs the optimization using `optimize_model!`, which iterates over the training and validation data to refine the model.
+"""
 function run_optimization(conf::Config)
     train_config_inds, val_conf_inds = get_config_index_sample(conf)
 
-    Rs = get_translation_vectors(conf)
-    
+    Rs = get_translation_vectors_for_hr_fit(conf)
+    @show train_config_inds
     train_strcs = get_structures(conf, config_indices=train_config_inds, Rs=Rs)
     train_bases = Basis[Basis(strc, conf) for strc in train_strcs]
     ham_train = EffectiveHamiltonian(train_strcs, train_bases, conf)
 
     val_strcs = get_structures(conf, config_indices=val_conf_inds, Rs=Rs)
     val_bases = Basis[Basis(strc, conf) for strc in val_strcs]
-    ham_val = validate ? EffectiveHamiltonian(val_strcs, val_bases, conf) : get_empty_effective_hamiltonian()
+    ham_val = EffectiveHamiltonian(val_strcs, val_bases, conf)
 
     dl = DataLoader(train_config_inds, val_conf_inds, 8, 8, conf)
     Nε, Nk = get_neig_and_nk(dl.train_data)
@@ -17,4 +44,5 @@ function run_optimization(conf::Config)
     prof = HamsterProfiler(3, conf)
     
     optimize_model!(ham_train, ham_val, optim, dl, prof, conf)
+    return prof
 end

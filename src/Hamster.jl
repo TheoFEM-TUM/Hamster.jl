@@ -44,6 +44,8 @@ export write_hr, read_hr
 
 export Loss, Regularization, update!, DataLoader, GDOptimizer, optimize_model!, HamsterProfiler
 
+export run_optimization
+
 # Precompililation
 include("Hamster_precompile.jl")
 

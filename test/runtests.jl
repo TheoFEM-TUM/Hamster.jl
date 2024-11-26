@@ -50,3 +50,7 @@ end
     include("optim/test_profiler.jl")
     include("optim/test_optimize.jl")
 end
+
+@testset "calc" begin
+    include("calc/test_optimization.jl")
+end

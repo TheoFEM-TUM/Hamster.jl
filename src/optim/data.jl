@@ -111,3 +111,34 @@ function read_hr_data_from_path(path, inds)
         return [HrData(Rs, Hr)]
     end
 end
+
+"""
+    get_translation_vectors_for_hr_fit(conf=get_empty_config(); hr_fit=get_hr_fit(conf), train_data=get_train_data(conf))::Matrix{Float64}
+
+If fitting the model to Hr data, read the respective translation vectors from the `train_data` file.
+
+# Arguments
+- `conf` (default: `get_empty_config()`): A `Config` instance.
+- `hr_fit`: If true, model is fit to Hr data.
+- `train_data`: Path to the training data file.
+
+# Returns
+- `Rs::Matrix{Float64}`: The translation vectors, if not `hr_fit`, return zeros (Rs are calculated depending on `rcut`).
+"""
+function get_translation_vectors_for_hr_fit(conf=get_empty_config(); hr_fit=get_hr_fit(conf), train_data=get_train_data(conf))::Matrix{Float64}
+    if hr_fit
+        if occursin(".h5", train_data)
+            Rs = h5read(train_data, "Rs")
+            if ndims(Rs) == 3
+                return Rs[:, :, 1]
+            else
+                return Rs
+            end
+        else
+            _, Rs, _ = read_hrdat(train_data)
+            return Rs
+        end
+    else
+        return zeros(3, 1)
+    end
+end

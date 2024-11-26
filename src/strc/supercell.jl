@@ -75,5 +75,6 @@ function get_config_index_sample(conf=get_empty_config(); Nconf=get_Nconf(conf),
     train_config_inds = sample(Nconf_min:Nconf_max, Nconf, replace=false, ordered=true)
     remaining_indices = setdiff(Nconf_min:Nconf_max, train_config_inds)
     val_config_inds = sample(remaining_indices, Nval, replace=false, ordered=true)
+    if Nconf == 1 && get_validate(conf); val_config_inds = [1]; end # only one config, e.g., pc
     return train_config_inds, val_config_inds
 end
