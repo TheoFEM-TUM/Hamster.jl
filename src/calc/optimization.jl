@@ -29,7 +29,6 @@ function run_optimization(conf::Config)
     train_config_inds, val_conf_inds = get_config_index_sample(conf)
 
     Rs = get_translation_vectors_for_hr_fit(conf)
-    @show train_config_inds
     train_strcs = get_structures(conf, config_indices=train_config_inds, Rs=Rs)
     train_bases = Basis[Basis(strc, conf) for strc in train_strcs]
     ham_train = EffectiveHamiltonian(train_strcs, train_bases, conf)
