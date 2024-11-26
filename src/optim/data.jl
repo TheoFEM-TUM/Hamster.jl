@@ -12,7 +12,8 @@ struct DataLoader{A, B}
     val_data :: Vector{B}
 end
 
-function DataLoader(train_config_inds, val_config_inds, PC_Nε, SC_Nε, conf=get_empty_config(); train_path=get_train_data(conf), val_path=get_val_data(conf), validate=get_validate(conf), bandmin=get_bandmin(conf), train_mode=get_train_mode(conf), val_mode=get_val_mode(conf), hr_fit=get_hr_fit(conf), hr_val=hr_fit)
+function DataLoader(train_config_inds, val_config_inds, PC_Nε, SC_Nε, conf=get_empty_config(); train_path=get_train_data(conf), val_path=get_val_data(conf), validate=get_validate(conf), bandmin=get_bandmin(conf), train_mode=get_train_mode(conf), val_mode=get_val_mode(conf), hr_fit=get_hr_fit(conf), eig_val=get_eig_val(conf))
+    hr_val = !eig_val
     train_data = hr_fit ? get_hr_data(train_mode, train_path, inds=train_config_inds) : get_eig_data(train_mode, train_path, PC_Nε, SC_Nε, inds=train_config_inds, bandmin=bandmin)
     val_data = hr_val ? get_hr_data(val_mode, val_path, inds=val_config_inds, empty=!validate) : get_eig_data(val_mode, val_path, PC_Nε, SC_Nε, inds=val_config_inds, bandmin=bandmin, empty=!validate)
     return DataLoader(train_data, val_data)
@@ -45,6 +46,20 @@ struct HrData{M}
     Rs :: Matrix{Float64}
     Hr :: Vector{M}
 end
+
+"""
+    get_neig_and_nk(data::Vector)
+
+Get the number of eigenvalues and the number of k-points from a collection of data.
+
+# Arguments
+- `data`: A vector of either `EigData` or `HrData`.
+
+# Returns
+- `(Neig, Nk)`: The number of eigenvalues and k-points of the first data point. `Return 0 for HrData`.
+"""
+get_neig_and_nk(data::Vector{EigData}) = (size(data[1].Es, 1), size(data[1].kp, 2))
+get_neig_and_nk(data::Vector{<:HrData}) = (0, 0)
 
 function get_eig_data(mode, path, PC_Nε, SC_Nε; inds=Int64[], bandmin=1, empty=false)
     data = EigData[]

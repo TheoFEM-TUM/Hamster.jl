@@ -156,4 +156,4 @@ function backward(ham::EffectiveHamiltonian, index, loss, data::EigData, cache, 
     return out
 end
 
-backward(ham::EffectiveHamiltonian, index, loss, data::HrData, cache) = backward(loss, cache[1], data.Hr)
+backward(ham::EffectiveHamiltonian, index, loss, data::HrData, cache, conf) = backward(loss, cache[1], data.Hr)

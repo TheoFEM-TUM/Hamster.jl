@@ -12,7 +12,7 @@ Read a Wannier90 `hr.dat` file and extract the Hamiltonian matrix elements, latt
   - `Rs::Array{Float64, 2}`: The lattice vectors, a 2D array with dimensions (3, NR).
   - `deg::Vector{Int64}`: The degeneracy values, a vector of length NR.
 """
-function read_hrdat(file="wannier90_hr.dat")
+function read_hrdat(file="wannier90_hr.dat"; real=true)
     lines = open_and_read(file)
 
     NR = parse(Int64, lines[3])
@@ -37,7 +37,10 @@ function read_hrdat(file="wannier90_hr.dat")
         if Rvec_new ≠ Rvec; Rind += 1; Rvec = Rvec_new; Rs[:, Rind] = Rvec; end
 
         i, j = parse.(Int64, lines[k][4:5])
-        Hᴿ[Rind][i, j] = parse(Float64, lines[k][6]) + im*parse(Float64, lines[k][7])
+        Hᴿ[Rind][i, j] = parse(Float64, lines[k][6])
+        if !real
+            Hᴿ[Rind][i, j] += im*parse(Float64, lines[k][7])
+        end
     end
     return Hᴿ, Rs, deg
 end
