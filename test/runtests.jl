@@ -3,6 +3,7 @@ using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Stati
 @testset "Parse" begin
     include("parse/test_utils.jl")
     include("parse/test_poscar.jl")
+    include("parse/test_wannier90.jl")
     include("parse/test_commandline.jl")
 end
 
