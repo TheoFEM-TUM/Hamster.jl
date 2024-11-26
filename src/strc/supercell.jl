@@ -13,19 +13,19 @@ Generates a list of `Structure` objects based on the configurations from an XDAT
 - `strcs`: A vector of `Structure` objects. Each structure represents the ion positions and their displacements relative to the initial configuration.
 - `config_indices`: The indices of the configurations used to create the structures.
 """
-function get_structures(conf=get_empty_config(); mode="pc", index_file="config_inds.dat", xdatcar=get_xdatcar(conf), sc_poscar=get_sc_poscar(conf), poscar=get_poscar(conf))
+function get_structures(conf=get_empty_config(); Rs=zeros(3, 1), mode="pc", config_indices=[1], xdatcar=get_xdatcar(conf), sc_poscar=get_sc_poscar(conf), poscar=get_poscar(conf))
     if lowercase(mode) == "md" || lowercase(mode) == "mixed"
-        poscar = read_poscar(sc_poscar)
+        sc_poscar = read_poscar(sc_poscar)
+        @unpack rs_atom, atom_types = sc_poscar
         lattice, configs = occursin(".h5", xdatcar) ? (h5read(xdatcar, "lattice"), h5read(xdatcar, "positions")) : read_xdatcar(xdatcar, frac=false)
         
         # Check that POSCAR lattice and XDATCAR lattice are compatible
-        @assert poscar.lattice ≈ lattice
+        @assert sc_poscar.lattice ≈ lattice
 
-        Nconf_max = size(configs, 3)
-        config_indices = index_file in readdir() ? read_from_file(index_file) : get_config_index_sample(Nconf_max, conf, val_ratio=0)[1]
+        Ts = frac_to_cart(get_translation_vectors(1), lattice)
+        rs_ion = frac_to_cart(rs_atom, lattice)
+        Rs = Rs == zeros(3, 1) ? get_translation_vectors(rs_ion, lattice, rcut=get_rcut(conf)) : Rs
         
-        Ts = frac_to_cart(get_translation_vectors(1), poscar.lattice)
-        rs_ion = frac_to_cart(poscar.rs_atom, poscar.lattice)
         strcs = map(config_indices) do index
             δrs_ion = similar(rs_ion)
 
@@ -35,38 +35,46 @@ function get_structures(conf=get_empty_config(); mode="pc", index_file="config_i
                 δrs_ion[:, iion] = rs_ion[:, iion] - configs[:, iion, index] + Ts[:, Rmin]
             end
 
-            Structure(rs_ion, δrs_ion, poscar.atom_types, poscar.lattice, conf)
+            Structure(Rs, rs_ion, δrs_ion, atom_types, lattice, conf)
         end
+
         if lowercase(mode) == "md"
-            return strcs, config_indices
+            return strcs
         else
-            return [Structure(conf), strcs...], config_indices
+            return [Structure(conf), strcs...]
         end
-    elseif lowercase(mode) == "pc"
-        return [Structure(conf)], [1]
+
+    elseif lowercase(mode) == "pc" && length(config_indices) > 0
+        pc_poscar = read_poscar(poscar)
+        @unpack rs_atom, lattice = pc_poscar
+        Rs = Rs == zeros(3, 1) ? get_translation_vectors(frac_to_cart(rs_atom, lattice), lattice, rcut=get_rcut(conf)) : Rs
+        return [Structure(conf, Rs=Rs)]
+    else
+        return Structure[]
     end
 end
 
 """
-    get_config_index_sample(Nconf_max, conf=get_empty_config(); Nconf=get_Nconf(conf), Nconf_min=get_Nconf_min(conf), val_ratio=get_val_ratio(conf))
+    get_config_index_sample(conf=get_empty_config(); Nconf=get_Nconf(conf), Nconf_min=get_Nconf_min(conf), Nconf_max=get_Nconf_max(conf), val_ratio=get_val_ratio(conf))
 
 Randomly selects training and validation configuration indices from a given range of configurations.
 
 # Arguments
-- `Nconf_max`: The maximum configuration index.
 - `conf`: (Optional) A configuration object from which additional parameters are obtained. Defaults to an empty configuration.
-- `Nconf`: (Optional) The number of configurations to sample for training, fetched from the configuration object if not provided.
-- `Nconf_min`: (Optional) The minimum configuration index, fetched from the configuration object if not provided.
-- `val_ratio`: (Optional) The ratio of validation data size to training data size, fetched from the configuration object if not provided.
+- `Nconf`: (Optional) The number of configurations to sample for training.
+- `Nconf_min`: (Optional) The minimum configuration index.
+- `Nconf_max`: (Optional) The maximum configuration index.
+- `val_ratio`: (Optional) The ratio of validation data size to training data size.
 
 # Returns
 - `train_config_inds`: A vector of indices for training configurations.
 - `val_config_inds`: A vector of indices for validation configurations.
 """
-function get_config_index_sample(Nconf_max, conf=get_empty_config(); Nconf=get_Nconf(conf), Nconf_min=get_Nconf_min(conf), val_ratio=get_val_ratio(conf))
+function get_config_index_sample(conf=get_empty_config(); Nconf=get_Nconf(conf), Nconf_min=get_Nconf_min(conf), Nconf_max=get_Nconf_max(conf), val_ratio=get_val_ratio(conf))
     Nval = round(Int64, Nconf * val_ratio)
     train_config_inds = sample(Nconf_min:Nconf_max, Nconf, replace=false, ordered=true)
     remaining_indices = setdiff(Nconf_min:Nconf_max, train_config_inds)
     val_config_inds = sample(remaining_indices, Nval, replace=false, ordered=true)
+    if Nconf == 1 && get_validate(conf); val_config_inds = [1]; end # only one config, e.g., pc
     return train_config_inds, val_config_inds
 end

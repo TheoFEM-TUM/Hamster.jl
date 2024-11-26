@@ -8,9 +8,11 @@ struct EffectiveHamiltonian{T, S1, S2}
     Rs :: Vector{Matrix{Float64}}
 end
 
-function EffectiveHamiltonian(conf=get_empty_conf(); mode="pc", index_file="config_inds.dat", tb_model=get_tb_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), sp_tol = get_sp_tol(conf), soc=get_soc(conf))
-    strcs, config_indices = get_structures(conf, mode=mode, index_file=index_file) # TODO: What happens if there is only one Structure? PC/Mixed?
-    bases = [Basis(strc, conf) for strc in strcs]
+function EffectiveHamiltonian(strcs, bases, conf=get_empty_conf(); mode="pc", index_file="config_inds.dat", tb_model=get_tb_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), sp_tol = get_sp_tol(conf), soc=get_soc(conf))
+    if isempty(strcs) && isempty(bases)
+        return EffectiveHamiltonian(0, nothing, Dense(), Dense(), 1e-10, false, [zeros(3, 1)])
+    end
+    
     Rs = [strc.Rs for strc in strcs]
 
     models = ()
@@ -20,8 +22,6 @@ function EffectiveHamiltonian(conf=get_empty_conf(); mode="pc", index_file="conf
 
     return EffectiveHamiltonian(length(strcs), models, sp_mode, sp_diag, sp_tol, soc, Rs)
 end
-
-get_empty_effective_hamiltonian() = EffectiveHamiltonian(0, nothing, Dense(), Dense(), 1e-10, false, [zeros(3, 1)])
 
 """
     get_hamiltonian(ham::EffectiveHamiltonian, index, ks)

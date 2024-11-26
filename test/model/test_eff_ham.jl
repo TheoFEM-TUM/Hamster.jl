@@ -17,10 +17,16 @@ path = string(@__DIR__) * "/test_files/"
     set_value!(conf, "verbosity", 0)
 
     # Test that effective Hamiltonian model gives correct eigenvalues
-    eff_ham = EffectiveHamiltonian(conf)
+    strc = Structure(conf); basis = Basis(strc, conf)
+    eff_ham = EffectiveHamiltonian([strc], [basis], conf)
     ks = read_from_file(joinpath(path, "kpoints.dat"))
     Es_correct = read_from_file(joinpath(path, "Es.dat"))
     Hk = get_hamiltonian(eff_ham, 1, ks)
     Es, vs = diagonalize(Hk)
     @test mean(abs.(Es .- Es_correct)) < 0.01
+
+    # Test empty model
+    eff_empty = EffectiveHamiltonian([], [], conf)
+    @test eff_empty.Nstrc == 0
+    @test eff_empty.models === nothing    
 end

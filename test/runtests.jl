@@ -3,6 +3,7 @@ using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Stati
 @testset "Parse" begin
     include("parse/test_utils.jl")
     include("parse/test_poscar.jl")
+    include("parse/test_wannier90.jl")
     include("parse/test_commandline.jl")
 end
 
@@ -48,4 +49,8 @@ end
     include("optim/test_data.jl")
     include("optim/test_profiler.jl")
     include("optim/test_optimize.jl")
+end
+
+@testset "calc" begin
+    include("calc/test_optimization.jl")
 end
