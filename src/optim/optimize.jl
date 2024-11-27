@@ -63,7 +63,7 @@ Performs a single training step on a Hamiltonian model by computing gradients an
 - Updates the model parameters in-place within `ham_train`.
 """
 function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id, conf=get_empty_config())
-    results = pmap(indices) do index
+    results = map(indices) do index
         forward_time = @elapsed L_train, cache = forward(ham_train, index, optim.loss, train_data[index])
         backward_time = @elapsed dL_dHr_index = backward(ham_train, index, optim.loss, train_data[index], cache, conf)
         return (forward_time, backward_time, L_train, dL_dHr_index)
@@ -94,7 +94,7 @@ Evaluates the validation loss for a Hamiltonian model over a given validation da
 """
 function val_step!(ham_val, loss, val_data, prof, iter)
     val_time = @elapsed begin 
-        L_val = @distributed (+) for index in 1:ham_val.Nstrc
+        L_val = mapreduce(+, 1:ham_val.Nstrc) do index
             forward(ham_val, index, loss, val_data[index])[1] / ham_val.Nstrc
         end
     end

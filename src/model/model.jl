@@ -116,7 +116,7 @@ function get_model_gradient(h, dL_dHr::Vector{<:AbstractMatrix})
 end
 
 function get_model_gradient(model::TBModel, indices, dL_dHr)
-    @views dVs = pmap(enumerate(indices)) do (n, index)
+    @views dVs = map(enumerate(indices)) do (n, index)
         get_model_gradient(model.hs[index], dL_dHr[n])
     end
     dV = cat(dVs..., dims=2)
