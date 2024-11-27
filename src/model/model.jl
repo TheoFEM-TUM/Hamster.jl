@@ -73,23 +73,17 @@ get_hr(model, mode; apply_soc=false) = get_hr(model.hs, model.V, mode, apply_soc
 get_hr(model, V, mode; apply_soc=false) = get_hr(model.hs, V, mode, apply_soc=apply_soc)
 
 """
-    update!(model::TBModel, opt, dL_dHr)
+    update!(model::TBModel, opt, dV)
 
-Updates the parameters of the given tight-binding model `model` using the provided optimization method `opt` and the derivative of the loss function with respect to the Hamiltonian `dL_dHr`.
+Updates the parameters of the given TB model `model` using the provided optimizer `opt` and the gradient `dV`.
 
 # Arguments
 - `model`: A `TBModel` object that contains the parameters to be updated.
 - `opt`: An optimization algorithm or method used to update the model's parameters.
-- `reg`: The regularization term to penalize parameter values according to its definition.
-- `dL_dHr`: A matrix or array representing the derivative of the loss function with respect to the Hamiltonian.
+- `dV`: The gradient of the loss w.r.t. to the model parameters.
 """
-function update!(model::TBModel, indices, opt, reg, dL_dHr)
-    if any(model.update)
-        dV_grad = get_model_gradient(model, indices, dL_dHr)
-        dV_penal = backward(reg, model.V)
-        dV = @. ifelse(model.update, dV_grad + dV_penal, 0.)
-        update!(opt, model.V, dV)
-    end
+function update!(model::TBModel, opt, dV)
+    update!(opt, model.V, dV)
 end
 
 """
@@ -115,12 +109,32 @@ function get_model_gradient(h, dL_dHr::Vector{<:AbstractMatrix})
     return dV
 end
 
-function get_model_gradient(model::TBModel, indices, dL_dHr)
-    @views dVs = map(enumerate(indices)) do (n, index)
-        get_model_gradient(model.hs[index], dL_dHr[n])
+"""
+    get_model_gradient(ham::EffectiveHamiltonian, indices, reg, dL_dHr)
+
+Computes the gradient of the loss w.r.t. the model parameters.
+
+# Arguments
+- `ham::EffectiveHamiltonian`: The effective Hamiltonian model.
+- `indices::AbstractVector`: A set of structure indices.
+- `reg`: A regularization term or parameter used in the gradient computation.
+- `dL_dHr`: The derivative of the loss function with respect to the Hamiltonian.
+
+# Returns
+- `AbstractVector`: A collection of gradients, one for each model in the `ham.models`, computed using the provided indices, regularization term, and loss derivative.
+"""
+function get_model_gradient(model::TBModel, indices, reg, dL_dHr)
+    if any(model.update)
+        @views dVs = map(enumerate(indices)) do (n, index)
+            get_model_gradient(model.hs[index], dL_dHr[n])
+        end
+        dV_ = cat(dVs..., dims=2)
+        dV_grad = dropdims(sum(dV_, dims=2), dims=2)
+
+        dV_penal = backward(reg, model.V)
+        dV = @. ifelse(model.update, dV_grad + dV_penal, 0.)
+        return dV
     end
-    dV = cat(dVs..., dims=2)
-    return dropdims(mean(dV, dims=2), dims=2)
 end
 
 """

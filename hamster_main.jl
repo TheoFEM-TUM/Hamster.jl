@@ -12,6 +12,7 @@ conf = haskey(args, "conf") ? get_config(filename=args["conf"]) : get_config()
 for (key, value) in args
     set_value!(conf, key, value)
 end
+if rank ≠ 0; set_value!(conf, "verbosity", 0); end
 Hamster.main(comm, conf, rank=rank, nranks=nranks, num_nodes=num_nodes)
 
 MPI.Finalize()

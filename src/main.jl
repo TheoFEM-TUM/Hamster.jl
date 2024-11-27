@@ -8,7 +8,7 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1)
     end
 
     task = decide_which_task_to_perform(conf)
-    run_calculation(task, conf)
+    run_calculation(task, comm, conf, rank=rank, nranks=nranks)
 end
 
 """

@@ -68,16 +68,15 @@ Update the parameters of each model within the `EffectiveHamiltonian` object usi
 
 # Arguments
 - `ham::EffectiveHamiltonian`: The effective Hamiltonian object containing multiple models.
-- `indices`: The indices of the structures that the gradient belongs to.
 - `opt`: An optimizer object specifying the update rule (e.g., ADAM).
-- `dL_dHr`: The derivative of the loss w.r.t. to each matrix element of the real-space Hamiltonian.
+- `model_grad`: The gradient of the loss w.r.t. the model parameters.
 
 # Returns
 - This function modifies the `ham` object in place, updating the parameters of each model it contains.
 """
-function update!(ham::EffectiveHamiltonian, indices, opt, reg, dL_dHr)
-    for model in ham.models
-        update!(model, indices, opt, reg, dL_dHr)
+function update!(ham::EffectiveHamiltonian, opt, model_grad)
+    for (model, grad) in zip(ham.models, model_grad)
+        update!(model, opt, grad)
     end
 end
 
