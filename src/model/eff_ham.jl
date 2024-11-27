@@ -8,7 +8,7 @@ struct EffectiveHamiltonian{T, S1, S2}
     Rs :: Vector{Matrix{Float64}}
 end
 
-function EffectiveHamiltonian(strcs, bases, conf=get_empty_conf(); mode="pc", index_file="config_inds.dat", tb_model=get_tb_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), sp_tol = get_sp_tol(conf), soc=get_soc(conf))
+function EffectiveHamiltonian(strcs, bases, conf=get_empty_conf(); mode="pc", index_file="config_inds.dat", tb_model=get_tb_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), sp_tol=get_sp_tol(conf), soc=get_soc(conf))
     if isempty(strcs) && isempty(bases)
         return EffectiveHamiltonian(0, nothing, Dense(), Dense(), 1e-10, false, [zeros(3, 1)])
     end
