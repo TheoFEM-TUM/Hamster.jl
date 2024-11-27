@@ -89,16 +89,15 @@ using LinearAlgebra, BenchmarkTools, OhMyThreads, Distributed
 
 @show BLAS.get_num_threads()
 
-M = [rand(128, 128) for i in 1:48]
+M = [rand(128, 128) for i in 1:8]
 
-@btime map(eigvals, M)
-
-@btime tmap(eigvals, M)
-
-addprocs(8)
+addprocs(4)
 @btime pmap(eigvals, M)
 rmprocs(workers)
 
+
+@btime map(eigvals, M)
+@btime tmap(eigvals, M)
 
 function myfunc(f, N)
     M = [rand(N, N) for i in 1:48]
@@ -106,3 +105,5 @@ function myfunc(f, N)
 end
 
 @btime myfunc($tmap, 128)
+
+38.8 / 0.86
