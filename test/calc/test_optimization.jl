@@ -6,7 +6,8 @@
     set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
     set_value!(conf, "val_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
 
-    prof = run_optimization(conf)
+    prof = Hamster.main(conf)
     @test mean(prof.L_train[:, end]) < 0.15
     @test prof.L_val[end] < 0.5 # includes all bands
+    rm("hamster.out")
 end

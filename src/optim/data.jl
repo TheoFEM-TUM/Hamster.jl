@@ -89,8 +89,11 @@ function read_eigenvalue_data_from_path(path, inds, bandmin, Nε)
     if occursin(".h5", path)
         kp = h5read(path, "kpoints")
         Es = h5read(path, "eigenvalues")
-        data = [EigData(kp, Es[bandmin:bandmin+Nε-1, :, n]) for n in inds]
-        return data
+        if kp isa Matrix{Float64}
+            return [EigData(kp, Es[bandmin:bandmin+Nε-1, :, n]) for n in inds]
+        elseif kp isa Array{Float64, 3}
+            return [EigData(kp[:, :, n], Es[bandmin:bandmin+Nε-1, :, n]) for n in inds]
+        end
     else
         kp, Es = read_eigenval(path)
         return [EigData(kp, Es[bandmin:bandmin+Nε-1, :])]

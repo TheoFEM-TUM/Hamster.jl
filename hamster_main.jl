@@ -1,4 +1,3 @@
-using Pkg; Pkg.add("ClusterManagers")
 using Distributed, Hamster, ClusterManagers
 
 args = Hamster.parse_commandline(ARGS)
@@ -20,6 +19,6 @@ end
 
 @everywhere using Hamster
 
-Hamster.main(ARGS, conf)
+Hamster.main(conf, num_nodes=num_nodes)
 
 rmprocs(workers())

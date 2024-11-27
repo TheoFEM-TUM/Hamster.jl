@@ -8,37 +8,33 @@ Generates the main output file `hamster.out` with initial run information.
 
 # Details
 This function performs the following tasks:
-1. Opens the file `hamster.out` for writing.
+1. Opens (creates) the file `hamster.out` for writing.
 2. Writes the current date and time to the file to record when the Hamster run started.
-3. Writes the number of threads being used by the current Julia session.
-4. Calls `write_separator(hamster_out)` to insert a separator line in the output file.
-5. Closes the `hamster.out` file.
+3. Writes the list of unique hostnames.
 """
-function generate_output(conf::Config=get_empty_config())
-    hamster_out = open("hamster.out", "w")
-    
-    # Write current date and time of day
-    dt = now(); date = Date(dt); time = Time(dt)
-    println(hamster_out, "Starting Hamster run on $date at $time.")
-    
-    # Write number of threads
-    nt = Threads.nthreads()
-    println(hamster_out, "   Running on $nt threads.")
+function generate_output(conf::Config=get_empty_config(); hostnames=hostnames)
+    open("hamster.out", "w") do hamster_out
+        print_hamster(hamster_out)
 
-    write_separator(hamster_out)
-
-    close(hamster_out)
+        # Write current date and time of day
+        dt = now(); date = Date(dt); time = Time(dt)
+        println(hamster_out, "Starting Hamster run on $date at $time.")
+        hostlist = string.(unique(hostnames))
+        hostlist = replace("$hostlist", "["=>"", "]"=>"")
+        println(hamster_out, "  Hamster is running on host(s): $hostlist")
+        write_separator(hamster_out)
+    end
 end
 
 """
     write_separator(hamster_out)
 
-Write a separator line of 80 hyphens to the `hamster_out` file.
+Write a separator line of `L` times `char`` to the `io_stream`.
 
 # Arguments
-- `hamster_out::IO`: The output file stream to which the separator will be written.
+- `io_stream::IO`: The io stream to which the separator will be written.
 """
-write_separator(hamster_out) = println(hamster_out, "="^80)
+write_separator(io_stream; char='=', L=80) = println(io_stream, char^L)
 
 """
     append_output_block(block_title, block_tags, block_values; filename="hamster.out")
@@ -64,7 +60,23 @@ function append_output_block(block_title, block_tags, block_values; filename="ha
             write_output_line(hamster_out, tag, value)
         end
         write_separator(hamster_out)
+        println(hamster_out, "")
         close(hamster_out)
+    end
+end
+
+function write_block_summary(block_label, filename="hamster.out"; kwargs...)
+    if filename in readdir()
+        open(filename, "a") do io
+            write(io, "  $block_label Summary\n")
+            write_separator(io, char='-')
+            for (key, value) in kwargs
+                key_string = rpad(replace("      $key:", "["=>"", "]"=>""), 34)
+                value_string = rpad(replace("      $value", "["=>"", "]"=>""), 40)
+                write(io, "$key_string $value_string\n")
+            end
+            write_separator(io)
+        end
     end
 end
 
