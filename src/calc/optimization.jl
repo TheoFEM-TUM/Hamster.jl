@@ -1,5 +1,5 @@
 """
-run_optimization(conf::Config)
+   run_calculation(::Val{:optimization}, conf::Config)
 
 Runs the optimization process for an effective Hamiltonian model using the specified configuration.
 
@@ -25,7 +25,7 @@ Runs the optimization process for an effective Hamiltonian model using the speci
 7. **Model Optimization**:
    - Performs the optimization using `optimize_model!`, which iterates over the training and validation data to refine the model.
 """
-function run_optimization(conf::Config)
+function run_calculation(::Val{:optimization}, conf::Config)
     train_config_inds, val_conf_inds = get_config_index_sample(conf)
 
     Rs = get_translation_vectors_for_hr_fit(conf)

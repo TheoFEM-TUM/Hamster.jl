@@ -1,6 +1,6 @@
 module Hamster
 
-using TensorOperations, LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Dates, PeriodicTable, UnPack,
+using LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Dates, PeriodicTable, UnPack,
     CubicSplines, HCubature, Statistics, ChunkSplitters, Distributed, FiniteDiff, StatsBase, HDF5, Printf, OhMyThreads
 
 include("parse/utils.jl"); include("parse/poscar.jl"); include("parse/eigenval.jl"); include("parse/xdatcar.jl"); include("parse/wannier90.jl")
@@ -44,7 +44,7 @@ export write_hr, read_hr
 
 export Loss, Regularization, update!, DataLoader, GDOptimizer, optimize_model!, HamsterProfiler
 
-export run_optimization
+export run_calculation
 
 # Precompililation
 include("Hamster_precompile.jl")
