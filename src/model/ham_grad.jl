@@ -1,6 +1,5 @@
 """
-    get_eigenvalue_gradient(vs, Rs, ks)
-    get_eigenvalue_gradient(vs::AbstractArray{<:SparseVector}, Rs, ks)
+    get_eigenvalue_gradient(vs, Rs, ks, sp_mode, sp_iterator; nthreads_bands, nthreads_kpoints)
 
 Compute the gradient `dE_dHr` of each energy eigenvalue at each k-point w.r.t. the real-space Hamiltonian matrix elements.
 
@@ -8,21 +7,23 @@ Compute the gradient `dE_dHr` of each energy eigenvalue at each k-point w.r.t. t
 -`vs`: Matrix that contains the (sparse) eigenvectors of each eigenvalue `(m, k)`.
 - `Rs::Matrix{Int64}`: Lattice translation vectors in units of the lattice vectors.
 - `ks::Matrix{Float64}`: The coordinates of each k-point in units of the reciprocal lattice vectors.
+- `sp_mode`: Either `Dense` or `Sparse`, determines whether the gradients are sparsified.
+- `sp_iterator`: Special iterator to optimize iteration over `i, j, R` for very sparse systems.
 
 # Returns
 - `dE_dHr`: An array of shape `(NR, Nε, Nk)` that contains (sparse) matrices of shape `(Nε, Nε)`.
 """
-function get_eigenvalue_gradient(vs, Rs, ks; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads(), sp_tol=1e-10)
+function get_eigenvalue_gradient(vs, Rs, ks, ::Dense, sp_iterator=nothing; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads(), sp_tol=1e-10)
     Nε = size(vs, 1); NR = size(Rs, 2); Nk = size(ks, 2)
     dE_dHr = Array{Matrix{Float64}}(undef, NR, Nε, Nk)
-    hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks), nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=sp_tol)
+    hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks), nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands)
     return dE_dHr
 end
 
-function get_eigenvalue_gradient(vs::AbstractArray{<:SparseVector}, Rs, ks; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads(), sp_tol=1e-10)
+function get_eigenvalue_gradient(vs, Rs, ks, ::Sparse, sp_iterator; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads(), sp_tol=1e-10)
     Nε = size(vs, 1); NR = size(Rs, 2); Nk = size(ks, 2)
     dE_dHr = Array{SparseMatrixCSC{Float64, Int64}}(undef, NR, Nε, Nk)
-    hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks), nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=sp_tol)
+    sparse_hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks), sp_iterator, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=sp_tol)
     return dE_dHr
 end
 
@@ -43,17 +44,17 @@ For each k-point `k` and eigenstate `m`, this function computes the matrix eleme
 
 and stores the real part of this value in `dE_dλ[R, m, k]`. This is done for each lattice vector `R`, eigenstate `m`, and k-point `k`.
 """
-function hellman_feynman!(dE_dHr, Ψ, dHk_dHr; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads(), sp_tol=1e-10)
-    tforeach(axes(Ψ, 2), nchunks=nthreads_kpoints) do k
-        tforeach(axes(Ψ, 1), nchunks=nthreads_bands) do m
+function hellman_feynman!(dE_dHr, Ψ, dHk_dHr; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads())
+    tforeach(axes(Ψ, 3), nchunks=nthreads_kpoints) do k
+        tforeach(axes(Ψ, 2), nchunks=nthreads_bands) do m
             for R in axes(dHk_dHr, 1)
-                @views dE_dHr[R, m, k] = _hellman_feynman_step(Ψ[m, k], dHk_dHr[R, k], sp_tol=sp_tol)
+                @views dE_dHr[R, m, k] = _hellman_feynman_step(Ψ[:, m, k], dHk_dHr[R, k])
             end
         end
     end
 end
 
-function _hellman_feynman_step(Ψ_mk::AbstractVector, dHk_dHr; sp_tol=1e-10)
+function _hellman_feynman_step(Ψ_mk::AbstractVector, dHk_dHr)
     dE_dHr = zeros(length(Ψ_mk), length(Ψ_mk))
     for i in eachindex(Ψ_mk), j in eachindex(Ψ_mk)
         dE_dHr[i, j] = real(conj(Ψ_mk[i]) * dHk_dHr * Ψ_mk[j])
@@ -61,11 +62,25 @@ function _hellman_feynman_step(Ψ_mk::AbstractVector, dHk_dHr; sp_tol=1e-10)
     return dE_dHr
 end
 
-function _hellman_feynman_step(Ψ_mk::SparseVector, dHk_dHr; sp_tol=1e-10)
-    dE_dHr = spzeros(length(Ψ_mk), length(Ψ_mk))
-    for i in nzrange(Ψ_mk, 1), j in nzrange(Ψ_mk, 1)
-        dE_dHr[i, j] = real(conj(Ψ_mk[i]) * dHk_dHr * Ψ_mk[j])
+function sparse_hellman_feynman!(dE_dHr, Ψ, dHk_dHr, sp_iterator; nthreads_kpoints=Threads.nthreads(), nthreads_bands=Threads.nthreads(), sp_tol=1e-10)
+    tforeach(axes(Ψ, 3), nchunks=nthreads_kpoints) do k
+        tforeach(axes(Ψ, 2), nchunks=nthreads_bands) do m
+            for (R, inds) in enumerate(sp_iterator)
+                @views dE_dHr[R, m, k] = _sparse_hellman_feyman_step(Ψ[:, m, k], dHk_dHr[R, k], inds, size(Ψ, 1), sp_tol=sp_tol)
+            end
+        end
     end
+end
+
+function _sparse_hellman_feyman_step(Ψ_mk, dHk_dHr, inds, Nε; sp_tol=1e-10)
+    is = Int64[]
+    js = Int64[]
+    vals = Float64[]
+    @views for (i, j) in inds
+        val = real(conj(Ψ_mk[i]) * dHk_dHr * Ψ_mk[j])
+        push!(is, i); push!(js, j); push!(vals, val)
+    end
+    dE_dHr = sparse(is, js, vals, Nε, Nε)
     droptol!(dE_dHr, sp_tol)
     return dE_dHr
 end

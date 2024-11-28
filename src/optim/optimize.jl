@@ -149,9 +149,8 @@ The behavior of the function depends on the type of `data`, which can be either 
 function forward(ham::EffectiveHamiltonian, index, loss, data::EigData)
     Hk = get_hamiltonian(ham, index, data.kp)
     Es, vs = diagonalize(Hk)
-    vs_out = reshape_and_sparsify_eigenvectors(vs, ham.sp_mode, sp_tol=ham.sp_tol)
     L_train = loss(Es, data.Es)
-    return L_train, (Es, vs_out)
+    return L_train, (Es, vs)
 end
 
 function forward(ham::EffectiveHamiltonian, index, loss, data::HrData)
@@ -179,8 +178,8 @@ The function behavior varies depending on the type of `data`, which can be eithe
 function backward(ham::EffectiveHamiltonian, index, loss, data::EigData, cache, conf=get_empty_config(); nthreads_kpoints=get_nthreads_kpoints(conf), nthreads_bands=get_nthreads_bands(conf))
     Es_tb, vs = cache
     dL_dE = backward(loss, Es_tb, data.Es)
-    dE_dHr = get_eigenvalue_gradient(vs, ham.Rs[index], data.kp, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=ham.sp_tol)
-    dL_dHr = chain_rule(dL_dE, dE_dHr, ham.sp_mode, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=ham.sp_tol)
+    @time dE_dHr = get_eigenvalue_gradient(vs, ham.Rs[index], data.kp, ham.sp_mode, ham.sp_iterator, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=ham.sp_tol)
+    @time dL_dHr = chain_rule(dL_dE, dE_dHr, ham.sp_mode, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=ham.sp_tol)
     return dL_dHr
 end
 
