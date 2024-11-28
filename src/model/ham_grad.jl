@@ -92,19 +92,6 @@ function sparse_hellman_feynman!(dE_dHr, Ψ, dHk_dHr, sp_iterator; nthreads_kpoi
     end
 end
 
-function _sparse_hellman_feyman_step(Ψ_mk, dHk_dHr, inds, Nε; sp_tol=1e-10)
-    is = zeros(Int64, length(inds))
-    js = zeros(Int64, length(inds))
-    vals = zeros(length(inds))
-    @views for (idx, (i, j)) in enumerate(inds)
-        val = real(conj(Ψ_mk[i]) * dHk_dHr * Ψ_mk[j])
-        is[idx] = i; js[idx] = j; vals[idx] = val
-    end
-    dE_dHr = sparse(is, js, vals, Nε, Nε)
-    droptol!(dE_dHr, sp_tol)
-    return dE_dHr
-end
-
 """
     chain_rule(dL_dE, dE_dHr, mode)
 
