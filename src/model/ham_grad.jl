@@ -15,7 +15,14 @@ Compute the gradient `dE_dHr` of each energy eigenvalue at each k-point w.r.t. t
 """
 function get_eigenvalue_gradient(vs, Rs, ks, ::Dense, sp_iterator=nothing; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads(), sp_tol=1e-10)
     Nε = size(vs, 1); NR = size(Rs, 2); Nk = size(ks, 2)
-    dE_dHr = fill(zeros(Nε, Nε), NR, Nε, Nk)
+    dE_dHr = Array{Matrix{Float64}}(undef, NR, Nε, Nk)
+    tforeach(axes(vs, 3), nchunks=nthreads_kpoints) do k
+        tforeach(axes(vs, 2), nchunks=nthreads_bands) do m
+            @views for R in 1:NR
+                dE_dHr[R, m, k] = zeros(Nε, Nε)
+            end
+        end
+    end
     hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks), nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands)
     return dE_dHr
 end
@@ -47,7 +54,7 @@ and stores the real part of this value in `dE_dλ[R, m, k]`. This is done for ea
 function hellman_feynman!(dE_dHr, Ψ, dHk_dHr; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads())
     tforeach(axes(Ψ, 3), nchunks=nthreads_kpoints) do k
         tforeach(axes(Ψ, 2), nchunks=nthreads_bands) do m
-            @views for R in axes(dHk_dHr, 1), j in axes(Ψ, 1), i in axes(Ψ, 2)
+            @views for R in axes(dHk_dHr, 1), j in axes(Ψ, 1), i in axes(Ψ, 1)
                 dE_dHr[R, m, k][i, j] = real(conj(Ψ[i, m, k]) * dHk_dHr[R, k] * Ψ[j, m, k])
             end
         end

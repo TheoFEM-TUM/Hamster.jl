@@ -107,3 +107,7 @@ end
 @btime myfunc($tmap, 128)
 
 38.8 / 0.86
+
+x[1, 1, 1][1, 2] = 1
+
+@show x

@@ -42,6 +42,7 @@ end
     for R in axes(dE_dHr_old, 3), j in axes(dE_dHr_old, 2), i in axes(dE_dHr_old, 1)
         for k in axes(dE_dHr_old, 5), m in axes(dE_dHr_old, 4)
             push!(same_as_old, dE_dHr_sp[R, m, k][i, j] ≈ dE_dHr_old[i, j, R, m, k])
+
         end
     end
     @test all(same_as_old)
