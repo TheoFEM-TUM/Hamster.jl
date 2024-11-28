@@ -1,5 +1,5 @@
 """
-    optimize_model!(ham_train, ham_val, optim, dl, prof, conf=get_empty_config(); verbosity=get_verbosity(conf), Nbatch=get_nbatch(conf), validate=get_validate(conf))
+    optimize_model!(ham_train, ham_val, optim, dl, prof, conf=get_empty_config(); verbosity=get_verbosity(conf), Nbatch=get_nbatch(conf), validate=get_validate(conf), rank=0, nranks=1)
 
 Optimizes the model by performing training and optional validation steps.
 
@@ -9,13 +9,11 @@ Optimizes the model by performing training and optional validation steps.
 - `optim`: An optimization configuration, including the optimizer and its settings.
 - `dl`: A data loader object containing the training data.
 - `prof`: A profiler object used to store training and validation information.
-- `conf`: A configuration object containing additional settings (default is an empty config).
-- `verbosity`: The level of verbosity for logging (default is set by `get_verbosity(conf)`).
-- `Nbatch`: The number of batches per training iteration (default is set by `get_nbatch(conf)`).
-- `validate`: A flag indicating whether to perform validation during training (default is set by `get_validate(conf)`).
-
-# Description
-This function optimizes a model by iterating through training steps and optionally validating the model after each training iteration. It reports the progress of training and validation via printing functions at each iteration. The training step involves computing the loss, performing backpropagation, and updating the model parameters. If `validate` is set to true, the model is evaluated on a validation dataset after each training iteration.
+- `comm`: The MPI communicator.
+- `conf`: A `Config` instance.
+- `verbosity`: The level of verbosity for logging.
+- `Nbatch`: The number of batches per training iteration.
+- `validate`: A flag indicating whether to perform validation during training.
 
 # Workflow
 1. Print the start message.
@@ -24,7 +22,7 @@ This function optimizes a model by iterating through training steps and optional
 4. Print the final status once training is complete.
 
 # Returns
-- This function does not return any value but updates the `prof` object with training and validation statistics and updates model parameters.
+- Updates the HamsterProfiler `prof` and the model parameters in `ham_train` and `ham_val`.
 """
 function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_empty_config(); verbosity=get_verbosity(conf), Nbatch=get_nbatch(conf), validate=get_validate(conf), rank=0, nranks=1)
     print_start_message(prof; verbosity=verbosity)
@@ -51,17 +49,20 @@ Performs a single training step on a Hamiltonian model by computing gradients an
 
 # Arguments
 - `ham_train`: The Hamiltonian model being trained.
-- `indices`: A collection of indices specifying which training data points to process in this step.
-- `optim`: An object encapsulating optimization parameters, such as the loss function, regularization, and optimizer.
-- `train_data`: A collection of training data corresponding to the indices. Each entry contains the input-output pairs or features for training.
-
-# Workflow
-1. Iterates through the given `indices` to compute the loss (`L_train`) and cache intermediate values using the `forward` function.
-2. Calls `backward` to compute the gradient of the loss with respect to the model parameters (`dL_dHr`) for each index.
-3. Updates the model parameters using the computed gradients and the specified optimizer via `update!`.
+- `indices`: The indices of the structures to be evaluated.
+- `optim`: A `GDOptimizer` instance.
+- `train_data`: The training data.
+- `prof`: A `HamsterProfiler` instance.
+- `iter`: The iteration index.
+- `batch_id`: The batch index.
+- `comm`: The MPI communicator.
+- `conf`: A `Config` instance.
+- `rank`: The active MPI rank.
+- `nranks`: The total number of MPI ranks.
 
 # Side Effects
 - Updates the model parameters in-place within `ham_train`.
+- Writes timing information and training loss to `prof`.
 """
 function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id, comm, conf=get_empty_config(); rank=0, nranks=1)
     Nstrc_tot = MPI.Reduce(length(indices), +, comm, root=0)
@@ -86,7 +87,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         MPI.Barrier(comm)
     end
 
-    L_train = MPI.Reduce(sum(Ls_train), +, comm, root=0) 
+    L_train = MPI.Reduce(sum(Ls_train), +, comm, root=0)
     forward_time = MPI.Reduce(sum(forward_times), +, comm, root=0)
     backward_time = MPI.Reduce(sum(backward_times), +, comm, root=0) 
     update_time = MPI.Reduce(update_time, +, comm, root=0) 
@@ -148,7 +149,7 @@ The behavior of the function depends on the type of `data`, which can be either 
 function forward(ham::EffectiveHamiltonian, index, loss, data::EigData)
     Hk = get_hamiltonian(ham, index, data.kp)
     Es, vs = diagonalize(Hk)
-    vs_out = reshape_and_sparsify_eigenvectors(vs, ham.sp_mode)
+    vs_out = reshape_and_sparsify_eigenvectors(vs, ham.sp_mode, sp_tol=ham.sp_tol)
     L_train = loss(Es, data.Es)
     return L_train, (Es, vs_out)
 end
