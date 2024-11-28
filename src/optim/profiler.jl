@@ -176,6 +176,10 @@ Prints the final loss, the total time elapsed, and a message indicating that the
 """
 function print_final_status(prof; verbosity=1)
     total_time = sum(prof.timings)
+    forward_time = sum(prof.timings[:, :, 1])
+    backward_time = sum(prof.timings[:, :, 2])
+    update_time = sum(prof.timings[:, :, 3])
+
     final_train_loss = mean(prof.L_train[:, end])
     final_val_loss = prof.L_val[end]
     if verbosity > 0
@@ -185,6 +189,11 @@ function print_final_status(prof; verbosity=1)
         println(@sprintf("Final Train Loss: %.6f", final_train_loss))
         if final_val_loss ≠ 0; println(@sprintf("Final Val Loss: %.6f", final_val_loss)); end
         println(@sprintf("Total Time: %.2f seconds", total_time))
+        if verbosity > 1
+            println(@sprintf("Forward Time: %.2f seconds", forward_time))
+            println(@sprintf("Backward Time: %.2f seconds", backward_time))
+            println(@sprintf("Update Time: %.2f seconds", update_time))
+        end
         println("========================================")
     end
 end
