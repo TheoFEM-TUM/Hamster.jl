@@ -8,7 +8,7 @@ Runs the optimization process for an effective Hamiltonian model using the speci
 
 # Workflow
 1. **Configuration Sampling**:
-   - Splits the configuration indices into training (`train_config_inds`) and validation (`val_conf_inds`) sets.
+   - Splits the configuration indices into training (`train_config_inds`) and validation (`val_config_inds`) sets.
 2. **Translation Vectors**:
    - Reads translation vectors `Rs` (if `hr_fit`).
 3. **Training Data Preparation**:
@@ -25,23 +25,34 @@ Runs the optimization process for an effective Hamiltonian model using the speci
 7. **Model Optimization**:
    - Performs the optimization using `optimize_model!`, which iterates over the training and validation data to refine the model.
 """
-function run_calculation(::Val{:optimization}, conf::Config)
-    train_config_inds, val_conf_inds = get_config_index_sample(conf)
+function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1)
+   train_config_inds, val_config_inds = get_config_index_sample(conf)
+   
+   if rank == 0
+      write_to_file(train_config_inds, "train_config_inds")
+      write_to_file(train_config_inds, "val_config_inds")
+   end
+   
+   MPI.Bcast!(train_config_inds, comm, root=0)
+   MPI.Bcast!(val_config_inds, comm, root=0)
+   MPI.Barrier(comm)
 
-    Rs = get_translation_vectors_for_hr_fit(conf)
-    train_strcs = get_structures(conf, config_indices=train_config_inds, Rs=Rs)
-    train_bases = Basis[Basis(strc, conf) for strc in train_strcs]
-    ham_train = EffectiveHamiltonian(train_strcs, train_bases, conf)
+   local_train_inds = split_indices_into_chunks(train_config_inds, nranks, rank=rank)
+   local_val_inds = split_indices_into_chunks(val_config_inds, nranks, rank=rank)
+   Rs = get_translation_vectors_for_hr_fit(conf)
+   train_strcs = get_structures(conf, config_indices=local_train_inds, Rs=Rs, mode=get_train_mode(conf))
+   train_bases = Basis[Basis(strc, conf) for strc in train_strcs]
+   ham_train = EffectiveHamiltonian(train_strcs, train_bases, conf)
 
-    val_strcs = get_structures(conf, config_indices=val_conf_inds, Rs=Rs)
-    val_bases = Basis[Basis(strc, conf) for strc in val_strcs]
-    ham_val = EffectiveHamiltonian(val_strcs, val_bases, conf)
+   val_strcs = get_structures(conf, config_indices=local_val_inds, Rs=Rs, mode=get_val_mode(conf))
+   val_bases = Basis[Basis(strc, conf) for strc in val_strcs]
+   ham_val = EffectiveHamiltonian(val_strcs, val_bases, conf)
 
-    dl = DataLoader(train_config_inds, val_conf_inds, 8, 8, conf)
-    Nε, Nk = get_neig_and_nk(dl.train_data)
-    optim = GDOptimizer(Nε, Nk, conf)
-    prof = HamsterProfiler(3, conf)
-    
-    optimize_model!(ham_train, ham_val, optim, dl, prof, conf)
-    return prof
+   dl = DataLoader(local_train_inds, local_val_inds, length(train_bases[1]), length(train_bases[end]), conf)
+   Nε, Nk = get_neig_and_nk(dl.train_data)
+   optim = GDOptimizer(Nε, Nk, conf)
+   prof = HamsterProfiler(3, conf)
+   
+   optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf, rank=rank, nranks=nranks)
+   return prof
 end

@@ -50,9 +50,9 @@ end
 The `sp_diag` tag switches between dense and sparse methods for matrix diagonalization.
 """
 function get_sp_diag(conf::Config)::Union{Sparse, Dense}
-    if conf("sp_mode") == "default"
+    if conf("sp_diag") == "default"
         return Dense()
     else
-        conf("sp_mode") ? Sparse() : Dense()
+        conf("sp_diag") ? Sparse() : Dense()
     end
 end

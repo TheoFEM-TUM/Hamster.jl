@@ -1,6 +1,5 @@
 """
-    get_eigenvalue_gradient(vs, Rs, ks)
-    get_eigenvalue_gradient(vs::AbstractArray{<:SparseVector}, Rs, ks)
+    get_eigenvalue_gradient(vs, Rs, ks, sp_mode, sp_iterator; nthreads_bands, nthreads_kpoints)
 
 Compute the gradient `dE_dHr` of each energy eigenvalue at each k-point w.r.t. the real-space Hamiltonian matrix elements.
 
@@ -8,21 +7,30 @@ Compute the gradient `dE_dHr` of each energy eigenvalue at each k-point w.r.t. t
 -`vs`: Matrix that contains the (sparse) eigenvectors of each eigenvalue `(m, k)`.
 - `Rs::Matrix{Int64}`: Lattice translation vectors in units of the lattice vectors.
 - `ks::Matrix{Float64}`: The coordinates of each k-point in units of the reciprocal lattice vectors.
+- `sp_mode`: Either `Dense` or `Sparse`, determines whether the gradients are sparsified.
+- `sp_iterator`: Special iterator to optimize iteration over `i, j, R` for very sparse systems.
 
 # Returns
 - `dE_dHr`: An array of shape `(NR, Nε, Nk)` that contains (sparse) matrices of shape `(Nε, Nε)`.
 """
-function get_eigenvalue_gradient(vs, Rs, ks; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads())
+function get_eigenvalue_gradient(vs, Rs, ks, ::Dense, sp_iterator=nothing; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads(), sp_tol=1e-10)
     Nε = size(vs, 1); NR = size(Rs, 2); Nk = size(ks, 2)
     dE_dHr = Array{Matrix{Float64}}(undef, NR, Nε, Nk)
+    tforeach(axes(vs, 3), nchunks=nthreads_kpoints) do k
+        tforeach(axes(vs, 2), nchunks=nthreads_bands) do m
+            @views for R in 1:NR
+                dE_dHr[R, m, k] = zeros(Nε, Nε)
+            end
+        end
+    end
     hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks), nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands)
     return dE_dHr
 end
 
-function get_eigenvalue_gradient(vs::AbstractArray{<:SparseVector}, Rs, ks; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads())
+function get_eigenvalue_gradient(vs, Rs, ks, ::Sparse, sp_iterator; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads(), sp_tol=1e-10)
     Nε = size(vs, 1); NR = size(Rs, 2); Nk = size(ks, 2)
-    dE_dHr = Array{SparseMatrixCSC{Float64, Int64}}(undef, NR, Nε, Nk)
-    hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks), nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands)
+    dE_dHr = fill(spzeros(Nε, Nε), NR, Nε, Nk)
+    sparse_hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks), sp_iterator, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=sp_tol)
     return dE_dHr
 end
 
@@ -44,28 +52,56 @@ For each k-point `k` and eigenstate `m`, this function computes the matrix eleme
 and stores the real part of this value in `dE_dλ[R, m, k]`. This is done for each lattice vector `R`, eigenstate `m`, and k-point `k`.
 """
 function hellman_feynman!(dE_dHr, Ψ, dHk_dHr; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads())
-    tforeach(axes(Ψ, 2), nchunks=nthreads_kpoints) do k
-        tforeach(axes(Ψ, 1), nchunks=nthreads_bands) do m
-            for R in axes(dHk_dHr, 1)
-                @views dE_dHr[R, m, k] = _hellman_feynman_step(Ψ[m, k], dHk_dHr[R, k])
+    tforeach(axes(Ψ, 3), nchunks=nthreads_kpoints) do k
+        tforeach(axes(Ψ, 2), nchunks=nthreads_bands) do m
+            @views for R in axes(dHk_dHr, 1), j in axes(Ψ, 1), i in axes(Ψ, 1)
+                dE_dHr[R, m, k][i, j] = real(conj(Ψ[i, m, k]) * dHk_dHr[R, k] * Ψ[j, m, k])
             end
         end
     end
 end
 
-function _hellman_feynman_step(Ψ_mk::AbstractVector, dHk_dHr)
-    dE_dHr = zeros(length(Ψ_mk), length(Ψ_mk))
-    for i in eachindex(Ψ_mk), j in eachindex(Ψ_mk)
-        dE_dHr[i, j] = real(conj(Ψ_mk[i]) * dHk_dHr * Ψ_mk[j])
+function sparse_hellman_feynman!(dE_dHr, Ψ, dHk_dHr, sp_iterator; nthreads_kpoints=Threads.nthreads(), nthreads_bands=Threads.nthreads(), sp_tol=1e-10)
+    max_nnz = maximum([length(inds) for inds in sp_iterator])
+    Nε = size(Ψ, 1)
+    
+    # Preallocate thread-local buffers
+    thread_buffers = Dict(tid => (
+        is = Vector{Int64}(undef, max_nnz),
+        js = Vector{Int64}(undef, max_nnz),
+        vals = Vector{Float64}(undef, max_nnz)
+    ) for tid in 1:Threads.nthreads())
+
+    tforeach(axes(Ψ, 3), nchunks=nthreads_kpoints) do k
+        tforeach(axes(Ψ, 2), nchunks=nthreads_bands) do m
+            id = Threads.threadid()
+            buffer = thread_buffers[id]
+            @unpack is, js, vals = buffer
+            @views for (R, inds) in enumerate(sp_iterator)
+                nnz = 0
+                for (i, j) in inds
+                    val = real(conj(Ψ[i, m, k]) * dHk_dHr[R, k] * Ψ[j, m, k])
+                    if abs(val) > sp_tol
+                        nnz += 1
+                        is[nnz] = i; js[nnz] = j; vals[nnz] = val
+                    end
+                end
+                dE_dHr[R, m, k] = sparse(is[1:nnz], js[1:nnz], vals[1:nnz], Nε, Nε)
+            end
+        end
     end
-    return dE_dHr
 end
 
-function _hellman_feynman_step(Ψ_mk::SparseVector, dHk_dHr)
-    dE_dHr = spzeros(length(Ψ_mk), length(Ψ_mk))
-    for i in nzrange(Ψ_mk, 1), j in nzrange(Ψ_mk, 1)
-        dE_dHr[i, j] = real(conj(Ψ_mk[i]) * dHk_dHr * Ψ_mk[j])
+function _sparse_hellman_feyman_step(Ψ_mk, dHk_dHr, inds, Nε; sp_tol=1e-10)
+    is = zeros(Int64, length(inds))
+    js = zeros(Int64, length(inds))
+    vals = zeros(length(inds))
+    @views for (idx, (i, j)) in enumerate(inds)
+        val = real(conj(Ψ_mk[i]) * dHk_dHr * Ψ_mk[j])
+        is[idx] = i; js[idx] = j; vals[idx] = val
     end
+    dE_dHr = sparse(is, js, vals, Nε, Nε)
+    droptol!(dE_dHr, sp_tol)
     return dE_dHr
 end
 
@@ -82,14 +118,16 @@ Applies the chain rule to compute the gradient of the loss with respect to the r
 # Returns
 - `dL_dHr`: A real-space Hamiltonian gradient array, where each element contains the accumulated gradient for a specific lattice vector in `R`. Its shape is determined by the Hamiltonian structure and `mode`.
 """
-function chain_rule(dL_dE, dE_dHr, mode; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads())
-    dL_dHr = [get_empty_real_hamiltonians(size(dE_dHr, 2), size(dE_dHr, 1), mode) for _ in 1:Threads.nthreads()]
+function chain_rule(dL_dE, dE_dHr, mode; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads(), sp_tol=1e-10)
+    dL_dHr_thread = [get_empty_real_hamiltonians(size(dE_dHr, 2), size(dE_dHr, 1), mode) for _ in 1:Threads.nthreads()]
     tforeach(axes(dE_dHr, 3), nchunks=nthreads_kpoints) do k
         tforeach(axes(dE_dHr, 2), nchunks=nthreads_bands) do m
             for R in axes(dE_dHr, 1)
-                @views @. dL_dHr[Threads.threadid()][R] += dL_dE[m , k] * dE_dHr[R, m, k]
+                @views @. dL_dHr_thread[Threads.threadid()][R] += dL_dE[m , k] * dE_dHr[R, m, k]
             end
         end
     end
-    return sum(dL_dHr)
+    dL_dHr = sum(dL_dHr_thread)
+    if mode isa Sparse; droptol!(dL_dHr, sp_tol); end
+    return dL_dHr
 end

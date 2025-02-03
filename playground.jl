@@ -80,3 +80,34 @@ end |> y
 result = (x for x in 1:10) |> Tuple
 
 @time Hamster.get_rcut(conf)
+
+function func(x::Array{Float64, N}) where {N<3}
+    @show x
+end
+
+using LinearAlgebra, BenchmarkTools, OhMyThreads, Distributed
+
+@show BLAS.get_num_threads()
+
+M = [rand(128, 128) for i in 1:8]
+
+addprocs(4)
+@btime pmap(eigvals, M)
+rmprocs(workers)
+
+
+@btime map(eigvals, M)
+@btime tmap(eigvals, M)
+
+function myfunc(f, N)
+    M = [rand(N, N) for i in 1:48]
+    f(eigvals, M)
+end
+
+@btime myfunc($tmap, 128)
+
+38.8 / 0.86
+
+x[1, 1, 1][1, 2] = 1
+
+@show x

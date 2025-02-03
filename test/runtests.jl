@@ -1,4 +1,9 @@
-using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Statistics, FiniteDiff, HDF5, TensorOperations, Suppressor
+using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Statistics, FiniteDiff, HDF5, TensorOperations, Suppressor, MPI
+
+MPI.Init()
+comm = MPI.COMM_WORLD
+rank = MPI.Comm_rank(comm)
+nranks = MPI.Comm_size(comm)
 
 @testset "Parse" begin
     include("parse/test_utils.jl")
@@ -54,3 +59,5 @@ end
 @testset "calc" begin
     include("calc/test_optimization.jl")
 end
+
+MPI.Finalize()

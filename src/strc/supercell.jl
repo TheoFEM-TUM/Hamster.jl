@@ -78,3 +78,25 @@ function get_config_index_sample(conf=get_empty_config(); Nconf=get_Nconf(conf),
     if Nconf == 1 && get_validate(conf); val_config_inds = [1]; end # only one config, e.g., pc
     return train_config_inds, val_config_inds
 end
+
+"""
+    split_indices_into_chunks(indices, nchunks; rank=0)
+
+Splits a collection of indices into `nchunks` approximately equal-sized chunks and returns the chunk corresponding to the specified `rank`.
+
+# Arguments
+- `indices::AbstractVector`: The collection of indices to be split.
+- `nchunks::Int`: The number of chunks to divide the indices into.
+- `rank::Int=0`: The rank (0-based) specifying which chunk to return. Defaults to `0`.
+
+# Returns
+- `AbstractVector`: The chunk of indices corresponding to the specified `rank`. If the `rank` exceeds the number of chunks, an empty array of type `Int64[]` is returned.
+"""
+function split_indices_into_chunks(indices::AbstractVector{T}, nchunks; rank=0) where {T}
+    chunk_indices = collect(chunks(indices, n=nchunks))
+    if length(chunk_indices) ≥ rank + 1
+       return chunk_indices[rank+1]
+    else
+       return T[]
+    end
+ end

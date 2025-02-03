@@ -33,6 +33,22 @@ path = string(@__DIR__) * "/test_files/"
     set_value!(conf, "validate", "Optimizer", true)
     train_indices, val_indices = Hamster.get_config_index_sample(conf)
     @test train_indices == val_indices == [1]
+
+    # Test 6: test splitting indices into chunks (basic functionality)
+    indices = collect(1:9)
+    @test Hamster.split_indices_into_chunks(indices, 3, rank=0) == [1, 2, 3]
+    @test Hamster.split_indices_into_chunks(indices, 3, rank=1) == [4, 5, 6]
+    @test Hamster.split_indices_into_chunks(indices, 3, rank=2) == [7, 8, 9]
+
+    # Empty list
+    indices = []
+    @test Hamster.split_indices_into_chunks(indices, 1, rank=0) == []
+
+    # Out of range
+    indices = [1, 2]
+    @test Hamster.split_indices_into_chunks(indices, 3, rank=0) == [1]
+    @test Hamster.split_indices_into_chunks(indices, 3, rank=1) == [2]
+    @test Hamster.split_indices_into_chunks(indices, 3, rank=2) == []
 end
 
 @testset "Multiple Structures from XDATCAR" begin

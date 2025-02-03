@@ -1,26 +1,28 @@
-struct EffectiveHamiltonian{T, S1, S2}
+struct EffectiveHamiltonian{T, S1, S2, IT}
     Nstrc :: Int64
     models :: T
     sp_mode :: S1
     sp_diag :: S2
     sp_tol :: Float64
+    sp_iterator :: IT
     soc :: Bool
     Rs :: Vector{Matrix{Float64}}
 end
 
-function EffectiveHamiltonian(strcs, bases, conf=get_empty_conf(); mode="pc", index_file="config_inds.dat", tb_model=get_tb_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), sp_tol = get_sp_tol(conf), soc=get_soc(conf))
+function EffectiveHamiltonian(strcs, bases, conf=get_empty_conf(); tb_model=get_tb_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), sp_tol=get_sp_tol(conf), soc=get_soc(conf))
     if isempty(strcs) && isempty(bases)
-        return EffectiveHamiltonian(0, nothing, Dense(), Dense(), 1e-10, false, [zeros(3, 1)])
+        return EffectiveHamiltonian(0, nothing, Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)])
     end
     
     Rs = [strc.Rs for strc in strcs]
+    sp_iterator = get_sparse_iterator(strcs[1], bases[1], conf)
 
     models = ()
     if tb_model
         models = (models..., TBModel(strcs, bases, conf))
     end
 
-    return EffectiveHamiltonian(length(strcs), models, sp_mode, sp_diag, sp_tol, soc, Rs)
+    return EffectiveHamiltonian(length(strcs), models, sp_mode, sp_diag, sp_tol, sp_iterator, soc, Rs)
 end
 
 """
@@ -68,16 +70,15 @@ Update the parameters of each model within the `EffectiveHamiltonian` object usi
 
 # Arguments
 - `ham::EffectiveHamiltonian`: The effective Hamiltonian object containing multiple models.
-- `indices`: The indices of the structures that the gradient belongs to.
 - `opt`: An optimizer object specifying the update rule (e.g., ADAM).
-- `dL_dHr`: The derivative of the loss w.r.t. to each matrix element of the real-space Hamiltonian.
+- `model_grad`: The gradient of the loss w.r.t. the model parameters.
 
 # Returns
 - This function modifies the `ham` object in place, updating the parameters of each model it contains.
 """
-function update!(ham::EffectiveHamiltonian, indices, opt, reg, dL_dHr)
-    for model in ham.models
-        update!(model, indices, opt, reg, dL_dHr)
+function update!(ham::EffectiveHamiltonian, opt, model_grad)
+    for (model, grad) in zip(ham.models, model_grad)
+        update!(model, opt, grad)
     end
 end
 
@@ -94,4 +95,41 @@ function copy_params!(receiving_ham::H1, sending_ham::H2) where {H1,H2<:Effectiv
     for (receiving_model, sending_model) in zip(receiving_ham.models, sending_ham.models) 
         set_params!(receiving_model, get_params(sending_model))
     end
+end
+
+"""
+    get_sparse_iterator(strc, basis, conf=get_empty_config(), rcut=get_rcut(conf))
+
+Constructs an iterator that generates sparse matrix indices for interactions within a specified cutoff radius.
+
+# Arguments
+- `strc`: A structure object containing information about ions, positions, lattice, and grid points.
+- `basis`: A basis object, containing the orbitals associated with each ion.
+- `conf`: Configuration object, which contains relevant simulation parameters.
+- `rcut`: A cutoff radius, that defines the maximum distance for interactions to be included.
+
+# Returns
+- `indices`: A vector of vectors, where each sub-vector corresponds to a specific grid point (denoted by `R`) 
+  and contains tuples `(i, j)` representing the sparse matrix indices for interactions within the cutoff radius.
+"""
+function get_sparse_iterator(strc, basis, conf=get_empty_config(), rcut=get_rcut(conf))
+    nn_grid_points = iterate_nn_grid_points(strc.point_grid)
+    Norb_per_ion = length.(basis.orbitals)
+    ij_map = get_ion_orb_to_index_map(Norb_per_ion)
+    Ts = frac_to_cart(strc.Rs, strc.lattice)
+    indices = [Tuple{Int64, Int64}[] for R in axes(strc.Rs, 2)]
+    
+    for (iion, jion, R) in nn_grid_points
+        r⃗₁ = strc.ions[iion].pos - strc.ions[jion].dist
+        r⃗₂ = strc.ions[jion].pos - strc.ions[jion].dist - Ts[:, R]
+        r = normdiff(r⃗₁, r⃗₂)
+        if r ≤ rcut
+            for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
+                i = ij_map[(iion, iorb)]
+                j = ij_map[(jion, jorb)]
+                push!(indices[R], (i, j))
+            end
+        end
+    end
+    return indices
 end

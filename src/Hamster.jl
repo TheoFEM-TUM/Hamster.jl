@@ -1,7 +1,7 @@
 module Hamster
 
-using LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Dates, PeriodicTable, UnPack,
-    CubicSplines, HCubature, Statistics, ChunkSplitters, Distributed, FiniteDiff, StatsBase, HDF5, Printf, OhMyThreads
+using LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Dates, PeriodicTable, UnPack, MPI,
+    CubicSplines, HCubature, Statistics, ChunkSplitters, FiniteDiff, StatsBase, HDF5, Printf, OhMyThreads
 
 include("parse/utils.jl"); include("parse/poscar.jl"); include("parse/eigenval.jl"); include("parse/xdatcar.jl"); include("parse/wannier90.jl")
 include("parse/commandline.jl")

@@ -1,15 +1,14 @@
-function main(conf; num_nodes=1)
-    nhamster = get_nhamster(conf)
-    hostnames = pmap(1:nworkers()) do i
-        readchomp(`hostname`)
+function main(comm, conf; rank=0, nranks=1, num_nodes=1)
+    hostnames = MPI.gather(readchomp(`hostname`), comm, root=0)
+    if rank == 0
+        generate_output(conf, hostnames=hostnames)
+        julia_num_threads = Threads.nthreads()
+        nthreads_kpoints = get_nthreads_kpoints(conf)
+        nthreads_bands = get_nthreads_bands(conf)
+        write_block_summary("Parallelization", num_nodes=num_nodes, nhamster=nranks, julia_num_threads=julia_num_threads, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands)
     end
-    generate_output(conf, hostnames=hostnames)
-    nthreads_kpoints = pmap(worker->get_nthreads_kpoints(conf), workers())
-    nthreads_bands = pmap(worker->get_nthreads_bands(conf), workers())
-    write_block_summary("Parallelization", num_nodes=num_nodes, nhamster_per_node=nhamster, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands)
-
     task = decide_which_task_to_perform(conf)
-    run_calculation(task, conf)
+    run_calculation(task, comm, conf, rank=rank, nranks=nranks)
 end
 
 """
