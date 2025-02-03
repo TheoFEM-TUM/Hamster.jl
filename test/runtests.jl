@@ -56,6 +56,10 @@ end
     include("optim/test_optimize.jl")
 end
 
+@testset "ML" begin
+    include("mlham/test_kernel.jl")
+end
+
 @testset "calc" begin
     include("calc/test_optimization.jl")
 end

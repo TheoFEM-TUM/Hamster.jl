@@ -76,21 +76,22 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         push!(forward_times, f_time); push!(backward_times, b_time); push!(Ls_train, L_train)
         return dL_dHr_index
     end
-    MPI.Barrier(comm)
-    update_time = @elapsed for model in ham_train.models
+
+    update_begin = MPI.Wtime()
+    for model in ham_train.models
         model_grad_local = get_model_gradient(model, indices, optim.reg, dL_dHr)
         model_grad = MPI.Reduce(model_grad_local, +, comm, root=0)
         if rank == 0; update!(model, optim.adam, model_grad ./ Nstrc_tot); end
         params = get_params(model)
         MPI.Bcast!(params, comm, root=0)
         set_params!(model, params)
-        MPI.Barrier(comm)
     end
+    update_time_local = MPI.Wtime() - update_begin
 
     L_train = MPI.Reduce(sum(Ls_train), +, comm, root=0)
     forward_time = MPI.Reduce(sum(forward_times), +, comm, root=0)
     backward_time = MPI.Reduce(sum(backward_times), +, comm, root=0) 
-    update_time = MPI.Reduce(update_time, +, comm, root=0) 
+    update_time = MPI.Reduce(update_time_local, +, comm, root=0)
 
     if rank == 0
         prof.L_train[batch_id, iter] = L_train ./ Nstrc_tot

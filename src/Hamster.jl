@@ -26,6 +26,8 @@ include("model/eff_ham.jl")
 include("optim/adam.jl"); include("optim/loss.jl"); include("optim/data.jl"); include("optim/gd_optimizer.jl"); include("optim/profiler.jl")
 include("optim/optimize.jl")
 
+include("mlham/kernel.jl")
+
 include("calc/optimization.jl")
 
 include("main.jl")
@@ -43,6 +45,8 @@ export get_hamiltonian, diagonalize, get_hr, init_params!
 export write_hr, read_hr
 
 export Loss, Regularization, update!, DataLoader, GDOptimizer, optimize_model!, HamsterProfiler
+
+export HamiltonianKernel
 
 export run_calculation
 
