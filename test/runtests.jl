@@ -57,6 +57,7 @@ end
 end
 
 @testset "ML" begin
+    include("mlham/test_descriptor.jl")
     include("mlham/test_kernel.jl")
 end
 

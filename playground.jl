@@ -106,19 +106,15 @@ end
 
 @btime myfunc($tmap, 128)
 
-using Plots
+M = sprand(Float64, 100, 100, 0.1)
 
-nodes = [1, 2, 3, 4, 5, 6, 7, 8]
-times = [1169.55, 1125.57, 1134.08, 1154.08, 1140.16, 1153.78, 1145.19, 1129.07]
-plot(nodes, times ./ maximum(times), xlabel="Nodes", ylabel="Efficiency", label="Hamster", marker=:circle, ylim=(0, 1.5), labelfontsize=18, tickfontsize=18, legendfontsize=16, framestyle=:box)
-hline!([1], label="Ideal scaling", linestyle=:dash, color=:red)
-savefig("hamster_weak_scaling.pdf")
+rows, cols, vals = nonzeros(M)
 
-nodes = [1, 2, 3, 4, 5, 6, 7, 8]
-times = [3026.73, 1525.60, 1030.58, 815.85, 674.28, 582.76, 521.05, 449.01] # total
-#times = [1134.74, 571.15, 366.50, 300.11, 238.41, 202.53, 179.31, 152.35] #forward
-#times = [1886.17, 947.41, 656.37, 509.17, 427.96, 373.14, 333.36, 287.80] # backward
-#times = [5.82, 7.04, 7.70, 6.57, 7.92, 7.09, 8.38, 8.87] # update
-plot(nodes, times[1] ./ times, xlabel="Nodes", ylabel="Speedup", marker=:circle, labelfontsize=18, tickfontsize=18, legendfontsize=16, framestyle=:box, xlim=(0.9,8.1), ylim=(0.9,8.1), label="Hamster")
-plot!(nodes, nodes, label="Ideal scaling", linestyle=:dash, color=:red)
-savefig("hamster_strong_scaling.pdf")
+for (i, v) in enumerate(nonzeros(M))
+    @show typeof(i)
+    @show i, v
+end
+
+for m in enumerate(M)
+    @show m
+end

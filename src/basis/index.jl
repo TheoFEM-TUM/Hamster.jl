@@ -34,7 +34,7 @@ function get_ion_orb_to_index_map(Norb)
     Nion = length(Norb)
     ij_map = Dict{Tuple{Int64, Int64}, Int64}()
     @views for iion in 1:Nion, jorb in 1:Norb[iion]
-        i = sum(Norb[1:iion-1]) + jorb
+        i = iion > 1 ? sum(Norb[1:iion-1]) + jorb : jorb
         ij_map[(iion, jorb)] = i
     end
     return ij_map

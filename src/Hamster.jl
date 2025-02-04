@@ -8,7 +8,7 @@ include("parse/commandline.jl")
 
 include("conf/config.jl"); include("conf/read_config.jl")
 include("conf/defaults.jl"); include("conf/strc_defaults.jl"); include("conf/basis_defaults.jl"); include("conf/model_defaults.jl")
-include("conf/optim_defaults.jl"); include("conf/supercell_defaults.jl")
+include("conf/optim_defaults.jl"); include("conf/supercell_defaults.jl"); include("conf/ml_defaults.jl")
 
 include("out/output.jl")
 
@@ -26,7 +26,7 @@ include("model/eff_ham.jl")
 include("optim/adam.jl"); include("optim/loss.jl"); include("optim/data.jl"); include("optim/gd_optimizer.jl"); include("optim/profiler.jl")
 include("optim/optimize.jl")
 
-include("mlham/kernel.jl")
+include("mlham/descriptor.jl"); include("mlham/kernel.jl")
 
 include("calc/optimization.jl")
 
