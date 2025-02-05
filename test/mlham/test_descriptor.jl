@@ -11,7 +11,8 @@
     basis = Basis(strc, conf)
     model = TBModel(strc, basis, conf)
 
-    @time env = Hamster.get_environmental_descriptor(model.hs, model.V, strc, basis, conf)
+    #Test 1: test environmental descriptor
+    env = Hamster.get_environmental_descriptor(model.hs, model.V, strc, basis, conf)
 
     @test env isa Vector{Float64}
     @test length(env) == length(basis)
@@ -19,7 +20,7 @@
     @test std(env[1:4]) < 1e-10
     @test std(env[5:8]) < 1e-10
 
-    # Test: test orbswap
+    # Test 2: test orbswap
     type1 = "Ga"; type2 = "As"; iorb = 1; jorb = 2
     @test Hamster.decide_orbswap(type1, type2, iorb, jorb) == false
     @test Hamster.decide_orbswap(type1, type2, jorb, iorb) == false
@@ -35,5 +36,6 @@
     type1 = "As"; type2 = "As"; iorb = 2; jorb = 1
     @test Hamster.decide_orbswap(type1, type2, iorb, jorb) == true
 
-    @time descriptors = Hamster.get_tb_descriptor(model.hs, model.V, strc, basis, conf)
+    # Test 3: test complete descriptor set
+    descriptors = Hamster.get_tb_descriptor(model.hs, model.V, strc, basis, conf)
 end
