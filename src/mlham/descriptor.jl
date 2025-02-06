@@ -163,7 +163,7 @@ function sample_structure_descriptors(descriptors; num_cluster=1, num_points=1, 
     centroids = result.centers
 
     cluster_sizes = [count(x -> x == c, indices) for c in 1:num_cluster]
-    cluster_variances = [mean([Hamster.normdiff(descriptors[:, i], centroids[:, c]) for i in findall(x -> x == c, indices)]) for c in 1:num_cluster]
+    cluster_variances = [mean([normdiff(descriptors[:, i], centroids[:, c]) for i in findall(x -> x == c, indices)]) for c in 1:num_cluster]
 
     # Compute weights
     size_weights = cluster_sizes ./ sum(cluster_sizes)

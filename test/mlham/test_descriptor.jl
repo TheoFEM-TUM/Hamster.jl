@@ -5,7 +5,7 @@
     set_value!(conf, "rllm_file", joinpath(path, "rllm.dat"))
     #set_value!(conf, "sp_mode", true)
     #set_value!(conf, "sp_tol", 1e-5)
-    #set_value!(conf, "verbosity", 0)
+    set_value!(conf, "verbosity", 0)
 
     strc = Structure(conf)
     basis = Basis(strc, conf)
