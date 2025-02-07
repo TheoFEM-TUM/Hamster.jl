@@ -144,26 +144,26 @@ function get_environmental_descriptor(h, V, strc, basis, conf::Config; apply_par
 end
 
 """
-    sample_structure_descriptors(descriptors; num_cluster=1, num_points=1, alpha=0.5)
+    sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=0.5)
 
 Selects a subset of descriptor vectors using K-Means clustering, weighted by cluster size and spread.
 
 # Arguments
 - `descriptors`: A matrix where each column represents a descriptor vector.
-- `num_cluster::Int=1`: The number of clusters for K-Means.
-- `num_points::Int=1`: The total number of descriptor vectors to select.
+- `Ncluster::Int=1`: The number of clusters for K-Means.
+- `Npoints::Int=1`: The total number of descriptor vectors to select.
 - `alpha::Float64=0.5`: A weighting factor (0 ≤ α ≤ 1) that balances selection between cluster size (α → 1) and spread (α → 0).
 
 # Returns
-- A matrix of selected descriptor vectors with `num_points` columns.
+- A matrix of selected descriptor vectors with `Npoints` columns.
 """
-function sample_structure_descriptors(descriptors; num_cluster=1, num_points=1, alpha=0.5)
-    result = kmeans(descriptors, num_cluster)
+function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=0.5)
+    result = kmeans(descriptors, Ncluster)
     indices = result.assignments
     centroids = result.centers
 
-    cluster_sizes = [count(x -> x == c, indices) for c in 1:num_cluster]
-    cluster_variances = [mean([normdiff(descriptors[:, i], centroids[:, c]) for i in findall(x -> x == c, indices)]) for c in 1:num_cluster]
+    cluster_sizes = [count(x -> x == c, indices) for c in 1:Ncluster]
+    cluster_variances = [mean([normdiff(descriptors[:, i], centroids[:, c]) for i in findall(x -> x == c, indices)]) for c in 1:Ncluster]
 
     # Compute weights
     size_weights = cluster_sizes ./ sum(cluster_sizes)
@@ -171,11 +171,11 @@ function sample_structure_descriptors(descriptors; num_cluster=1, num_points=1, 
     final_weights = alpha .* size_weights + (1 - alpha) .* spread_weights
     final_weights ./= sum(final_weights)  # Normalize
 
-    points_per_cluster = round.(Int, final_weights .* num_points)
+    points_per_cluster = round.(Int, final_weights .* Npoints)
     points_per_cluster .= max.(1, points_per_cluster)
 
-    # Adjust to ensure the exact number of `num_points` is selected
-    diff = num_points - sum(points_per_cluster)
+    # Adjust to ensure the exact number of `Npoints` is selected
+    diff = Npoints - sum(points_per_cluster)
     if diff != 0
         sorted_clusters = sortperm(final_weights, rev=true)
         for i in 1:abs(diff)
@@ -184,7 +184,7 @@ function sample_structure_descriptors(descriptors; num_cluster=1, num_points=1, 
     end
 
     selected_indices = []
-    for c in 1:num_cluster
+    for c in 1:Ncluster
         cluster_indices = findall(x -> x == c, indices)
         num_to_take = min(points_per_cluster[c], length(cluster_indices))
         

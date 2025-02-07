@@ -15,6 +15,14 @@ mutable struct HamiltonianKernel{T1, T2, T3}
     structure_descriptors :: Vector{T3}
 end
 
+function HamiltonianKernel(strcs, bases, model, conf; Ncluster=get_ml_ncluster(conf), Npoints=get_ml_npoints(conf))
+    structure_descriptors = map(eachindex(strcs)) do n
+        get_tb_descriptor(model.hs[n], model.V, strcs[n], bases[n], conf)
+    end
+    data_points = sample_structure_descriptors(structure_descriptors, Ncluster=Ncluster, Npoints=Npoints)
+    return HamiltonianKernel(params, data_points, sim_params, structure_descriptors)
+end
+
 exp_sim(x₁, x₂; σ=0.1)::Float64 = exp(-normdiff(x₁, x₂)^2 / σ)
 
 (k::HamiltonianKernel)(xin) = mapreduce(wx->wx[1]*exp_sim(wx[2], xin, σ=k.sim_params), +, zip(k.params, k.data_points))
