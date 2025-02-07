@@ -42,6 +42,6 @@
     # Test: test descriptor sampler
     X = rand(3, 1000)
     num_cluster = 10; num_points = 100
-    Xout = Hamster.sample_structure_descriptors(X, num_cluster=num_cluster, num_points=num_points)
+    Xout = Hamster.sample_structure_descriptors(X, Ncluster=num_cluster, Npoints=num_points)
     @test size(Xout) == (3, num_points)
 end
