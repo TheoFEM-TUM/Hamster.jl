@@ -66,6 +66,10 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
     return h_env
 end
 
+function reshape_structure_descriptors(descriptors)
+    return [descriptor for n in eachindex(descriptors) for R in eachindex(descriptors[n]) for (i, j, descriptor) in zip(findnz(descriptors[n][R])...)]
+end
+
 """
     decide_orbswap(itype, jtype, iorb, jorb) -> Bool
 
@@ -193,5 +197,5 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
         append!(selected_indices, selected)
     end
 
-    return descriptors[:, selected_indices]
+    return [descriptors[:, index] for index in selected_indices]
 end
