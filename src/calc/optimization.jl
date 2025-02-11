@@ -42,11 +42,11 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    Rs = get_translation_vectors_for_hr_fit(conf)
    train_strcs = get_structures(conf, config_indices=local_train_inds, Rs=Rs, mode=get_train_mode(conf))
    train_bases = Basis[Basis(strc, conf) for strc in train_strcs]
-   ham_train = EffectiveHamiltonian(train_strcs, train_bases, conf)
+   ham_train = EffectiveHamiltonian(train_strcs, train_bases, comm, conf, rank=rank, nranks=nranks)
 
    val_strcs = get_structures(conf, config_indices=local_val_inds, Rs=Rs, mode=get_val_mode(conf))
    val_bases = Basis[Basis(strc, conf) for strc in val_strcs]
-   ham_val = EffectiveHamiltonian(val_strcs, val_bases, conf)
+   ham_val = EffectiveHamiltonian(val_strcs, val_bases, comm, conf, rank=rank, nranks=nranks)
 
    dl = DataLoader(local_train_inds, local_val_inds, length(train_bases[1]), length(train_bases[end]), conf)
    Nε, Nk = get_neig_and_nk(dl.train_data)

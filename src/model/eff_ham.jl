@@ -9,7 +9,7 @@ struct EffectiveHamiltonian{T, S1, S2, IT}
     Rs :: Vector{Matrix{Float64}}
 end
 
-function EffectiveHamiltonian(strcs, bases, conf=get_empty_conf(); tb_model=get_tb_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), sp_tol=get_sp_tol(conf), soc=get_soc(conf))
+function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_model=get_tb_model(conf), ml_model=get_ml_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), sp_tol=get_sp_tol(conf), soc=get_soc(conf), rank=0, nranks=1)
     if isempty(strcs) && isempty(bases)
         return EffectiveHamiltonian(0, nothing, Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)])
     end
@@ -20,6 +20,9 @@ function EffectiveHamiltonian(strcs, bases, conf=get_empty_conf(); tb_model=get_
     models = ()
     if tb_model
         models = (models..., TBModel(strcs, bases, conf))
+    end
+    if ml_model && tb_model
+        models = (models..., HamiltonianKernel(strcs, bases, models[1], comm, conf, rank=rank, nranks=nranks))
     end
 
     return EffectiveHamiltonian(length(strcs), models, sp_mode, sp_diag, sp_tol, sp_iterator, soc, Rs)

@@ -1,4 +1,11 @@
 """
+    ml_model=false
+
+The `ml_model` tag switches on the use of an ML model in the effective Hamiltonian.
+"""
+get_ml_model(conf::Config)::Bool = haskey(conf, "ML")
+
+"""
     ml_rcut=rcut
 
 Sets the cut-off radius for the ML model. Defaults to the same cut-off radius as the TB model.

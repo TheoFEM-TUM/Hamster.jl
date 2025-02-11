@@ -17,13 +17,14 @@ end
 
 """
     HamiltonianKernel(strcs, bases, model, conf)
+
+Constructor for a HamiltonianKernel model.
 """
 function HamiltonianKernel(strcs, bases, model, comm, conf=get_empty_config(); Ncluster=get_ml_ncluster(conf), Npoints=get_ml_npoints(conf), rank=0, nranks=1)
     structure_descriptors = map(eachindex(strcs)) do n
         get_tb_descriptor(model.hs[n], model.V, strcs[n], bases[n], conf)
     end
     Npoints_local = floor(Int64, Npoints / nranks)
-    # TODO: reshape structure_descriptors
     data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local)
 
     data_points = MPI.Reduce(data_points_local, vcat, comm, root=0)

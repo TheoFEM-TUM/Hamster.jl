@@ -11,10 +11,10 @@
     # Test that errer of effective Hamiltonian model for GaAs is sufficiently small
     @test Hamster.get_validate(conf)
     strc = Structure(conf); basis = Basis(strc, conf)
-    ham_train = EffectiveHamiltonian([strc], [basis], conf)
+    ham_train = EffectiveHamiltonian([strc], [basis], comm, conf, rank=rank, nranks=nranks)
     optim = GDOptimizer(8, 56, conf)
     dl = DataLoader([1], [1], 8, 8, conf)
-    ham_val = EffectiveHamiltonian([strc], [basis], conf)
+    ham_val = EffectiveHamiltonian([strc], [basis], comm, conf, rank=rank, nranks=nranks)
     prof = HamsterProfiler(3, conf, printeachiter=100)
     optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf)
     @test mean(prof.L_train[:, end]) < 0.15
@@ -36,10 +36,10 @@ end
     # Test that errer of effective Hamiltonian model for GaAs is sufficiently small
     @test Hamster.get_validate(conf)
     strc = Structure(conf); basis = Basis(strc, conf)
-    ham_train = EffectiveHamiltonian([strc], [basis], conf)
+    ham_train = EffectiveHamiltonian([strc], [basis], comm, conf, rank=rank, nranks=nranks)
     optim = GDOptimizer(8, 56, conf)
     dl = DataLoader([1], [1], 8, 8, conf)
-    ham_val = EffectiveHamiltonian([strc], [basis], conf)
+    ham_val = EffectiveHamiltonian([strc], [basis], comm, conf, rank=rank, nranks=nranks)
     prof = HamsterProfiler(3, conf, printeachiter=100)
     optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf)
     @test mean(prof.L_train[:, end]) < 0.15
@@ -65,14 +65,14 @@ end
     strcs = get_structures(conf, Rs=Rs)
     @test strcs[1].Rs == Rs
     bases = Basis[Basis(strc, conf) for strc in strcs]
-    ham_train = EffectiveHamiltonian(strcs, bases, conf)
+    ham_train = EffectiveHamiltonian(strcs, bases, comm, conf, rank=rank, nranks=nranks)
     
     optim = GDOptimizer(conf)
     dl = DataLoader([1], [1], 8, 8, conf)
     
     strcs_val = get_structures(conf)
     bases_val = Basis[Basis(strc, conf) for strc in strcs_val]
-    ham_val = EffectiveHamiltonian(strcs_val, bases_val, conf)
+    ham_val = EffectiveHamiltonian(strcs_val, bases_val, comm, conf, rank=rank, nranks=nranks)
 
     prof = HamsterProfiler(3, conf, printeachiter=20)
     optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf)
