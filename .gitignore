@@ -25,3 +25,4 @@ Manifest.toml
 
 # Exclude Hamster executable
 hamster
+hamster_test
