@@ -1,7 +1,7 @@
 begin Options
     rcut = 7
     load_rllm = true
-    verbosity = 1
+    verbosity = 0
 end
 
 begin Optimizer

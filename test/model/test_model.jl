@@ -51,7 +51,7 @@ end
 
 @testset "Test init_params" begin
     # Test 1: Test parameter initialization
-    model = TBModel(nothing, zeros(3), [true, true, true])
+    model = TBModel(nothing, zeros(3), zeros(3), [true, true, true])
     basis = nothing
     Hamster.init_params!(model, basis, initas="ones")
     @test model.V == ones(3)

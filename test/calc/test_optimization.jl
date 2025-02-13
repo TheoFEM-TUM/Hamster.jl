@@ -24,5 +24,5 @@ end
     prof = Hamster.main(comm, conf, rank=rank)
     @test mean(prof.L_train[:, end]) < 0.15
     @test prof.L_val[end] < 0.5 # includes all bands
-    rm("train_config_inds.dat"); rm("val_config_inds.dat")
+    rm("hamster.out"); rm("train_config_inds.dat"); rm("val_config_inds.dat"); rm("params.dat")
 end
