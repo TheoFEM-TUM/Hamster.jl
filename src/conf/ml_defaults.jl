@@ -6,6 +6,13 @@ The `ml_model` tag switches on the use of an ML model in the effective Hamiltoni
 get_ml_model(conf::Config)::Bool = haskey(conf, "ML")
 
 """
+    ml_optimize=false
+
+The `ml_optimize` tag switches on optimization of the ML model.
+"""
+get_ml_optimize(conf::Config)::Bool = conf("optimize", "ML") == "default" ? false : conf("optimize", "ML")
+
+"""
     ml_rcut=rcut
 
 Sets the cut-off radius for the ML model. Defaults to the same cut-off radius as the TB model.
@@ -18,6 +25,13 @@ get_ml_rcut(conf::Config)::Float64 = conf("rcut", "ML") == "default" ? get_rcut(
 Sets the scaling factor that is multiplied with the environmental descriptor.
 """
 get_env_scale(conf::Config)::Float64 = conf("env_scale", "ML") == "default" ? 1.0 : conf("env_scale", "ML")
+
+"""
+    sim_params=0.1
+
+Sets the parameter for the similarity function of the kernel model.
+"""
+get_sim_params(conf::Config)::Float64 = conf("sim_params", "ML") == "default" ? 0.1 : conf("sim_params", "ML")
 
 """
     apply_distortion=false

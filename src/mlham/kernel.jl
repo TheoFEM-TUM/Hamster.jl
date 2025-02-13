@@ -20,7 +20,7 @@ end
 
 Constructor for a HamiltonianKernel model.
 """
-function HamiltonianKernel(strcs, bases, model, comm, conf=get_empty_config(); Ncluster=get_ml_ncluster(conf), Npoints=get_ml_npoints(conf), rank=0, nranks=1)
+function HamiltonianKernel(strcs, bases, model, comm, conf=get_empty_config(); Ncluster=get_ml_ncluster(conf), Npoints=get_ml_npoints(conf), sim_params=get_sim_params(conf), rank=0, nranks=1)
     structure_descriptors = map(eachindex(strcs)) do n
         get_tb_descriptor(model.hs[n], model.V, strcs[n], bases[n], conf)
     end
@@ -29,6 +29,9 @@ function HamiltonianKernel(strcs, bases, model, comm, conf=get_empty_config(); N
 
     data_points = MPI.Reduce(data_points_local, vcat, comm, root=0)
     MPI.Bcast!(data_points, comm, root=0)
+
+    # TODO: init params
+    params = zeros(length(data_points))
     return HamiltonianKernel(params, data_points, sim_params, structure_descriptors)
 end
 
@@ -52,13 +55,29 @@ Constructs a set of real-space Hamiltonians from a `HamiltonianKernel`.
 # Returns
 - A vector of real-space Hamiltonian matrices, optionally modified with SOC transformations.
 """
-function get_hr(kernel::HamiltonianKernel, mode, index; apply_soc=false)
+function get_hr(kernel::HamiltonianKernel, mode::Dense, index; apply_soc=false)
     h_env = kernel.structure_descriptors[index]
     Hr = get_empty_real_hamiltonians(size(h_env[1], 1), length(h_env), mode)
     for R in eachindex(h_env)
         for (i, j, hin) in zip(findnz(h_env[R])...)
             Hr[R][i, j] = kernel(hin)
         end
+    end
+    return apply_soc ? apply_spin_basis.(Hr) : Hr
+end
+
+function get_hr(kernel::HamiltonianKernel, mode::Sparse, index; apply_soc=false)
+    h_env = kernel.structure_descriptors[index]
+    Nε = size(h_env[1], 1)
+    Hr = get_empty_real_hamiltonians(Nε, length(h_env), mode)
+    for R in eachindex(h_env)
+        is = Int64[]
+        js = Int64[]
+        vals = Float64[]
+        for (i, j, hin) in zip(findnz(h_env[R])...)
+            push!(is, i); push!(js, j); push!(vals, kernel(hin))
+        end
+        Hr[R] = sparse(is, js, vals, Nε, Nε)
     end
     return apply_soc ? apply_spin_basis.(Hr) : Hr
 end
@@ -88,7 +107,13 @@ Retrieve the parameters associated with a `HamiltonianKernel`.
 # Returns
 - The parameters stored in the `ws` field of the given `HamiltonianKernel` instance.
 """
-get_params(kernel::HamiltonianKernel) = kernel.ws
+get_params(kernel::HamiltonianKernel) = kernel.params
+
+function write_params(kernel::HamiltonianKernel, conf=get_empty_conf())
+    for n in eachindex(kernel.params)
+        
+    end
+end
 
 """
     set_params!(kernel::HamiltonianKernel, ws)
@@ -105,12 +130,12 @@ Set the parameters of a `HamiltonianKernel` instance.
 # Returns
 - Updates the `Vs` field of the `kernel` in place if the consistency checks pass.
 """
-function set_params!(kernel::HamiltonianKernel, ws)
-    throw_error = size(kernel.ws) ≠ size(ws)
+function set_params!(kernel::HamiltonianKernel, params)
+    throw_error = size(kernel.params) ≠ size(params)
     if throw_error
         error("Parameter vector is not of correct size!")
     else
-        kernel.ws = ws
+        kernel.params = params
     end
 end
 
@@ -132,8 +157,8 @@ function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr)
     dparams = zeros(length(kernel.params))
     @views for n in eachindex(dparams), index in indices
         h_env = kernel.structure_descriptors[index]
-        for R in eachindex(dL_dHr), (i, j, hin) in zip(findnz(h_env[R]...))
-            dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) * dL_dHr[i, j]
+        for R in eachindex(dL_dHr[index]), (i, j, hin) in zip(findnz(h_env[R])...)
+            dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) * dL_dHr[index][R][i, j]
         end
     end
     dparams_penal = backward(reg, kernel.params)

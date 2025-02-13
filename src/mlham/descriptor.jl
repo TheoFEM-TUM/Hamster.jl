@@ -60,14 +60,25 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
         end
     end
     for R in 1:NR
-        h_env[R] = sparse(is[R], js[R], vals[R])
+        h_env[R] = sparse(is[R], js[R], vals[R], Nε, Nε)
     end
-
     return h_env
 end
 
+"""
+    reshape_structure_descriptors(descriptors) -> Matrix{Float64}
+
+Reshapes a nested structure of sparse descriptors into a dense matrix (to be used as input for kmeans).
+
+# Arguments
+- `descriptors`: A nested collection of sparse matrices representing structure descriptors.
+
+# Returns
+- A matrix (`Matrix{Float64}`) where each column corresponds to a flattened descriptor.
+"""
 function reshape_structure_descriptors(descriptors)
-    return [descriptor for n in eachindex(descriptors) for R in eachindex(descriptors[n]) for (i, j, descriptor) in zip(findnz(descriptors[n][R])...)]
+    out = hcat([Vector(descriptor) for n in eachindex(descriptors) for R in eachindex(descriptors[n]) for (i, j, descriptor) in zip(findnz(descriptors[n][R])...)]...)
+    return out
 end
 
 """
@@ -165,9 +176,14 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
     result = kmeans(descriptors, Ncluster)
     indices = result.assignments
     centroids = result.centers
-
+        
     cluster_sizes = [count(x -> x == c, indices) for c in 1:Ncluster]
     cluster_variances = [mean([normdiff(descriptors[:, i], centroids[:, c]) for i in findall(x -> x == c, indices)]) for c in 1:Ncluster]
+
+    # Filter empty clusters
+    nonzero_clusters = findall(s -> s ≠ 0, cluster_sizes)
+    cluster_sizes = cluster_sizes[nonzero_clusters]
+    cluster_variances = cluster_variances[nonzero_clusters]
 
     # Compute weights
     size_weights = cluster_sizes ./ sum(cluster_sizes)
@@ -188,7 +204,7 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
     end
 
     selected_indices = []
-    for c in 1:Ncluster
+    for c in eachindex(cluster_sizes)
         cluster_indices = findall(x -> x == c, indices)
         num_to_take = min(points_per_cluster[c], length(cluster_indices))
         
@@ -197,5 +213,5 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
         append!(selected_indices, selected)
     end
 
-    return [descriptors[:, index] for index in selected_indices]
+    return [SVector{size(descriptors, 1)}(descriptors[:, index]) for index in selected_indices]
 end
