@@ -1,0 +1,50 @@
+
+Welcome to
+===========================================================================
+||   _   _                             _                         _   _   ||
+||  | | | |   __ _   _ __ ___    ___  | |_    ___   _ __        (_) | |  ||
+||  | |_| |  / _` | | '_ ` _ \  / __| | __|  / _ \ | '__|       | | | |  ||
+||  |  _  | | (_| | | | | | | | \__ \ | |_  |  __/ | |     _    | | | |  ||
+||  |_| |_|  \__,_| |_| |_| |_| |___/  \__|  \___| |_|    (_)  _/ | |_|  ||
+||                                                            |__/       ||
+===========================================================================
+Hamiltonian-learning
+    Approach for Multiscale Simulations 
+        using a Transferable and Efficient Representation.
+
+
+Starting Hamster run on 2025-02-13 at 15:48:32.296.
+  Hamster is running on host(s): "pop-os"
+================================================================================
+  Parallelization Summary
+--------------------------------------------------------------------------------
+      num_nodes:                         1                                 
+      nhamster:                          1                                 
+      julia_num_threads:                 1                                 
+      nthreads_kpoints:                  1                                 
+      nthreads_bands:                    1                                 
+================================================================================
+Structure Information:
+   POSCAR                    =                /home/martin/Documents/Do
+   rcut                      =                                      7.0
+   grid_size                 =                                      7.0
+   Number of atoms           =                                        2
+   Unique atom species       =                             ["Ga", "As"]
+   Number of R vectors       =                                       49
+   Ion interactions          =                                      196
+   Ion interaction total     =                                      196
+   Structure time            =                                3.3113e-5
+================================================================================
+
+Structure Information:
+   POSCAR                    =                /home/martin/Documents/Do
+   rcut                      =                                      7.0
+   grid_size                 =                                      7.0
+   Number of atoms           =                                        2
+   Unique atom species       =                             ["Ga", "As"]
+   Number of R vectors       =                                       49
+   Ion interactions          =                                      196
+   Ion interaction total     =                                      196
+   Structure time            =                                 3.185e-5
+================================================================================
+

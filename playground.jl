@@ -118,3 +118,13 @@ end
 for m in enumerate(M)
     @show m
 end
+
+v = rand(3)
+w = rand(3)
+u = rand(3)
+
+M = rand(3, 100)
+
+@show M[:, 1:2:10]
+
+SVector{3}(rand(3))

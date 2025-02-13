@@ -80,9 +80,9 @@ if test_all || test_only == "ML"
 end
 
 if test_all || test_only == "calc"
-    #@testset "calc" begin
-    #    include("calc/test_optimization.jl")
-    #end
+    @testset "calc" begin
+        include("calc/test_optimization.jl")
+    end
 end
 
 MPI.Finalize()

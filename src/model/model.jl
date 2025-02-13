@@ -5,11 +5,13 @@ A mutable struct representing a tight-binding model.
 
 # Fields
 - `h::Matrix{SparseMatrixCSC{Float64, Int64}}`: A matrix where each element is a sparse matrix representing the geometry tensor.
+- `parameter_labels::Vector`: A vector containing the label for each parameter.
 - `V::Vector{Float64}`: A vector containing the model's parameters.
 - `update::Bool`: A boolean flag indicating whether the model's parameters `V` should be updated during optimization or kept fixed.
 """
-mutable struct TBModel{G}
+mutable struct TBModel{G, P}
     hs :: G
+    parameter_labels :: P
     V :: Vector{Float64}
     update :: Vector{Bool}
 end
@@ -31,7 +33,7 @@ Constructs a `TBModel` for the given structure `strc` and basis `basis`, based o
 """
 function TBModel(strc::Structure, basis::Basis, conf=get_empty_config(); update_tb=get_update_tb(conf, nparams(basis)), initas=get_init_params(conf))
     h = get_geometry_tensor(strc, basis, conf)
-    model = TBModel(h, ones(size(h, 1)), update_tb)
+    model = TBModel(h, basis.parameters, ones(size(h, 1)), update_tb)
     init_params!(model, basis, conf, initas=initas)
     return model
 end
@@ -40,7 +42,7 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, conf=get_empt
     hs = map(eachindex(strcs)) do n
         get_geometry_tensor(strcs[n], bases[n], conf)
     end
-    model = TBModel(hs, ones(length(update_tb)), update_tb)
+    model = TBModel(hs, bases[1].parameters, ones(length(update_tb)), update_tb)
     init_params!(model, bases[1], conf, initas=initas)
     return model
 end
@@ -68,9 +70,9 @@ function get_hr(h::AbstractMatrix, V::AbstractVector, mode=Val{:dense}; apply_so
     return apply_soc ? apply_spin_basis.(Hr) : Hr
 end
 
-get_hr(model, mode, index::Int64; apply_soc=false) = get_hr(model.hs[index], model.V, mode, apply_soc=apply_soc)
-get_hr(model, mode; apply_soc=false) = get_hr(model.hs, model.V, mode, apply_soc=apply_soc)
-get_hr(model, V, mode; apply_soc=false) = get_hr(model.hs, V, mode, apply_soc=apply_soc)
+get_hr(model::TBModel, mode, index::Int64; apply_soc=false) = get_hr(model.hs[index], model.V, mode, apply_soc=apply_soc)
+get_hr(model::TBModel, mode; apply_soc=false) = get_hr(model.hs, model.V, mode, apply_soc=apply_soc)
+get_hr(model::TBModel, V, mode; apply_soc=false) = get_hr(model.hs, V, mode, apply_soc=apply_soc)
 
 """
     update!(model::TBModel, opt, dV)
@@ -134,6 +136,8 @@ function get_model_gradient(model::TBModel, indices, reg, dL_dHr)
         dV_penal = backward(reg, model.V)
         dV = @. ifelse(model.update, dV_grad + dV_penal, 0.)
         return dV
+    else
+        return zeros(length(model.V))
     end
 end
 
@@ -180,6 +184,17 @@ Retrieve the parameters associated with a `TBModel`.
 - The parameters stored in the `V` field of the given `TBModel` instance.
 """
 get_params(model::TBModel) = model.V
+
+"""
+    write_params(model::TBModel, conf=get_empty_config())
+
+Writes the parameters of a `TBModel` using its parameter labels and values.
+
+# Arguments
+- `model::TBModel`: The tight-binding model whose parameters need to be written.
+- `conf`: (Optional) Configuration settings, defaults to an empty configuration.
+"""
+write_params(model::TBModel, conf=get_empty_config()) = write_params(model.parameter_labels, model.V, conf)
 
 """
     set_params!(model::TBModel, V)
