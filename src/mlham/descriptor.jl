@@ -13,9 +13,11 @@ Ensures continuity by using a cosine-based smoothing function.
 """
 function fcut(r, rcut)
     if r > rcut
-        return 0
-    else
+        return 0.0
+    elseif rcut ≠ 0
         return 1/2 * (cos(π*r/rcut) + 1)
+    else
+        return 1.0
     end
 end
 
@@ -48,14 +50,13 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
             orbswap = decide_orbswap(strc.ions[iion].type, strc.ions[jion].type, iorb, jorb)
             Zs = [element_to_number(strc.ions[iion].type), element_to_number(strc.ions[jion].type)]
             Zs = orbswap ? reverse(Zs) : Zs
-
             iaxis = basis.orbitals[iion][iorb].axis
             jaxis = basis.orbitals[jion][jorb].axis
             φ, θs = get_angular_descriptors(strc.ions[iion].type, strc.ions[jion].type, ri, rj, iaxis, jaxis, orbswap)
         
             if Δr ≤ rcut
                 ii, jj = orbswap ? (j, i) : (i, j)
-                push!(is[R], ii); push!(js[R], jj); push!(vals[R], SVector{8}(Zs[1], Zs[2], Δr, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale))
+                push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8}(Zs[1], Zs[2], Δr, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale))
             end
         end
     end
@@ -99,7 +100,29 @@ ion type and `iorb > jorb`, or if the ion type of `iorb` is greater than that of
 """
 decide_orbswap(itype, jtype, iorb, jorb) = (itype == jtype && iorb > jorb) || (element_to_number(itype) > element_to_number(jtype))
 
+"""
+    get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)
 
+Computes angular descriptors based on the relative positions and orbital orientations of two atoms.
+
+# Arguments
+- `itype, jtype`: Atomic types of the two atoms.
+- `ri, rj`: Position vectors of the two atoms.
+- `iaxis, jaxis`: Axes defining the local orbital orientation for each atom.
+- `orbswap`: A boolean indicating whether orbital swapping should be applied.
+
+# Returns
+- `φ::Float64`: The angle between the two orbital axes.
+- `θs::Vector{Float64}`: A sorted or conditionally reversed list of angles between each axis and the bond direction.
+
+# Behavior
+- Computes the normalized bond direction `Δrij` and `Δrji` depending on the distance between the atoms.
+- Determines the angle `φ` between the two orbital axes.
+- Computes `θs`, the angles between each axis (`iaxis`, `jaxis`) and the respective bond directions.
+- Ensures consistent ordering of `θs` based on atomic types and orbital swapping rules.
+
+This function is useful for defining angular features in physics-informed machine learning models or tight-binding calculations.
+"""
 function get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)
     Δr = normdiff(ri, rj)
     Δrij = Δr > 0 ? normalize(rj - ri) : normalize(iaxis)
@@ -212,6 +235,8 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
         selected = sample(cluster_indices, num_to_take, replace=false)
         append!(selected_indices, selected)
     end
+
+    summary = (nz_clusters = length(cluster_sizes), cluster_sizes = cluster_sizes, points_per_cluster = points_per_cluster, cluster_variances = cluster_variances)
 
     return [SVector{size(descriptors, 1)}(descriptors[:, index]) for index in selected_indices]
 end

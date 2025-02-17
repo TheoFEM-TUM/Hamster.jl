@@ -134,7 +134,7 @@ function iterate_nn_grid_points(grid_point, point_grid::PointGrid)
             push!(all_inds, (iion, R))
         end
     end
-    return all_inds
+    return unique(all_inds)
 end
 
 """

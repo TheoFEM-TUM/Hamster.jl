@@ -1,4 +1,18 @@
 """
+    init_params=zeros
+
+The `init_params` tag determines how the parameters of the ML model are initialized.
+"""
+get_ml_init_params(conf::Config)::String = conf("init_params", "ML") == "default" ? "zeros" : conf("init_params", "ML")
+
+"""
+    filename=ml_params
+
+The `filename` tag sets the name for the parameter file of the ML model.
+"""
+get_ml_filename(conf::Config)::String = conf("filename", "ML") == "default" ? "ml_params" : conf("filename", "ML")
+
+"""
     ml_model=false
 
 The `ml_model` tag switches on the use of an ML model in the effective Hamiltonian.

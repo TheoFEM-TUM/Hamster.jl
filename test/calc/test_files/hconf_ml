@@ -7,14 +7,14 @@ end
 begin Optimizer
     update_tb = false
     lr = 0.001
-    niter = 500
+    niter = 300
     loss = MAE
     wE = 1 1 1 1 1 1 0.1 0.1
     wk_1 = 5
 end
 
 begin ML
-    ncluster = 70
+    ncluster = 15
     npoints = 70
 end
 

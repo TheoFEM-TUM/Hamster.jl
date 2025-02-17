@@ -109,9 +109,23 @@ Retrieve the parameters associated with a `HamiltonianKernel`.
 """
 get_params(kernel::HamiltonianKernel) = kernel.params
 
-function write_params(kernel::HamiltonianKernel, conf=get_empty_conf())
-    for n in eachindex(kernel.params)
-        
+function write_params(kernel::HamiltonianKernel, conf=get_empty_conf(); filename=get_ml_filename(conf))
+    open(filename*".dat", "w") do file
+        # Write header to file
+        println(file, "begin ", get_system(conf))
+        println(file, "  rcut = ", get_ml_rcut(conf))
+        println(file, "  sim_params = ", get_sim_params(conf))
+        println(file, "  env_scale = ", get_env_scale(conf))
+        println(file, "  apply_distortion = ", get_apply_distortion(conf))
+        println(file, "end")
+        println(file, "")
+        for n in eachindex(kernel.params)
+            print(file, kernel.params[n])
+            for data_point in kernel.data_points[n]
+                print(file, " "); print(file, data_point)
+            end
+            print(file, "\n")
+        end
     end
 end
 
