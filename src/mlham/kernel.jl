@@ -169,10 +169,12 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 """
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr)
     dparams = zeros(length(kernel.params))
-    @views for n in eachindex(dparams), index in indices
-        h_env = kernel.structure_descriptors[index]
-        for R in eachindex(dL_dHr[index]), (i, j, hin) in zip(findnz(h_env[R])...)
-            dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) * dL_dHr[index][R][i, j]
+    Threads.@threads for n in eachindex(dparams)
+        for index in indices
+            h_env = kernel.structure_descriptors[index]
+            for R in eachindex(dL_dHr[index]), (i, j, hin) in zip(findnz(h_env[R])...)
+                dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) .* dL_dHr[index][R][i, j]
+            end
         end
     end
     dparams_penal = backward(reg, kernel.params)
