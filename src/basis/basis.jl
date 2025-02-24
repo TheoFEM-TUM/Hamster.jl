@@ -50,6 +50,19 @@ Compute the total number of orbitals in the `basis`.
 Base.length(basis::Basis) = sum(length.(basis.orbitals))
 
 """
+    Base.size(basis::Basis) -> Tuple{Int}
+
+Returns the size of the `Basis` object, which corresponds to the number of orbitals centered on each ion.
+
+# Arguments
+- `basis::Basis`: The basis object containing a set of orbitals.
+
+# Returns
+- A tuple containing the number of orbitals in the basis.
+"""
+Base.size(basis::Basis) = tuple(length.(basis.orbitals)...)
+
+"""
     nparams(basis::Basis) -> Int
 
 Return the number of TB overlap parameters defined in `basis`.

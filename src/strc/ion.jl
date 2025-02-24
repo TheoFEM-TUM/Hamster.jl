@@ -93,4 +93,4 @@ Retrieve the positions of all ions in a given vector of `Ion` objects.
 # Returns
 - `Vector{SVector{3, Float64}}`: A vector of `SVector{3, Float64}` where each element represents the 3D Cartesian coordinates of an ion.
 """
-get_ion_positions(ions::Vector{Ion})::Vector{SVector{3, Float64}} = [ion.pos for ion in ions]
+get_ion_positions(ions::Vector{Ion}; apply_distortion=false)::Vector{SVector{3, Float64}} = apply_distortion ? [ion.pos - ion.dist for ion in ions] : [ion.pos for ion in ions]

@@ -1,15 +1,26 @@
 begin Options
     rcut = 7
     load_rllm = true
-    verbosity = 0
+    rllm_file = rllm.dat
+    sp_mode = false
+end
+
+begin Supercell
+    Nconf = 2
+    Nconf_max = 10
 end
 
 begin Optimizer
-    lr = 0.5
-    niter = 300
+    lr = 0.01
+    niter = 30
     loss = MAE
-    wE = 1 1 1 1 1 1 0.1 0.1
-    wk_1 = 5
+    train_data = eigenval.h5
+    train_mode = md
+end
+
+begin ML
+    ncluster = 15
+    npoints = 100
 end
 
 begin atom Ga

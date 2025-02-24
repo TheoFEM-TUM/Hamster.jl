@@ -9,7 +9,7 @@ struct EffectiveHamiltonian{T, S1, S2, IT}
     Rs :: Vector{Matrix{Float64}}
 end
 
-function EffectiveHamiltonian(strcs, bases, conf=get_empty_conf(); tb_model=get_tb_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), sp_tol=get_sp_tol(conf), soc=get_soc(conf))
+function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_model=get_tb_model(conf), ml_model=get_ml_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), sp_tol=get_sp_tol(conf), soc=get_soc(conf), ml_data_points=nothing, rank=0, nranks=1)
     if isempty(strcs) && isempty(bases)
         return EffectiveHamiltonian(0, nothing, Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)])
     end
@@ -20,6 +20,13 @@ function EffectiveHamiltonian(strcs, bases, conf=get_empty_conf(); tb_model=get_
     models = ()
     if tb_model
         models = (models..., TBModel(strcs, bases, conf))
+    end
+    if ml_model && tb_model
+        kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, rank=rank, nranks=nranks)
+        if ml_data_points ≠ nothing
+            kernel.data_points = ml_data_points
+        end
+        models = (models..., kernel)
     end
 
     return EffectiveHamiltonian(length(strcs), models, sp_mode, sp_diag, sp_tol, sp_iterator, soc, Rs)
@@ -94,6 +101,32 @@ Copy parameters from one EffectiveHamiltonian (`sending_ham`) to another (`recei
 function copy_params!(receiving_ham::H1, sending_ham::H2) where {H1,H2<:EffectiveHamiltonian}
     for (receiving_model, sending_model) in zip(receiving_ham.models, sending_ham.models) 
         set_params!(receiving_model, get_params(sending_model))
+    end
+end
+
+"""
+    write_params(eff_ham::EffectiveHamiltonian, conf)
+
+Writes the parameters of all models contained within an `EffectiveHamiltonian`.
+
+# Arguments
+- `eff_ham::EffectiveHamiltonian`: An EffectiveHamiltonian model.
+- `conf::Config`: A configuration object.
+
+# Behavior
+- Iterates through all models within `eff_ham` and calls `write_params(model)` for each.
+"""
+function write_params(eff_ham::EffectiveHamiltonian, conf=get_empty_config())
+    for model in eff_ham.models
+        write_params(model, conf)
+    end
+end
+
+function get_ml_data_points(eff_ham, conf=get_empty_config(); tb_model=get_tb_model(conf), ml_model=get_ml_model(conf))
+    if tb_model && ml_model
+        return eff_ham.models[2].data_points
+    else
+        return nothing
     end
 end
 

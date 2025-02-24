@@ -18,7 +18,7 @@ path = string(@__DIR__) * "/test_files/"
 
     # Test that effective Hamiltonian model gives correct eigenvalues
     strc = Structure(conf); basis = Basis(strc, conf)
-    eff_ham = EffectiveHamiltonian([strc], [basis], conf)
+    eff_ham = EffectiveHamiltonian([strc], [basis], comm, conf, rank=rank, nranks=nranks)
     ks = read_from_file(joinpath(path, "kpoints.dat"))
     Es_correct = read_from_file(joinpath(path, "Es.dat"))
     Hk = get_hamiltonian(eff_ham, 1, ks)
@@ -26,7 +26,7 @@ path = string(@__DIR__) * "/test_files/"
     @test mean(abs.(Es .- Es_correct)) < 0.01
 
     # Test empty model
-    eff_empty = EffectiveHamiltonian([], [], conf)
+    eff_empty = EffectiveHamiltonian([], [], comm, conf, rank=rank, nranks=nranks)
     @test eff_empty.Nstrc == 0
     @test eff_empty.models === nothing    
 end

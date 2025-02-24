@@ -1,6 +1,6 @@
 module Hamster
 
-using LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Dates, PeriodicTable, UnPack, MPI,
+using LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Dates, PeriodicTable, UnPack, MPI, Clustering,
     CubicSplines, HCubature, Statistics, ChunkSplitters, FiniteDiff, StatsBase, HDF5, Printf, OhMyThreads
 
 include("parse/utils.jl"); include("parse/poscar.jl"); include("parse/eigenval.jl"); include("parse/xdatcar.jl"); include("parse/wannier90.jl")
@@ -8,7 +8,7 @@ include("parse/commandline.jl")
 
 include("conf/config.jl"); include("conf/read_config.jl")
 include("conf/defaults.jl"); include("conf/strc_defaults.jl"); include("conf/basis_defaults.jl"); include("conf/model_defaults.jl")
-include("conf/optim_defaults.jl"); include("conf/supercell_defaults.jl")
+include("conf/optim_defaults.jl"); include("conf/supercell_defaults.jl"); include("conf/ml_defaults.jl")
 
 include("out/output.jl")
 
@@ -25,6 +25,8 @@ include("model/eff_ham.jl")
 
 include("optim/adam.jl"); include("optim/loss.jl"); include("optim/data.jl"); include("optim/gd_optimizer.jl"); include("optim/profiler.jl")
 include("optim/optimize.jl")
+
+include("mlham/descriptor.jl"); include("mlham/kernel.jl")
 
 include("calc/optimization.jl")
 
@@ -43,6 +45,8 @@ export get_hamiltonian, diagonalize, get_hr, init_params!
 export write_hr, read_hr
 
 export Loss, Regularization, update!, DataLoader, GDOptimizer, optimize_model!, HamsterProfiler
+
+export HamiltonianKernel
 
 export run_calculation
 

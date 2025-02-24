@@ -1,15 +1,6 @@
 begin Options
-    rcut = 7
+    rcut = 5
     load_rllm = true
-    verbosity = 0
-end
-
-begin Optimizer
-    lr = 0.5
-    niter = 300
-    loss = MAE
-    wE = 1 1 1 1 1 1 0.1 0.1
-    wk_1 = 5
 end
 
 begin atom Ga

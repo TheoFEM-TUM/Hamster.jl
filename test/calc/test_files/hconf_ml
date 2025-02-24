@@ -5,11 +5,17 @@ begin Options
 end
 
 begin Optimizer
-    lr = 0.5
-    niter = 300
+    update_tb = false
+    lr = 0.01
+    niter = 100
     loss = MAE
     wE = 1 1 1 1 1 1 0.1 0.1
     wk_1 = 5
+end
+
+begin ML
+    ncluster = 15
+    npoints = 70
 end
 
 begin atom Ga
