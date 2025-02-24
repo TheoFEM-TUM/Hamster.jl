@@ -26,3 +26,18 @@ end
     @test prof.L_val[end] < 0.3 # includes all bands
     rm("hamster.out"); rm("train_config_inds.dat"); rm("val_config_inds.dat"); rm("params.dat"); rm("ml_params.dat")
 end
+
+@testset "Optimization for MD data" begin
+    path = joinpath(@__DIR__, "test_files")
+    conf = get_config(filename = joinpath(path, "hconf_md"))
+    set_value!(conf, "poscar", joinpath(path, "POSCAR_md"))
+    set_value!(conf, "poscar", "Supercell", joinpath(path, "POSCAR_md"))
+    set_value!(conf, "xdatcar", "Supercell", joinpath(path, "XDATCAR"))
+    set_value!(conf, "rllm_file", joinpath(path, "rllm.dat"))
+    set_value!(conf, "train_data", "Optimizer", joinpath(path, "eigenval.h5"))
+    set_value!(conf, "init_params", joinpath(path, "params.dat"))
+
+    prof = Hamster.main(comm, conf, rank=rank)
+    @test mean(prof.L_train[:, end]) < 0.15
+    rm("hamster.out"); rm("train_config_inds.dat"); rm("val_config_inds.dat"); rm("params.dat"); rm("ml_params.dat")
+end
