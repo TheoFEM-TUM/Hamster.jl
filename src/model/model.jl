@@ -71,8 +71,8 @@ function get_hr(h::AbstractMatrix, V::AbstractVector, mode=Val{:dense}; apply_so
 end
 
 get_hr(model::TBModel, mode, index::Int64; apply_soc=false) = get_hr(model.hs[index], model.V, mode, apply_soc=apply_soc)
-get_hr(model::TBModel, mode; apply_soc=false) = get_hr(model.hs, model.V, mode, apply_soc=apply_soc)
 get_hr(model::TBModel, V, mode; apply_soc=false) = get_hr(model.hs, V, mode, apply_soc=apply_soc)
+get_hr(model::TBModel, mode; apply_soc=false) = get_hr(model, model.V, mode, apply_soc=apply_soc)
 
 """
     update!(model::TBModel, opt, dV)
