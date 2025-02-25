@@ -26,9 +26,8 @@ function HamiltonianKernel(strcs, bases, model, comm, conf=get_empty_config(); N
     end
     Npoints_local = floor(Int64, Npoints / nranks)
     data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local)
-
-    data_points = MPI.Reduce(data_points_local, vcat, comm, root=0)
-    MPI.Bcast!(data_points, comm, root=0)
+    data_points = MPI.Gather(data_points_local, 0, comm)
+    data_points = MPI.bcast(data_points, comm, root=0)
 
     # TODO: init params
     params = zeros(length(data_points))
