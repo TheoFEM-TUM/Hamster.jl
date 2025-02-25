@@ -30,7 +30,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    
    if rank == 0
       write_to_file(train_config_inds, "train_config_inds")
-      write_to_file(train_config_inds, "val_config_inds")
+      write_to_file(val_config_inds, "val_config_inds")
    end
    
    MPI.Bcast!(train_config_inds, comm, root=0)

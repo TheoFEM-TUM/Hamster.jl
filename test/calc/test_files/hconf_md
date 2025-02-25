@@ -3,6 +3,7 @@ begin Options
     load_rllm = true
     rllm_file = rllm.dat
     sp_mode = false
+    verbosity = 0
 end
 
 begin Supercell
