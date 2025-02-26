@@ -57,3 +57,5 @@ end
     @test mean(prof.L_train[:, end]) < 0.15
     rm("hamster.out"); rm("train_config_inds.dat"); rm("val_config_inds.dat"); rm("params.dat"); rm("ml_params.dat")
 end
+
+rm("L_train.dat"); rm("L_val.dat")
