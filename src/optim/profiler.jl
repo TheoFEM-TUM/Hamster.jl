@@ -88,7 +88,7 @@ Prints a message indicating the start of the model validation process.
 """
 function print_val_start(prof, iter; verbosity=1)
     printit = decide_printit(1, 1, iter, prof.printeachbatch, prof.printeachiter; verbosity=verbosity)
-    if printit; println("Validating model..."); end
+    if printit; println("   Validating model..."); end
 end
 
 """
@@ -105,7 +105,7 @@ function print_val_status(prof, iter; verbosity=1)
     _, Niter = size(prof.L_train)
     printit = decide_printit(1, 1, iter, prof.printeachbatch, prof.printeachiter; verbosity=verbosity)
     if printit
-        println(@sprintf("Iteration: %d / %d | Val Loss: %.4f | Time: %.5f s", iter, Niter, prof.L_val[iter], prof.val_times[iter]))
+        println(@sprintf("   Iteration: %d / %d | Val Loss: %.4f | Time: %.5f s", iter, Niter, prof.L_val[iter], prof.val_times[iter]))
     end
 end
 
