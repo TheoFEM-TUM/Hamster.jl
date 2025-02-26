@@ -124,10 +124,10 @@ function val_step!(ham_val, loss, val_data, prof, iter, comm; rank=0, nranks=1)
             forward(ham_val, index, loss, val_data[index])[1] / ham_val.Nstrc
         end
     end
-    MPI.Reduce(L_val, +, comm, root=0)
+    L_val = MPI.Reduce(L_val, +, comm, root=0)
     if rank == 0
         prof.val_times[iter] = val_time ./ nranks
-        prof.L_val[iter] = L_val ./ Nstrc_tot
+        prof.L_val[iter] = L_val ./ nranks
     end
 end
 
