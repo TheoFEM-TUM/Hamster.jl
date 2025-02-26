@@ -32,8 +32,6 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_emp
             train_step!(ham_train, indices, optim, dl.train_data, prof, iter, batch_id, comm, conf, rank=rank, nranks=nranks)
             print_train_status(prof, iter, batch_id, verbosity=verbosity)
         end
-        train_step_time = MPI.Wtime() - iter_begin
-        val_begin = MPI.Wtime()
         if validate
             print_val_start(prof, iter, verbosity=verbosity)
             copy_params!(ham_val, ham_train)
@@ -41,10 +39,7 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_emp
             print_val_status(prof, iter, verbosity=verbosity)
         end
         MPI.Barrier(comm)
-        val_step_time = MPI.Wtime() - val_begin
         iter_time = MPI.Wtime() - iter_begin
-        if verbosity > 1 && rank == 0; println("Train time: $train_step_time s"); end
-        if verbosity > 1 && rank == 0; println("Validation time: $val_step_time s"); end
         if verbosity > 1 && rank == 0; println("Iteration time: $iter_time s"); end
     end
     print_final_status(prof; verbosity=verbosity)
@@ -133,12 +128,12 @@ Evaluates the validation loss for a Hamiltonian model over a given validation da
 """
 function val_step!(ham_val, loss, val_data, prof, iter, comm; rank=0, nranks=1)
     val_begin = MPI.Wtime()
-    L_val = mapreduce(+, 1:ham_val.Nstrc) do index
+    Ls_val = map(1:ham_val.Nstrc) do index
         forward(ham_val, index, loss, val_data[index])[1] / ham_val.Nstrc
     end
     val_time_local = MPI.Wtime() - val_begin
     val_time = MPI.Reduce(val_time_local, +, comm, root=0)
-    L_val = MPI.Reduce(L_val, +, comm, root=0)
+    L_val = MPI.Reduce(sum(Ls_val), +, comm, root=0)
     if rank == 0
         prof.val_times[iter] = val_time ./ nranks
         prof.L_val[iter] = L_val ./ nranks
