@@ -55,5 +55,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    
    optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf, rank=rank, nranks=nranks)
    write_params(ham_train, conf)
+   write_to_file(dropdims(sum(prof.L_train, dims=1), dims=1), "L_train")
+   write_to_file(prof.L_val, "L_val")
    return prof
 end
