@@ -28,7 +28,7 @@ include("optim/optimize.jl")
 
 include("mlham/descriptor.jl"); include("mlham/kernel.jl")
 
-include("calc/optimization.jl")
+include("calc/optimization.jl"); include("calc/standard.jl")
 
 include("main.jl")
 
