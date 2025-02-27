@@ -25,6 +25,8 @@ Given a `Config` instance, decides which type of calculation is to be performed 
 function decide_which_task_to_perform(conf::Config)
     if haskey(conf, "Optimizer")
         return Val{:optimization}()
+    else
+        return Val{:standard}()
     end
     error("Your given configuration does not specify which calculation to perform. Check your input!")
 end

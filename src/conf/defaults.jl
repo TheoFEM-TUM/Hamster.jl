@@ -20,6 +20,27 @@ The `init_params` tag determines how the TB parameters are initialized. Possible
 get_init_params(conf::Config)::String = conf("init_params") == "default" ? "ones" : conf("init_params")
 
 """
+    kpoints=none
+
+The `kpoints` tag sets a file or method to determine the set of k-points.
+"""
+get_kpoints_file(conf::Config)::String = conf("kpoints") == "default" ? "none" : conf("kpoints")
+
+"""
+    neig=6 (only if sp_diag=true)
+
+The `neig` tag sets the number of eigenvalues that are calculated when using Krylov-Shur.
+"""
+get_neig(conf::Config)::Int64 = conf("Neig") == "default" ? 6 : conf("Neig")
+
+"""
+    eig_target=0.
+
+The `eig_target` tag sets the target energy when using Krylov-Shur.
+"""
+get_eig_target(conf::Config)::Float64 = conf("eig_target") == "default" ? 0. : conf("eig_target")
+
+"""
     nthreads_kpoints=JULIA_NUM_THREADS
 
 The `nthreads_kpoints` tag sets the number of tasks to work on kpoints simultaneously.

@@ -111,7 +111,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
 end
 
 """
-val_step!(ham_val, loss, val_data, prof, iter, comm, rank=0)
+    val_step!(ham_val, loss, val_data, prof, iter, comm, rank=0)
 
 Evaluates the validation loss for a Hamiltonian model over a given validation dataset, and stores the results in the `HamsterProfiler` instance. This function also tracks the time taken for validation.
 
