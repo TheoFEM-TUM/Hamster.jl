@@ -16,11 +16,11 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1)
 
     prof = HamsterProfiler(2, conf, Niter=length(local_inds), Nbatch=1)
 
-    get_eigenvalues(ham, prof, comm, conf, rank=rank, nranks=nranks)
+    get_eigenvalues(ham, prof, local_inds, comm, conf, rank=rank, nranks=nranks)
     return prof
 end
 
-function get_eigenvalues(ham::EffectiveHamiltonian, prof, comm, conf=get_empty_config(); Nbatch=get_nbatch(conf), rank=0, nranks=1, verbosity=get_verbosity(conf))
+function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf=get_empty_config(); Nbatch=get_nbatch(conf), rank=0, nranks=1, verbosity=get_verbosity(conf))
     strc_ind = 0
     ks = get_kpoints_from_config(conf)
     Nstrc_tot = MPI.Reduce(ham.Nstrc, +, comm, root=0)
@@ -41,17 +41,28 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, comm, conf=get_empty_c
                     println(" Hamiltonian time: $(ham_time ./ nranks) s")
                     println(" Diagonalization time: $(diag_time ./ nranks) s")
                 end
-                if Nstrc_tot == 1; write_to_file(Es, "Es"); end
             end
-            
+            if Nstrc_tot == 1 && rank == 0
+                write_to_file(Es, "Es")
+            else
+                if !("tmp" in readdir(pwd())); mkdir("tmp"); end
+                write_to_file(Es, "tmp/Es$(local_inds[index])")
+            end            
             print_train_status(prof, strc_ind, batch_id, verbosity=verbosity)
         end
     end
 end
 
-function get_kpoints_from_config(conf::Config; kpoints_file=get_kpoints_file(conf))
+function get_kpoints_from_config(conf::Config; kpoints_file=get_kpoints_file(conf))::Matrix{Float64}
     if occursin("EIGENVAL", kpoints_file)
         ks, _, _ = read_eigenval(kpoints_file)
         return ks
+    elseif occursin(".h5", kpoints_file)
+        ks = h5read(kpoints_file, "kpoints")
+        if ks isa Matrix{Float64}
+            return ks
+        elseif ks isa Array{Float64, 3}
+            return ks[:, :, 1]
+        end
     end
 end
