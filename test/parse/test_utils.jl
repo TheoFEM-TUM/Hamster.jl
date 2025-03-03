@@ -73,3 +73,26 @@ end
     out = @capture_out Hamster.print_hamster()
     @test out == "\nWelcome to\n===========================================================================\n||   _   _                             _                         _   _   ||\n||  | | | |   __ _   _ __ ___    ___  | |_    ___   _ __        (_) | |  ||\n||  | |_| |  / _` | | '_ ` _ \\  / __| | __|  / _ \\ | '__|       | | | |  ||\n||  |  _  | | (_| | | | | | | | \\__ \\ | |_  |  __/ | |     _    | | | |  ||\n||  |_| |_|  \\__,_| |_| |_| |_| |___/  \\__|  \\___| |_|    (_)  _/ | |_|  ||\n||                                                            |__/       ||\n===========================================================================\nHamiltonian-learning\n    Approach for Multiscale Simulations \n        using a Transferable and Efficient Representation.\n\n\n"
 end
+
+@testset "Collapse output files" begin
+    path = joinpath(@__DIR__, "test_files")
+    Es2_1 = rand(2, 2)
+    Es2_2 = rand(2, 2)
+    write_to_file(Es2_1, joinpath(path, "Es2_1")); write_to_file(Es2_2, joinpath(path, "Es2_2"))
+    Hamster.collapse_files_with("Es2", location=path)
+    @test isfile("Es2.dat")
+    Es2 = read_from_file("Es2.dat")
+    @test Es2[:, :, 1] == Es2_1
+    @test Es2[:, :, 2] == Es2_2
+    rm("Es2.dat"); rm(joinpath(path, "Es2_1.dat")); rm(joinpath(path, "Es2_2.dat"))
+
+    Es3_1 = rand(2, 2, 2)
+    Es3_2 = rand(2, 2, 2)
+    write_to_file(Es3_1, joinpath(path, "Es3_1")); write_to_file(Es3_2, joinpath(path, "Es3_2"))
+    Hamster.collapse_files_with("Es3", location=path)
+    @test isfile("Es3.dat")
+    Es3 = read_from_file("Es3.dat")
+    @test Es3[:, :, :, 1] == Es3_1
+    @test Es3[:, :, :, 2] == Es3_2
+    rm("Es3.dat"); rm(joinpath(path, "Es3_1.dat")); rm(joinpath(path, "Es3_2.dat"))
+end

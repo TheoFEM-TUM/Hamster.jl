@@ -1,5 +1,8 @@
 function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1)
     config_inds, _ = get_config_index_sample(conf)
+    if get_config_inds(conf) ≠ "none"
+        config_inds = read_from_file(get_config_inds(conf))
+    end
    
     if rank == 0
        write_to_file(config_inds, "config_inds")
@@ -44,9 +47,11 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
             end
             if Nstrc_tot == 1 && rank == 0
                 write_to_file(Es, "Es")
+                write_to_file(vs, "vs")
             else
                 if !("tmp" in readdir(pwd())); mkdir("tmp"); end
                 write_to_file(Es, "tmp/Es$(local_inds[index])")
+                write_to_file(vs, "tmp/vs$(local_inds[index])")
             end            
             print_train_status(prof, strc_ind, batch_id, verbosity=verbosity)
         end

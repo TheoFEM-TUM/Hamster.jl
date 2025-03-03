@@ -139,6 +139,26 @@ Read an Array `M` with elements of `type` from the file with name `filename`.
 function read_from_file(filename; type=Float64)
     lines = open_and_read(filename)
     Ns = Tuple(parse.(Int64, filter!(el->el≠"", split(lines[1], " "))))
-    M = parse.(type, lines[2:end])
+    M = tryparse.(type, lines[2:end])
+    if any(x->x===nothing, M)
+        M = tryparse.(ComplexF64, lines[2:end])
+    end
     return reshape(M, Ns)
+end
+
+"""
+    collapse_files_with!(str)
+
+Searches for all output files in the `"tmp"` directory that contain the substring `str` in their filename.  
+Reads and combines their data into a single large array, then writes the merged result to a new file named `str*".dat"`.
+
+# Arguments
+- `str::String`: A substring to match filenames in the `"tmp"` directory.
+"""
+function collapse_files_with(str; location=joinpath(pwd(), "tmp"))
+    files = [file for file in readdir(location) if occursin(str, file)]
+    data = [read_from_file(joinpath(location, file)) for file in files]
+    ndims = length(size(data[1]))
+    data_combined = cat(data..., dims=ndims+1)
+    write_to_file(data_combined, str)
 end

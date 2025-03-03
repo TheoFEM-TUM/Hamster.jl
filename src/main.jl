@@ -11,7 +11,15 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1)
             julia_num_threads=julia_num_threads, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands)
     end
     task = decide_which_task_to_perform(conf)
-    run_calculation(task, comm, conf, rank=rank, nranks=nranks)
+    out = run_calculation(task, comm, conf, rank=rank, nranks=nranks)
+    if isdir("tmp")
+        for str in ["Es", "vs"]
+            if any([occursin(str, file) for file in readdir(joinpath(pwd(), "tmp"))])
+                collapse_files_with(str)
+            end
+        end
+    end
+    return out
 end
 
 """

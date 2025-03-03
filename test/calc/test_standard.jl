@@ -32,5 +32,5 @@ end
         @test mean(abs.(Es_dft[:, :, ind] .- Es_tb)) < 0.3
     end
 
-    rm("hamster.out"); rm("config_inds.dat"); rm("tmp", recursive=true)
+    rm("hamster.out"); rm("config_inds.dat"); rm("tmp", recursive=true); rm("Es.dat"); rm("vs.dat")
 end
