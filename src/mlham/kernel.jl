@@ -29,8 +29,7 @@ function HamiltonianKernel(strcs, bases, model, comm, conf=get_empty_config(); N
     data_points = MPI.Gather(data_points_local, 0, comm)
     data_points = MPI.bcast(data_points, comm, root=0)
 
-    # TODO: init params
-    params = zeros(length(data_points))
+    params, data_points = init_ml_params!(data_points, conf)
     return HamiltonianKernel(params, data_points, sim_params, structure_descriptors)
 end
 
@@ -108,7 +107,17 @@ Retrieve the parameters associated with a `HamiltonianKernel`.
 """
 get_params(kernel::HamiltonianKernel) = kernel.params
 
-function write_params(kernel::HamiltonianKernel, conf=get_empty_conf(); filename=get_ml_filename(conf))
+"""
+    write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filename=get_ml_filename(conf))
+
+Writes the parameters and configuration settings of a HamiltonianKernel object to a file.
+
+# Arguments
+- `kernel::HamiltonianKernel`: The HamiltonianKernel object containing the parameters and data points to write to the file.
+- `conf`: A configuration object (default: `get_empty_config()`) containing simulation parameters and settings.
+- `filename`: The name of the file to which the data will be written (default: `get_ml_filename(conf)`).
+"""
+function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filename=get_ml_filename(conf))
     open(filename*".dat", "w") do file
         # Write header to file
         println(file, "begin ", get_system(conf))
@@ -125,6 +134,66 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_conf(); filename
             end
             print(file, "\n")
         end
+    end
+end
+
+"""
+    read_ml_params(conf=get_empty_config(); filename=get_ml_filename(conf))
+
+Reads the parameters for a HamiltonianKernel model from a file and returns the parameters and associated data points.
+
+# Arguments
+- `conf`: A configuration object (default: `get_empty_config()`) containing simulation parameters and settings.
+- `filename`: The name of the `.dat` file to read from (default: `get_ml_filename(conf)`).
+"""
+function read_ml_params(conf=get_empty_config(); filename=get_ml_filename(conf))
+    if !occursin(".dat", filename); filename *= ".dat"; end
+    lines = open_and_read(filename)
+    lines = split_lines(lines)
+    N = length(lines[8]) - 1
+
+    # Check that header params match Config
+    @assert parse(Float64, lines[2][end]) == get_ml_rcut(conf)
+    @assert parse(Float64, lines[3][end]) == get_sim_params(conf)
+    @assert parse(Float64, lines[4][end]) == get_env_scale(conf)
+    @assert parse(Bool, lines[5][end]) == get_apply_distortion(conf)
+
+    data_points = SVector{N, Float64}[]
+    params = Float64[]
+    for line in lines[8:end]
+        if length(line) > 1
+            parsed_line = parse.(Float64, line)
+            push!(params, parsed_line[1])
+            push!(data_points, SVector{N, Float64}(parsed_line[2:end]))
+        end
+    end
+    return params, data_points
+end
+
+"""
+    init_ml_params!(data_points, conf=get_empty_config(); initas=get_ml_init_params(conf))
+
+Initializes machine learning parameters based on a given initialization strategy and updates the `data_points`.
+
+# Arguments
+- `data_points`: The data points associated with the machine learning parameters.
+- `conf`: A configuration object (default: `get_empty_config()`) containing simulation parameters and settings.
+- `initas`: A string (default: `get_ml_init_params(conf)`) that specifies the initialization strategy. Possible values:
+  - `'z'`: Initialize parameters to zeros.
+  - `'o'`: Initialize parameters to ones.
+  - `'r'`: Initialize parameters with random values.
+  - `file`: Initialize parameters from a file `initas`
+"""
+function init_ml_params!(data_points, conf=get_empty_config(); initas=get_ml_init_params(conf))
+    Nparams = length(data_points)
+    if initas[1] == 'z'
+        return zeros(Nparams), data_points
+    elseif initas[1] == 'o'
+        return ones(Nparams), data_points
+    elseif initas[1] == 'r'
+        return rand(Nparams), data_points
+    else
+        return read_ml_params(conf)
     end
 end
 
