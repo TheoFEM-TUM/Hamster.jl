@@ -1,3 +1,34 @@
+"""
+    run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1)
+
+Performs a standard calculation for an effective Hamiltonian model.
+
+# Arguments
+- `::Val{:standard}`: A type parameter indicating that this function performs a standard calculation.
+- `comm`: The MPI communicator used for parallel processing.
+- `conf::Config`: A configuration object that contains parameters for the calculation.
+- `rank`: The MPI rank of the current process (default: `0`).
+- `nranks`: The total number of MPI ranks (default: `1`).
+
+# Function Behavior
+1. Retrieves the configuration indices using `get_config_index_sample(conf)`.
+2. If configuration indices are specified in the configuration file, they are read from a file.
+3. The root process (`rank == 0`) writes the configuration indices to a file.
+4. The indices are broadcast to all processes using `MPI.Bcast!`, ensuring consistency across ranks.
+5. Determines the mode of calculation:
+   - `"md"` (molecular dynamics) if the configuration contains `"Supercell"`.
+   - `"pc"` (phonon calculation) otherwise.
+6. Distributes the configuration indices among MPI ranks for parallel execution.
+7. Extracts atomic structures using `get_structures(conf, config_indices=local_inds, mode=mode)`.
+8. Constructs bases using the `Basis` type for each structure.
+9. Initializes the `EffectiveHamiltonian` for solving electronic or vibrational properties.
+10. Sets up a `HamsterProfiler` to profile the computation over multiple iterations.
+11. Computes eigenvalues using `get_eigenvalues`, which performs the main calculation.
+12. Returns the profiler object (`prof`), which contains performance and profiling data.
+
+# Returns
+- `prof::HamsterProfiler`: An object containing profiling information about the Hamiltonian calculation.
+"""
 function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1)
     config_inds, _ = get_config_index_sample(conf)
     if get_config_inds(conf) ≠ "none"
@@ -23,6 +54,23 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1)
     return prof
 end
 
+"""
+    get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf=get_empty_config();
+                    Nbatch=get_nbatch(conf), rank=0, nranks=1, verbosity=get_verbosity(conf))
+
+Computes eigenvalues and eigenvectors of the Hamiltonian for a set of structures, distributing the computation across MPI ranks.
+
+# Arguments
+- `ham::EffectiveHamiltonian`: The effective Hamiltonian object.
+- `prof`: A profiling object that stores timing information for each step.
+- `local_inds`: Indices of the local structures assigned to the current MPI rank.
+- `comm`: The MPI communicator used for parallel execution.
+- `conf`: Configuration object (default: `get_empty_config()`) containing parameters for diagonalization.
+- `Nbatch`: The batch size for processing structures (default: `get_nbatch(conf)`).
+- `rank`: The rank of the MPI process (default: `0`).
+- `nranks`: Total number of MPI ranks (default: `1`).
+- `verbosity`: Level of verbosity for printed output (default: `get_verbosity(conf)`).
+"""
 function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf=get_empty_config(); Nbatch=get_nbatch(conf), rank=0, nranks=1, verbosity=get_verbosity(conf))
     strc_ind = 0
     ks = get_kpoints_from_config(conf)

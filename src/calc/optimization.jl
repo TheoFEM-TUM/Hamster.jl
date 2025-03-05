@@ -1,5 +1,5 @@
 """
-   run_calculation(::Val{:optimization}, conf::Config)
+   run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1)
 
 Runs the optimization process for an effective Hamiltonian model using the specified configuration.
 
