@@ -1,5 +1,5 @@
 """
-HamsterProfiler
+    HamsterProfiler
 
 A data structure for tracking and managing profiling information during an iterative process, including loss, timing, and verbosity settings.
 
@@ -50,7 +50,7 @@ function HamsterProfiler(Ntimes, conf=get_empty_config(); Nbatch=get_nbatch(conf
 end
 
 """
-print_train_status(prof, iter, batch_id; verbosity=1)
+    print_train_status(prof, iter, batch_id; verbosity=1)
 
 Prints the training status during an iterative training process, including loss, timing, and iteration progress.
 
@@ -71,6 +71,10 @@ function print_train_status(prof, iter, batch_id; verbosity=1)
 
     time_iter = sum(prof.timings[:, iter, :])
     time_left = sum(prof.timings[:, 1:iter, :]) / iter * (Niter - iter)
+    if iter > 1     # account for validation time (only for iter > 1 since validation is performed after training print)
+        time_left += sum(prof.val_times[1:iter-1]) / (iter - 1) * (Niter - iter + 1)
+    end
+
     if printit && prof.printeachbatch
         print_iteration_status(iter, Niter, batch_id, Nbatch, mean(prof.L_train[:, iter]), time_iter, time_left)
     elseif printit && !prof.printeachbatch
@@ -110,7 +114,7 @@ function print_val_status(prof, iter; verbosity=1)
 end
 
 """
-print_iteration_status(iter, Niter, batch_id, Nbatch, L_train, time_iter, time_left)
+    print_iteration_status(iter, Niter, batch_id, Nbatch, L_train, time_iter, time_left)
 
 Prints the current status of an iterative process, including iteration number, batch details, loss, and timing information.
 
@@ -147,7 +151,7 @@ function print_iteration_status(iter, Niter, batch_id, Nbatch, L_train, time_ite
 end
 
 """
-print_start_message(prof)
+    print_start_message(prof)
 
 Prints a message indicating the start of a run, along with the total number of iterations.
 
@@ -167,7 +171,7 @@ function print_start_message(prof::HamsterProfiler; verbosity=1)
 end
 
 """
-print_final_status(prof)
+    print_final_status(prof)
 
 Prints the final loss, the total time elapsed, and a message indicating that the run has finished.
 
@@ -175,10 +179,11 @@ Prints the final loss, the total time elapsed, and a message indicating that the
 - `prof`: A HamsterProfiler instance used to compute `final_loss` and `total_time`.
 """
 function print_final_status(prof; verbosity=1)
-    total_time = sum(prof.timings)
+    total_time = sum(prof.timings) + sum(prof.val_times)
     forward_time = sum(prof.timings[:, :, 1])
     backward_time = sum(prof.timings[:, :, 2])
     update_time = sum(prof.timings[:, :, 3])
+    val_time = sum(prof.val_times)
 
     final_train_loss = mean(prof.L_train[:, end])
     final_val_loss = prof.L_val[end]
@@ -193,13 +198,14 @@ function print_final_status(prof; verbosity=1)
             println(@sprintf("Forward Time: %.2f seconds", forward_time))
             println(@sprintf("Backward Time: %.2f seconds", backward_time))
             println(@sprintf("Update Time: %.2f seconds", update_time))
+            println(@sprintf("Validation Time: %.2f seconds", val_time))
         end
         println("========================================")
     end
 end
 
 """
-decide_printit(batch_id, Nbatch, iter, printeachbatch, printeachiter; verbosity=verbosity)
+    decide_printit(batch_id, Nbatch, iter, printeachbatch, printeachiter; verbosity=verbosity)
 
 Determines whether to print status updates based on the current iteration, batch, and verbosity settings.
 
