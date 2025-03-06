@@ -13,7 +13,7 @@ end
 
 begin atom Ga
     n = 3
-    alpha = 13
+    alpha = 9
     orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
 end
 
