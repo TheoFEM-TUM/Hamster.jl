@@ -174,3 +174,10 @@ get_printeachbatch(conf::Config)::Bool = conf("printeachbatch", "Optimizer") == 
 The `printeachiter` tag determines at what iteration interval profiler information is printed.
 """
 get_printeachiter(conf::Config)::Int64 = conf("printeachiter", "Optimizer") == "default" ? 1 : conf("printeachiter", "Optimizer")
+
+"""
+    valeachiter=1
+
+The `valeachiter` tag determines at what iteration interval a validation step is performed.
+"""
+get_valeachiter(conf::Config)::Int64 = conf("valeachiter", "Optimizer") == "default" ? 1 : conf("valeachiter", "Optimizer")

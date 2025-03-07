@@ -24,7 +24,7 @@ Optimizes the model by performing training and optional validation steps.
 # Returns
 - Updates the HamsterProfiler `prof` and the model parameters in `ham_train` and `ham_val`.
 """
-function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_empty_config(); verbosity=get_verbosity(conf), Nbatch=get_nbatch(conf), validate=get_validate(conf), rank=0, nranks=1)
+function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_empty_config(); verbosity=get_verbosity(conf), Nbatch=get_nbatch(conf), validate=get_validate(conf), valeachiter=get_valeachiter(conf), rank=0, nranks=1)
     print_start_message(prof; verbosity=verbosity)
     for iter in 1:optim.Niter
         iter_begin = MPI.Wtime()
@@ -32,7 +32,7 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_emp
             train_step!(ham_train, indices, optim, dl.train_data, prof, iter, batch_id, comm, conf, rank=rank, nranks=nranks)
             print_train_status(prof, iter, batch_id, verbosity=verbosity)
         end
-        if validate
+        if validate && mod(iter, valeachiter) == 0
             print_val_start(prof, iter, verbosity=verbosity)
             copy_params!(ham_val, ham_train)
             val_step!(ham_val, optim.val_loss, dl.val_data, prof, iter, comm, rank=rank, nranks=nranks)
