@@ -29,10 +29,10 @@ Performs a standard calculation for an effective Hamiltonian model.
 # Returns
 - `prof::HamsterProfiler`: An object containing profiling information about the Hamiltonian calculation.
 """
-function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1)
+function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1, verbosity=get_verbosity(conf))
     config_inds, _ = get_config_index_sample(conf)
     if get_config_inds(conf) ≠ "none"
-        config_inds = read_from_file(get_config_inds(conf))
+        config_inds = read_from_file(get_config_inds(conf), type=Int64)
     end
    
     if rank == 0
@@ -44,9 +44,24 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1)
  
     mode = haskey(conf, "Supercell") ? "md" : "pc"
     local_inds = split_indices_into_chunks(config_inds, nranks, rank=rank)
+    
+    if rank == 0 && verbosity > 1; println("Getting structures..."); end
+    begin_time = MPI.Wtime()
     strcs = get_structures(conf, config_indices=local_inds, mode=mode)
+    strc_time = MPI.Wtime() - begin_time
+    if rank == 0 && verbosity > 1; println(" Structure time: $strc_time s"); end
+
+    if rank == 0 && verbosity > 1; println("Getting bases..."); end
+    begin_time = MPI.Wtime()
     bases = Basis[Basis(strc, conf) for strc in strcs]
+    bases_time = MPI.Wtime() - begin_time
+    if rank == 0 && verbosity > 1; println(" Basis time: $bases_time s"); end
+
+    if rank == 0 && verbosity > 1; println("Getting Hamiltonian models..."); end
+    begin_time = MPI.Wtime()
     ham = EffectiveHamiltonian(strcs, bases, comm, conf, rank=rank, nranks=nranks)
+    ham_time = MPI.Wtime() - begin_time
+    if rank == 0 && verbosity > 1; println(" Model time: $ham_time s"); end
 
     prof = HamsterProfiler(2, conf, Niter=length(local_inds), Nbatch=1)
 
