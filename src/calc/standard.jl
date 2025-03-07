@@ -112,7 +112,8 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
                 write_to_file(Es, "Es")
                 write_to_file(vs, "vs")
             else
-                if !("tmp" in readdir(pwd())); mkdir("tmp"); end
+                if !("tmp" in readdir(pwd())) && rank == 0; mkdir("tmp"); end
+                MPI.Barrier(comm)
                 write_to_file(Es, "tmp/Es$(local_inds[index])")
                 write_to_file(vs, "tmp/vs$(local_inds[index])")
             end            
