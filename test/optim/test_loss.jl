@@ -122,6 +122,21 @@
     @test reg.λ == 1e-5
     @test reg.b == 1
     @test reg.n == 1
+
+    # Test 13: Test weight ranges
+    @test Hamster.get_weight_index_from_key("wk_1-3") == 1:3
+    @test Hamster.get_weight_index_from_key("wE_5-9") == 5:9
+    @test Hamster.get_weight_index_from_key("wE_5") == 5:5
+
+    conf = get_empty_config()
+    set_value!(conf, "wE_5-8", "Optimizer", 0.1)
+    set_value!(conf, "wE_5", "Optimizer", 0.2)
+    set_value!(conf, "wk", "Optimizer", "2 2 2 2")
+    set_value!(conf, "wk_3-4", "Optimizer", 1)
+
+    loss_13 = Loss(8, 4, conf)
+    @test loss_13.wE == [1, 1, 1, 1, 0.2, 0.1, 0.1, 0.1]
+    @test loss_13.wk == [2, 2, 1, 1]
 end
 
 @testset "Hr loss" begin
