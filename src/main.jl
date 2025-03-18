@@ -5,10 +5,12 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1)
         julia_num_threads = Threads.nthreads()
         nthreads_kpoints = get_nthreads_kpoints(conf)
         nthreads_bands = get_nthreads_bands(conf)
+        nthreads_blas = get_nthreads_blas(conf); BLAS.set_num_threads(nthreads_blas)
         Nconf = get_Nconf(conf)
         write_block_summary("Parallelization", num_nodes=num_nodes, nhamster=nranks, 
             nstrc_per_hamster=round(Int64, Nconf/nranks), nstrc_per_node=round(Int64, Nconf/num_nodes), 
-            julia_num_threads=julia_num_threads, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands)
+            julia_num_threads=julia_num_threads, nthreads_kpoints=nthreads_kpoints, 
+            nthreads_bands=nthreads_bands, nthreads_blas=nthreads_blas)
     end
     task = decide_which_task_to_perform(conf)
     out = run_calculation(task, comm, conf, rank=rank, nranks=nranks)

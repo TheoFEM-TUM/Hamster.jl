@@ -55,6 +55,13 @@ The `nthreads_bands` tag sets the number of tasks to work on energy bands simult
 get_nthreads_bands(conf::Config)::Int64 = conf("nthreads_bands") == "default" ? Threads.nthreads() : conf("nthreads_bands")
 
 """
+    nthreads_blas=1
+
+The `nthreads_blas` tag sets the number of threads used by the BLAS library.
+"""
+get_nthreads_blas(conf::Config)::Int64 = conf("nthreads_blas") == "default" ? 1 : conf("nthreads_blas")
+
+"""
     nhamster=1
 
 The `nhamster` tag sets the number of `Hamster` processes to be spawned for parallel tasks.
