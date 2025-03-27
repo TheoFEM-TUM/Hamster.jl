@@ -56,6 +56,16 @@ end
 get_number_of_orbitals(orbitals) = length.(orbitals)
 
 """
+    get_axes_from_orbitals(orbitals::Vector{Vector{Orbitals}}]) -> Vector{Matrix{3, Norb}}
+
+Reads the orbital axes from a nested Vector of `Orbital` and returns them as a Vector of matrices.
+
+# Arguments
+- `orbitals::Vector{Vector{Orbital}}`: A vector where each element is a vector of `Orbital`.
+"""
+get_axes_from_orbitals(orbitals::Vector{Vector{Orbital}}) = [hcat(orb_list...) for orb_list in orbitals]
+
+"""
     get_axes(iion::Int64, strc::Structure, orbital_list::Vector{Angular}, conf=get_empty_config(); NNaxes=get_nnaxes(conf, type))
 
 Compute the axes (or orientations) for a set of orbitals associated with a specific ion in a structure.
