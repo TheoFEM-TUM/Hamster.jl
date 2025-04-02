@@ -1,3 +1,16 @@
+"""
+    mutable struct SOCModel{M}
+
+A mutable struct representing a model for Spin-Orbit Coupling (SOC) effects.
+
+# Fields:
+- `params::Vector{Float64}`: A vector of model parameters.
+- `unique_ion_types::Vector{String}`: A vector of unique ion types involved in the system, represented as strings.
+- `all_type_types::Vector{String}`: A vector containing all ion types, possibly with repetitions, represented as strings.
+- `matrices::Vector{M}`: A vector of matrices that describe the SOC interactions for the given orbital basis.
+- `Rs::Matrix{Float64}`: A matrix that contains the lattice translation vectors.
+- `update::Bool`: A boolean flag indicating whether the model is set to update its parameters or not.
+"""
 mutable struct SOCModel{M}
     params :: Vector{Float64}
     unique_ion_types :: Vector{String}
