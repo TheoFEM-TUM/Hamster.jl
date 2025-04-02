@@ -24,7 +24,7 @@ get_ml_model(conf::Config)::Bool = haskey(conf, "ML")
 
 The `ml_optimize` tag switches on optimization of the ML model.
 """
-get_ml_optimize(conf::Config)::Bool = conf("optimize", "ML") == "default" ? false : conf("optimize", "ML")
+get_update_ml(conf::Config)::Bool = conf("update", "ML") == "default" ? false : conf("update", "ML")
 
 """
     ml_rcut=rcut
