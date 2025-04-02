@@ -36,6 +36,14 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_mode
         ml_time = MPI.Wtime() - begin_time
         if rank == 0 && verbosity > 1; println("    ML time: $ml_time s"); end
     end
+    if soc
+        if rank == 0 && verbosity > 1; println("   Getting SOC model..."); end
+        begin_time = MPI.Wtime()
+        soc_model = SOCModel(strcs[1], bases[1], conf)
+        models = (models..., soc_model)
+        soc_time = MPI.Wtime() - begin_time
+        if rank == 0 && verbosity > 1; println("    SOC time: $soc_time s"); end
+    end
 
     return EffectiveHamiltonian(length(strcs), models, sp_mode, sp_diag, sp_tol, sp_iterator, soc, Rs)
 end

@@ -43,3 +43,20 @@
     set_value!(conf, "nhamster", 3.3)
     @test_throws InexactError Hamster.get_nhamster(conf)
 end
+
+@testset "SOC defaults" begin
+    get_soc = Hamster.get_soc
+    
+    # Test 1: test soc tag
+    conf = get_empty_config()
+    @test get_soc(conf) == false
+    
+    set_value!(conf, "soc", true)
+    @test get_soc(conf) == true
+
+    # Test 2: test soc block
+    conf = get_empty_config()
+    @test get_soc(conf) == false
+    set_value!(conf, "update", "SOC", true)
+    @test get_soc(conf) == true
+end

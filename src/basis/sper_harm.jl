@@ -16,6 +16,19 @@ function str_to_orb(str)::Angular
     return orbdict[str]
 end
 
+# Dictionary mapping (l,mₗ) to their conventional names
+const lm_to_orbital_map = Dict(
+    (0, 0) => "s",
+    (1, 0) => "pz",
+    (1, 1) => "px",
+    (1, -1) => "py",
+    (2, 0) => "dz2",
+    (2, 1) => "dxz",
+    (2, -1) => "dyz",
+    (2, 2) => "dx2-y2",
+    (2, -2) => "dxy"
+    )
+
 """
     get_spherical(l, m)
 
@@ -29,7 +42,6 @@ Returns the spherical harmonic function for a given orbital angular momentum qua
 - The corresponding spherical harmonic function as a vector, based on the values of `l` and `m`.
 """
 get_spherical(l, m)::Angular = [[s()], [pz(), px()], [dz2(), dxz(), dx2_y2()]][l+1][m+1]
-
 
 # Angular parts produce 0/0 for r = [0, 0, 0]
 nan_to_zero(x) = isnan(x) ? zero(x) : x

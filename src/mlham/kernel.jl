@@ -55,7 +55,7 @@ Constructs a set of real-space Hamiltonians from a `HamiltonianKernel`.
 """
 function get_hr(kernel::HamiltonianKernel, mode::Dense, index; apply_soc=false)
     h_env = kernel.structure_descriptors[index]
-    Hr = get_empty_real_hamiltonians(size(h_env[1], 1), length(h_env), mode)
+    Hr = get_empty_complex_hamiltonians(size(h_env[1], 1), length(h_env), mode)
     for R in eachindex(h_env)
         for (i, j, hin) in zip(findnz(h_env[R])...)
             Hr[R][i, j] = kernel(hin)
@@ -67,7 +67,7 @@ end
 function get_hr(kernel::HamiltonianKernel, mode::Sparse, index; apply_soc=false)
     h_env = kernel.structure_descriptors[index]
     Nε = size(h_env[1], 1)
-    Hr = get_empty_real_hamiltonians(Nε, length(h_env), mode)
+    Hr = get_empty_complex_hamiltonians(Nε, length(h_env), mode)
     for R in eachindex(h_env)
         is = Int64[]
         js = Int64[]

@@ -48,7 +48,9 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    val_bases = Basis[Basis(strc, conf) for strc in val_strcs]
    ham_val = EffectiveHamiltonian(val_strcs, val_bases, comm, conf, rank=rank, nranks=nranks, ml_data_points=get_ml_data_points(ham_train, conf))
 
-   dl = DataLoader(local_train_inds, local_val_inds, length(train_bases[1]), length(train_bases[end]), conf)
+   PC_Nε = get_soc(conf) ? 2*length(train_bases[1]) : length(train_bases[1])
+   SC_Nε = get_soc(conf) ? 2*length(train_bases[end]) : length(train_bases[end])
+   dl = DataLoader(local_train_inds, local_val_inds, PC_Nε, SC_Nε, conf)
    Nε, Nk = get_neig_and_nk(dl.train_data)
    optim = GDOptimizer(Nε, Nk, conf)
    prof = HamsterProfiler(3, conf)

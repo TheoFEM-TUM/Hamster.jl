@@ -1,0 +1,32 @@
+begin Options
+    rcut = 7
+    load_rllm = true
+    verbosity = 0
+end
+
+begin Optimizer
+    update_tb = false
+    lr = 0.5
+    niter = 10
+    loss = MAE
+    wE_6-8 = 2
+    wk_1 = 5
+end
+
+begin SOC
+    update = true
+    init_params = zeros
+end
+
+begin atom Ga
+    n = 3
+    alpha = 9
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+end
+
+begin atom As
+    n = 3
+    alpha = 13
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+    nnaxes = true
+end

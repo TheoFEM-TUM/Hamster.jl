@@ -286,7 +286,7 @@ function read_params(filename="params.dat")
             push!(parameters, string_to_param_label(line[1]))
             push!(parameter_values, parse(Float64, line[2]))
         else
-            push!(ion_types, string(line[3:end]))
+            push!(ion_types, line[1][4:end])
             push!(soc_parameters, parse(Float64, line[2]))
         end
     end
