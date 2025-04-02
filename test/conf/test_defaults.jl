@@ -42,6 +42,12 @@
     @test Hamster.get_nhamster(conf) == 2
     set_value!(conf, "nhamster", 3.3)
     @test_throws InexactError Hamster.get_nhamster(conf)
+
+    # Test 7: test neig
+    conf = get_empty_config()
+    Hamster.get_neig(conf) == 6
+    set_value!(conf, "neig", 8)
+    Hamster.get_neig(conf) == 8
 end
 
 @testset "SOC defaults" begin
