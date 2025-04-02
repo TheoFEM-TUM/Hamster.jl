@@ -54,6 +54,20 @@ function update!(soc_model::SOCModel, opt, dparams)
     update!(opt, soc_model.params, dparams)
 end
 
+"""
+    get_model_gradient(soc_model::SOCModel, indices, reg, dL_dHr)
+
+Computes the gradient of loss w.r.t. the SOC model's parameters.
+
+# Arguments:
+- `soc_model::SOCModel`: The SOC model.
+- `indices`: The structure indices (not used here).
+- `reg`: A regularization term that penalizes certain parameter values to avoid overfitting or enforce specific behavior.
+- `dL_dHr`: Gradient of the loss w.r.t. the Hamiltonian matrix elements.
+
+# Returns:
+- `dparams`: A vector containing the gradient of the loss w.r.t. the model parameters.
+"""
 function get_model_gradient(soc_model::SOCModel, indices, reg, dL_dHr)
     iR0 = findR0(soc_model.Rs)
     dparams = zeros(length(soc_model.params))
