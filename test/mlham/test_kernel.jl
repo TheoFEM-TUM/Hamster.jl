@@ -21,7 +21,7 @@ end
     params = rand(10)
     data_points = [SVector{8, Float64}(rand(8)) for i in 1:N]
 
-    kernel = HamiltonianKernel(params, data_points, 0.2, [])
+    kernel = HamiltonianKernel(params, data_points, 0.2, [], false)
     write_params(kernel, conf)
 
     # Test 1: test parameter read and write
