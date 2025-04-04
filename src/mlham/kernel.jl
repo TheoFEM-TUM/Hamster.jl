@@ -13,6 +13,7 @@ mutable struct HamiltonianKernel{T1, T2, T3}
     data_points :: Vector{T1}
     sim_params :: T2
     structure_descriptors :: Vector{T3}
+    update :: Bool
 end
 
 """
@@ -20,7 +21,7 @@ end
 
 Constructor for a HamiltonianKernel model.
 """
-function HamiltonianKernel(strcs, bases, model, comm, conf=get_empty_config(); Ncluster=get_ml_ncluster(conf), Npoints=get_ml_npoints(conf), sim_params=get_sim_params(conf), rank=0, nranks=1)
+function HamiltonianKernel(strcs, bases, model, comm, conf=get_empty_config(); Ncluster=get_ml_ncluster(conf), Npoints=get_ml_npoints(conf), sim_params=get_sim_params(conf), update_ml=get_ml_update(conf), rank=0, nranks=1)
     structure_descriptors = map(eachindex(strcs)) do n
         get_tb_descriptor(model.hs[n], model.V, strcs[n], bases[n], conf)
     end
@@ -30,7 +31,7 @@ function HamiltonianKernel(strcs, bases, model, comm, conf=get_empty_config(); N
     data_points = MPI.bcast(data_points, comm, root=0)
 
     params, data_points = init_ml_params!(data_points, conf)
-    return HamiltonianKernel(params, data_points, sim_params, structure_descriptors)
+    return HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml)
 end
 
 exp_sim(x₁, x₂; σ=0.1)::Float64 = exp(-normdiff(x₁, x₂)^2 / σ)
@@ -193,7 +194,7 @@ function init_ml_params!(data_points, conf=get_empty_config(); initas=get_ml_ini
     elseif initas[1] == 'r'
         return rand(Nparams), data_points
     else
-        return read_ml_params(conf)
+        return read_ml_params(conf, filename=initas)
     end
 end
 
@@ -237,14 +238,18 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 """
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr)
     dparams = zeros(length(kernel.params))
-    for n in eachindex(dparams)
-        for index in indices
-            h_env = kernel.structure_descriptors[index]
-            for R in eachindex(dL_dHr[index]), (i, j, hin) in zip(findnz(h_env[R])...)
-                dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) .* dL_dHr[index][R][i, j]
+    if kernel.update
+        for n in eachindex(dparams)
+            for index in indices
+                h_env = kernel.structure_descriptors[index]
+                for R in eachindex(dL_dHr[index]), (i, j, hin) in zip(findnz(h_env[R])...)
+                    dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) .* dL_dHr[index][R][i, j]
+                end
             end
         end
+        dparams_penal = backward(reg, kernel.params)
+        return dparams .+ dparams_penal
+    else 
+        return dparams
     end
-    dparams_penal = backward(reg, kernel.params)
-    return dparams .+ dparams_penal
 end
