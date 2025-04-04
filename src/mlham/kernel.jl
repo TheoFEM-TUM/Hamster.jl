@@ -21,7 +21,9 @@ end
 
 Constructor for a HamiltonianKernel model.
 """
-function HamiltonianKernel(strcs, bases, model, comm, conf=get_empty_config(); Ncluster=get_ml_ncluster(conf), Npoints=get_ml_npoints(conf), sim_params=get_sim_params(conf), update_ml=get_ml_update(conf), rank=0, nranks=1)
+function HamiltonianKernel(strcs::Vector{Structure}, bases::Vector{Basis}, model::TBModel, comm, conf=get_empty_config(); 
+    Ncluster=get_ml_ncluster(conf), Npoints=get_ml_npoints(conf), sim_params=get_sim_params(conf), update_ml=get_ml_update(conf), rank=0, nranks=1)
+    
     structure_descriptors = map(eachindex(strcs)) do n
         get_tb_descriptor(model.hs[n], model.V, strcs[n], bases[n], conf)
     end
