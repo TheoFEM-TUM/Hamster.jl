@@ -42,7 +42,7 @@ function (conf::Config)(key::String, typekey="none")
     lowercase_key = lowercase(key)
     if haskey(conf.options, lowercase_key) && typekey == "none"
         return convert_value(conf.options[lowercase_key])
-    elseif typekey ≠ "none" && haskey(conf, typekey)
+    elseif typekey ≠ "none" && haskey(conf.blocks, typekey)
         if haskey(conf.blocks[typekey], lowercase_key)
             return convert_value(conf.blocks[typekey][lowercase_key])
         else

@@ -9,7 +9,7 @@ struct EffectiveHamiltonian{T, S1, S2, IT}
     Rs :: Vector{Matrix{Float64}}
 end
 
-function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_model=get_tb_model(conf), ml_model=get_ml_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), sp_tol=get_sp_tol(conf), soc=get_soc(conf), ml_data_points=nothing, rank=0, nranks=1)
+function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_model=get_tb_model(conf), ml_model=get_ml_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), sp_tol=get_sp_tol(conf), soc=get_soc(conf), ml_data_points=nothing, rank=0, nranks=1, verbosity=get_verbosity(conf))
     if isempty(strcs) && isempty(bases)
         return EffectiveHamiltonian(0, nothing, Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)])
     end
@@ -19,14 +19,30 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_mode
 
     models = ()
     if tb_model
+        if rank == 0 && verbosity > 1; println("   Getting TB model..."); end
+        begin_time = MPI.Wtime()
         models = (models..., TBModel(strcs, bases, conf))
+        tb_time = MPI.Wtime() - begin_time
+        if rank == 0 && verbosity > 1; println("    TB time: $tb_time s"); end
     end
     if ml_model && tb_model
+        if rank == 0 && verbosity > 1; println("   Getting ML model..."); end
+        begin_time = MPI.Wtime()
         kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, rank=rank, nranks=nranks)
         if ml_data_points ≠ nothing
             kernel.data_points = ml_data_points
         end
         models = (models..., kernel)
+        ml_time = MPI.Wtime() - begin_time
+        if rank == 0 && verbosity > 1; println("    ML time: $ml_time s"); end
+    end
+    if soc
+        if rank == 0 && verbosity > 1; println("   Getting SOC model..."); end
+        begin_time = MPI.Wtime()
+        soc_model = SOCModel(strcs[1], bases[1], conf)
+        models = (models..., soc_model)
+        soc_time = MPI.Wtime() - begin_time
+        if rank == 0 && verbosity > 1; println("    SOC time: $soc_time s"); end
     end
 
     return EffectiveHamiltonian(length(strcs), models, sp_mode, sp_diag, sp_tol, sp_iterator, soc, Rs)

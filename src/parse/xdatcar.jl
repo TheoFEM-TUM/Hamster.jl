@@ -19,7 +19,10 @@ function read_xdatcar(xdatcar="XDATCAR"; frac=true)
     a = parse(Float64, lines[2][1])
 
     # Lattice vectors
-    lattice = a .* parse_lines_as_array(lines[3:5], i1=1, i2=3)
+    lattice = zeros(Float64, 3, 3)
+    for i in 1:3
+        lattice[:, i] = @. a * parse(Float64, lines[2+i])
+    end
 
     # Number of ions
     Nion = sum(parse.(Int64, lines[7]))

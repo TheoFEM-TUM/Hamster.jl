@@ -24,20 +24,23 @@ Optimizes the model by performing training and optional validation steps.
 # Returns
 - Updates the HamsterProfiler `prof` and the model parameters in `ham_train` and `ham_val`.
 """
-function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_empty_config(); verbosity=get_verbosity(conf), Nbatch=get_nbatch(conf), validate=get_validate(conf), rank=0, nranks=1)
+function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_empty_config(); verbosity=get_verbosity(conf), Nbatch=get_nbatch(conf), validate=get_validate(conf), valeachiter=get_valeachiter(conf), rank=0, nranks=1)
     print_start_message(prof; verbosity=verbosity)
     for iter in 1:optim.Niter
+        iter_begin = MPI.Wtime()
         for (batch_id, indices) in enumerate(chunks(1:ham_train.Nstrc, n=Nbatch))
             train_step!(ham_train, indices, optim, dl.train_data, prof, iter, batch_id, comm, conf, rank=rank, nranks=nranks)
             print_train_status(prof, iter, batch_id, verbosity=verbosity)
         end
-        if validate
+        if validate && mod(iter, valeachiter) == 0
             print_val_start(prof, iter, verbosity=verbosity)
             copy_params!(ham_val, ham_train)
             val_step!(ham_val, optim.val_loss, dl.val_data, prof, iter, comm, rank=rank, nranks=nranks)
             print_val_status(prof, iter, verbosity=verbosity)
         end
         MPI.Barrier(comm)
+        iter_time = MPI.Wtime() - iter_begin
+        if verbosity > 1 && rank == 0; println("Iteration time: $iter_time s"); end
     end
     print_final_status(prof; verbosity=verbosity)
 end
@@ -65,6 +68,7 @@ Performs a single training step on a Hamiltonian model by computing gradients an
 - Writes timing information and training loss to `prof`.
 """
 function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id, comm, conf=get_empty_config(); rank=0, nranks=1)
+    verbosity = get_verbosity(conf)
     Nstrc_tot = MPI.Reduce(length(indices), +, comm, root=0)
     forward_times = Float64[]
     backward_times = Float64[]
@@ -98,11 +102,16 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         prof.timings[batch_id, iter, 1] = forward_time ./ nranks
         prof.timings[batch_id, iter, 2] = backward_time ./ nranks
         prof.timings[batch_id, iter, 3] = update_time ./ nranks
+        if verbosity > 1
+            println(" Forward time: $(forward_time ./ nranks) s")
+            println(" Backward time: $(backward_time ./ nranks) s")
+            println(" Update time: $(update_time ./ nranks) s")
+        end
     end
 end
 
 """
-val_step!(ham_val, loss, val_data, prof, iter, comm, rank=0)
+    val_step!(ham_val, loss, val_data, prof, iter, comm, rank=0)
 
 Evaluates the validation loss for a Hamiltonian model over a given validation dataset, and stores the results in the `HamsterProfiler` instance. This function also tracks the time taken for validation.
 
@@ -118,16 +127,16 @@ Evaluates the validation loss for a Hamiltonian model over a given validation da
 - Updates to `prof.val_times`: The elapsed time for the validation step is stored in `prof.val_times[iter]`.
 """
 function val_step!(ham_val, loss, val_data, prof, iter, comm; rank=0, nranks=1)
-    Nstrc_tot = MPI.Reduce(ham_val.Nstrc, +, comm, root=0)
-    val_time = @elapsed begin 
-        L_val = mapreduce(+, 1:ham_val.Nstrc) do index
-            forward(ham_val, index, loss, val_data[index])[1] / ham_val.Nstrc
-        end
+    val_begin = MPI.Wtime()
+    Ls_val = map(1:ham_val.Nstrc) do index
+        forward(ham_val, index, loss, val_data[index])[1] / ham_val.Nstrc
     end
-    MPI.Reduce(L_val, +, comm, root=0)
+    val_time_local = MPI.Wtime() - val_begin
+    val_time = MPI.Reduce(val_time_local, +, comm, root=0)
+    L_val = MPI.Reduce(sum(Ls_val), +, comm, root=0)
     if rank == 0
         prof.val_times[iter] = val_time ./ nranks
-        prof.L_val[iter] = L_val ./ Nstrc_tot
+        prof.L_val[iter] = L_val ./ nranks
     end
 end
 

@@ -1,0 +1,24 @@
+begin Options
+    rcut = 7
+    load_rllm = true
+    sp_mode = false
+    verbosity = 0
+end
+
+begin Supercell
+    Nconf = 2
+    Nconf_max = 10
+end
+
+begin atom Ga
+    n = 3
+    alpha = 9
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+end
+
+begin atom As
+    n = 3
+    alpha = 13
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+    nnaxes = true
+end

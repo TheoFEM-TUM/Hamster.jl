@@ -154,7 +154,7 @@ function get_sparsity(H::Vector{<:AbstractArray}; sp_tol=1e-10)
 end
 
 """
-    droptol!(H::Vector{AbstractSparseMatrix}, tol=1e-8)
+    droptol!(H::Vector{AbstractSparseMatrix}, tol=1e-10)
 
 Applies a tolerance to drop small elements from a vector of sparse matrices, modifying the matrices in place.
 

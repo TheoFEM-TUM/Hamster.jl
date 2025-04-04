@@ -13,6 +13,7 @@ mutable struct HamiltonianKernel{T1, T2, T3}
     data_points :: Vector{T1}
     sim_params :: T2
     structure_descriptors :: Vector{T3}
+    update :: Bool
 end
 
 """
@@ -20,19 +21,19 @@ end
 
 Constructor for a HamiltonianKernel model.
 """
-function HamiltonianKernel(strcs, bases, model, comm, conf=get_empty_config(); Ncluster=get_ml_ncluster(conf), Npoints=get_ml_npoints(conf), sim_params=get_sim_params(conf), rank=0, nranks=1)
+function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, model, comm, conf=get_empty_config(); 
+    Ncluster=get_ml_ncluster(conf), Npoints=get_ml_npoints(conf), sim_params=get_sim_params(conf), update_ml=get_ml_update(conf), rank=0, nranks=1)
+    
     structure_descriptors = map(eachindex(strcs)) do n
         get_tb_descriptor(model.hs[n], model.V, strcs[n], bases[n], conf)
     end
     Npoints_local = floor(Int64, Npoints / nranks)
     data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local)
+    data_points = MPI.Gather(data_points_local, 0, comm)
+    data_points = MPI.bcast(data_points, comm, root=0)
 
-    data_points = MPI.Reduce(data_points_local, vcat, comm, root=0)
-    MPI.Bcast!(data_points, comm, root=0)
-
-    # TODO: init params
-    params = zeros(length(data_points))
-    return HamiltonianKernel(params, data_points, sim_params, structure_descriptors)
+    params, data_points = init_ml_params!(data_points, conf)
+    return HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml)
 end
 
 exp_sim(x₁, x₂; σ=0.1)::Float64 = exp(-normdiff(x₁, x₂)^2 / σ)
@@ -57,7 +58,7 @@ Constructs a set of real-space Hamiltonians from a `HamiltonianKernel`.
 """
 function get_hr(kernel::HamiltonianKernel, mode::Dense, index; apply_soc=false)
     h_env = kernel.structure_descriptors[index]
-    Hr = get_empty_real_hamiltonians(size(h_env[1], 1), length(h_env), mode)
+    Hr = get_empty_complex_hamiltonians(size(h_env[1], 1), length(h_env), mode)
     for R in eachindex(h_env)
         for (i, j, hin) in zip(findnz(h_env[R])...)
             Hr[R][i, j] = kernel(hin)
@@ -69,7 +70,7 @@ end
 function get_hr(kernel::HamiltonianKernel, mode::Sparse, index; apply_soc=false)
     h_env = kernel.structure_descriptors[index]
     Nε = size(h_env[1], 1)
-    Hr = get_empty_real_hamiltonians(Nε, length(h_env), mode)
+    Hr = get_empty_complex_hamiltonians(Nε, length(h_env), mode)
     for R in eachindex(h_env)
         is = Int64[]
         js = Int64[]
@@ -109,7 +110,17 @@ Retrieve the parameters associated with a `HamiltonianKernel`.
 """
 get_params(kernel::HamiltonianKernel) = kernel.params
 
-function write_params(kernel::HamiltonianKernel, conf=get_empty_conf(); filename=get_ml_filename(conf))
+"""
+    write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filename=get_ml_filename(conf))
+
+Writes the parameters and configuration settings of a HamiltonianKernel object to a file.
+
+# Arguments
+- `kernel::HamiltonianKernel`: The HamiltonianKernel object containing the parameters and data points to write to the file.
+- `conf`: A configuration object (default: `get_empty_config()`) containing simulation parameters and settings.
+- `filename`: The name of the file to which the data will be written (default: `get_ml_filename(conf)`).
+"""
+function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filename=get_ml_filename(conf))
     open(filename*".dat", "w") do file
         # Write header to file
         println(file, "begin ", get_system(conf))
@@ -126,6 +137,66 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_conf(); filename
             end
             print(file, "\n")
         end
+    end
+end
+
+"""
+    read_ml_params(conf=get_empty_config(); filename=get_ml_filename(conf))
+
+Reads the parameters for a HamiltonianKernel model from a file and returns the parameters and associated data points.
+
+# Arguments
+- `conf`: A configuration object (default: `get_empty_config()`) containing simulation parameters and settings.
+- `filename`: The name of the `.dat` file to read from (default: `get_ml_filename(conf)`).
+"""
+function read_ml_params(conf=get_empty_config(); filename=get_ml_filename(conf))
+    if !occursin(".dat", filename); filename *= ".dat"; end
+    lines = open_and_read(filename)
+    lines = split_lines(lines)
+    N = length(lines[8]) - 1
+
+    # Check that header params match Config
+    @assert parse(Float64, lines[2][end]) == get_ml_rcut(conf)
+    @assert parse(Float64, lines[3][end]) == get_sim_params(conf)
+    @assert parse(Float64, lines[4][end]) == get_env_scale(conf)
+    @assert parse(Bool, lines[5][end]) == get_apply_distortion(conf)
+
+    data_points = SVector{N, Float64}[]
+    params = Float64[]
+    for line in lines[8:end]
+        if length(line) > 1
+            parsed_line = parse.(Float64, line)
+            push!(params, parsed_line[1])
+            push!(data_points, SVector{N, Float64}(parsed_line[2:end]))
+        end
+    end
+    return params, data_points
+end
+
+"""
+    init_ml_params!(data_points, conf=get_empty_config(); initas=get_ml_init_params(conf))
+
+Initializes machine learning parameters based on a given initialization strategy and updates the `data_points`.
+
+# Arguments
+- `data_points`: The data points associated with the machine learning parameters.
+- `conf`: A configuration object (default: `get_empty_config()`) containing simulation parameters and settings.
+- `initas`: A string (default: `get_ml_init_params(conf)`) that specifies the initialization strategy. Possible values:
+  - `'z'`: Initialize parameters to zeros.
+  - `'o'`: Initialize parameters to ones.
+  - `'r'`: Initialize parameters with random values.
+  - `file`: Initialize parameters from a file `initas`
+"""
+function init_ml_params!(data_points, conf=get_empty_config(); initas=get_ml_init_params(conf))
+    Nparams = length(data_points)
+    if initas[1] == 'z'
+        return zeros(Nparams), data_points
+    elseif initas[1] == 'o'
+        return ones(Nparams), data_points
+    elseif initas[1] == 'r'
+        return rand(Nparams), data_points
+    else
+        return read_ml_params(conf, filename=initas)
     end
 end
 
@@ -169,14 +240,18 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 """
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr)
     dparams = zeros(length(kernel.params))
-    Threads.@threads for n in eachindex(dparams)
-        for index in indices
-            h_env = kernel.structure_descriptors[index]
-            for R in eachindex(dL_dHr[index]), (i, j, hin) in zip(findnz(h_env[R])...)
-                dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) .* dL_dHr[index][R][i, j]
+    if kernel.update
+        for n in eachindex(dparams)
+            for index in indices
+                h_env = kernel.structure_descriptors[index]
+                for R in eachindex(dL_dHr[index]), (i, j, hin) in zip(findnz(h_env[R])...)
+                    dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) .* dL_dHr[index][R][i, j]
+                end
             end
         end
+        dparams_penal = backward(reg, kernel.params)
+        return dparams .+ dparams_penal
+    else 
+        return dparams
     end
-    dparams_penal = backward(reg, kernel.params)
-    return dparams .+ dparams_penal
 end

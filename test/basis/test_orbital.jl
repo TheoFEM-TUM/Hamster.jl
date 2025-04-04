@@ -49,4 +49,7 @@ end
     @test all([typeof(orbitals[iion][jorb].type) == expected_types[iion][jorb] for iion in eachindex(orbitals) for jorb in eachindex(orbitals[iion])])
     @test all([orbitals[iion][jorb].axis == expected_axes[iion][jorb] for iion in eachindex(orbitals) for jorb in eachindex(orbitals[iion])])
     @test all([orbitals[iion][jorb].ion_type == expected_ion_types[iion][jorb] for iion in eachindex(orbitals) for jorb in eachindex(orbitals[iion])])
+
+    orb_axes = Hamster.get_axes_from_orbitals(orbitals)
+    @test all([orb_axes[iion][:, jorb] == expected_axes[iion][jorb] for iion in eachindex(orbitals) for jorb in eachindex(orbitals[iion])]) 
 end

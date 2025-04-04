@@ -2,7 +2,7 @@
     prof = HamsterProfiler(3)
     # Test 1: verbosity > 0
     val_print = @capture_out Hamster.print_val_start(prof, 1, verbosity=1)
-    @test val_print == "Validating model...\n"
+    @test val_print == "   Validating model...\n"
     
     #Test 2: verbosity = 0
     val_print = @capture_out Hamster.print_val_start(prof, 1, verbosity=0)
@@ -10,7 +10,7 @@
 
     # Test 3: verbosity > 0
     val_print = @capture_out Hamster.print_val_status(prof, 1)
-    @test val_print == "Iteration: 1 / 1 | Val Loss: 0.0000 | Time: 0.00000 s\n"
+    @test val_print == "   Iteration: 1 / 1 | Val Loss: 0.0000 | Time: 0.00000 s\n"
 
     # Test 4: verbosity = 0
     val_print = @capture_out Hamster.print_val_status(prof, 1, verbosity=0)

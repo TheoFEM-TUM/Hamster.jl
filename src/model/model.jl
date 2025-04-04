@@ -61,7 +61,7 @@ Construct the real-space Hamiltonian (`Hr`) by multiplying the geometry tensor `
 - `Hr`: The resulting real-space Hamiltonian matrix (or array of matrices), constructed by summing the weighted Hamiltonian blocks for each lattice vector `R`.
 """
 function get_hr(h::AbstractMatrix, V::AbstractVector, mode=Val{:dense}; apply_soc=false)
-    Hr = get_empty_real_hamiltonians(size(h[1, 1], 1), size(h, 2), mode)
+    Hr = get_empty_complex_hamiltonians(size(h[1, 1], 1), size(h, 2), mode)
     Threads.@threads for R in axes(h, 2)
         for v in axes(h, 1)
             @. Hr[R] += h[v, R] * V[v]

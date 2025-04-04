@@ -79,9 +79,18 @@ if test_all || test_only == "ML"
     end
 end
 
+if test_all || test_only == "SOC"
+    @testset "SOC" begin
+        include("soc/test_soc_utils.jl")
+        include("soc/test_soc_matrices.jl")
+        include("soc/test_soc_model.jl")
+    end
+end
+
 if test_all || test_only == "calc"
     @testset "calc" begin
         include("calc/test_optimization.jl")
+        include("calc/test_standard.jl")
     end
 end
 

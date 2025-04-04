@@ -46,20 +46,40 @@ function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band
 
     for key in keys(conf.blocks["Optimizer"])
         if occursin("wk_", key)
-            index = parse(Int64, key[4:end])
-            wk[index] = conf(key, "Optimizer")
+            index_range = get_weight_index_from_key(key)
+            wk[index_range] .= conf(key, "Optimizer")
         elseif occursin("we_", key)
-            index = parse(Int64, key[4:end])
-            wE[index] = conf(key, "Optimizer")
+            index_range = get_weight_index_from_key(key)
+            wE[index_range] .= conf(key, "Optimizer")
         end
     end
-
     return Loss(wE, wk, n)
 end
 
 Loss(conf=get_empty_config()) = Loss(loss_to_n[get_loss(conf)])
 
 (l::Loss)(y, ŷ) = forward(l, y, ŷ)
+
+"""
+    get_weight_index_from_key(key::String) -> UnitRange{Int64}
+
+Parses a weight key string and returns a range of indices.
+
+# Arguments
+- `key::String`: A string representing a weight index, either as a single value (e.g., `"key_1"`) or as a range (e.g., `"key_1-3"`).
+
+# Returns
+- A `UnitRange{Int64}` representing the parsed index or index range.
+"""
+function get_weight_index_from_key(key)
+    if occursin('-', key)
+        key_split = split(key, '-')
+        return parse(Int64, key_split[1][4:end]):parse(Int64, key_split[2])
+    else
+        index = parse(Int64, key[4:end])
+        return index:index
+    end
+end
 
 """
     forward(l::Loss, y, ŷ)

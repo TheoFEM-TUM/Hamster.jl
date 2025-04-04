@@ -39,13 +39,6 @@ The `niter` parameter sets the maximum number of iterations (through the trainin
 get_niter(conf::Config)::Int64 = conf("niter", "Optimizer") == "default" ? 1 : conf("niter", "Optimizer")
 
 """
-    nbatch=1
-
-The `nbatch` tag detemines into how many batches the training structures are split for stochastic gradient optimization.
-"""
-get_nbatch(conf::Config)::Int64 = conf("nbatch", "Optimizer") == "default" ? 1 : conf("nbatch", "Optimizer")
-
-"""
     wE=ones
 
 The `wE` tag sets the weight of each energy band for the calculation of the loss. Individual weights can also be set with, e.g., `wE_3 = 2`.
@@ -181,3 +174,10 @@ get_printeachbatch(conf::Config)::Bool = conf("printeachbatch", "Optimizer") == 
 The `printeachiter` tag determines at what iteration interval profiler information is printed.
 """
 get_printeachiter(conf::Config)::Int64 = conf("printeachiter", "Optimizer") == "default" ? 1 : conf("printeachiter", "Optimizer")
+
+"""
+    valeachiter=1
+
+The `valeachiter` tag determines at what iteration interval a validation step is performed.
+"""
+get_valeachiter(conf::Config)::Int64 = conf("valeachiter", "Optimizer") == "default" ? 1 : conf("valeachiter", "Optimizer")

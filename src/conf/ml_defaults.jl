@@ -20,11 +20,18 @@ The `ml_model` tag switches on the use of an ML model in the effective Hamiltoni
 get_ml_model(conf::Config)::Bool = haskey(conf, "ML")
 
 """
+    update=true
+
+The `update` tag switches on/off optimization of ML parameters.
+"""
+get_ml_update(conf::Config)::Bool = conf("update", "ML") == "default" ? true : conf("update", "ML")
+
+"""
     ml_optimize=false
 
 The `ml_optimize` tag switches on optimization of the ML model.
 """
-get_ml_optimize(conf::Config)::Bool = conf("optimize", "ML") == "default" ? false : conf("optimize", "ML")
+get_update_ml(conf::Config)::Bool = conf("update", "ML") == "default" ? false : conf("update", "ML")
 
 """
     ml_rcut=rcut

@@ -18,13 +18,6 @@ The `tb_model` tag switches on the use of a TB model in the effective Hamiltonia
 get_tb_model(conf::Config)::Bool = conf("tb_model") == "default" ? true : conf("tb_model")
 
 """
-    soc=false
-
-The `soc` tag switches on spin-orbit coupling (SOC).
-"""
-get_soc(conf::Config)::Bool = conf("soc") == "default" ? false : conf("soc")
-
-"""
     sp_tol=1e-10
 
 The `sp_tol` tag sets a tolerance for value to be considered zero.
