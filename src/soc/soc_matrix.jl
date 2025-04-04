@@ -27,7 +27,7 @@ function get_soc_matrices(strc::Structure, basis::Basis, conf=get_empty_config()
         ls = unique([orb.type.l for orb in basis.orbitals[iion]])
         soc_blocks = Matrix{ComplexF64}[] # skipped/empty for hybrid
         orb_order = String[]
-        if length(ls) == 1 || ls[1] < 0 # Hybrid
+        if ls[1] < 0 # Hybrid
             # Get the correct orientation axes and calculate Msoc_ho for the current atom
             axes = atom_axes_list[iion]
             push!(soc_matrices, get_Msoc_ho(axes, mode=hybridisation[ls[1]])) # TODO
