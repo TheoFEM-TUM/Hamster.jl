@@ -1,0 +1,31 @@
+begin Options
+    rcut = 7
+    verbosity = 0
+    itp_tol = 1e-3
+end
+
+begin Optimizer
+    lr = 0.5
+    niter = 50
+    loss = MAE
+    wE = 1 1 1 1 1 1 0.1 0.1
+    wk_1 = 5
+end
+
+begin HyperOpt
+    lowerbounds = 5 5
+    upperbounds = 20 20
+    niter = 5
+    params = Ga_alpha As_alpha
+end
+
+begin atom Ga
+    n = 3
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+end
+
+begin atom As
+    n = 3
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+    nnaxes = true
+end
