@@ -1,7 +1,7 @@
 module Hamster
 
 using LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Dates, PeriodicTable, UnPack, MPI, Clustering, BlockDiagonals,
-    CubicSplines, HCubature, Statistics, ChunkSplitters, FiniteDiff, StatsBase, HDF5, Printf, OhMyThreads
+    CubicSplines, HCubature, Statistics, ChunkSplitters, FiniteDiff, StatsBase, HDF5, Printf, OhMyThreads, Distributions
 
 include("parse/utils.jl"); include("parse/poscar.jl"); include("parse/eigenval.jl"); include("parse/xdatcar.jl"); include("parse/wannier90.jl")
 include("parse/commandline.jl")
@@ -9,6 +9,7 @@ include("parse/commandline.jl")
 include("conf/config.jl"); include("conf/read_config.jl")
 include("conf/defaults.jl"); include("conf/strc_defaults.jl"); include("conf/basis_defaults.jl"); include("conf/model_defaults.jl")
 include("conf/optim_defaults.jl"); include("conf/supercell_defaults.jl"); include("conf/ml_defaults.jl"); include("conf/soc_defaults.jl")
+include("conf/hyperopt_defaults.jl")
 
 include("out/output.jl")
 
@@ -30,7 +31,7 @@ include("optim/optimize.jl")
 
 include("mlham/descriptor.jl"); include("mlham/kernel.jl")
 
-include("calc/optimization.jl"); include("calc/standard.jl")
+include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hyperopt.jl")
 
 include("main.jl")
 
