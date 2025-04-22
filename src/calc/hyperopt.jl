@@ -67,7 +67,7 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
         prof.timings[1, iter] = time
         prof.L_train[1, iter] = L_local
 
-        # coverage: ignore start
+        # COV_EXCL_START
         if rank == 0 && verbosity > 0
             print_train_status(prof, iter, 1, verbosity=verbosity)
             for (index, param) in enumerate(params)
@@ -75,12 +75,12 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
             end
             println("Current optimum: $(minimum(prof.L_train[1, 1:iter])).")
         end
-        # coverage: ignore end
+        # COV_EXCL_STOP
     end
     if rank == 0 && verbosity > 0; println("========================================"); end
 
     Lmin, indmin = findmin(prof.L_train[1, :])
-    # coverage: ignore start
+    # COV_EXCL_START
     if rank == 0 && verbosity > 0
         println("Final status:")
         println("  Minimal loss: $Lmin")
@@ -89,7 +89,7 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
         end
         println("========================================")
     end
-    # coverage: ignore end
+    # COV_EXCL_STOP
 
     h5open("hyperopt_out.h5", "w") do file
         file["L_train"] = prof.L_train[1, :]
