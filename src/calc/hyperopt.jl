@@ -26,8 +26,8 @@ function hyper_optimize(param_values, params, comm, conf; rank=0, nranks=1, verb
     end
     prof = Hamster.run_calculation(Val{:optimization}(), comm, conf, rank=rank, nranks=nranks)
     Lmin = validate ? minimum(prof.L_val) : minimum(prof.L_train)
-    if verbosity > 1; @printf("  Final training loss: %.6f\n", minimum(prof.L_train)); end
-    if verbosity > 1 && validate; @printf("  Final validation loss: %.6f\n", minimum(prof.L_val)); end
+    if verbosity > 1; @printf("  Final training loss: %.6f\n", minimum(prof.L_train)); end # coverage: ignore
+    if verbosity > 1 && validate; @printf("  Final validation loss: %.6f\n", minimum(prof.L_val)); end # coverage: ignore
     return Lmin
 end
 
@@ -52,11 +52,11 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
     Niter = get_hyperopt_niter(conf)
 
     all_params = zeros(length(params), Niter)
-    if verbosity == 1; set_value!(conf, "verbosity", 0); end
+    if verbosity == 1; set_value!(conf, "verbosity", 0); end # coverage: ignore
     prof = HamsterProfiler(1, conf, Niter=Niter, Nbatch=1)
 
     for iter in 1:Niter
-        if rank == 0 && verbosity > 0; println("========================================"); end
+        if rank == 0 && verbosity > 0; println("========================================"); end # coverage: ignore
         param_values = [rand(lower:step:upper) for (lower, upper, step) in zip(lowerbounds, upperbounds, stepsizes)]
         MPI.Bcast!(param_values, comm, root=0)
 
@@ -67,6 +67,7 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
         prof.timings[1, iter] = time
         prof.L_train[1, iter] = L_local
 
+        # coverage: ignore start
         if rank == 0 && verbosity > 0
             print_train_status(prof, iter, 1, verbosity=verbosity)
             for (index, param) in enumerate(params)
@@ -74,10 +75,12 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
             end
             println("Current optimum: $(minimum(prof.L_train[1, 1:iter])).")
         end
+        # coverage: ignore end
     end
     if rank == 0 && verbosity > 0; println("========================================"); end
 
     Lmin, indmin = findmin(prof.L_train[1, :])
+    # coverage: ignore start
     if rank == 0 && verbosity > 0
         println("Final status:")
         println("  Minimal loss: $Lmin")
@@ -86,6 +89,8 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
         end
         println("========================================")
     end
+    # coverage: ignore end
+
     h5open("hyperopt_out.h5", "w") do file
         file["L_train"] = prof.L_train[1, :]
         file["param_values"] = all_params
