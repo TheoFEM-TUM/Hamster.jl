@@ -8,5 +8,5 @@
     @test std(prof.L_train) > 0
     @test std(prof.timings) > 0
     rm("hamster.out"); rm("train_config_inds.dat"); rm("val_config_inds.dat"); rm("params.dat")
-    rm("L_val.dat"); rm("L_train.dat"); rm("rllm.dat")
+    rm("L_val.dat"); rm("L_train.dat"); rm("rllm.dat"); rm("hyperopt_out.h5")
 end
