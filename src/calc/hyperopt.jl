@@ -86,5 +86,10 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
         end
         println("========================================")
     end
+    h5open("hyperopt_out.h5", "w") do file
+        file["L_train"] = prof.L_train[1, :]
+        file["param_values"] = all_params
+        file["params"] = params
+    end
     return prof
 end
