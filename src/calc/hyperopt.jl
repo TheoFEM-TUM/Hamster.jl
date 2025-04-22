@@ -48,6 +48,7 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
     params = get_hyperopt_params(conf)
     lowerbounds = get_hyperopt_lowerbounds(conf)
     upperbounds = get_hyperopt_upperbounds(conf)
+    stepsizes = get_hyperopt_stepsizes(conf, length(params))
     Niter = get_hyperopt_niter(conf)
 
     all_params = zeros(length(params), Niter)
@@ -56,7 +57,7 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
 
     for iter in 1:Niter
         if rank == 0 && verbosity > 0; println("========================================"); end
-        param_values = rand.(Uniform.(lowerbounds, upperbounds))
+        param_values = [rand(lower:step:upper) for (lower, upper, step) in zip(lowerbounds, upperbounds, stepsizes)]
         MPI.Bcast!(param_values, comm, root=0)
 
         all_params[:, iter] = param_values

@@ -20,6 +20,13 @@ The `upperbounds` define the upper bounds of the search space.
 get_hyperopt_upperbounds(conf::Config)::Vector{Float64} = conf("upperbounds", "HyperOpt") == "default" ? [0] : conf("upperbounds", "HyperOpt")
 
 """
+    stepsizes=[1e-5]
+
+The `stepsizes` defines the minimum difference between two points that are sampled as trial hyperparameters.
+"""
+get_hyperopt_stepsizes(conf::Config, Nparams)::Vector{Float64} = conf("stepsizes", "HyperOpt") == "default" ? ones(Nparams)*1e-5 : conf("stepsizes", "HyperOpt")
+
+"""
     niter=10
 
 The `niter` tags sets the maximum number of iterations in the hyperparameter optimization.
