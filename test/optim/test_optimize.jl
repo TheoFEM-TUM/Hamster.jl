@@ -8,7 +8,7 @@
     set_value!(conf, "verbosity", 0)
     set_value!(conf, "Niter", "Optimizer", 300)
 
-    # Test that errer of effective Hamiltonian model for GaAs is sufficiently small
+    # Test that error of effective Hamiltonian model for GaAs is sufficiently small
     @test Hamster.get_validate(conf)
     strc = Structure(conf); basis = Basis(strc, conf)
     ham_train = EffectiveHamiltonian([strc], [basis], comm, conf, rank=rank, nranks=nranks)
@@ -33,7 +33,7 @@ end
     set_value!(conf, "verbosity", 0)
     set_value!(conf, "Niter", "Optimizer", 300)
 
-    # Test that errer of effective Hamiltonian model for GaAs is sufficiently small
+    # Test that error of effective Hamiltonian model for GaAs is sufficiently small
     @test Hamster.get_validate(conf)
     strc = Structure(conf); basis = Basis(strc, conf)
     ham_train = EffectiveHamiltonian([strc], [basis], comm, conf, rank=rank, nranks=nranks)
@@ -60,7 +60,7 @@ end
     set_value!(conf, "NNaxes", "As", false)
     Hr, Rs, deg = Hamster.read_hrdat(joinpath(path, "wannier90_hr.dat"))
 
-    # Test that errer of effective Hamiltonian model for GaAs is sufficiently small
+    # Test that error of effective Hamiltonian model for GaAs is sufficiently small
     @test Hamster.get_validate(conf)
     strcs = get_structures(conf, Rs=Rs)
     @test strcs[1].Rs == Rs
