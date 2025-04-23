@@ -44,20 +44,29 @@ Performs random search hyperparameter optimization by repeatedly evaluating rand
 - `nranks::Int`: Number of MPI processes (default = 1).
 - `verbosity::Int`: Controls the amount of output printed (default = retrieved from `conf`).
 """
-function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=1, verbosity=get_verbosity(conf))
-    params = get_hyperopt_params(conf)
-    lowerbounds = get_hyperopt_lowerbounds(conf)
-    upperbounds = get_hyperopt_upperbounds(conf)
-    stepsizes = get_hyperopt_stepsizes(conf, length(params))
-    Niter = get_hyperopt_niter(conf)
+function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=1, verbosity=get_verbosity(conf), 
+            params=get_hyperopt_params(conf), lowerbounds=get_hyperopt_lowerbounds(conf), upperbounds=get_hyperopt_upperbounds(conf),
+            stepsizes=get_hyperopt_stepsizes(conf), mode=get_hyperopt_mode(conf), Niter=get_hyperopt_niter(conf))
 
-    all_params = zeros(length(params), Niter)
     if verbosity == 1; set_value!(conf, "verbosity", 0); end # coverage: ignore
+    
+    param_ranges = [lower:step:upper for (lower, upper, step) in zip(lowerbounds, upperbounds, stepsizes)]
+    possible_values = collect(Iterators.product(param_ranges...))
+    Niter = mode[1] == 'g' && Niter == 1 ? length(possible_values) : Niter
+    all_params = zeros(length(params), Niter)
     prof = HamsterProfiler(1, conf, Niter=Niter, Nbatch=1)
+    print_start_message(prof, verbosity=verbosity)
 
     for iter in 1:Niter
         if rank == 0 && verbosity > 0; println("========================================"); end # coverage: ignore
-        param_values = [rand(lower:step:upper) for (lower, upper, step) in zip(lowerbounds, upperbounds, stepsizes)]
+        
+        if mode[1] == 'r'
+            param_values = [rand(lower:step:upper) for (lower, upper, step) in zip(lowerbounds, upperbounds, stepsizes)]
+        elseif mode[1] == 'g'
+            param_ranges = [lower:step:upper for (lower, upper, step) in zip(lowerbounds, upperbounds, stepsizes)]
+            possible_values = collect(Iterators.product(param_ranges...))
+            param_values = [possible_values[iter]...]
+        end
         MPI.Bcast!(param_values, comm, root=0)
 
         all_params[:, iter] = param_values
