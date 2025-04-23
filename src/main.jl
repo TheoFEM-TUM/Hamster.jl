@@ -33,7 +33,9 @@ end
 Given a `Config` instance, decides which type of calculation is to be performed based on certain tags in the input file.
 
 # Details
-- An `Optimizer` block tells Hamster to run a parameter optimization.
+- An `Optimizer` without a `HyperOpt` block tells Hamster to run a parameter optimization.
+- An `Optimizer` with a `HyperOpt` block tells Hamster to run a hyperparameter optimization.
+- Otherwise, a standard calculation is performed.
 """
 function decide_which_task_to_perform(conf::Config)
     if haskey(conf, "Optimizer") && !haskey(conf, "HyperOpt")
