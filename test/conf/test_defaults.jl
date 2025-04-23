@@ -102,4 +102,16 @@ end
     # Test 9: test multiple values
     set_value!(conf, "upperbounds", "HyperOpt", "3 4")
     @test Hamster.get_hyperopt_upperbounds(conf) == Float64[3, 4]
+
+    # Test 10: test stepsizes default
+    set_value!(conf, "params", "HyperOpt", "param1 param2")
+    @test Hamster.get_hyperopt_stepsizes(conf) == [1e-5, 1e-5]
+
+    # Test 11: test single value
+    set_value!(conf, "stepsizes", "HyperOpt", 0.1)
+    @test Hamster.get_hyperopt_stepsizes(conf) == [0.1]
+
+    # Test 12: test multiple values
+    set_value!(conf, "stepsizes", "HyperOpt", "0.1 0.2")
+    @test Hamster.get_hyperopt_stepsizes(conf) == [0.1, 0.2] 
 end
