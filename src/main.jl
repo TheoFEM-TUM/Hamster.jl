@@ -6,9 +6,13 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1)
         nthreads_kpoints = get_nthreads_kpoints(conf)
         nthreads_bands = get_nthreads_bands(conf)
         nthreads_blas = get_nthreads_blas(conf); BLAS.set_num_threads(nthreads_blas)
+        
+        # COV_EXCL_START
         if get(ENV, "OMP_NUM_THREADS", "not set") ∉ ["1", "not set"] && rank == 0
-            @warn "OMP_NUM_THREADS is not set to 1 (currently: $(get(ENV, "OMP_NUM_THREADS", "not set"))). This may hurt performance in multi-threaded or distributed settings. Consider setting OMP_NUM_THREADS=1, but test for your case." # coverage: ignore
+            @warn "OMP_NUM_THREADS is not set to 1 (currently: $(get(ENV, "OMP_NUM_THREADS", "not set"))). This may hurt performance in multi-threaded or distributed settings. Consider setting OMP_NUM_THREADS=1, but test for your case."
         end
+        # COV_EXCL_STOP
+
         Nconf = get_Nconf(conf)
         write_block_summary("Parallelization", num_nodes=num_nodes, nhamster=nranks, 
             nstrc_per_hamster=round(Int64, Nconf/nranks), nstrc_per_node=round(Int64, Nconf/num_nodes), 
