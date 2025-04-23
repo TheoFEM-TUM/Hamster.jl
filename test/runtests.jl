@@ -91,6 +91,7 @@ if test_all || test_only == "calc"
     @testset "calc" begin
         include("calc/test_optimization.jl")
         include("calc/test_standard.jl")
+        include("calc/test_hyperopt.jl")
     end
 end
 

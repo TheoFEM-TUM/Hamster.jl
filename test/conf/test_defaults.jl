@@ -66,3 +66,52 @@ end
     set_value!(conf, "update", "SOC", true)
     @test get_soc(conf) == true
 end
+
+@testset "HyperOpt defaults" begin
+    conf = get_empty_config()
+
+    # Test 1: test params default
+    @test Hamster.get_hyperopt_params(conf) == String[]
+
+    # Test 2: test single parameter
+    set_value!(conf, "params", "HyperOpt", "param1")
+    @test Hamster.get_hyperopt_params(conf) == ["param1"]
+
+    # Test 3: test multiple values
+    set_value!(conf, "params", "HyperOpt", "param1 param2")
+    @test Hamster.get_hyperopt_params(conf) == ["param1", "param2"]
+
+    # Test 4: test lowerbounds default
+    @test Hamster.get_hyperopt_lowerbounds(conf) == [0]
+
+    # Test 5: test single value
+    set_value!(conf, "lowerbounds", "HyperOpt", 1)
+    @test Hamster.get_hyperopt_lowerbounds(conf) == [1]
+
+    # Test 6: test multiple values
+    set_value!(conf, "lowerbounds", "HyperOpt", "1 2")
+    @test Hamster.get_hyperopt_lowerbounds(conf) == Float64[1, 2]
+
+    # Test 7: test upperbounds default
+    @test Hamster.get_hyperopt_upperbounds(conf) == [0]
+
+    # Test 8: test single value
+    set_value!(conf, "upperbounds", "HyperOpt", -1)
+    @test Hamster.get_hyperopt_upperbounds(conf) == [-1]
+
+    # Test 9: test multiple values
+    set_value!(conf, "upperbounds", "HyperOpt", "3 4")
+    @test Hamster.get_hyperopt_upperbounds(conf) == Float64[3, 4]
+
+    # Test 10: test stepsizes default
+    set_value!(conf, "params", "HyperOpt", "param1 param2")
+    @test Hamster.get_hyperopt_stepsizes(conf) == [1e-5, 1e-5]
+
+    # Test 11: test single value
+    set_value!(conf, "stepsizes", "HyperOpt", 0.1)
+    @test Hamster.get_hyperopt_stepsizes(conf) == [0.1]
+
+    # Test 12: test multiple values
+    set_value!(conf, "stepsizes", "HyperOpt", "0.1 0.2")
+    @test Hamster.get_hyperopt_stepsizes(conf) == [0.1, 0.2] 
+end
