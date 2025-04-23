@@ -50,9 +50,11 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
 
     if verbosity == 1; set_value!(conf, "verbosity", 0); end # coverage: ignore
     
-    param_ranges = [lower:step:upper for (lower, upper, step) in zip(lowerbounds, upperbounds, stepsizes)]
-    possible_values = collect(Iterators.product(param_ranges...))
-    Niter = mode[1] == 'g' && Niter == 1 ? length(possible_values) : Niter
+    if mode[1] == 'g' && Niter == 1
+        param_ranges = [lower:step:upper for (lower, upper, step) in zip(lowerbounds, upperbounds, stepsizes)]
+        possible_values = collect(Iterators.product(param_ranges...))
+        Niter = length(possible_values)
+    end
     all_params = zeros(length(params), Niter)
     prof = HamsterProfiler(1, conf, Niter=Niter, Nbatch=1)
     print_start_message(prof, verbosity=verbosity)

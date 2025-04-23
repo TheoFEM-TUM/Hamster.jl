@@ -6,7 +6,7 @@ end
 
 begin Optimizer
     lr = 0.5
-    niter = 50
+    niter = 10
     loss = MAE
     wE = 1 1 1 1 1 1 0.1 0.1
     wk_1 = 5
@@ -14,8 +14,8 @@ end
 
 begin HyperOpt
     lowerbounds = 5 5
-    upperbounds = 20 20
-    niter = 5
+    upperbounds = 15 15
+    niter = 3
     params = Ga_alpha As_alpha
 end
 
