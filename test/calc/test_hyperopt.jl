@@ -16,13 +16,17 @@ end
     conf = get_config(filename = joinpath(path, "hconf_hyperopt"))
     set_value!(conf, "poscar", joinpath(path, "POSCAR_gaas"))
     set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
-    set_value!(conf, "stepsizes", "HyperOpt", "10 10")
+    set_value!(conf, "lowerbounds", "HyperOpt", 5)
+    set_value!(conf, "upperbounds", "HyperOpt", 7)
+    set_value!(conf, "params", "HyperOpt", "rcut")
+    set_value!(conf, "stepsizes", "HyperOpt", "1")
     set_value!(conf, "mode", "HyperOpt", "grid")
+    set_value!(conf, "niter", "HyperOpt", 1)
 
     prof = Hamster.main(comm, conf, rank=rank)
     @test std(prof.L_train) > 0
     @test std(prof.timings) > 0
-    @test h5read("hyperopt_out.h5", "param_values") == [5.0 15.0 5.0; 5.0 5.0 15.0]
+    @test h5read("hyperopt_out.h5", "param_values") == [5.0 6.0 7.0]
     rm("hamster.out"); rm("train_config_inds.dat"); rm("val_config_inds.dat"); rm("params.dat")
     rm("L_val.dat"); rm("L_train.dat"); rm("rllm.dat"); rm("hyperopt_out.h5")
 end
