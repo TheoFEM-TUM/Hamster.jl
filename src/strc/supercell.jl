@@ -70,12 +70,25 @@ Randomly selects training and validation configuration indices from a given rang
 - `train_config_inds`: A vector of indices for training configurations.
 - `val_config_inds`: A vector of indices for validation configurations.
 """
-function get_config_index_sample(conf=get_empty_config(); Nconf=get_Nconf(conf), Nconf_min=get_Nconf_min(conf), Nconf_max=get_Nconf_max(conf), val_ratio=get_val_ratio(conf))
-    Nval = round(Int64, Nconf * val_ratio)
-    train_config_inds = sample(Nconf_min:Nconf_max, Nconf, replace=false, ordered=true)
-    remaining_indices = setdiff(Nconf_min:Nconf_max, train_config_inds)
+function get_config_index_sample(conf=get_empty_config(); Nconf=get_Nconf(conf), Nconf_min=get_Nconf_min(conf), Nconf_max=get_Nconf_max(conf),
+            validate=get_validate(conf), val_ratio=get_val_ratio(conf), train_mode=get_train_mode(conf), val_mode = get_val_mode(conf))
+
+    train_config_inds = [1]
+    if Nconf > 1 && lowercase(train_mode) == lowercase(val_mode)
+        train_config_inds = sample(Nconf_min:Nconf_max, Nconf, replace=false, ordered=true)
+    end
+
+    val_config_inds = Int64[]    
+    Nval = train_mode == val_mode ? round(Int64, Nconf * val_ratio) : Nconf
+    remaining_indices = lowercase(train_mode) == "pc" ? (Nconf_min:Nconf_max) : setdiff(Nconf_min:Nconf_max, train_config_inds)
     val_config_inds = sample(remaining_indices, Nval, replace=false, ordered=true)
-    if Nconf == 1 && get_validate(conf); val_config_inds = [1]; end # only one config, e.g., pc
+    
+    if Nconf == 1 && validate && lowercase(val_mode) == "pc"
+        val_config_inds = [1] # only one config, e.g., pc
+    elseif !validate
+        val_config_inds = Int64[]
+    end
+
     return train_config_inds, val_config_inds
 end
 
