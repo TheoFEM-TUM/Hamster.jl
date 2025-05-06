@@ -12,10 +12,12 @@ struct DataLoader{A, B}
     val_data :: Vector{B}
 end
 
-function DataLoader(train_config_inds, val_config_inds, PC_Nε, SC_Nε, conf=get_empty_config(); train_path=get_train_data(conf), val_path=get_val_data(conf), validate=get_validate(conf), bandmin=get_bandmin(conf), train_mode=get_train_mode(conf), val_mode=get_val_mode(conf), hr_fit=get_hr_fit(conf), eig_val=get_eig_val(conf))
+function DataLoader(train_config_inds, val_config_inds, Nε_train, Nε_val, conf=get_empty_config(); train_path=get_train_data(conf), val_path=get_val_data(conf), 
+    validate=get_validate(conf), bandmin=get_bandmin(conf), val_bandmin=get_val_bandmin(conf), train_mode=get_train_mode(conf), val_mode=get_val_mode(conf), hr_fit=get_hr_fit(conf), eig_val=get_eig_val(conf))
+
     hr_val = !eig_val
-    train_data = hr_fit ? get_hr_data(train_mode, train_path, inds=train_config_inds) : get_eig_data(train_mode, train_path, PC_Nε, SC_Nε, inds=train_config_inds, bandmin=bandmin)
-    val_data = hr_val ? get_hr_data(val_mode, val_path, inds=val_config_inds, empty=!validate) : get_eig_data(val_mode, val_path, PC_Nε, SC_Nε, inds=val_config_inds, bandmin=bandmin, empty=!validate)
+    train_data = hr_fit ? get_hr_data(train_mode, train_path, inds=train_config_inds) : get_eig_data(train_mode, train_path, Nε_train[1], Nε_train[2], inds=train_config_inds, bandmin=bandmin)
+    val_data = hr_val ? get_hr_data(val_mode, val_path, inds=val_config_inds, empty=!validate) : get_eig_data(val_mode, val_path, Nε_val[1], Nε_val[2], inds=val_config_inds, bandmin=val_bandmin, empty=!validate)
     return DataLoader(train_data, val_data)
 end
 
