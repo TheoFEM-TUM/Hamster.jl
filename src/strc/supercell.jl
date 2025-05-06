@@ -60,11 +60,14 @@ end
 Randomly selects training and validation configuration indices from a given range of configurations.
 
 # Arguments
-- `conf`: (Optional) A configuration object from which additional parameters are obtained. Defaults to an empty configuration.
-- `Nconf`: (Optional) The number of configurations to sample for training.
-- `Nconf_min`: (Optional) The minimum configuration index.
-- `Nconf_max`: (Optional) The maximum configuration index.
-- `val_ratio`: (Optional) The ratio of validation data size to training data size.
+- `conf`: (Optional) A configuration object from which all other parameters may be derived. Defaults to an empty configuration.
+- `Nconf`: (Optional) The number of configurations to sample for training. Derived from `conf` if not specified.
+- `Nconf_min`: (Optional) The minimum configuration index. Derived from `conf` if not specified.
+- `Nconf_max`: (Optional) The maximum configuration index. Derived from `conf` if not specified.
+- `validate`: (Optional) Boolean flag indicating whether validation should be performed. Derived from `conf` if not specified.
+- `val_ratio`: (Optional) Ratio of validation configurations to training configurations. Used only if `train_mode == val_mode`.
+- `train_mode`: (Optional) Mode identifier for training configurations. Derived from `conf`.
+- `val_mode`: (Optional) Mode identifier for validation configurations. Derived from `conf`.
 
 # Returns
 - `train_config_inds`: A vector of indices for training configurations.
