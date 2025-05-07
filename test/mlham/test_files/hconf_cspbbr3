@@ -1,0 +1,27 @@
+begin Options
+    rcut = 7
+    load_rllm = true
+    verbosity = 2
+end
+
+begin ML
+    update = false
+    Ncluster = 30
+    Npoints = 100
+end
+
+begin atom Cs
+  alpha = 20
+  orbitals = s
+end
+
+begin atom Pb
+  n = 4
+  alpha = 16
+  orbitals = s px py pz
+end
+
+begin atom Br
+  alpha = 14
+  orbitals = px py pz
+end
