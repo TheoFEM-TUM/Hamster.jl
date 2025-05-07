@@ -16,7 +16,7 @@ path = string(@__DIR__) * "/test_files/"
     @test all(i->100 ≤ i ≤ 1000, config_indices)
 
     # Test 3: validation with ratio 0.2, Nconf_min set to 100
-    train_indices, val_indices = Hamster.get_config_index_sample(Nconf=100, Nconf_min=75, Nconf_max=1000, val_ratio=0.2)
+    train_indices, val_indices = Hamster.get_config_index_sample(Nconf=100, Nconf_min=75, Nconf_max=1000, val_ratio=0.2, validate=true, val_mode="md", train_mode="md")
     @test length(unique(train_indices)) == 100
     @test length(unique(val_indices)) == 20
     @test all(i->75 ≤ i ≤ 1000, train_indices)
@@ -34,17 +34,22 @@ path = string(@__DIR__) * "/test_files/"
     train_indices, val_indices = Hamster.get_config_index_sample(conf)
     @test train_indices == val_indices == [1]
 
-    # Test 6: test splitting indices into chunks (basic functionality)
+    # Test 6: Test md validation with pc training
+    train_indices, val_indices = Hamster.get_config_index_sample(Nconf=10, Nconf_max=100, validate=true, val_mode="md")
+    @test train_indices == [1]
+    @test length(val_indices) == 10
+
+    # Test 7: test splitting indices into chunks (basic functionality)
     indices = collect(1:9)
     @test Hamster.split_indices_into_chunks(indices, 3, rank=0) == [1, 2, 3]
     @test Hamster.split_indices_into_chunks(indices, 3, rank=1) == [4, 5, 6]
     @test Hamster.split_indices_into_chunks(indices, 3, rank=2) == [7, 8, 9]
 
-    # Empty list
+    # Test 8: Empty list
     indices = []
     @test Hamster.split_indices_into_chunks(indices, 1, rank=0) == []
 
-    # Out of range
+    # Test 9: Out of range
     indices = [1, 2]
     @test Hamster.split_indices_into_chunks(indices, 3, rank=0) == [1]
     @test Hamster.split_indices_into_chunks(indices, 3, rank=1) == [2]

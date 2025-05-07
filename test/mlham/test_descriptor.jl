@@ -53,20 +53,27 @@ end
     @test std(env[5:8]) < 1e-10
 
     # Test 2: test orbswap
-    type1 = "Ga"; type2 = "As"; iorb = 1; jorb = 2
-    @test Hamster.decide_orbswap(type1, type2, iorb, jorb) == false
-    @test Hamster.decide_orbswap(type1, type2, jorb, iorb) == false
+    # Different elements: should swap if element_to_number(itype) > element_to_number(jtype)
+    @test Hamster.decide_orbswap("Pb", "Ga", 0, 0, 0, 0) == true   # Pb > Ga
+    @test Hamster.decide_orbswap("Br", "Cs", 0, 0, 0, 0) == false  # Br < Cs
 
-    type1 = "As"; type2 = "Ga"; iorb = 1; jorb = 2
-    @test Hamster.decide_orbswap(type1, type2, iorb, jorb) == true
-    @test Hamster.decide_orbswap(type1, type2, jorb, iorb) == true
+    # Same element, l_i > l_j: should swap
+    @test Hamster.decide_orbswap("As", "As", 2, 0, 1, 0) == true   # d vs p
+    @test Hamster.decide_orbswap("As", "As", 1, 0, 2, 0) == false
 
-    type1 = "As"; type2 = "As"; iorb = 1; jorb = 2
-    @test Hamster.decide_orbswap(type1, type2, iorb, jorb) == false
-    @test Hamster.decide_orbswap(type1, type2, iorb, iorb) == false
+    # Same element, same l, m_i > m_j: should swap
+    @test Hamster.decide_orbswap("Ga", "Ga", 1, 1, 1, 0) == true
+    @test Hamster.decide_orbswap("Ga", "Ga", 1, 0, 1, 1) == false
 
-    type1 = "As"; type2 = "As"; iorb = 2; jorb = 1
-    @test Hamster.decide_orbswap(type1, type2, iorb, jorb) == true
+    # Same element, same l and m: no swap
+    @test Hamster.decide_orbswap("Cs", "Cs", 0, 0, 0, 0) == false
+
+    # Different elements, same orbitals: test periodic table order
+    @test Hamster.decide_orbswap("Pb", "Br", 1, 0, 1, 0) == true   # Pb > Br
+    @test Hamster.decide_orbswap("As", "Pb", 1, 0, 1, 0) == false  # As < Pb
+
+    # Edge case: same element, same l, m_i > m_j
+    @test Hamster.decide_orbswap("Br", "Br", 2, 2, 2, 1) == true
 
     # Test 2: test angular descriptor
     # Test case 1: Identical atom types, no orbital swap
@@ -112,4 +119,32 @@ end
     Xout = Hamster.sample_structure_descriptors(X, Ncluster=num_cluster, Npoints=num_points)
     @test length(Xout) == num_points
     @test length(Xout[1]) == 3
+end
+
+@testset "CsPbBr3 descriptors (Orbital ordering)" begin
+    path = joinpath(@__DIR__, "test_files/")
+    conf = get_config(filename=joinpath(path, "hconf_cspbbr3"))
+    set_value!(conf, "rllm_file", joinpath(path, "rllm_cspbbr3.dat"))
+    set_value!(conf, "poscar", joinpath(path, "POSCAR_CsPbBr3"))
+    #set_value!(conf, "init_params", "ML", joinpath(path, "ml_params.dat"))
+    set_value!(conf, "init_params", "ML", "zeros")
+    set_value!(conf, "verbosity", 0)
+
+    strc_1 = Structure(conf); basis_1 = Basis(strc_1, conf); model_1 = TBModel(strc_1, basis_1, conf)
+    descriptors_1 = Hamster.get_tb_descriptor(model_1.hs, model_1.V, strc_1, basis_1, conf)
+
+    set_value!(conf, "orbitals", "Pb", "s py px pz"); set_value!(conf, "orbitals", "Br", "py px pz")
+    strc_2 = Structure(conf); basis_2 = Basis(strc_2, conf); model_2 = TBModel(strc_2, basis_2, conf)
+    descriptors_2 = Hamster.get_tb_descriptor(model_2.hs, model_2.V, strc_2, basis_2, conf)
+
+    orbs_1 = ["Pb_s", "Pb_px", "Pb_py", "Pb_pz", "Cs_s", "Br-1_px", "Br-1_py", "Br-1_pz", "Br-2_px", "Br-2_py", "Br-2_pz", "Br-3_px", "Br-3_py", "Br-3_pz"]
+    orbs_2 = ["Pb_s", "Pb_py", "Pb_px", "Pb_pz", "Cs_s", "Br-1_py", "Br-1_px", "Br-1_pz", "Br-2_py", "Br-2_px", "Br-2_pz", "Br-3_py", "Br-3_px", "Br-3_pz"]
+    correct_permutation = Bool[]
+    for R in eachindex(descriptors_1), i in axes(descriptors_1[R], 1), j in axes(descriptors_1[R], 2)
+        i_2 = findfirst(orb -> orb == orbs_1[i], orbs_2)
+        j_2 = findfirst(orb -> orb == orbs_1[j], orbs_2)
+        err = sum(abs.(descriptors_1[R][i, j] .- descriptors_2[R][i_2, j_2]))
+        push!(correct_permutation, err < 1e-5)
+    end
+    @test all(correct_permutation)
 end

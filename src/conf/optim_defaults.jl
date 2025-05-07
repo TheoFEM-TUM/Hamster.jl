@@ -95,6 +95,13 @@ The `bandmin` tag sets the index of the lowest band that is included in the fitt
 get_bandmin(conf::Config)::Int64 = conf("bandmin", "Optimizer") == "default" ? 1 : conf("bandmin", "Optimizer")
 
 """
+    val_bandmin=1
+
+The `bandmin` tag sets the index of the lowest band that is included in the validation.
+"""
+get_val_bandmin(conf::Config)::Int64 = conf("val_bandmin", "Optimizer") == "default" ? get_bandmin(conf) : conf("val_bandmin", "Optimizer")
+
+"""
     hr_fit=false
 
 The `hr_fit` tag switches on fitting the effective Hamiltonian model to Hamiltonian data.

@@ -311,38 +311,46 @@ end
 
 struct porb <: Angular
     l :: Int64
+    m :: Int64
 end
-porb() = porb(1)
+porb() = porb(1, 0)
 
 struct dorb <: Angular
     l :: Int64
+    m :: Int64
 end
-dorb() = dorb(2)
+dorb() = dorb(2, 0)
 
 struct sp3 <: Angular
     l :: Int64
+    m :: Int64
 end
-sp3() = sp3(-1)
+sp3() = sp3(-1, 0)
 
 struct sp3dr2 <: Angular
     l :: Int64
+    m :: Int64
 end
-sp3dr2() = sp3dr2(-2)
+sp3dr2() = sp3dr2(-2, 0)
 
 struct prdr2 <: Angular
     l :: Int64
+    m :: Int64
 end
-prdr2() = prdr2(-3)
+prdr2() = prdr2(-3, 0)
 
 struct pxdx2 <: Angular
     l :: Int64
+    m :: Int64
 end
-pxdx2() = pxdx2(-3)
+pxdx2() = pxdx2(-3, 0)
 struct pydy2 <: Angular
     l :: Int64
+    m :: Int64
 end
-pydy2() = pydy2(-3)
+pydy2() = pydy2(-3, 0)
 struct pzdz2 <: Angular
     l :: Int64
+    m :: Int64
 end
-pzdz2() = pzdz2(-3)
+pzdz2() = pzdz2(-3, 0)

@@ -60,22 +60,38 @@ end
 Randomly selects training and validation configuration indices from a given range of configurations.
 
 # Arguments
-- `conf`: (Optional) A configuration object from which additional parameters are obtained. Defaults to an empty configuration.
-- `Nconf`: (Optional) The number of configurations to sample for training.
-- `Nconf_min`: (Optional) The minimum configuration index.
-- `Nconf_max`: (Optional) The maximum configuration index.
-- `val_ratio`: (Optional) The ratio of validation data size to training data size.
+- `conf`: (Optional) A configuration object from which all other parameters may be derived. Defaults to an empty configuration.
+- `Nconf`: (Optional) The number of configurations to sample for training. Derived from `conf` if not specified.
+- `Nconf_min`: (Optional) The minimum configuration index. Derived from `conf` if not specified.
+- `Nconf_max`: (Optional) The maximum configuration index. Derived from `conf` if not specified.
+- `validate`: (Optional) Boolean flag indicating whether validation should be performed. Derived from `conf` if not specified.
+- `val_ratio`: (Optional) Ratio of validation configurations to training configurations. Used only if `train_mode == val_mode`.
+- `train_mode`: (Optional) Mode identifier for training configurations. Derived from `conf`.
+- `val_mode`: (Optional) Mode identifier for validation configurations. Derived from `conf`.
 
 # Returns
 - `train_config_inds`: A vector of indices for training configurations.
 - `val_config_inds`: A vector of indices for validation configurations.
 """
-function get_config_index_sample(conf=get_empty_config(); Nconf=get_Nconf(conf), Nconf_min=get_Nconf_min(conf), Nconf_max=get_Nconf_max(conf), val_ratio=get_val_ratio(conf))
-    Nval = round(Int64, Nconf * val_ratio)
-    train_config_inds = sample(Nconf_min:Nconf_max, Nconf, replace=false, ordered=true)
-    remaining_indices = setdiff(Nconf_min:Nconf_max, train_config_inds)
+function get_config_index_sample(conf=get_empty_config(); Nconf=get_Nconf(conf), Nconf_min=get_Nconf_min(conf), Nconf_max=get_Nconf_max(conf),
+            validate=get_validate(conf), val_ratio=get_val_ratio(conf), train_mode=get_train_mode(conf), val_mode = get_val_mode(conf))
+
+    train_config_inds = [1]
+    if Nconf > 1 && lowercase(train_mode) == lowercase(val_mode)
+        train_config_inds = sample(Nconf_min:Nconf_max, Nconf, replace=false, ordered=true)
+    end
+
+    val_config_inds = Int64[]    
+    Nval = train_mode == val_mode ? round(Int64, Nconf * val_ratio) : Nconf
+    remaining_indices = lowercase(train_mode) == "pc" ? (Nconf_min:Nconf_max) : setdiff(Nconf_min:Nconf_max, train_config_inds)
     val_config_inds = sample(remaining_indices, Nval, replace=false, ordered=true)
-    if Nconf == 1 && get_validate(conf); val_config_inds = [1]; end # only one config, e.g., pc
+    
+    if Nconf == 1 && validate && lowercase(val_mode) == "pc"
+        val_config_inds = [1] # only one config, e.g., pc
+    elseif !validate
+        val_config_inds = Int64[]
+    end
+
     return train_config_inds, val_config_inds
 end
 
