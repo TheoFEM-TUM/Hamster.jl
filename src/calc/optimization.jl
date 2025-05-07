@@ -50,8 +50,12 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
 
    PC_Nε_train = get_soc(conf) ? 2*length(train_bases[1]) : length(train_bases[1])
    SC_Nε_train = get_soc(conf) ? 2*length(train_bases[end]) : length(train_bases[end])
-   PC_Nε_val = get_soc(conf) ? 2*length(val_bases[1]) : length(val_bases[1])
-   SC_Nε_val = get_soc(conf) ? 2*length(val_bases[end]) : length(val_bases[end])
+   PC_Nε_val = PC_Nε_train
+   SC_Nε_val = SC_Nε_train
+   if get_validate(conf)
+      PC_Nε_val = get_soc(conf) ? 2*length(val_bases[1]) : length(val_bases[1])
+      SC_Nε_val = get_soc(conf) ? 2*length(val_bases[end]) : length(val_bases[end])
+   end
 
    dl = DataLoader(local_train_inds, local_val_inds, (PC_Nε_train, SC_Nε_train), (PC_Nε_val, SC_Nε_val), conf)
    Nε, Nk = get_neig_and_nk(dl.train_data)

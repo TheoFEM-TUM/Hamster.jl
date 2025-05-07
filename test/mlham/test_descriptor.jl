@@ -128,7 +128,7 @@ end
     set_value!(conf, "poscar", joinpath(path, "POSCAR_CsPbBr3"))
     #set_value!(conf, "init_params", "ML", joinpath(path, "ml_params.dat"))
     set_value!(conf, "init_params", "ML", "zeros")
-    set_value!(conf, "verbosity", 2)
+    set_value!(conf, "verbosity", 0)
 
     strc_1 = Structure(conf); basis_1 = Basis(strc_1, conf); model_1 = TBModel(strc_1, basis_1, conf)
     descriptors_1 = Hamster.get_tb_descriptor(model_1.hs, model_1.V, strc_1, basis_1, conf)
