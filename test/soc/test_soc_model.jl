@@ -4,6 +4,7 @@
     set_value!(conf, "rllm_file", joinpath(path, "rllm_gaas.dat"))
     set_value!(conf, "poscar", joinpath(path, "POSCAR_gaas"))
     set_value!(conf, "init_params", joinpath(path, "params.dat"))
+    set_value!(conf, "update", "SOC", true)
     set_value!(conf, "verbosity", 0)
 
     strc = Structure(conf); basis = Basis(strc, conf)
@@ -34,6 +35,7 @@ end
     set_value!(conf, "poscar", joinpath(path, "POSCAR_CsPbBr3"))
     set_value!(conf, "init_params", joinpath(path, "params_cspbbr3.dat"))
     set_value!(conf, "init_params", "ML", joinpath(path, "ml_params.dat"))
+    set_value!(conf, "update", "SOC", true)
     set_value!(conf, "verbosity", 0)
 
     strc = Structure(conf); basis = Basis(strc, conf)

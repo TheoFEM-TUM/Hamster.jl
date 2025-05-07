@@ -10,10 +10,6 @@ begin ML
     Npoints = 100
 end
 
-begin SOC
-    update = true
-end
-
 begin atom Cs
   alpha = 20
   orbitals = s
