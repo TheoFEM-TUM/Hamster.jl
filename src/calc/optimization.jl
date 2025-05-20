@@ -29,8 +29,10 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    train_config_inds, val_config_inds = get_config_index_sample(conf)
    
    if rank == 0
-      write_to_file(train_config_inds, "train_config_inds")
-      write_to_file(val_config_inds, "val_config_inds")
+      h5open("hamster_out.h5", "w") do file
+         file["train_config_inds"] = train_config_inds
+         file["val_config_inds"] = val_config_inds
+      end
    end
    
    MPI.Bcast!(train_config_inds, comm, root=0)
@@ -65,8 +67,10 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf, rank=rank, nranks=nranks)
    write_params(ham_train, conf)
    if rank == 0
-      write_to_file(dropdims(sum(prof.L_train, dims=1), dims=1), "L_train")
-      write_to_file(prof.L_val, "L_val")
+      h5open("hamster_out.h5", "w") do file
+         file["L_train"] = dropdims(sum(prof.L_train, dims=1), dims=1)
+         file["L_val"] = prof.L_val
+      end
    end
    return prof
 end

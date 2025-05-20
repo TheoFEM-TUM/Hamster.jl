@@ -85,7 +85,10 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
 
     if lowercase(mode[1]) == 't'
         space = Dict(Symbol(param)=>HP.QuantUniform(Symbol(param), l, u, δ) for (param, l, u, δ) in zip(params, lowerbounds, upperbounds, stepsizes))
-        results = fmin(ps->hyper_optimize(ps, params, prof, comm, conf, rank=rank, nranks=nranks, verbosity=verbosity), space, Niter)
+        logger = Base.NullLogger()
+        Base.with_logger(logger) do
+            results = fmin(ps->hyper_optimize(ps, params, prof, comm, conf, rank=rank, nranks=nranks, verbosity=verbosity), space, Niter)
+        end
     else
         for iter in 1:Niter
             if lowercase(mode[1]) == 'r'
@@ -116,7 +119,9 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
 
     h5open("hamster_out.h5", "w") do file
         file["L_train"] = prof.L_train[1, :]
-        file["param_values"] = prof.param_values
+        for (index, param) in enumerate(params)
+            file[param] = prof.param_values[index, :]
+        end
         file["params"] = params
     end
     return prof
