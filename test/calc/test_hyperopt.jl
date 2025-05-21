@@ -25,7 +25,7 @@ end
     prof = Hamster.main(comm, conf, rank=rank)
     @test std(prof.L_train) > 0
     @test std(prof.timings) > 0
-    @test h5read("hamster_out.h5", "rcut") == [5.0 6.0 7.0]
+    @test h5read("hamster_out.h5", "rcut") == [5.0, 6.0, 7.0]
     rm("hamster.out"); rm("params.dat"); rm("rllm.dat"); rm("hamster_out.h5")
 end
 
