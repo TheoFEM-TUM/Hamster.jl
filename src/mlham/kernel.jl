@@ -216,9 +216,9 @@ Set the parameters of a `HamiltonianKernel` instance.
 - Updates the `Vs` field of the `kernel` in place if the consistency checks pass.
 """
 function set_params!(kernel::HamiltonianKernel, params)
-    throw_error = size(kernel.params) ≠ size(params)
+    throw_error = length(kernel.data_points) ≠ length(params)
     if throw_error
-        error("Parameter vector is not of correct size!")
+        error("Parameter vector is not of correct size ($(length(kernel.data_points)) ≠ $(length(params)))!")
     else
         kernel.params = params
     end
