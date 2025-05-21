@@ -17,14 +17,14 @@ Evaluate a given set of hyperparameters by updating a configuration and running 
 """
 function hyper_optimize(params, labels, prof, comm, conf; rank=0, nranks=1, verbosity=get_verbosity(conf), validate=get_validate(conf))::Float64
     if rank == 0 && verbosity > 0; println("========================================"); end # coverage: ignore
-    
+
     param_values = map(labels) do label
         params[Symbol(label)]
     end
     MPI.Bcast!(param_values, comm, root=0)
     iter = findfirst(x->x==0, prof.L_train[1, :])
     for (label, param_value) in zip(labels, param_values)
-        block_key = split_line(label, char="_")
+        block_key = split(label, '_', limit=2)
         param_index = findfirst(l->l==label, labels)
         prof.param_values[param_index, iter] = param_value
         if length(block_key) == 1
