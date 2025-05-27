@@ -169,6 +169,13 @@ function get_val_ratio(conf::Config)::Float64
 end
 
 """
+    val_weights=false
+
+If `val_weights` is true, the same weights are used for the validation loss as for the training loss.
+"""
+get_val_weights(conf::Config)::Bool = conf("val_weights", "Optimizer") == "default" ? false : conf("val_weights", "Optimizer")
+
+"""
     printeachbatch=false (true if verbosity > 1)
 
 The `printeachbatch` tag switches on printing profiler information at every batch.

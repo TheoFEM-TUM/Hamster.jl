@@ -32,12 +32,18 @@ Creates a gradient descent optimizer for a given loss function, regularization t
 - `conf::Any`: Configuration object for the optimizer, defaults to `get_empty_config()`.
 - `lr::Float64` (optional): Learning rate for the Adam optimizer. Defaults to the value returned by `get_lr(conf)`.
 - `Niter::Int` (optional): Number of iterations for the optimization process. Defaults to the value returned by `get_niter(conf)`.
+- `val_weights::Bool` (optional): If true, same weights are used for validation as for training.
 """
-function GDOptimizer(Nε, Nk, conf=get_empty_config(); lr=get_lr(conf), Niter=get_niter(conf))
+function GDOptimizer(Nε, Nk, conf=get_empty_config(); lr=get_lr(conf), Niter=get_niter(conf), val_weights=get_val_weights(conf))
     loss = Nε == 0 && Nk == 0 ? Loss(conf) : Loss(Nε, Nk, conf)
+    if val_weights
+        val_loss = Nε == 0 && Nk == 0 ? Loss(conf) : Loss(Nε, Nk, conf)
+    else
+        val_loss = Loss(conf)
+    end
     reg = Regularization(conf)
     adam = Adam(lr)
-    return GDOptimizer(loss, Loss(conf), reg, adam, Niter)
+    return GDOptimizer(loss, val_loss, reg, adam, Niter)
 end
 
 GDOptimizer(conf=get_empty_config()) = GDOptimizer(0, 0, conf)
