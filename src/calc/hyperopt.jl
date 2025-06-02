@@ -35,7 +35,7 @@ function hyper_optimize(params, labels, prof, comm, conf; rank=0, nranks=1, verb
     end
 
     begin_time = MPI.Wtime()
-    prof_opt = Hamster.run_calculation(Val{:optimization}(), comm, conf, rank=rank, nranks=nranks)
+    prof_opt = Hamster.run_calculation(Val{:optimization}(), comm, conf, rank=rank, nranks=nranks, write_output=false)
     time = MPI.Wtime() - begin_time
     prof.timings[1, iter] = time
     Lmin = validate ? minimum(prof_opt.L_val) : minimum(prof_opt.L_train)

@@ -25,7 +25,7 @@ Runs the optimization process for an effective Hamiltonian model using the speci
 7. **Model Optimization**:
    - Performs the optimization using `optimize_model!`, which iterates over the training and validation data to refine the model.
 """
-function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1)
+function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1, write_output=true)
    train_config_inds, val_config_inds = get_config_index_sample(conf)
    
    if rank == 0
@@ -66,7 +66,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    
    optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf, rank=rank, nranks=nranks)
    write_params(ham_train, conf)
-   if rank == 0
+   if rank == 0 && write_output
       h5open("hamster_out.h5", "w") do file
          file["L_train"] = dropdims(sum(prof.L_train, dims=1), dims=1)
          file["L_val"] = prof.L_val
