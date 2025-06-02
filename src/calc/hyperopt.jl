@@ -85,9 +85,14 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
 
     if lowercase(mode[1]) == 't'
         space = Dict(Symbol(param)=>HP.QuantUniform(Symbol(param), l, u, δ) for (param, l, u, δ) in zip(params, lowerbounds, upperbounds, stepsizes))
-        logger = Base.NullLogger()
-        Base.with_logger(logger) do
-            results = fmin(ps->hyper_optimize(ps, params, prof, comm, conf, rank=rank, nranks=nranks, verbosity=verbosity), space, Niter)
+        TreeParzen.Graph.checkspace(space)
+        tpe_config = TreeParzen.Config()
+        trialhist = TreeParzen.Trials.Trial[]
+        for iter in 1:Niter
+            trial_i = ask(space, trialhist, tpe_config)
+            ps = trial_i.hyperparams
+            L_local = hyper_optimize(ps, params, prof, comm, conf, rank=rank, nranks=nranks, verbosity=verbosity)
+            tell!(trialhist, trial_i, L_local)
         end
     else
         for iter in 1:Niter
