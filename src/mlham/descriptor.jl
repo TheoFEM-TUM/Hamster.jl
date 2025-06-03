@@ -243,7 +243,7 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
         end
     end
 
-    selected_indices = []
+    selected_indices = Int64[]
     for c in eachindex(cluster_sizes)
         cluster_indices = findall(x -> x == c, indices)
         num_to_take = min(points_per_cluster[c], length(cluster_indices))
@@ -256,10 +256,9 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
         end
         append!(selected_indices, selected)
     end
-
     summary = (nz_clusters = length(cluster_sizes), cluster_sizes = cluster_sizes, points_per_cluster = points_per_cluster, cluster_variances = cluster_variances)
 
-    return [SVector{size(descriptors, 1)}(descriptors[:, index]) for index in selected_indices]
+    return SVector{size(descriptors, 1), Float64}[SVector{size(descriptors, 1)}(descriptors[:, index]) for index in selected_indices]
 end
 
 """

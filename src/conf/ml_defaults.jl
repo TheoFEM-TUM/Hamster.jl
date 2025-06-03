@@ -59,7 +59,7 @@ get_sim_params(conf::Config)::Float64 = conf("sim_params", "ML") == "default" ? 
 
 The `sampling` tag determines how points are selected from each cluster. Defaults to "random".
 """
-get_ml_sampling(conf::Config)::String = conf("sampling", "ML") == "defaults" ? "random" : conf("sampling", "ML")
+get_ml_sampling(conf::Config)::String = conf("sampling", "ML") == "default" ? "random" : conf("sampling", "ML")
 
 """
     apply_distortion=false
