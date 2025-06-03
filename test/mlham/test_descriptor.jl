@@ -30,6 +30,16 @@
     @test fcut(-1.0, 1.0) ≈ 0.0 atol=1e-6  # Cosine function is even, so negative r behaves like positive
 end
 
+@testset "greedy farthest-point sampling" begin
+    ds = rand(3, 100)
+    cluster_indices = 1:5:100
+    num_to_take = 5
+
+    selected = Hamster.farthest_point_sampling(ds, cluster_indices, num_to_take)
+    @test length(unique(selected)) == num_to_take
+    @test all([i ∈ cluster_indices for i in selected])
+end
+
 @testset "GaAs descriptors" begin
     path = joinpath(@__DIR__, "test_files")
     conf = get_config(filename = joinpath(path, "hconf"))

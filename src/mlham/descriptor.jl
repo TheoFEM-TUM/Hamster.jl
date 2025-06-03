@@ -28,7 +28,7 @@ Calculate the TB descriptor for a given a TB `model`, a structure `strc` and a T
 """
 function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_ml_rcut(conf), apply_distortion=get_apply_distortion(conf), env_scale=get_env_scale(conf),
     apply_distance_distortion=get_apply_distance_distortion(conf))
-    
+
     Nε = length(basis); Norb_per_ion = size(basis); NR = size(strc.Rs, 2)
 
     h_env = SparseMatrixCSC{SVector{8, Float64}, Int64}[spzeros(SVector{8, Float64}, Nε, Nε) for _ in 1:NR]
@@ -198,7 +198,7 @@ function get_environmental_descriptor(h, V, strc, basis, conf::Config; apply_par
 end
 
 """
-    sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=0.5)
+    sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random")
 
 Selects a subset of descriptor vectors using K-Means clustering, weighted by cluster size and spread.
 
@@ -207,11 +207,12 @@ Selects a subset of descriptor vectors using K-Means clustering, weighted by clu
 - `Ncluster::Int=1`: The number of clusters for K-Means.
 - `Npoints::Int=1`: The total number of descriptor vectors to select.
 - `alpha::Float64=0.5`: A weighting factor (0 ≤ α ≤ 1) that balances selection between cluster size (α → 1) and spread (α → 0).
+- `ml_sampling::String`: Determines how points are selected from each cluster. Defaults to random.
 
 # Returns
 - A matrix of selected descriptor vectors with `Npoints` columns.
 """
-function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=0.5)
+function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random")
     result = kmeans(descriptors, Ncluster)
     indices = result.assignments
     centroids = result.centers
@@ -247,12 +248,50 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
         cluster_indices = findall(x -> x == c, indices)
         num_to_take = min(points_per_cluster[c], length(cluster_indices))
         
-        # Random selection from the cluster if more points than required
-        selected = sample(cluster_indices, num_to_take, replace=false)
+        if ml_sampling[1] == 'r'
+            selected = sample(cluster_indices, num_to_take, replace=false)
+        elseif ml_sampling[1] == 'f'
+            selected = farthest_point_sampling(descriptors, cluster_indices, num_to_take)
+        end
         append!(selected_indices, selected)
     end
 
     summary = (nz_clusters = length(cluster_sizes), cluster_sizes = cluster_sizes, points_per_cluster = points_per_cluster, cluster_variances = cluster_variances)
 
     return [SVector{size(descriptors, 1)}(descriptors[:, index]) for index in selected_indices]
+end
+
+"""
+    farthest_point_sampling(descriptors, cluster_indices, num_to_take)
+
+Selects `num_to_take` diverse points from a subset of data specified by `cluster_indices` using
+greedy farthest-point sampling based on Euclidean distance.
+
+# Arguments
+- `descriptors::AbstractMatrix{<:Real}`: A matrix of feature vectors where each column corresponds to a data point.
+- `cluster_indices::Vector{Int}`: Indices of the points in `descriptors` that belong to the cluster to sample from.
+- `num_to_take::Int`: Number of points to select.
+
+# Returns
+- `selected::Vector{Int}`: Indices of the selected points (subset of `cluster_indices`) representing a diverse subset.
+"""
+function farthest_point_sampling(descriptors, cluster_indices, num_to_take)
+    cluster_size = length(cluster_indices)
+    selected = Int[]
+    dists = fill(Inf, cluster_size)
+
+    push!(selected, rand(cluster_indices))
+    while length(selected) < num_to_take
+        last = selected[end]
+        for (i, point_index) in enumerate(cluster_indices)
+            d = normdiff(descriptors[:, point_index], descriptors[:, last])
+            dists[i] = min(dists[i], d)
+        end
+
+        sorted_inds = sortperm(dists, rev=true)
+        next = findfirst(i->i∉selected, cluster_indices[sorted_inds])
+        push!(selected, cluster_indices[sorted_inds][next])
+    end
+
+    return selected
 end

@@ -28,7 +28,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         get_tb_descriptor(model.hs[n], model.V, strcs[n], bases[n], conf)
     end
     Npoints_local = floor(Int64, Npoints / nranks)
-    data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local)
+    data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
     data_points = MPI.Gather(data_points_local, 0, comm)
     data_points = MPI.bcast(data_points, comm, root=0)
 
