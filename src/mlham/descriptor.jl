@@ -278,19 +278,22 @@ greedy farthest-point sampling based on Euclidean distance.
 function farthest_point_sampling(descriptors, cluster_indices, num_to_take)
     cluster_size = length(cluster_indices)
     selected = Int[]
-    dists = fill(Inf, cluster_size)
 
-    push!(selected, rand(cluster_indices))
-    while length(selected) < num_to_take
-        last = selected[end]
-        for (i, point_index) in enumerate(cluster_indices)
-            d = normdiff(descriptors[:, point_index], descriptors[:, last])
-            dists[i] = min(dists[i], d)
+    if cluster_size > 0 && num_to_take > 0
+        dists = fill(Inf, cluster_size)
+
+        push!(selected, rand(cluster_indices))
+        while length(selected) < num_to_take
+            last = selected[end]
+            for (i, point_index) in enumerate(cluster_indices)
+                d = normdiff(descriptors[:, point_index], descriptors[:, last])
+                dists[i] = min(dists[i], d)
+            end
+
+            sorted_inds = sortperm(dists, rev=true)
+            next = findfirst(i->i∉selected, cluster_indices[sorted_inds])
+            push!(selected, cluster_indices[sorted_inds][next])
         end
-
-        sorted_inds = sortperm(dists, rev=true)
-        next = findfirst(i->i∉selected, cluster_indices[sorted_inds])
-        push!(selected, cluster_indices[sorted_inds][next])
     end
 
     return selected
