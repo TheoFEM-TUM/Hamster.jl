@@ -248,6 +248,7 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
         cluster_indices = findall(x -> x == c, indices)
         num_to_take = min(points_per_cluster[c], length(cluster_indices))
         
+        selected = Int64[]
         if ml_sampling[1] == 'r'
             selected = sample(cluster_indices, num_to_take, replace=false)
         elseif ml_sampling[1] == 'f'
