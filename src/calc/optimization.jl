@@ -65,8 +65,9 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    prof = HamsterProfiler(3, conf)
    
    optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf, rank=rank, nranks=nranks)
-   write_params(ham_train, conf)
+   MPI.Barrier(comm)
    if rank == 0 && write_output
+      write_params(ham_train, conf)
       h5open("hamster_out.h5", "w") do file
          file["L_train"] = dropdims(sum(prof.L_train, dims=1), dims=1)
          file["L_val"] = prof.L_val
