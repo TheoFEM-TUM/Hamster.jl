@@ -47,6 +47,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
         ri = rs_ion[iion]
         rj = rs_ion[jion] - Ts[:, R]
         Δr = normdiff(ri, rj)
+        Δr_dist = normdiff(ri - strc.ions[iion].dist, rj - strc.ions[jion].dist)
         for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
             i = ij_map[(iion, iorb)]
             j = ij_map[(jion, jorb)]
@@ -61,7 +62,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
         
             if Δr ≤ rcut
                 ii, jj = orbswap ? (j, i) : (i, j)
-                push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1], Zs[2], Δr, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
+                push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1], Zs[2], Δr_dist, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
             end
         end
     end
