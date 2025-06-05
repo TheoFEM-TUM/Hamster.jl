@@ -40,7 +40,7 @@ The `orbitals` tag defines the set of orbitals that is used as a basis for the i
 """
 function get_orbitals(conf::Config, type)::Vector{String}
     if conf("orbitals", type) == "default" 
-        return ["s", "px", "py", "pz"]
+        return String[]
     else
         # Convert orbitals to a Vector if it is not
         if typeof(conf("orbitals", type)) <: AbstractVector 
