@@ -24,34 +24,36 @@ function get_soc_matrices(strc::Structure, basis::Basis, conf=get_empty_config()
     soc_order = Vector{String}[] # one atom, one orb_order
     # Iterate over each ion
     for (iion, ion) in enumerate(strc.ions)
-        ls = unique([orb.type.l for orb in basis.orbitals[iion]])
-        soc_blocks = Matrix{ComplexF64}[] # skipped/empty for hybrid
-        orb_order = String[]
-        if ls[1] < 0 # Hybrid
-            # Get the correct orientation axes and calculate Msoc_ho for the current atom
-            axes = atom_axes_list[iion]
-            push!(soc_matrices, get_Msoc_ho(axes, mode=hybridisation[ls[1]])) # TODO
+        if length(basis.orbitals[iion]) > 0
+            ls = unique([orb.type.l for orb in basis.orbitals[iion]])
+            soc_blocks = Matrix{ComplexF64}[] # skipped/empty for hybrid
+            orb_order = String[]
+            if ls[1] < 0 # Hybrid
+                # Get the correct orientation axes and calculate Msoc_ho for the current atom
+                axes = atom_axes_list[iion]
+                push!(soc_matrices, get_Msoc_ho(axes, mode=hybridisation[ls[1]])) # TODO
 
-            # Define the basis order that expresses Msoc
-            if hybridisation[ls[1]] == "sp3"
-                orb_order = ["sp3₁↑", "sp3₁↓", "sp3₂↑", "sp3₂↓", "sp3₃↑", "sp3₃↓", "sp3₄↑", "sp3₄↓"]
-            elseif hybridisation[ls[1]] == "sp3dr2"
-                orb_order = ["sp3d2₁↑", "sp3d2₁↓", "sp3d2₂↑", "sp3d2₂↓", "sp3d2₃↑", "sp3d2₃↓", "sp3d2₄↑", "sp3d2₄↓"]
+                # Define the basis order that expresses Msoc
+                if hybridisation[ls[1]] == "sp3"
+                    orb_order = ["sp3₁↑", "sp3₁↓", "sp3₂↑", "sp3₂↓", "sp3₃↑", "sp3₃↓", "sp3₄↑", "sp3₄↓"]
+                elseif hybridisation[ls[1]] == "sp3dr2"
+                    orb_order = ["sp3d2₁↑", "sp3d2₁↓", "sp3d2₂↑", "sp3d2₂↓", "sp3d2₃↑", "sp3d2₃↓", "sp3d2₄↑", "sp3d2₄↓"]
+                end
+                push!(soc_order, orb_order)
+            else
+                for l in ls # AOs
+                    ms = [orb.type.m for orb in basis.orbitals[iion] if orb.type.l == l]
+                    spatial_dims = [lm_to_orbital_map[(l, m)] for m in ms if (l, m) in keys(lm_to_orbital_map)]
+                    spin_dims = ["↑", "↓"]
+                    basis_order = [sd * sp for sd in spatial_dims for sp in spin_dims]
+                    if l in keys(soc_functions); push!(soc_blocks, soc_functions[l](basis_order)); end
+                    append!(orb_order, basis_order)
+                end
+                # Allocate different l-matrices into one block-diagonal matrix
+                ion_soc_matrix = Matrix(BlockDiagonal(soc_blocks))
+                push!(soc_matrices, ion_soc_matrix)
+                push!(soc_order, orb_order)
             end
-            push!(soc_order, orb_order)
-        else
-            for l in ls # AOs
-                ms = [orb.type.m for orb in basis.orbitals[iion] if orb.type.l == l]
-                spatial_dims = [lm_to_orbital_map[(l, m)] for m in ms if (l, m) in keys(lm_to_orbital_map)]
-                spin_dims = ["↑", "↓"]
-                basis_order = [sd * sp for sd in spatial_dims for sp in spin_dims]
-                if l in keys(soc_functions); push!(soc_blocks, soc_functions[l](basis_order)); end
-                append!(orb_order, basis_order)
-            end
-            # Allocate different l-matrices into one block-diagonal matrix
-            ion_soc_matrix = Matrix(BlockDiagonal(soc_blocks))
-            push!(soc_matrices, ion_soc_matrix)
-            push!(soc_order, orb_order)
         end
     end
     if verbosity > 1; @show soc_order; end

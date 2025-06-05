@@ -22,10 +22,9 @@ end
 
 function SOCModel(strc::Structure, basis::Basis, conf=get_empty_config())
     matrices = get_soc_matrices(strc, basis, conf)
-
     params, unique_ion_types = init_soc_params(strc.ions, conf)
-
-    return SOCModel(params, unique_ion_types, get_ion_types(strc.ions), matrices, strc.Rs, get_update_soc(conf))
+    all_type_types = filter(type->haskey(conf.blocks, type), get_ion_types(strc.ions))
+    return SOCModel(params, unique_ion_types, all_type_types, matrices, strc.Rs, get_update_soc(conf))
 end
 
 """
@@ -116,8 +115,9 @@ Initializes spin-orbit coupling (SOC) parameters for a given set of ions based o
   - File path or identifier: Reads SOC parameters from an external source.
 """
 function init_soc_params(ions, conf=get_empty_config(); initas=get_soc_init_params(conf))
-    Nparams = length(ions)
     unique_ion_types = get_ion_types(ions, uniq=true)
+    filter!(type->haskey(conf.blocks, type), unique_ion_types)
+    Nparams = length(unique_ion_types)
     if initas[1] == 'z'
         return zeros(Nparams), unique_ion_types
     elseif initas[1] == 'o'
