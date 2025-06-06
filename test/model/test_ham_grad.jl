@@ -21,7 +21,10 @@ end
     Rs = 2 .* rand(3, 5) .- 1
     ks = rand(3, 3) .- 0.5
 
-    vs = diagonalize(get_hamiltonian(Hr_1, Rs, ks))[2]
+    vs = nothing
+    with_logger(Base.NullLogger()) do
+        vs = diagonalize(get_hamiltonian(Hr_1, Rs, ks))[2]
+    end
     dE_dHr_an = Hamster.get_eigenvalue_gradient(vs, Rs, ks, Hamster.Dense()) #[R, m, k][i, j]
     dE_dHr_old = get_eigenvalue_gradient(vs, Rs, ks) # i, j, R, m, k
 
@@ -35,7 +38,10 @@ end
 
     # Test 2: test that the gradient dE_dHr is the same as with explicit loops for sparse arrays
     sp_iterator = [[(i, j) for i in 1:4 for j in 1:4] for R in axes(Rs, 2)]
-    vs = diagonalize(get_hamiltonian(Hr_1, Rs, ks))[2]
+    vs = nothing
+    with_logger(Base.NullLogger()) do
+        vs = diagonalize(get_hamiltonian(Hr_1, Rs, ks))[2]
+    end
     dE_dHr_sp = Hamster.get_eigenvalue_gradient(vs, Rs, ks, Hamster.Sparse(), sp_iterator)
 
     same_as_old = Bool[]

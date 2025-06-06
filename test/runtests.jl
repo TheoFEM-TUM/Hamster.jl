@@ -1,4 +1,4 @@
-using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Statistics, FiniteDiff, HDF5, TensorOperations, Suppressor, MPI
+using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Statistics, FiniteDiff, HDF5, TensorOperations, Suppressor, MPI, Logging
 
 MPI.Init()
 comm = MPI.COMM_WORLD
