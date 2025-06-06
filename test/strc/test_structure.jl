@@ -1,7 +1,6 @@
 test_file_path = joinpath(@__DIR__, "test_files")
 
 @testset "Structure" begin
-
     # Test 1: Create Structure from POSCAR
     poscar = Hamster.read_poscar(joinpath(test_file_path, "POSCAR_CsPbBr3"))
     strc = Structure(poscar_path=joinpath(test_file_path, "POSCAR_CsPbBr3"))
@@ -43,4 +42,15 @@ test_file_path = joinpath(@__DIR__, "test_files")
         end
     end
     @test all(all_rs_included)
+
+    # Test 5: test sep_NN
+    conf = get_empty_config()
+    set_value!(conf, "rcut", 5)
+    set_value!(conf, "sepNN", true)
+    strc_5 = Structure(conf, poscar_path=joinpath(test_file_path, "SC_POSCAR_gaas"))
+    nn_dict = Hamster.get_nn_thresholds(strc_5.ions, Hamster.frac_to_cart(strc_5.Rs, strc_5.lattice), strc_5.point_grid, conf)
+    @test nn_dict[Hamster.IonLabel("Ga", "As", sorted=false)] ≈ Hamster.normdiff(strc_5.ions[1].pos, strc_5.ions[5].pos)
+    @test nn_dict[Hamster.IonLabel("As", "Ga", sorted=false)] ≈ Hamster.normdiff(strc_5.ions[1].pos, strc_5.ions[5].pos)
+    @test nn_dict[Hamster.IonLabel("As", "As", sorted=false)] ≈ Hamster.normdiff(strc_5.ions[1].pos, strc_5.ions[2].pos)
+    @test nn_dict[Hamster.IonLabel("Ga", "Ga", sorted=false)] ≈ Hamster.normdiff(strc_5.ions[5].pos, strc_5.ions[6].pos)
 end
