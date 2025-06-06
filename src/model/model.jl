@@ -161,6 +161,8 @@ function init_params!(model, basis, conf=get_empty_config(); initas=get_init_par
         set_params!(model, ones(length(model.V)))
     elseif initas[1] == 'r'
         set_params!(model, rand(length(model.V)))
+    elseif initas[1] == 'z'
+        set_params!(model, zeros(length(model.V)))
     else
         parameters, parameter_values, _, _, conf_values = read_params(initas)
         check_consistency(conf_values, conf)
