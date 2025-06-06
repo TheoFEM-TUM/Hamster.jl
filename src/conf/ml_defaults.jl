@@ -55,11 +55,25 @@ Sets the parameter for the similarity function of the kernel model.
 get_sim_params(conf::Config)::Float64 = conf("sim_params", "ML") == "default" ? 0.1 : conf("sim_params", "ML")
 
 """
+    sampling=random
+
+The `sampling` tag determines how points are selected from each cluster. Defaults to "random".
+"""
+get_ml_sampling(conf::Config)::String = conf("sampling", "ML") == "default" ? "random" : conf("sampling", "ML")
+
+"""
     apply_distortion=false
 
 If true, distortions are applied to atomic positions in calculating descriptor values.
 """
 get_apply_distortion(conf::Config)::Bool = conf("apply_distortion", "ML") == "default" ? false : conf("apply_distortion", "ML")
+
+"""
+    apply_distance_distortion=false
+
+If true, distortions are applied to atomic positions in calculating atomic distance in ML descriptor.
+"""
+get_apply_distance_distortion(conf::Config)::Bool = conf("apply_distance_distortion", "ML") == "default" ? false : conf("apply_distance_distortion", "ML")
 
 """
     ncluster=1

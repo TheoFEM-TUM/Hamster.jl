@@ -35,7 +35,7 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_emp
         if validate && mod(iter, valeachiter) == 0
             print_val_start(prof, iter, verbosity=verbosity)
             copy_params!(ham_val, ham_train)
-            val_step!(ham_val, optim.val_loss, dl.val_data, prof, iter, comm, rank=rank, nranks=nranks)
+            val_step!(ham_val, optim.val_loss, dl.val_data, prof, iter, comm, rank=rank, nranks=nranks, valeachiter=valeachiter)
             print_val_status(prof, iter, verbosity=verbosity)
         end
         MPI.Barrier(comm)
@@ -126,7 +126,7 @@ Evaluates the validation loss for a Hamiltonian model over a given validation da
 - `L_val`: The average validation loss computed over all validation structures. This value is also stored in `prof.L_val` at the index corresponding to `iter`.
 - Updates to `prof.val_times`: The elapsed time for the validation step is stored in `prof.val_times[iter]`.
 """
-function val_step!(ham_val, loss, val_data, prof, iter, comm; rank=0, nranks=1)
+function val_step!(ham_val, loss, val_data, prof, iter, comm; rank=0, nranks=1, valeachiter=valeachiter)
     val_begin = MPI.Wtime()
     Ls_val = map(1:ham_val.Nstrc) do index
         forward(ham_val, index, loss, val_data[index])[1] / ham_val.Nstrc
@@ -136,7 +136,7 @@ function val_step!(ham_val, loss, val_data, prof, iter, comm; rank=0, nranks=1)
     L_val = MPI.Reduce(sum(Ls_val), +, comm, root=0)
     if rank == 0
         prof.val_times[iter] = val_time ./ nranks
-        prof.L_val[iter] = L_val ./ nranks
+        prof.L_val[iter-valeachiter+1:iter] .= L_val ./ nranks
     end
 end
 

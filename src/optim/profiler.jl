@@ -13,6 +13,7 @@ A data structure for tracking and managing profiling information during an itera
   - Second dimension: iterations.
   - Third dimension: additional timing steps or phases within each iteration.
 - `val_times::Vector{Float64}`: A 1D array containing validation timing information for each iteration.
+- `param_values::Vector{Float64}`: A 2D array where each column stores the parameter values for a given iteration.
 
 # Usage
 The `HamsterProfiler` struct is used in training workflows to:
@@ -27,6 +28,7 @@ struct HamsterProfiler
     printeachiter :: Int64
     timings :: Array{Float64, 3}
     val_times :: Vector{Float64}
+    param_values :: Matrix{Float64}
 end
 
 """
@@ -41,12 +43,15 @@ A constructor function for initializing a `HamsterProfiler` instance.
 - `Niter::Int`: The number of iterations (optional). Default is determined by the value of `get_niter(conf)`.
 - `printeachbatch::Bool`: A flag to determine whether to print detailed status for each batch (optional). Default is determined by the value of `get_printeachbatch(conf)`.
 - `printeachiter::Int`: Specifies the frequency of printing status updates (optional). Default is determined by the value of `get_printeachiter(conf)`.
+-`Nparams::Int`: The number of parameters that are optimized.
 
 # Returns
 - An instance of the `HamsterProfiler` struct.
 """
-function HamsterProfiler(Ntimes, conf=get_empty_config(); Nbatch=get_nbatch(conf), Niter=get_niter(conf), printeachbatch=get_printeachbatch(conf), printeachiter=get_printeachiter(conf))
-    HamsterProfiler(zeros(Nbatch, Niter), zeros(Niter), printeachbatch, printeachiter, zeros(Nbatch, Niter, Ntimes), zeros(Niter))
+function HamsterProfiler(Ntimes, conf=get_empty_config(); Nbatch=get_nbatch(conf), Niter=get_niter(conf), 
+    printeachbatch=get_printeachbatch(conf), printeachiter=get_printeachiter(conf), Nparams=1)
+    
+    return HamsterProfiler(zeros(Nbatch, Niter), zeros(Niter), printeachbatch, printeachiter, zeros(Nbatch, Niter, Ntimes), zeros(Niter), zeros(Nparams, Niter))
 end
 
 """

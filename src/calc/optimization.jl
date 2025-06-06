@@ -25,12 +25,14 @@ Runs the optimization process for an effective Hamiltonian model using the speci
 7. **Model Optimization**:
    - Performs the optimization using `optimize_model!`, which iterates over the training and validation data to refine the model.
 """
-function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1)
+function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1, write_output=true)
    train_config_inds, val_config_inds = get_config_index_sample(conf)
    
    if rank == 0
-      write_to_file(train_config_inds, "train_config_inds")
-      write_to_file(val_config_inds, "val_config_inds")
+      h5open("hamster_out.h5", "w") do file
+         file["train_config_inds"] = train_config_inds
+         file["val_config_inds"] = val_config_inds
+      end
    end
    
    MPI.Bcast!(train_config_inds, comm, root=0)
@@ -52,6 +54,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    SC_Nε_train = get_soc(conf) ? 2*length(train_bases[end]) : length(train_bases[end])
    PC_Nε_val = PC_Nε_train
    SC_Nε_val = SC_Nε_train
+
    if get_validate(conf)
       PC_Nε_val = get_soc(conf) ? 2*length(val_bases[1]) : length(val_bases[1])
       SC_Nε_val = get_soc(conf) ? 2*length(val_bases[end]) : length(val_bases[end])
@@ -63,10 +66,13 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    prof = HamsterProfiler(3, conf)
    
    optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf, rank=rank, nranks=nranks)
-   write_params(ham_train, conf)
-   if rank == 0
-      write_to_file(dropdims(sum(prof.L_train, dims=1), dims=1), "L_train")
-      write_to_file(prof.L_val, "L_val")
+   MPI.Barrier(comm)
+   if rank == 0 && write_output
+      write_params(ham_train, conf)
+      h5open("hamster_out.h5", "w") do file
+         file["L_train"] = dropdims(sum(prof.L_train, dims=1), dims=1)
+         file["L_val"] = prof.L_val
+      end
    end
    return prof
 end

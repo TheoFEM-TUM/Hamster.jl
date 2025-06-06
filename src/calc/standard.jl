@@ -116,7 +116,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
                 MPI.Barrier(comm)
                 write_to_file(Es, "tmp/Es$(local_inds[index])")
                 write_to_file(vs, "tmp/vs$(local_inds[index])")
-            end            
+            end
             print_train_status(prof, strc_ind, batch_id, verbosity=verbosity)
         end
     end

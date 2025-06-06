@@ -28,6 +28,7 @@ end
     set_value!(conf, "rllm_file", joinpath(path, "rllm.dat"))
     set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
     set_value!(conf, "val_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
+    set_value!(conf, "val_weights", "Optimizer", true)
     set_value!(conf, "sp_mode", true)
     set_value!(conf, "sp_tol", 1e-5)
     set_value!(conf, "verbosity", 0)
@@ -43,7 +44,7 @@ end
     prof = HamsterProfiler(3, conf, printeachiter=100)
     optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf)
     @test mean(prof.L_train[:, end]) < 0.15
-    @test prof.L_val[end] < 0.5 # includes all bands
+    @test prof.L_val[end] < 0.15 # same loss as train
 end
 
 @testset "Fit model to GaAs Hr" begin

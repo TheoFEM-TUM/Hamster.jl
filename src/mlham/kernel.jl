@@ -28,7 +28,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         get_tb_descriptor(model.hs[n], model.V, strcs[n], bases[n], conf)
     end
     Npoints_local = floor(Int64, Npoints / nranks)
-    data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local)
+    data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
     data_points = MPI.Gather(data_points_local, 0, comm)
     data_points = MPI.bcast(data_points, comm, root=0)
 
@@ -36,7 +36,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
     return HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml)
 end
 
-exp_sim(x₁, x₂; σ=0.1)::Float64 = exp(-normdiff(x₁, x₂)^2 / σ)
+exp_sim(x₁, x₂; σ=√0.05)::Float64 = exp(-normdiff(x₁, x₂)^2 / (2σ^2))
 
 (k::HamiltonianKernel)(xin) = mapreduce(wx->wx[1]*exp_sim(wx[2], xin, σ=k.sim_params), +, zip(k.params, k.data_points))
 
@@ -216,9 +216,9 @@ Set the parameters of a `HamiltonianKernel` instance.
 - Updates the `Vs` field of the `kernel` in place if the consistency checks pass.
 """
 function set_params!(kernel::HamiltonianKernel, params)
-    throw_error = size(kernel.params) ≠ size(params)
+    throw_error = length(kernel.data_points) ≠ length(params)
     if throw_error
-        error("Parameter vector is not of correct size!")
+        error("Parameter vector is not of correct size ($(length(kernel.data_points)) ≠ $(length(params)))!")
     else
         kernel.params = params
     end

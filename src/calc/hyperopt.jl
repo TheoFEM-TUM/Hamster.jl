@@ -15,19 +15,44 @@ Evaluate a given set of hyperparameters by updating a configuration and running 
 # Returns
 - `Float64`: The minimum training loss obtained from the optimization calculation.
 """
-function hyper_optimize(param_values, params, comm, conf; rank=0, nranks=1, verbosity=get_verbosity(conf), validate=get_validate(conf))::Float64
-    for (index, param) in enumerate(params)
-        block_key = split_line(param, char="_")
+function hyper_optimize(params, labels, prof, comm, conf; rank=0, nranks=1, verbosity=get_verbosity(conf), validate=get_validate(conf))::Float64
+    if rank == 0 && verbosity > 0; println("========================================"); end # coverage: ignore
+
+    param_values = map(labels) do label
+        params[Symbol(label)]
+    end
+    MPI.Bcast!(param_values, comm, root=0)
+    iter = findfirst(x->x==0, prof.L_train[1, :])
+    for (label, param_value) in zip(labels, param_values)
+        block_key = split(label, '_', limit=2)
+        param_index = findfirst(l->l==label, labels)
+        prof.param_values[param_index, iter] = param_value
         if length(block_key) == 1
-            set_value!(conf, block_key[1], param_values[index])
+            set_value!(conf, block_key[1], param_value)
         elseif length(block_key) == 2
-            set_value!(conf, block_key[2], block_key[1], param_values[index])
+            set_value!(conf, block_key[2], block_key[1], param_value)
         end
     end
-    prof = Hamster.run_calculation(Val{:optimization}(), comm, conf, rank=rank, nranks=nranks)
-    Lmin = validate ? minimum(prof.L_val) : minimum(prof.L_train)
-    if verbosity > 1; @printf("  Final training loss: %.6f\n", minimum(prof.L_train)); end # coverage: ignore
-    if verbosity > 1 && validate; @printf("  Final validation loss: %.6f\n", minimum(prof.L_val)); end # coverage: ignore
+
+    begin_time = MPI.Wtime()
+    prof_opt = Hamster.run_calculation(Val{:optimization}(), comm, conf, rank=rank, nranks=nranks, write_output=false)
+    time = MPI.Wtime() - begin_time
+    prof.timings[1, iter] = time
+    Lmin = validate ? minimum(prof_opt.L_val) : minimum(prof_opt.L_train)
+    
+    if verbosity > 1; @printf("  Final training loss: %.6f\n", minimum(prof_opt.L_train)); end # coverage: ignore
+    if verbosity > 1 && validate; @printf("  Final validation loss: %.6f\n", minimum(prof_opt.L_val)); end # coverage: ignore
+    
+    prof.L_train[1, iter] = Lmin
+    # COV_EXCL_START
+    if rank == 0 && verbosity > 0
+        print_train_status(prof, iter, 1, verbosity=verbosity)
+        for (key, param_value) in params
+            println("   $key = $param_value")
+        end
+        println("Current optimum: $(minimum(prof.L_train[1, 1:iter])).")
+    end
+    # COV_EXCL_STOP
     return Lmin
 end
 
@@ -50,44 +75,39 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
 
     if verbosity == 1; set_value!(conf, "verbosity", 0); end # coverage: ignore
     
-    if mode[1] == 'g' && Niter == 1
+    if lowercase(mode[1]) == 'g' && Niter == 1
         param_ranges = [lower:step:upper for (lower, upper, step) in zip(lowerbounds, upperbounds, stepsizes)]
         possible_values = collect(Iterators.product(param_ranges...))
         Niter = length(possible_values)
     end
-    all_params = zeros(length(params), Niter)
-    prof = HamsterProfiler(1, conf, Niter=Niter, Nbatch=1)
+    prof = HamsterProfiler(1, conf, Niter=Niter, Nbatch=1, Nparams=length(params))
     print_start_message(prof, verbosity=verbosity)
 
-    for iter in 1:Niter
-        if rank == 0 && verbosity > 0; println("========================================"); end # coverage: ignore
-        
-        if mode[1] == 'r'
-            param_values = [rand(lower:step:upper) for (lower, upper, step) in zip(lowerbounds, upperbounds, stepsizes)]
-        elseif mode[1] == 'g'
-            param_ranges = [lower:step:upper for (lower, upper, step) in zip(lowerbounds, upperbounds, stepsizes)]
-            possible_values = collect(Iterators.product(param_ranges...))
-            param_values = [possible_values[iter]...]
+    if lowercase(mode[1]) == 't'
+        space = Dict(Symbol(param)=>HP.QuantUniform(Symbol(param), l, u, δ) for (param, l, u, δ) in zip(params, lowerbounds, upperbounds, stepsizes))
+        TreeParzen.Graph.checkspace(space)
+        tpe_config = TreeParzen.Config()
+        trialhist = TreeParzen.Trials.Trial[]
+        for iter in 1:Niter
+            trial_i = ask(space, trialhist, tpe_config)
+            ps = trial_i.hyperparams
+            L_local = hyper_optimize(ps, params, prof, comm, conf, rank=rank, nranks=nranks, verbosity=verbosity)
+            tell!(trialhist, trial_i, L_local)
         end
-        MPI.Bcast!(param_values, comm, root=0)
-
-        all_params[:, iter] = param_values
-        begin_time = MPI.Wtime()
-        L_local = hyper_optimize(param_values, params, comm, conf, rank=rank, nranks=nranks, verbosity=verbosity)
-        time = MPI.Wtime() - begin_time
-        prof.timings[1, iter] = time
-        prof.L_train[1, iter] = L_local
-
-        # COV_EXCL_START
-        if rank == 0 && verbosity > 0
-            print_train_status(prof, iter, 1, verbosity=verbosity)
-            for (index, param) in enumerate(params)
-                println("   $param = $(all_params[index, iter])")
+    else
+        for iter in 1:Niter
+            if lowercase(mode[1]) == 'r'
+                param_values = [rand(lower:step:upper) for (lower, upper, step) in zip(lowerbounds, upperbounds, stepsizes)]
+            elseif lowercase(mode[1]) == 'g'
+                param_ranges = [lower:step:upper for (lower, upper, step) in zip(lowerbounds, upperbounds, stepsizes)]
+                possible_values = collect(Iterators.product(param_ranges...))
+                param_values = [possible_values[iter]...]
             end
-            println("Current optimum: $(minimum(prof.L_train[1, 1:iter])).")
+            param_dict = Dict(Symbol(param)=>value for (param, value) in zip(params, param_values))
+            L_local = hyper_optimize(param_dict, params, prof, comm, conf, rank=rank, nranks=nranks, verbosity=verbosity)
         end
-        # COV_EXCL_STOP
     end
+
     if rank == 0 && verbosity > 0; println("========================================"); end
 
     Lmin, indmin = findmin(prof.L_train[1, :])
@@ -96,16 +116,20 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
         println("Final status:")
         println("  Minimal loss: $Lmin")
         for (index, param) in enumerate(params)
-            println("   $param = $(all_params[index, indmin])")
+            println("   $param = $(prof.param_values[index, indmin])")
         end
         println("========================================")
     end
     # COV_EXCL_STOP
 
-    h5open("hyperopt_out.h5", "w") do file
-        file["L_train"] = prof.L_train[1, :]
-        file["param_values"] = all_params
-        file["params"] = params
+    if rank == 0
+        h5open("hamster_out.h5", "w") do file
+            file["L_train"] = prof.L_train[1, :]
+            for (index, param) in enumerate(params)
+                file[param] = prof.param_values[index, :]
+            end
+            file["params"] = params
+        end
     end
     return prof
 end

@@ -9,7 +9,7 @@
     prof = Hamster.main(comm, conf, rank=rank)
     @test mean(prof.L_train[:, end]) < 0.15
     @test prof.L_val[end] < 0.5 # includes all bands
-    rm("hamster.out"); rm("train_config_inds.dat"); rm("val_config_inds.dat"); rm("params.dat")
+    rm("hamster.out"); rm("params.dat")
 end
 
 @testset "Optimization workflow for TB+SOC" begin
@@ -23,7 +23,7 @@ end
     prof = Hamster.main(comm, conf, rank=rank)
     @test mean(prof.L_train[:, end]) < 0.20
     @test mean(prof.L_train[:, end]) < mean(prof.L_train[:, 1])
-    rm("hamster.out"); rm("train_config_inds.dat"); rm("val_config_inds.dat"); rm("params.dat")
+    rm("hamster.out"); rm("params.dat")
 end
 
 @testset "Optimization workflow for ML+TB" begin
@@ -38,7 +38,7 @@ end
     prof = Hamster.main(comm, conf, rank=rank)
     @test mean(prof.L_train[:, end]) < 0.1
     @test prof.L_val[end] < 0.3 # includes all bands
-    rm("hamster.out"); rm("train_config_inds.dat"); rm("val_config_inds.dat"); rm("params.dat"); rm("ml_params.dat")
+    rm("hamster.out"); rm("params.dat"); rm("ml_params.dat")
 end
 
 @testset "Optimization workflow for ML+TB (sparse)" begin
@@ -54,7 +54,7 @@ end
     prof = Hamster.main(comm, conf, rank=rank)
     @test mean(prof.L_train[:, end]) < 0.1
     @test prof.L_val[end] < 0.3 # includes all bands
-    rm("hamster.out"); rm("train_config_inds.dat"); rm("val_config_inds.dat"); rm("params.dat"); rm("ml_params.dat")
+    rm("hamster.out"); rm("params.dat"); rm("ml_params.dat")
 end
 
 @testset "Optimization for MD data" begin
@@ -69,7 +69,7 @@ end
 
     prof = Hamster.main(comm, conf, rank=rank)
     @test mean(prof.L_train[:, end]) < 0.15
-    rm("hamster.out"); rm("train_config_inds.dat"); rm("val_config_inds.dat"); rm("params.dat"); rm("ml_params.dat")
+    rm("hamster.out"); rm("params.dat"); rm("ml_params.dat")
 end
 
-rm("L_train.dat"); rm("L_val.dat")
+rm("hamster_out.h5")

@@ -23,6 +23,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+TreeParzen = "eb66a70c-a255-11e9-03ea-7ba6b2f22006"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 
 [compat]
@@ -32,4 +33,5 @@ HDF5 = "0.17.2"
 MPI = "0.20.22"
 OhMyThreads = "0.7.0"
 Printf = "1.11.0"
+TreeParzen = "0.3.4"
 UnPack = "1.0.2"
