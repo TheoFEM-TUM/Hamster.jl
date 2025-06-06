@@ -96,3 +96,19 @@ end
     @test Es3[:, :, :, 2] == Es3_2
     rm("Es3.dat"); rm(joinpath(path, "Es3_1.dat")); rm(joinpath(path, "Es3_2.dat"))
 end
+
+@testset "parse_lines_as_array tests" begin
+    # Test 1: Simple float parsing
+    lines = [["1.0", "2.0", "3.0"], ["4.0", "5.0", "6.0"]]
+    result = Hamster.parse_lines_as_array(lines)
+    @test result == [1.0 2.0 3.0; 4.0 5.0 6.0]
+
+    # Test 2: Subrange with i1 and i2
+    result = Hamster.parse_lines_as_array(lines, i1=2, i2=3)
+    @test result == [2.0 3.0; 5.0 6.0]
+
+    # Test 3: Parsing integers
+    lines_int = [["1", "2", "3"], ["4", "5", "6"]]
+    result = Hamster.parse_lines_as_array(lines_int, type=Int)
+    @test result == [1 2 3; 4 5 6]
+end
