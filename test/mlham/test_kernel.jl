@@ -61,6 +61,7 @@ end
     set_value!(conf, "rllm_file", joinpath(path, "rllm_cspbbr3.dat"))
     set_value!(conf, "init_params", "ML", "rand")
     set_value!(conf, "init_params", "zeros")
+    set_value!(conf, "verbosity", 0)
     strc = Structure(conf)
     basis = Basis(strc, conf)
     model = TBModel([strc], [basis], conf)
