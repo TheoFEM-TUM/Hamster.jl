@@ -48,6 +48,12 @@
     Hamster.get_neig(conf) == 6
     set_value!(conf, "neig", 8)
     Hamster.get_neig(conf) == 8
+
+    # Test 8: test sp_diag
+    conf = get_empty_config()
+    @test Hamster.get_sp_diag(conf) isa Hamster.Dense
+    set_value!(conf, "sp_diag", true)
+    @test Hamster.get_sp_diag(conf) isa Hamster.Sparse
 end
 
 @testset "SOC defaults" begin
