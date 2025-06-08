@@ -8,10 +8,10 @@ function get_update_tb(conf::Config, NV)::Vector{Bool}
     if conf("update_tb", "Optimizer") == "default" 
         update_tb .= haskey(conf, "Optimizer") ? true : false
     else
-        if typeof(conf("update_tb", "Optimizer")) <: Bool
+        if conf("update_tb", "Optimizer") isa Bool
             update_tb .= conf("update_tb", "Optimizer") ? true : false
         else
-            update_tb .= map(index ∈ update_tb, eachindex(update_tb))
+            update_tb .= map(index -> index ∈ conf("update_tb", "Optimizer"), eachindex(update_tb))
         end
     end
     return update_tb

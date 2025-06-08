@@ -8,7 +8,7 @@ using PrecompileTools: @compile_workload, @setup_workload
     ks = rand(3, 5)
     Hrs = Matrix{Float64}[rand(4, 4) for R in 1:5]
     Hr_sp = [sprand(4, 4, 0.1) for R in 1:5]
-    Hks = [rand(ComplexF64, 4, 4) for i in 1:5]
+    Hks = [Hermitian(rand(ComplexF64, 4, 4)) for i in 1:5]
     @compile_workload begin
         Hamster.normdiff(v, w)
         Hamster.normdiff(v, w, t)

@@ -40,7 +40,6 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
 
     ij_map = get_ion_orb_to_index_map(Norb_per_ion)
     l_map = [basis.orbitals[iion][iorb].type.l for iion in 1:length(Norb_per_ion) for iorb in 1:Norb_per_ion[iion]]
-    m_map = [basis.orbitals[iion][iorb].type.m for iion in 1:length(Norb_per_ion) for iorb in 1:Norb_per_ion[iion]]
 
     is = [Int64[] for R in 1:NR]
     js = [Int64[] for R in 1:NR]
@@ -54,17 +53,17 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
         for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
             i = ij_map[(iion, iorb)]
             j = ij_map[(jion, jorb)]
-            l_i = l_map[i]; m_i = m_map[i]
-            l_j = m_map[j]; m_j = m_map[j]
-            orbswap = decide_orbswap(strc.ions[iion].type, strc.ions[jion].type, l_i, m_i, l_j, m_j)
+            l_i = l_map[i]
+            l_j = l_map[j]
+            orbswap = decide_orbswap(strc.ions[iion].type, strc.ions[jion].type, l_i, env[i], l_j, env[j])
             Zs = [element_to_number(strc.ions[iion].type), element_to_number(strc.ions[jion].type)]
             Zs = orbswap ? reverse(Zs) : Zs
             iaxis = basis.orbitals[iion][iorb].axis
             jaxis = basis.orbitals[jion][jorb].axis
-            φ, θs = get_angular_descriptors(strc.ions[iion].type, strc.ions[jion].type, ri, rj, iaxis, jaxis, orbswap)
-        
+            φ, θs, angleswap = get_angular_descriptors(strc.ions[iion].type, strc.ions[jion].type, ri, rj, iaxis, jaxis, orbswap)
+
             if Δr ≤ rcut
-                ii, jj = orbswap ? (j, i) : (i, j)
+                ii, jj = orbswap || angleswap ? (j, i) : (i, j)
                 push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
             end
         end
@@ -114,7 +113,7 @@ This helps maintain consistent descriptor or feature vector construction in syst
 # Returns
 - `true` if the orbitals should be swapped to maintain ordering; `false` otherwise.
 """
-decide_orbswap(itype, jtype, l_i, m_i, l_j, m_j) = (itype == jtype && l_i > l_j) || (itype == jtype && l_i == l_j && m_i > m_j) || (element_to_number(itype) > element_to_number(jtype))
+decide_orbswap(itype, jtype, l_i, env_i, l_j, env_j) = (itype == jtype && l_i > l_j) || (itype == jtype && l_i == l_j && env_i > env_j) || (element_to_number(itype) > element_to_number(jtype))
 
 """
     get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)
@@ -145,13 +144,14 @@ function get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)
     Δrji = Δr > 0 ? normalize(ri - rj) : normalize(jaxis)
     φ = calc_angle(iaxis, jaxis)
     θs = Float64[calc_angle(iaxis, Δrij), calc_angle(jaxis, Δrji)]
-    
+    angleswap = θs[1] > θs[2] && Δr ≈ 0
+
     if itype == jtype 
         θs = sort(θs)
     else
         θs = orbswap ? reverse(θs) : θs
     end
-    return φ, θs
+    return φ, θs, angleswap
 end
 
 """

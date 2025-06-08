@@ -80,6 +80,10 @@ Fully diagonalizes a Hermitian Hamiltonian matrix `Hk` and returns the eigenvalu
 - `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to an eigenvalue of `Hk`. The eigenvectors are computed in the standard basis and are complex-valued.
 """
 function diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0)
+    if abs(sum(Hk .- Hermitian(Hk))) > 1e-5
+        maxdiff = maximum(abs.(Hk .- Hermitian(Hk)))
+        @warn "Hamiltonian not hermitian! Maximum missmatch: $maxdiff"
+    end
     eig = eigen(Hermitian(Hk))
     return real.(eig.values), eig.vectors
 end

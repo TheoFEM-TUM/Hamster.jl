@@ -53,3 +53,36 @@ end
 
     rm("ml_params.dat")
 end
+
+@testset "CsPbBr3 Hermitian Hamiltonian" begin
+    path = joinpath(@__DIR__, "test_files")
+    conf = get_config(filename = joinpath(path, "hconf_cspbbr3"))
+    set_value!(conf, "poscar", joinpath(path, "POSCAR_CsPbBr3"))
+    set_value!(conf, "rllm_file", joinpath(path, "rllm_cspbbr3.dat"))
+    set_value!(conf, "init_params", "ML", "rand")
+    set_value!(conf, "init_params", "zeros")
+    set_value!(conf, "verbosity", 0)
+    strc = Structure(conf)
+    basis = Basis(strc, conf)
+    model = TBModel([strc], [basis], conf)
+
+    kernel = HamiltonianKernel([strc], [basis], model, comm, conf)
+    Hr = get_hr(kernel, Hamster.Dense(), 1)
+    Hk = get_hamiltonian(Hr, strc.Rs, zeros(3, 1))
+    @test abs(sum(Hk[1] .- Hermitian(Hk[1]))) < 1e-7
+
+    iR0 = Hamster.findR0(strc.Rs)
+    d0 = kernel.structure_descriptors[1][iR0]
+    dishermitian = Bool[]
+    for i in 1:14, j in i:14
+        Δd = sum(abs.(d0[i, j] .- d0[j, i]))
+        push!(dishermitian, Δd < 1e-5)
+        if Δd > 1e-5
+            println("$i $j $(d0[i, j])")
+            println("$i $j $(d0[j, i])")
+            @show d0[i, j] .- d0[j, i]
+            println("---")
+        end
+    end
+    @test all(dishermitian)
+end

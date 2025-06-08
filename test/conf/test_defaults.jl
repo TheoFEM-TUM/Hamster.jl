@@ -48,6 +48,30 @@
     Hamster.get_neig(conf) == 6
     set_value!(conf, "neig", 8)
     Hamster.get_neig(conf) == 8
+
+    # Test 8: test sp_diag
+    conf = get_empty_config()
+    @test Hamster.get_sp_diag(conf) isa Hamster.Dense
+    set_value!(conf, "sp_diag", true)
+    @test Hamster.get_sp_diag(conf) isa Hamster.Sparse
+end
+
+@testset "Optim defaults" begin
+    # Test 1: test eig_fit
+    conf = get_empty_config()
+    @test Hamster.get_eig_fit(conf) == true
+    set_value!(conf, "hr_fit", "Optimizer", true)
+    @test Hamster.get_eig_fit(conf) == false
+    set_value!(conf, "eig_fit", "Optimizer", true)
+    @test Hamster.get_eig_fit(conf) == true
+
+    # Test 2: test update TB
+    conf = get_empty_config()
+    @test Hamster.get_update_tb(conf, 3) == [false, false, false]
+    set_value!(conf, "lr", "Optimizer", 0.1)
+    @test Hamster.get_update_tb(conf, 3) == [true, true, true]
+    set_value!(conf, "update_tb", "Optimizer", "1 3")
+    @test Hamster.get_update_tb(conf, 3) == [true, false, true]
 end
 
 @testset "SOC defaults" begin

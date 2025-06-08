@@ -1,5 +1,5 @@
 begin Options
-    rcut = 7
+    rcut = 6.2
     load_rllm = true
     verbosity = 2
 end
@@ -7,7 +7,7 @@ end
 begin ML
     update = false
     Ncluster = 30
-    Npoints = 100
+    Npoints = 200
 end
 
 begin atom Cs
@@ -16,7 +16,6 @@ begin atom Cs
 end
 
 begin atom Pb
-  n = 4
   alpha = 16
   orbitals = s px py pz
 end

@@ -27,13 +27,6 @@ The `update` tag switches on/off optimization of ML parameters.
 get_ml_update(conf::Config)::Bool = conf("update", "ML") == "default" ? true : conf("update", "ML")
 
 """
-    ml_optimize=false
-
-The `ml_optimize` tag switches on optimization of the ML model.
-"""
-get_update_ml(conf::Config)::Bool = conf("update", "ML") == "default" ? false : conf("update", "ML")
-
-"""
     ml_rcut=rcut
 
 Sets the cut-off radius for the ML model. Defaults to the same cut-off radius as the TB model.

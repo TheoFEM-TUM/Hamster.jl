@@ -73,9 +73,9 @@ function get_nn_thresholds(ions, Ts, point_grid, conf=get_empty_config(); sepNN=
             Δr = normdiff(ions[iion1].pos, ions[iion2].pos, Ts[:, R])
 
             for ion_label in [ion_label1, ion_label2]
-                if !haskey(NN_dict, ion_label)
+                if !haskey(NN_dict, ion_label) && Δr ≠ 0
                     NN_dict[ion_label] = Δr
-                else
+                elseif Δr ≠ 0
                     NN_dict[ion_label] = minimum([Δr, NN_dict[ion_label]])
                 end
             end
