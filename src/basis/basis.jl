@@ -60,7 +60,7 @@ Returns the size of the `Basis` object, which corresponds to the number of orbit
 # Returns
 - A tuple containing the number of orbitals in the basis.
 """
-Base.size(basis::Basis) = tuple(length.(basis.orbitals)...)
+Base.size(basis::Basis) = length.(basis.orbitals)
 
 """
     nparams(basis::Basis) -> Int
