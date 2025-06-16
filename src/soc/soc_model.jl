@@ -48,8 +48,7 @@ function get_hr(soc_model::SOCModel, sp_mode, index; apply_soc=true)
     end
     Msoc = BlockDiagonal(expanded_params .* soc_model.matrices)
     Msoc = convert_block_matrix_to_sparse(Msoc)
-    Mzero = BlockDiagonal(zeros(length(expanded_params)) .* soc_model.matrices)
-    Mzero = convert_block_matrix_to_sparse(Mzero)
+    Mzero = spzeros(ComplexF64, size(Msoc, 1), size(Msoc, 2))
     Hr = [ifelse(R⃗ == zeros(3), Msoc, Mzero) for R⃗ in eachcol(soc_model.Rs)]
     return Hr
 end
