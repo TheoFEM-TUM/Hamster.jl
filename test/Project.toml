@@ -1,4 +1,5 @@
 [deps]
+BlockDiagonals = "0a1fb500-61f7-11e9-3c65-f5ef3456f9f0"
 CubicSplines = "9c784101-8907-5a6d-9be6-98f00873c89b"
 FiniteDiff = "6a86dc24-6348-571c-b903-95158fe2bd41"
 HCubature = "19dc6840-f33b-545b-b366-655c7e3ffd49"

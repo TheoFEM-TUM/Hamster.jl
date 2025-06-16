@@ -167,3 +167,32 @@ function separate_spin_secs(orb_order)
         down_spin = filter(x -> occursin("↓", x), orb_order)
     return vcat(up_spin, down_spin)
 end 
+
+"""
+    convert_block_matrix_to_sparse(M::BlockDiagonal; sp_tol=1e-10) -> SparseMatrixCSC
+
+Converts a `BlockDiagonal` matrix `M` to a `SparseMatrixCSC` by iterating through
+each block and collecting the nonzero entries (within a given tolerance).
+
+# Arguments
+- `M::BlockDiagonal`: A block diagonal matrix, typically from `BlockDiagonals.jl` or similar libraries.
+"""
+function convert_block_matrix_to_sparse(M::BlockDiagonal; sp_tol=1e-10)
+    is = Int64[]; js = Int64[]; vals = ComplexF64[]
+    for (block_idx, block) in enumerate(blocks(M))
+        block_size = blocksize(M, block_idx)
+        for block_j in 1:block_size[2], block_i in 1:block_size[1]
+            val = block[block_i, block_j]
+            sizelist = blocksizes(M)[1:block_idx-1]
+            i = block_idx > 1 ? sum([s[1] for s in sizelist]) + block_i : block_i
+            j = block_idx > 1 ? sum([s[2] for s in sizelist]) + block_j : block_j
+            if abs(val) ≥ sp_tol
+                push!(is, i)
+                push!(js, j)
+                push!(vals, val)
+            end
+        end
+    end
+    M_sparse = sparse(is, js, vals, size(M, 1), size(M, 2))
+    return M_sparse
+end

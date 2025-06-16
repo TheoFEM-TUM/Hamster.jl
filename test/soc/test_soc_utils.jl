@@ -22,4 +22,10 @@
 
     # Test 3: test Msoc in real basis
     Msoc_p = Hamster.trans_lm_spatial("p", p_matrix)
+
+    # Test 4: test block to sparse conversion
+    M = BlockDiagonal([rand(2, 2), rand(3, 3)])
+    M_sparse = Hamster.convert_block_matrix_to_sparse(M)
+    @test abs(sum(M .- M_sparse)) < 1e-10
+    @test M_sparse isa SparseMatrixCSC
 end
