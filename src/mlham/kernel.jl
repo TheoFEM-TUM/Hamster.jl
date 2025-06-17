@@ -42,7 +42,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         end
 
         MPI.Gatherv!(view(data_points_local, 1:counts[rank + 1]), data_points_buf, 0, comm)
-        data_points = data_points_buf.data
+        data_points = rank == 0 ? data_points_buf.data : nothing
         data_points = MPI.bcast(data_points, comm)
 
         N_real = sum(counts)
