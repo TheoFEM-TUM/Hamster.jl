@@ -16,6 +16,6 @@ gaas_poscar = string(@__DIR__) * "/../parse/test_files/POSCAR_gaas"
     basis = Basis(strc, conf)
 
     @test length(basis) == 8
-    @test size(basis) == (4, 4)
+    @test size(basis) == [4, 4]
     @test nparams(basis) == length(basis.parameters)
 end
