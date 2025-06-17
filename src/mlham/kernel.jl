@@ -27,11 +27,14 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
     structure_descriptors = map(eachindex(strcs)) do n
         get_tb_descriptor(model.hs[n], model.V, strcs[n], bases[n], conf)
     end
-    Npoints_local = floor(Int64, Npoints / nranks)
-    data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
-    data_points = MPI.Gather(data_points_local, 0, comm)
-    data_points = MPI.bcast(data_points, comm, root=0)
-
+    if get_ml_init_params(conf)[1] ∈ ['r', 'z', 'o']
+        Npoints_local = floor(Int64, Npoints / nranks)
+        data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
+        data_points = MPI.Gather(data_points_local, 0, comm)
+        data_points = MPI.bcast(data_points, comm, root=0)
+    else
+        _, data_points = read_ml_params(conf, filename=get_ml_init_params(conf))
+    end
     params, data_points = init_ml_params!(data_points, conf)
     return HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml)
 end
