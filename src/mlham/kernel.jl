@@ -30,8 +30,16 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
     if get_ml_init_params(conf)[1] ∈ ['r', 'z', 'o']
         Npoints_local = floor(Int64, Npoints / nranks)
         data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
-        data_points = MPI.Gather(data_points_local, 0, comm)
-        data_points = MPI.bcast(data_points, comm, root=0)
+        local_counts::Int32 = length(data_points_local)
+        counts = MPI.Gather(local_counts, 0, comm)
+        counts = MPI.bcast(counts, 0, comm)
+        data_points = MPI.Gatherv(data_points_local, counts, 0, comm)
+        data_points = MPI.bcast(data_points, comm)
+
+        N_real = sum(counts)
+        if N_real ≠ Npoints && rank == 0
+            @info "Number of samples changed from $Npoints to $N_real"
+        end
     else
         _, data_points = read_ml_params(conf, filename=get_ml_init_params(conf))
     end
