@@ -21,7 +21,7 @@ end
 
 Constructor for a HamiltonianKernel model.
 """
-function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, model, comm, conf=get_empty_config(); 
+function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, model, comm, conf=get_empty_config(); verbosity=get_verbosity(conf),
     Ncluster=get_ml_ncluster(conf), Npoints=get_ml_npoints(conf), sim_params=get_sim_params(conf), update_ml=get_ml_update(conf), rank=0, nranks=1)
     
     structure_descriptors = map(eachindex(strcs)) do n
@@ -37,7 +37,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         data_points = MPI.bcast(data_points, comm)
 
         N_real = sum(counts)
-        if N_real ≠ Npoints && rank == 0
+        if N_real ≠ Npoints && rank == 0 && verbosity > 0
             @info "Number of samples changed from $Npoints to $N_real"
         end
     else
