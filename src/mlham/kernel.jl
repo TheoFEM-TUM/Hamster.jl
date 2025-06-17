@@ -33,7 +33,16 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         local_counts::Int32 = length(data_points_local)
         counts = MPI.Gather(local_counts, 0, comm)
         counts = MPI.bcast(counts, 0, comm)
-        data_points = MPI.Gatherv(data_points_local, counts, 0, comm)
+        #data_points = MPI.Gatherv(data_points_local, counts, 0, comm)
+
+        if rank == 0
+            data_points_buf = MPI.VBuffer(similar(data_points_local, sum(counts)), counts)
+        else
+            data_points_buf = nothing
+        end
+
+        MPI.Gatherv!(view(data_points_local, 1:counts[rank + 1]), data_points_buf, 0, comm)
+        data_points = data_points_buf.data
         data_points = MPI.bcast(data_points, comm)
 
         N_real = sum(counts)
