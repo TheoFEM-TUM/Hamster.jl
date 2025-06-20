@@ -52,7 +52,7 @@ end
         end
     end
     @test all(same_as_old)
-    @test dE_dHr_sp[1, 1, 1] isa SparseMatrixCSC{Float64, Int64}
+    @test dE_dHr_sp[1, 1, 1] isa SparseMatrixCSC{ComplexF64, Int64}
 
     # Test 3: test chain rule
     dL_dE = rand(size(dE_dHr_an, 2), size(ks, 2))
