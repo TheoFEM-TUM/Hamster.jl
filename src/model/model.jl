@@ -135,7 +135,7 @@ function get_model_gradient(model::TBModel, indices, reg, dL_dHr; soc=false)
             get_model_gradient(model.hs[index], dL_dHr[n], soc=soc)
         end
         dV_ = cat(dVs..., dims=2)
-        dV_grad = dropdims(sum(dV_, dims=2), dims=2)
+        dV_grad = real.(dropdims(sum(dV_, dims=2), dims=2))
 
         dV_penal = backward(reg, model.V)
         dV = @. ifelse(model.update, dV_grad + dV_penal, 0.)
