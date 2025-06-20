@@ -106,9 +106,9 @@ function get_model_gradient(h, dL_dHr::Vector{<:AbstractMatrix}; soc=false)
     @tasks for v in axes(h, 1)
         for R in eachindex(dL_dHr)
             if !soc
-                dV[v] += sum(h[v, R] .* dL_dHr[R])
+                dV[v] += sum(h[v, R] .* real.(dL_dHr[R]))
             else
-                dV[v] += sum(h[v, R] .* gradient_apply_spin_basis(dL_dHr[R]))
+                dV[v] += sum(h[v, R] .* gradient_apply_spin_basis(real.(dL_dHr[R])))
             end
         end
     end
@@ -135,7 +135,7 @@ function get_model_gradient(model::TBModel, indices, reg, dL_dHr; soc=false)
             get_model_gradient(model.hs[index], dL_dHr[n], soc=soc)
         end
         dV_ = cat(dVs..., dims=2)
-        dV_grad = real.(dropdims(sum(dV_, dims=2), dims=2))
+        dV_grad = dropdims(sum(dV_, dims=2), dims=2)
 
         dV_penal = backward(reg, model.V)
         dV = @. ifelse(model.update, dV_grad + dV_penal, 0.)
