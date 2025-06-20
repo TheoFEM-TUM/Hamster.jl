@@ -101,11 +101,15 @@ the function assumes it contains gradients for multiple structures and returns t
 # Returns
 - The gradients for each parameter in `model.V`.
 """
-function get_model_gradient(h, dL_dHr::Vector{<:AbstractMatrix})
+function get_model_gradient(h, dL_dHr::Vector{<:AbstractMatrix}; soc=false)
     dV = zeros(size(h, 1))
     @tasks for v in axes(h, 1)
         for R in eachindex(dL_dHr)
-            dV[v] += sum(h[v, R] .* dL_dHr[R])
+            if !soc
+                dV[v] += sum(h[v, R] .* dL_dHr[R])
+            else
+                dV[v] += sum(h[v, R] .* gradient_apply_spin_basis(dL_dHr[R]))
+            end
         end
     end
     return dV
@@ -125,10 +129,10 @@ Computes the gradient of the loss w.r.t. the model parameters.
 # Returns
 - `AbstractVector`: A collection of gradients, one for each model in the `ham.models`, computed using the provided indices, regularization term, and loss derivative.
 """
-function get_model_gradient(model::TBModel, indices, reg, dL_dHr)
+function get_model_gradient(model::TBModel, indices, reg, dL_dHr; soc=false)
     if any(model.update)
         @views dVs = map(enumerate(indices)) do (n, index)
-            get_model_gradient(model.hs[index], dL_dHr[n])
+            get_model_gradient(model.hs[index], dL_dHr[n], soc=soc)
         end
         dV_ = cat(dVs..., dims=2)
         dV_grad = dropdims(sum(dV_, dims=2), dims=2)

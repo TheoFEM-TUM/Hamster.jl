@@ -81,7 +81,7 @@ Computes the gradient of loss w.r.t. the SOC model's parameters.
 # Returns:
 - `dparams`: A vector containing the gradient of the loss w.r.t. the model parameters.
 """
-function get_model_gradient(soc_model::SOCModel, indices, reg, dL_dHr)
+function get_model_gradient(soc_model::SOCModel, indices, reg, dL_dHr; soc=true)
     iR0 = findR0(soc_model.Rs)
     dparams = zeros(length(soc_model.params))
     if soc_model.update
@@ -91,6 +91,7 @@ function get_model_gradient(soc_model::SOCModel, indices, reg, dL_dHr)
                 return ifelse(index == param_index, 1, 0)
             end
             Msoc = BlockDiagonal(expanded_params .* soc_model.matrices)
+            Msoc = convert_block_matrix_to_sparse(Msoc)
 
             for index in indices
                 dparams[param_index] += real(sum(dL_dHr[index][iR0] .* Msoc))

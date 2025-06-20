@@ -83,7 +83,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
 
     update_begin = MPI.Wtime()
     for model in ham_train.models
-        model_grad_local = get_model_gradient(model, indices, optim.reg, dL_dHr)
+        model_grad_local = get_model_gradient(model, indices, optim.reg, dL_dHr; soc=ham_train.soc)
         model_grad = MPI.Reduce(model_grad_local, +, comm, root=0)
         if rank == 0; update!(model, optim.adam, model_grad ./ Nstrc_tot); end
         params = get_params(model)
