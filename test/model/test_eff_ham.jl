@@ -28,5 +28,5 @@ path = string(@__DIR__) * "/test_files/"
     # Test empty model
     eff_empty = EffectiveHamiltonian([], [], comm, conf, rank=rank, nranks=nranks)
     @test eff_empty.Nstrc == 0
-    @test eff_empty.models === nothing    
+    @test eff_empty.models === nothing
 end
