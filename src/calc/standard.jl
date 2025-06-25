@@ -63,7 +63,7 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1,
     ham_time = MPI.Wtime() - begin_time
     if rank == 0 && verbosity > 1; println(" Model time: $ham_time s"); end
 
-    prof = HamsterProfiler(2, conf, Niter=length(local_inds), Nbatch=1)
+    prof = HamsterProfiler(3, conf, Niter=length(local_inds), Nbatch=1)
 
     get_eigenvalues(ham, prof, local_inds, comm, conf, rank=rank, nranks=nranks)
     return prof
@@ -86,10 +86,11 @@ Computes eigenvalues and eigenvectors of the Hamiltonian for a set of structures
 - `nranks`: Total number of MPI ranks (default: `1`).
 - `verbosity`: Level of verbosity for printed output (default: `get_verbosity(conf)`).
 """
-function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf=get_empty_config(); Nbatch=get_nbatch(conf), rank=0, nranks=1, verbosity=get_verbosity(conf))
+function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf=get_empty_config(); Nbatch=get_nbatch(conf), save_vecs=get_save_vecs(conf), rank=0, nranks=1, verbosity=get_verbosity(conf))
     strc_ind = 0
     ks = get_kpoints_from_config(conf)
     Nstrc_tot = MPI.Reduce(ham.Nstrc, +, comm, root=0)
+
     for (batch_id, indices) in enumerate(chunks(1:ham.Nstrc, n=Nbatch))
         for index in indices
             strc_ind += 1
@@ -100,23 +101,28 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
             ham_time = MPI.Reduce(ham_time_local, +, comm, root=0)
             diag_time = MPI.Reduce(diag_time_local, +, comm, root=0)
 
+            write_begin = MPI.Wtime()
+            if Nstrc_tot == 1 && rank == 0
+                write_to_file(Es, "Es")
+                if save_vecs; write_to_file(vs, "vs"); end
+            else
+                if !("tmp" in readdir(pwd())) && rank == 0; mkdir("tmp"); end
+                MPI.Barrier(comm)
+                write_to_file(Es, "tmp/Es$(local_inds[index])")
+                if save_vecs; write_to_file(vs, "tmp/vs$(local_inds[index])"); end
+            end
+            write_time = MPI.Wtime() - write_begin
+            prof.timings[1, strc_ind, 3] = write_time
             if rank == 0
                 prof.timings[1, strc_ind, 1] = ham_time / nranks
                 prof.timings[1, strc_ind, 2] = diag_time / nranks
                 if verbosity > 1
                     println(" Hamiltonian time: $(ham_time ./ nranks) s")
                     println(" Diagonalization time: $(diag_time ./ nranks) s")
+                    println(" Write time: $write_time s")
                 end
             end
-            if Nstrc_tot == 1 && rank == 0
-                write_to_file(Es, "Es")
-                write_to_file(vs, "vs")
-            else
-                if !("tmp" in readdir(pwd())) && rank == 0; mkdir("tmp"); end
-                MPI.Barrier(comm)
-                write_to_file(Es, "tmp/Es$(local_inds[index])")
-                write_to_file(vs, "tmp/vs$(local_inds[index])")
-            end
+
             print_train_status(prof, strc_ind, batch_id, verbosity=verbosity)
         end
     end
