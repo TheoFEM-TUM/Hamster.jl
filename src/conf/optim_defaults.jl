@@ -176,11 +176,11 @@ If `val_weights` is true, the same weights are used for the validation loss as f
 get_val_weights(conf::Config)::Bool = conf("val_weights", "Optimizer") == "default" ? false : conf("val_weights", "Optimizer")
 
 """
-    printeachbatch=false (true if verbosity > 0)
+    printeachbatch=false (true if verbosity > 1)
 
 The `printeachbatch` tag switches on printing profiler information at every batch.
 """
-get_printeachbatch(conf::Config)::Bool = conf("printeachbatch", "Optimizer") == "default" ? get_verbosity(conf) > 0 : conf("printeachbatch", "Optimizer")
+get_printeachbatch(conf::Config)::Bool = conf("printeachbatch", "Optimizer") == "default" ? get_verbosity(conf) > 1 : conf("printeachbatch", "Optimizer")
 
 """
     printeachiter=1
