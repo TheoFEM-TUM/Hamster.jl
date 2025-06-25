@@ -1,4 +1,4 @@
-function main(comm, conf; rank=0, nranks=1, num_nodes=1)
+function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity(conf))
     hostnames = MPI.gather(readchomp(`hostname`), comm, root=0)
     if rank == 0
         generate_output(conf, hostnames=hostnames)
