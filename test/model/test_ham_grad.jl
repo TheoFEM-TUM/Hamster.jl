@@ -17,7 +17,7 @@ end
 
 @testset "Eigenvalue gradient" begin
     # Test 1: test that the gradient dE_dHr is the same as with explicit loops
-    Hr_1 = [Hermitian(rand(4, 4)) for _ in 1:5]
+    Hr_1 = [Matrix(sprand(4, 4, 0.5)) for _ in 1:5]
     Rs = 2 .* rand(3, 5) .- 1
     ks = rand(3, 3) .- 0.5
 
