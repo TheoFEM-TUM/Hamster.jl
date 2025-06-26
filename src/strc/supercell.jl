@@ -20,7 +20,7 @@ function get_structures(conf=get_empty_config(); Rs=zeros(3, 1), mode="pc", conf
 
         if occursin(".h5", xdatcar)
             h5open(xdatcar, "r") do file
-                pos_key = haskey(file, "positions") ? "positions" : "configs"
+                pos_key = haskey(file, "configs") ? "configs" : "positions"
             end
             lattice, configs = (h5read(xdatcar, "lattice")[:, :, 1], h5read(xdatcar, "configs"))
             for n in axes(configs, 3)
