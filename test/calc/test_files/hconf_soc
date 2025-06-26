@@ -5,8 +5,8 @@ begin Options
 end
 
 begin Optimizer
-    update_tb = false
-    lr = 0.5
+    update_tb = true
+    lr = 0.01
     niter = 10
     loss = MAE
     wE_6-8 = 2
