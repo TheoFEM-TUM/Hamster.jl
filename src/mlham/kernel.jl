@@ -38,7 +38,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         if rank == 0
             data_points_buf = MPI.VBuffer(similar(data_points_local, sum(counts)), counts)
         else
-            data_points_buf = nothing
+            data_points_buf = nothing  # coverage: ignore
         end
 
         MPI.Gatherv!(view(data_points_local, 1:counts[rank + 1]), data_points_buf, 0, comm)
@@ -46,9 +46,11 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         data_points = MPI.bcast(data_points, comm)
 
         N_real = sum(counts)
+        # COV_EXCL_START
         if N_real ≠ Npoints && rank == 0 && verbosity > 0
             @info "Number of samples changed from $Npoints to $N_real"
         end
+        # COV_EXCL_STOP
     else
         _, data_points = read_ml_params(conf, filename=get_ml_init_params(conf))
     end
