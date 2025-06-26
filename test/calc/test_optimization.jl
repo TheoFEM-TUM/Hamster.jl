@@ -9,7 +9,6 @@
     prof = Hamster.main(comm, conf, rank=rank)
     @test mean(prof.L_train[:, end]) < 0.15
     @test prof.L_val[end] < 0.15
-    @test prof isa Vector
     rm("hamster.out"); rm("params.dat")
 end
 
