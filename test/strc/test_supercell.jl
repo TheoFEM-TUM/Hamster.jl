@@ -96,3 +96,44 @@ end
     strcs = get_structures(conf, mode="pc", config_indices=[])
     @test isempty(strcs)
 end
+
+@testset "Multiple Structures from h5 file" begin
+    # Test 1: Test basic functionality
+    conf = get_empty_config()
+    set_value!(conf, "XDATCAR", "Supercell", joinpath(path, "xdatcar_gaas.h5"))
+    set_value!(conf, "POSCAR", "Supercell", path*"SC_POSCAR_gaas")
+    set_value!(conf, "Nconf", "Supercell", 10)
+    set_value!(conf, "Nconf_min", "Supercell", 100)
+    set_value!(conf, "Nconf_max", "Supercell", 200)
+
+    poscar = Hamster.read_poscar(Hamster.get_sc_poscar(conf))
+    lattice, configs = Hamster.read_xdatcar(joinpath(path, "XDATCAR_gaas"), frac=false)
+
+    config_indices, _ = Hamster.get_config_index_sample(conf)
+    strcs = get_structures(conf, mode="md", config_indices=config_indices)
+
+    @test length(strcs) == 10
+
+    correct_atom_types = map(eachindex(strcs)) do n
+        Hamster.get_ion_types(strcs[n].ions) == poscar.atom_types
+    end
+    @test all(correct_atom_types)
+
+    rs_ion = Hamster.frac_to_cart(poscar.rs_atom, poscar.lattice)
+    Ts = Hamster.frac_to_cart(Hamster.get_translation_vectors(1), lattice)
+    correct_atom_positions = Bool[]
+    for n in eachindex(strcs), iion in eachindex(strcs[n].ions)
+        push!(correct_atom_positions, strcs[n].ions[iion].pos ≈ rs_ion[:, iion])
+        
+        r_ion = strcs[n].ions[iion].pos - strcs[n].ions[iion].dist
+        rmin = findmin([Hamster.normdiff(r_ion, configs[:, iion, config_indices[n]], Ts[:, R]) for R in axes(Ts, 2)])[1]
+        push!(correct_atom_positions, rmin ≈ 0.)
+    end
+    @test all(correct_atom_positions)
+
+    # Test 2: Test empty index list
+    strcs = get_structures(conf, mode="md", config_indices=[])
+    @test isempty(strcs)
+    strcs = get_structures(conf, mode="pc", config_indices=[])
+    @test isempty(strcs)
+end

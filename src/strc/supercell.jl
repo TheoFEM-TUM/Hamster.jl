@@ -17,9 +17,9 @@ function get_structures(conf=get_empty_config(); Rs=zeros(3, 1), mode="pc", conf
     if lowercase(mode) == "md" || lowercase(mode) == "mixed"
         sc_poscar = read_poscar(sc_poscar)
         @unpack rs_atom, atom_types = sc_poscar
-        
+
         if occursin(".h5", xdatcar)
-            lattice, configs = (h5read(xdatcar, "lattice")[:, :, 1], h5read(xdatcar, "positions"))
+            lattice, configs = (h5read(xdatcar, "lattice")[:, :, 1], h5read(xdatcar, "configs"))
             for n in axes(configs, 3)
                 configs[:, :, n] .= frac_to_cart(configs[:, :, n], lattice)
             end
