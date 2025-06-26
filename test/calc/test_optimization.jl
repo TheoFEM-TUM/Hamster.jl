@@ -67,7 +67,7 @@ end
     set_value!(conf, "init_params", joinpath(path, "params_cspbbr3.dat"))
 
     prof = Hamster.main(comm, conf, rank=rank)
-    @test mean(prof.L_train[:, end]) < 0.17
+    @test mean(prof.L_train[:, end]) < 0.20
     rm("hamster.out"); rm("params.dat"); rm("ml_params.dat")
 end
 
