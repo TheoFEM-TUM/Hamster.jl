@@ -15,7 +15,7 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_mode
     end
     
     Rs = [strc.Rs for strc in strcs]
-    sp_iterator = get_sparse_iterator(strcs[1], bases[1], conf)
+    sp_iterator = get_sparse_iterator(strcs[1], bases[1], conf, soc=soc)
 
     models = ()
     if tb_model
@@ -161,9 +161,9 @@ Constructs an iterator that generates sparse matrix indices for interactions wit
 - `indices`: A vector of vectors, where each sub-vector corresponds to a specific grid point (denoted by `R`) 
   and contains tuples `(i, j)` representing the sparse matrix indices for interactions within the cutoff radius.
 """
-function get_sparse_iterator(strc, basis, conf=get_empty_config(), rcut=get_rcut(conf))
+function get_sparse_iterator(strc, basis, conf=get_empty_config(), rcut=get_rcut(conf); soc=get_soc(conf))
     nn_grid_points = iterate_nn_grid_points(strc.point_grid)
-    Norb_per_ion = length.(basis.orbitals)
+    Norb_per_ion = soc ? 2 .* length.(basis.orbitals) : length.(basis.orbitals)
     ij_map = get_ion_orb_to_index_map(Norb_per_ion)
     Ts = frac_to_cart(strc.Rs, strc.lattice)
     indices = [Tuple{Int64, Int64}[] for R in axes(strc.Rs, 2)]

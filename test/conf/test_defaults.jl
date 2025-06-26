@@ -89,6 +89,16 @@ end
     @test get_soc(conf) == false
     set_value!(conf, "update", "SOC", true)
     @test get_soc(conf) == true
+
+    # Test 3: test init_params
+    conf = get_empty_config()
+    set_value!(conf, "soc", true)
+    @test Hamster.get_soc_init_params(conf) == "zeros"
+    set_value!(conf, "init_params", "params.dat")
+    @test Hamster.get_soc_init_params(conf) == "params.dat"
+    set_value!(conf, "init_params", "SOC", "params_soc.dat")
+    @test Hamster.get_soc_init_params(conf) == "params_soc.dat"
+
 end
 
 @testset "HyperOpt defaults" begin

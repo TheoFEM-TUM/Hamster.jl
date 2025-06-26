@@ -56,7 +56,7 @@ function get_soc_matrices(strc::Structure, basis::Basis, conf=get_empty_config()
             end
         end
     end
-    if verbosity > 1; @show soc_order; end
+    if verbosity > 2; @show soc_order; end # Only for debugging
     return soc_matrices
 end
 

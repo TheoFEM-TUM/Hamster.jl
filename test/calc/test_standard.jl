@@ -25,12 +25,11 @@ end
 
     prof = Hamster.main(comm, conf, rank=rank)
     Es_dft = h5read(joinpath(path, "eigenval.h5"), "eigenvalues")
+    Es_tb = read_from_file("Es.dat")
     inds = Int.(read_from_file("config_inds.dat"))
-    for ind in inds
-        Es_tb = read_from_file("tmp/Es$ind.dat")
-        @test mean(abs.(Es_dft[:, :, ind] .- Es_tb)) < 0.3
-        @test mean(abs.(Es_dft[:, :, ind] .- Es_tb)) < 0.3
+    for (i, ind) in enumerate(inds)
+        @test mean(abs.(Es_dft[:, :, ind] .- Es_tb[:, :, i])) < 0.3
     end
 
-    rm("hamster.out"); rm("config_inds.dat"); rm("tmp", recursive=true); rm("Es.dat"); rm("vs.dat")
+    rm("hamster.out"); rm("config_inds.dat"); rm("Es.dat")
 end

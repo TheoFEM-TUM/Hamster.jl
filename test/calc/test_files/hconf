@@ -6,10 +6,11 @@ end
 
 begin Optimizer
     lr = 0.5
-    niter = 300
+    niter = 100
     loss = MAE
     wE = 1 1 1 1 1 1 0.1 0.1
     wk_1 = 5
+    val_weights = true
 end
 
 begin atom Ga

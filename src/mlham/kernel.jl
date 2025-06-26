@@ -21,17 +21,37 @@ end
 
 Constructor for a HamiltonianKernel model.
 """
-function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, model, comm, conf=get_empty_config(); 
+function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, model, comm, conf=get_empty_config(); verbosity=get_verbosity(conf),
     Ncluster=get_ml_ncluster(conf), Npoints=get_ml_npoints(conf), sim_params=get_sim_params(conf), update_ml=get_ml_update(conf), rank=0, nranks=1)
     
     structure_descriptors = map(eachindex(strcs)) do n
         get_tb_descriptor(model.hs[n], model.V, strcs[n], bases[n], conf)
     end
-    Npoints_local = floor(Int64, Npoints / nranks)
-    data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
-    data_points = MPI.Gather(data_points_local, 0, comm)
-    data_points = MPI.bcast(data_points, comm, root=0)
+    if get_ml_init_params(conf)[1] ∈ ['r', 'z', 'o']
+        Npoints_local = floor(Int64, Npoints / nranks)
+        data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
+        local_counts::Int32 = length(data_points_local)
+        counts = MPI.Gather(local_counts, 0, comm)
+        counts = MPI.bcast(counts, 0, comm)
 
+        data_points_buf = nothing
+        if rank == 0
+            data_points_buf = MPI.VBuffer(similar(data_points_local, sum(counts)), counts)
+        end
+
+        MPI.Gatherv!(view(data_points_local, 1:counts[rank + 1]), data_points_buf, 0, comm)
+        data_points = rank == 0 ? data_points_buf.data : nothing
+        data_points = MPI.bcast(data_points, comm)
+
+        N_real = sum(counts)
+        # COV_EXCL_START
+        if N_real ≠ Npoints && rank == 0 && verbosity > 0
+            @info "Number of samples changed from $Npoints to $N_real"
+        end
+        # COV_EXCL_STOP
+    else
+        _, data_points = read_ml_params(conf, filename=get_ml_init_params(conf))
+    end
     params, data_points = init_ml_params!(data_points, conf)
     return HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml)
 end
@@ -238,14 +258,22 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 # Returns
 - `dparams`: A vector containing the computed gradients of the model parameters.
 """
-function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr)
+function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
     dparams = zeros(length(kernel.params))
     if kernel.update
         for n in eachindex(dparams)
             for index in indices
                 h_env = kernel.structure_descriptors[index]
-                for R in eachindex(dL_dHr[index]), (i, j, hin) in zip(findnz(h_env[R])...)
-                    dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) .* dL_dHr[index][R][i, j]
+                for R in eachindex(dL_dHr[index])
+                    for (i, j, hin) in zip(findnz(h_env[R])...)
+                        if !soc
+                            dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) .* real(dL_dHr[index][R][i, j])
+                        else
+                            i1 = 2*i-1; j1 = 2*j-1
+                            i2 = 2*i; j2 = 2*j
+                            dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) .* real(dL_dHr[index][R][i1, j1] + dL_dHr[index][R][i2, j2])
+                        end
+                    end
                 end
             end
         end

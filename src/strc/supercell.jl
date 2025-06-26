@@ -17,7 +17,19 @@ function get_structures(conf=get_empty_config(); Rs=zeros(3, 1), mode="pc", conf
     if lowercase(mode) == "md" || lowercase(mode) == "mixed"
         sc_poscar = read_poscar(sc_poscar)
         @unpack rs_atom, atom_types = sc_poscar
-        lattice, configs = occursin(".h5", xdatcar) ? (h5read(xdatcar, "lattice"), h5read(xdatcar, "positions")) : read_xdatcar(xdatcar, frac=false)
+
+        if occursin(".h5", xdatcar)
+            pos_key = ""
+            h5open(xdatcar, "r") do file
+                pos_key = haskey(file, "configs") ? "configs" : "positions"
+            end
+            lattice, configs = (h5read(xdatcar, "lattice")[:, :, 1], h5read(xdatcar, pos_key))
+            for n in axes(configs, 3)
+                configs[:, :, n] .= frac_to_cart(configs[:, :, n], lattice)
+            end
+        else
+            lattice, configs = read_xdatcar(xdatcar, frac=false)
+        end
         
         # Check that POSCAR lattice and XDATCAR lattice are compatible
         @assert sc_poscar.lattice ≈ lattice

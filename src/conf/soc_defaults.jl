@@ -17,4 +17,14 @@ get_update_soc(conf::Config)::Bool = conf("update", "SOC") == "default" ? true :
 
 The `init_params` tag determines how SOC parameters are initialized.
 """
-get_soc_init_params(conf::Config)::String = conf("init_params", "SOC") == "default" ? "zeros" : conf("init_params", "SOC")
+function get_soc_init_params(conf::Config)::String
+    soc_init = conf("init_params", "SOC")
+    tb_init = conf("init_params")
+    if soc_init == "default" && get_soc(conf) && tb_init ≠ "default" && !haskey(conf.blocks, "Optimizer")
+        return get_init_params(conf)
+    elseif soc_init == "default" && get_soc(conf)
+        return "zeros"
+    else
+        return soc_init
+    end
+end

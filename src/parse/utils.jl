@@ -157,7 +157,9 @@ Reads and combines their data into a single large array, then writes the merged 
 """
 function collapse_files_with(str; location=joinpath(pwd(), "tmp"))
     files = [file for file in readdir(location) if occursin(str, file)]
-    data = [read_from_file(joinpath(location, file)) for file in files]
+    L_str = length(str)
+    indices = parse.(Int64, [replace(file[L_str+1:end], ".dat"=>"") for file in files])
+    data = [read_from_file(joinpath(location, file)) for file in files[sortperm(indices)]]
     ndims = length(size(data[1]))
     data_combined = cat(data..., dims=ndims+1)
     write_to_file(data_combined, str)

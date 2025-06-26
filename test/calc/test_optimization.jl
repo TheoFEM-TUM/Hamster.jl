@@ -8,7 +8,7 @@
 
     prof = Hamster.main(comm, conf, rank=rank)
     @test mean(prof.L_train[:, end]) < 0.15
-    @test prof.L_val[end] < 0.5 # includes all bands
+    @test prof.L_val[end] < 0.15
     rm("hamster.out"); rm("params.dat")
 end
 
@@ -57,7 +57,21 @@ end
     rm("hamster.out"); rm("params.dat"); rm("ml_params.dat")
 end
 
-@testset "Optimization for MD data" begin
+@testset "Optimization workflow for ML+TB+SOC (sparse)" begin
+    path = joinpath(@__DIR__, "test_files")
+    conf = get_config(filename = joinpath(path, "hconf_cspbbr3"))
+    set_value!(conf, "poscar", joinpath(path, "POSCAR_cspbbr3"))
+    set_value!(conf, "rllm_file", joinpath(path, "rllm_cspbbr3.dat"))
+    set_value!(conf, "sp_mode", true)
+    set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_cspbbr3_soc"))
+    set_value!(conf, "init_params", joinpath(path, "params_cspbbr3.dat"))
+
+    prof = Hamster.main(comm, conf, rank=rank)
+    @test mean(prof.L_train[:, end]) < 0.20
+    rm("hamster.out"); rm("params.dat"); rm("ml_params.dat")
+end
+
+@testset "Optimization for MD data (sparse)" begin
     path = joinpath(@__DIR__, "test_files")
     conf = get_config(filename = joinpath(path, "hconf_md"))
     set_value!(conf, "poscar", joinpath(path, "POSCAR_md"))

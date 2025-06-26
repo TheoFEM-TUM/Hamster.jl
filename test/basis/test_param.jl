@@ -63,7 +63,7 @@ end
     rm(string(@__DIR__)*"/params.dat")
 end
 
-@testset "Parameters Cs" begin
+@testset "Parameters CsPbBr3" begin
     conf = get_empty_config()
     set_value!(conf, "orbitals", "Cs", "s")
     set_value!(conf, "orbitals", "Pb", "s px py pz")

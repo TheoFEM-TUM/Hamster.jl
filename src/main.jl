@@ -1,4 +1,4 @@
-function main(comm, conf; rank=0, nranks=1, num_nodes=1)
+function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity(conf))
     hostnames = MPI.gather(readchomp(`hostname`), comm, root=0)
     if rank == 0
         generate_output(conf, hostnames=hostnames)
@@ -21,12 +21,20 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1)
     end
     task = decide_which_task_to_perform(conf)
     out = run_calculation(task, comm, conf, rank=rank, nranks=nranks)
-    if isdir("tmp")
-        for str in ["Es", "vs"]
+    if isdir("tmp") && rank == 0
+        files = ["Es"]
+        if get_save_vecs(conf); push!(files, "vs"); end
+        collapse_time = @elapsed for str in files
             if any([occursin(str, file) for file in readdir(joinpath(pwd(), "tmp"))])
                 collapse_files_with(str)
             end
         end
+        rm("tmp", recursive=true)
+        # COV_EXCL_START
+        if verbosity > 1
+            println(" Final write time: $collapse_time s")
+        end
+        # COV_EXCL_STOP
     end
     return out
 end

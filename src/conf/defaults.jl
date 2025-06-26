@@ -34,6 +34,13 @@ The `neig` tag sets the number of eigenvalues that are calculated when using Kry
 get_neig(conf::Config)::Int64 = conf("Neig") == "default" ? 6 : conf("Neig")
 
 """
+    save_vecs=false
+
+The `save_vecs` tag determines whether the eigenvectors are written to a file.
+"""
+get_save_vecs(conf::Config)::Bool = conf("save_vecs") == "default" ? false : conf("save_vecs")
+
+"""
     eig_target=0.
 
 The `eig_target` tag sets the target energy when using Krylov-Shur.
