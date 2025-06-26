@@ -116,11 +116,13 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
             if rank == 0
                 prof.timings[1, strc_ind, 1] = ham_time / nranks
                 prof.timings[1, strc_ind, 2] = diag_time / nranks
+                # COV_EXCL_START
                 if verbosity > 1
                     println(" Hamiltonian time: $(ham_time ./ nranks) s")
                     println(" Diagonalization time: $(diag_time ./ nranks) s")
                     println(" Write time: $write_time s")
                 end
+                # COV_EXCL_STOP
             end
 
             print_train_status(prof, strc_ind, batch_id, verbosity=verbosity)
