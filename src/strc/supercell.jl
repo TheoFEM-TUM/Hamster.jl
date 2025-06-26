@@ -19,6 +19,7 @@ function get_structures(conf=get_empty_config(); Rs=zeros(3, 1), mode="pc", conf
         @unpack rs_atom, atom_types = sc_poscar
 
         if occursin(".h5", xdatcar)
+            pos_key = ""
             h5open(xdatcar, "r") do file
                 pos_key = haskey(file, "configs") ? "configs" : "positions"
             end
