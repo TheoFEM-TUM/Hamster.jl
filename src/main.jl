@@ -30,9 +30,11 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity
             end
         end
         rm("tmp", recursive=true)
+        # COV_EXCL_START
         if verbosity > 1
             println(" Final write time: $collapse_time s")
         end
+        # COV_EXCL_STOP
     end
     return out
 end
