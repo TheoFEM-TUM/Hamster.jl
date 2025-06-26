@@ -2,7 +2,7 @@ begin Options
     rcut = 7
     load_rllm = true
     rllm_file = rllm.dat
-    sp_mode = false
+    sp_mode = true
     verbosity = 0
 end
 
@@ -13,7 +13,7 @@ end
 
 begin Optimizer
     lr = 0.01
-    niter = 30
+    niter = 10
     loss = MAE
     train_data = eigenval.h5
     train_mode = md

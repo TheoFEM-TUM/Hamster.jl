@@ -1,0 +1,45 @@
+begin Options
+    rcut = 6.2
+    verbosity = 0
+    init_params = params.dat
+    sp_mode = true
+    load_rllm = true
+end
+
+begin Optimizer
+    lr = 0.01
+    update_tb = false
+    niter = 10
+    loss = MAE
+    wE_25-28 = 0.1
+    wE_18-19 = 10
+    wk_20 = 10
+    bandmin = 27
+    train_data = EIGENVAL_SOC
+end
+
+begin ML
+    update = true
+    init_params = zeros
+    npoints = 200
+    cluster = 20
+end
+
+begin SOC
+    init_params = ones
+end
+
+begin atom Cs
+  alpha = 3.77385
+  orbitals = s
+end
+
+begin atom Pb
+  alpha = 29.83655
+  orbitals = s px py pz
+end
+
+begin atom Br
+  alpha = 16.93986
+  orbitals = px py pz
+end
