@@ -141,5 +141,7 @@ function get_kpoints_from_config(conf::Config; kpoints_file=get_kpoints_file(con
         elseif ks isa Array{Float64, 3}
             return ks[:, :, 1]
         end
+    elseif occursin("gamma", lowercase(kpoints_file))
+        return zeros(3, 1)
     end
 end

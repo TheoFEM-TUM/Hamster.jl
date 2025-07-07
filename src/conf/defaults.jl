@@ -24,7 +24,7 @@ get_init_params(conf::Config)::String = conf("init_params") == "default" ? "ones
 
 The `kpoints` tag sets a file or method to determine the set of k-points.
 """
-get_kpoints_file(conf::Config)::String = conf("kpoints") == "default" ? "none" : conf("kpoints")
+get_kpoints_file(conf::Config)::String = conf("kpoints") == "default" ? "gamma" : conf("kpoints")
 
 """
     neig=6 (only if sp_diag=true)
