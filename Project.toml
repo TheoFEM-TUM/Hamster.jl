@@ -4,6 +4,7 @@ authors = ["martin <ga63loc@mytum.de>"]
 version = "0.1.0"
 
 [deps]
+Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 BlockDiagonals = "0a1fb500-61f7-11e9-3c65-f5ef3456f9f0"
 ChunkSplitters = "ae650224-84b6-46f8-82ea-d812ca08434e"
 Clustering = "aaaa29a8-35af-508c-8bc3-b662a17a0fe5"
@@ -27,6 +28,7 @@ TreeParzen = "eb66a70c-a255-11e9-03ea-7ba6b2f22006"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 
 [compat]
+Arpack = "0.5.4"
 BlockDiagonals = "0.2.0"
 Clustering = "0.15.8"
 HDF5 = "0.17.2"
