@@ -111,8 +111,9 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config(); tmethod=get_t
             r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
             r⃗₂ = strc.ions[iion2].pos - strc.ions[iion2].dist - Ts[:, R]
             
+            r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos - Ts[:, R])
             r = normdiff(r⃗₁, r⃗₂)
-            if r ≤ rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
+            if r_nd ≤ rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
                 Û = get_sk_transform_matrix(r⃗₁, r⃗₂, basis.orbitals[iion1][1].axis, tmethod)
                 nnlabel = get_nn_label(r, nn_dict[ion_label], conf)
                 for jorb1 in eachindex(basis.orbitals[iion1]), jorb2 in eachindex(basis.orbitals[iion2])
