@@ -81,8 +81,8 @@ Fully diagonalizes a Hermitian Hamiltonian matrix `Hk` and returns the eigenvalu
 """
 function diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0)
     if abs(sum(Hk .- Hermitian(Hk))) > 1e-5
-        maxdiff = maximum(abs.(Hk .- Hermitian(Hk)))
-        @warn "Hamiltonian not hermitian! Maximum missmatch: $maxdiff"
+        maxdiff, inds = findmax(abs.(Hk .- Hermitian(Hk)))
+        @warn "Hamiltonian not hermitian! Maximum missmatch: $maxdiff at $inds."
     end
     eig = eigen(Hermitian(Hk))
     return real.(eig.values), eig.vectors
