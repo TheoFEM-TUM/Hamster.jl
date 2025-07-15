@@ -74,3 +74,14 @@ get_nthreads_blas(conf::Config)::Int64 = conf("nthreads_blas") == "default" ? 1 
 The `nhamster` tag sets the number of `Hamster` processes to be spawned for parallel tasks.
 """
 get_nhamster(conf::Config)::Int64 = conf("nhamster") == "default" ? 1 : conf("nhamster")
+
+"""
+    seed=none
+
+The `seed` tag can be used to set a custom seed for RNG.
+"""
+function set_seed!(conf::Config; rank=0)
+    if conf("seed") ≠ "default"
+        Random.seed!(conf("seed") + rank)
+    end
+end
