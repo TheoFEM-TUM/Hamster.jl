@@ -27,7 +27,7 @@ Runs the optimization process for an effective Hamiltonian model using the speci
 """
 function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1, write_output=true)
    train_config_inds, val_config_inds = get_config_index_sample(conf)
-   
+
    if rank == 0
       h5open("hamster_out.h5", "w") do file
          file["train_config_inds"] = train_config_inds

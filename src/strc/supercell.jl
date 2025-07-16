@@ -99,9 +99,9 @@ function get_config_index_sample(conf=get_empty_config(); Nconf=get_Nconf(conf),
         train_config_inds = h5read(inds_conf, "train_config_inds")
     end
 
-    if 1 < Nconf && lowercase(train_mode) == lowercase(val_mode) && length(train_config_inds) < Nconf
+    if (lowercase(train_mode) == "md" || lowercase(train_mode) == lowercase(val_mode)) && length(train_config_inds) < Nconf
         append!(train_config_inds, sample(Nconf_min:Nconf_max, Nconf - length(train_config_inds), replace=false, ordered=true))
-    elseif lowercase(train_mode) == "pc"
+    elseif length(train_config_inds) == 0
         push!(train_config_inds, 1)
     end
 
