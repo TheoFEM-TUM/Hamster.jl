@@ -27,7 +27,7 @@ end
 Calculate the TB descriptor for a given a TB `model`, a structure `strc` and a TBConfig file `conf`.
 """
 function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_ml_rcut(conf), apply_distortion=get_apply_distortion(conf), env_scale=get_env_scale(conf),
-    apply_distance_distortion=get_apply_distance_distortion(conf))
+    apply_distance_distortion=get_apply_distance_distortion(conf), strc_scale=get_strc_scale(conf))
 
     Nε = length(basis); Norb_per_ion = size(basis); NR = size(strc.Rs, 2)
 
@@ -35,7 +35,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
 
     env = get_environmental_descriptor(h, V, strc, basis, conf)
 
-    rs_ion = get_ion_positions(strc.ions, apply_distortion=apply_distortion)
+    rs_ion = get_ion_positions(strc.ions)
     Ts = frac_to_cart(strc.Rs, strc.lattice)
 
     ij_map = get_ion_orb_to_index_map(Norb_per_ion)
@@ -48,22 +48,38 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
         ri = rs_ion[iion]
         rj = rs_ion[jion] - Ts[:, R]
         Δr = normdiff(ri, rj)
-        Δr_dist = normdiff(ri - strc.ions[iion].dist, rj - strc.ions[jion].dist)
-        Δr_in = apply_distance_distortion ? Δr_dist : Δr
+        if apply_distortion
+            ri -= strc.ions[iion].dist
+            rj -= strc.ions[jion].dist
+        end
+        Δr_dist = normdiff(ri, rj)
+        Δr_in = (apply_distance_distortion || apply_distortion) ? Δr_dist : Δr
+        if apply_distortion || apply_distance_distortion
+            Δr_in = Δr_in / rcut * strc_scale
+        end
         for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
             i = ij_map[(iion, iorb)]
             j = ij_map[(jion, jorb)]
             l_i = l_map[i]
             l_j = l_map[j]
-            orbswap = decide_orbswap(strc.ions[iion].type, strc.ions[jion].type, l_i, env[i], l_j, env[j])
+            
             Zs = [element_to_number(strc.ions[iion].type), element_to_number(strc.ions[jion].type)]
-            Zs = orbswap ? reverse(Zs) : Zs
             iaxis = basis.orbitals[iion][iorb].axis
             jaxis = basis.orbitals[jion][jorb].axis
-            φ, θs, angleswap = get_angular_descriptors(strc.ions[iion].type, strc.ions[jion].type, ri, rj, iaxis, jaxis, orbswap)
+            φ, θs = get_angular_descriptors(ri, rj, iaxis, jaxis)
+
+            orbswap = decide_orbswap(strc.ions[iion].type, strc.ions[jion].type, l_i, env[i], l_j, env[j])
+
+            Zs = orbswap ? reverse(Zs) : Zs
+            θs = orbswap ? reverse(θs) : θs
+
+            if apply_distortion || apply_distance_distortion
+                φ = φ / 2π * strc_scale
+                θs = @. θs / 2π * strc_scale
+            end
 
             if Δr ≤ rcut
-                ii, jj = orbswap || angleswap ? (j, i) : (i, j)
+                ii, jj = orbswap ? (j, i) : (i, j)
                 push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
             end
         end
@@ -124,7 +140,6 @@ Computes angular descriptors based on the relative positions and orbital orienta
 - `itype, jtype`: Atomic types of the two atoms.
 - `ri, rj`: Position vectors of the two atoms.
 - `iaxis, jaxis`: Axes defining the local orbital orientation for each atom.
-- `orbswap`: A boolean indicating whether orbital swapping should be applied.
 
 # Returns
 - `φ::Float64`: The angle between the two orbital axes.
@@ -135,23 +150,14 @@ Computes angular descriptors based on the relative positions and orbital orienta
 - Determines the angle `φ` between the two orbital axes.
 - Computes `θs`, the angles between each axis (`iaxis`, `jaxis`) and the respective bond directions.
 - Ensures consistent ordering of `θs` based on atomic types and orbital swapping rules.
-
-This function is useful for defining angular features in physics-informed machine learning models or tight-binding calculations.
 """
-function get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)
+function get_angular_descriptors(ri, rj, iaxis, jaxis)
     Δr = normdiff(ri, rj)
     Δrij = Δr > 0 ? normalize(rj - ri) : normalize(iaxis)
     Δrji = Δr > 0 ? normalize(ri - rj) : normalize(jaxis)
     φ = calc_angle(iaxis, jaxis)
     θs = Float64[calc_angle(iaxis, Δrij), calc_angle(jaxis, Δrji)]
-    angleswap = θs[1] > θs[2] && Δr ≈ 0
-
-    if itype == jtype 
-        θs = sort(θs)
-    else
-        θs = orbswap ? reverse(θs) : θs
-    end
-    return φ, θs, angleswap
+    return φ, θs
 end
 
 """
