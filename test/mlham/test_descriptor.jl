@@ -156,7 +156,7 @@ end
         err = sum(abs.(descriptors_1[R][i, j] .- descriptors_2[R][i_2, j_2]))
         push!(correct_permutation, err < 1e-5)
         if err > 1e-5
-            println("--- i, j ---")
+            println("--- $(orbs_1[i]), $(orbs_1[j]) ---")
             @show descriptors_1[R][i, j]
             @show descriptors_2[R][i_2, j_2]
         end

@@ -60,19 +60,19 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
         for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
             i = ij_map[(iion, iorb)]
             j = ij_map[(jion, jorb)]
-            l_i = l_map[i]
-            l_j = l_map[j]
+            itype = strc.ions[iion].type; l_i = l_map[i]
+            jtype = strc.ions[jion].type; l_j = l_map[j]
             
             Zs = [element_to_number(strc.ions[iion].type), element_to_number(strc.ions[jion].type)]
             iaxis = basis.orbitals[iion][iorb].axis
             jaxis = basis.orbitals[jion][jorb].axis
             φ, θs = get_angular_descriptors(ri, rj, iaxis, jaxis)
 
-            orbswap = decide_orbswap(strc.ions[iion].type, strc.ions[jion].type, l_i, env[i], l_j, env[j])
-            angleswap = θs[1] > θs[2] && Δr ≈ 0
+            orbswap = decide_orbswap(itype, jtype, l_i, env[i], l_j, env[j])
+            angleswap = (θs[1] > θs[2] && itype == jtype) || (orbswap && itype ≠ jtype)
 
             Zs = orbswap ? reverse(Zs) : Zs
-            θs = orbswap || angleswap ? reverse(θs) : θs
+            θs = angleswap ? reverse(θs) : θs
 
             if apply_distortion || apply_distance_distortion
                 φ = φ / 2π * strc_scale
@@ -80,7 +80,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
             end
 
             if Δr ≤ rcut
-                ii, jj = orbswap || angleswap ? (j, i) : (i, j)
+                ii, jj = orbswap ? (j, i) : (i, j)
                 push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
             end
         end
