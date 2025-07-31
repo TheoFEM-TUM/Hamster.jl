@@ -115,7 +115,7 @@ function get_config_index_sample(conf=get_empty_config(); Nconf=get_Nconf(conf),
         val_config_inds = h5read(val_inds_conf, "val_config_inds")
     end
 
-    if 1 < Nconf
+    if length(val_config_inds) < Nconf && lowercase(val_mode) == "md"
         Nval = train_mode == val_mode ? round(Int64, Nconf * val_ratio) : Nconf
         remaining_indices = lowercase(train_mode) == "pc" ? (Nconf_min:Nconf_max) : setdiff(Nconf_min:Nconf_max, train_config_inds)
         remaining_indices = setdiff(remaining_indices, val_config_inds)
