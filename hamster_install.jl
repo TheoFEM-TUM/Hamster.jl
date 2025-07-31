@@ -18,7 +18,7 @@ Hamiltonian-learning
 using Pkg
 
 # Add and import the `ArgParse` package
-Pkg.add("ArgParse")
+Pkg.add("ArgParse"); Pkg.add("MPI"); Pkg.add("Printf")
 using ArgParse
 
 hamster_path = string(@__DIR__)
