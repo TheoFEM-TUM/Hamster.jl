@@ -94,29 +94,29 @@ end
     jaxis = [0.0, 0.0, 1.0]
     orbswap = false
 
-    φ, θs = Hamster.get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)
+    φ, θs = Hamster.get_angular_descriptors(ri, rj, iaxis, jaxis)
     @test isapprox(φ, π/2, atol=1e-6)  # iaxis and jaxis are perpendicular
     @test θs == sort(θs)  # Must be sorted for same atom types
 
     itype, jtype = 1, 2
     orbswap = false
-    φ, θs = Hamster.get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)
+    φ, θs = Hamster.get_angular_descriptors(ri, rj, iaxis, jaxis)
     @test isapprox(φ, π/2, atol=1e-6)
-    @test θs == [Hamster.calc_angle(iaxis, normalize(rj - ri)), Hamster.calc_angle(jaxis, normalize(ri - rj))]  # No sorting
+    @test θs == Hamster.calc_angle(iaxis, normalize(rj - ri)), Hamster.calc_angle(jaxis, normalize(ri - rj))
 
     orbswap = true
-    φ, θs = Hamster.get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)
+    φ, θs = Hamster.get_angular_descriptors(ri, rj, iaxis, jaxis)
     @test isapprox(φ, π/2, atol=1e-6)
-    @test θs == reverse([Hamster.calc_angle(iaxis, normalize(rj - ri)), Hamster.calc_angle(jaxis, normalize(ri - rj))])  # Reversed
+    @test θs == [Hamster.calc_angle(iaxis, normalize(rj - ri)), Hamster.calc_angle(jaxis, normalize(ri - rj))]
 
     rj = ri
-    φ, θs = Hamster.get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)
+    φ, θs = Hamster.get_angular_descriptors(ri, rj, iaxis, jaxis)
     @test isapprox(φ, π/2, atol=1e-6)
-    @test θs == reverse([Hamster.calc_angle(iaxis, normalize(iaxis)), Hamster.calc_angle(jaxis, normalize(jaxis))])
+    @test θs == [Hamster.calc_angle(iaxis, normalize(iaxis)), Hamster.calc_angle(jaxis, normalize(jaxis))]
 
     iaxis = [1.0, 0.0, 0.0]
     jaxis = [1.0, 0.0, 0.0]  # Parallel axes
-    φ, θs = Hamster.get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)
+    φ, θs = Hamster.get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis)
     @test isapprox(φ, 0.0, atol=1e-6)  # Parallel axes should have angle 0
 
     # Test 3: test complete descriptor set
