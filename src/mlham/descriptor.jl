@@ -72,7 +72,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
             angleswap = θs[1] > θs[2] && Δr ≈ 0
 
             Zs = orbswap ? reverse(Zs) : Zs
-            θs = orbswap ? reverse(θs) : θs
+            θs = orbswap || angleswap ? reverse(θs) : θs
 
             if apply_distortion || apply_distance_distortion
                 φ = φ / 2π * strc_scale
