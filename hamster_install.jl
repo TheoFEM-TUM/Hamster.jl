@@ -25,8 +25,6 @@ hamster_path = string(@__DIR__)
 
 Pkg.develop(PackageSpec(path=hamster_path))
 Pkg.activate(hamster_path)
-Pkg.update()
-Pkg.resolve()
 Pkg.instantiate()
 
 # Parse command line arguments
