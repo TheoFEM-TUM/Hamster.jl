@@ -69,6 +69,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
             φ, θs = get_angular_descriptors(ri, rj, iaxis, jaxis)
 
             orbswap = decide_orbswap(strc.ions[iion].type, strc.ions[jion].type, l_i, env[i], l_j, env[j])
+            angleswap = θs[1] > θs[2] && Δr ≈ 0
 
             Zs = orbswap ? reverse(Zs) : Zs
             θs = orbswap ? reverse(θs) : θs
@@ -79,7 +80,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
             end
 
             if Δr ≤ rcut
-                ii, jj = orbswap ? (j, i) : (i, j)
+                ii, jj = orbswap || angleswap ? (j, i) : (i, j)
                 push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
             end
         end
