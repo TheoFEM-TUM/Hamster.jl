@@ -102,7 +102,7 @@ end
     orbswap = false
     φ, θs = Hamster.get_angular_descriptors(ri, rj, iaxis, jaxis)
     @test isapprox(φ, π/2, atol=1e-6)
-    @test θs == Hamster.calc_angle(iaxis, normalize(rj - ri)), Hamster.calc_angle(jaxis, normalize(ri - rj))
+    @test θs == [Hamster.calc_angle(iaxis, normalize(rj - ri)), Hamster.calc_angle(jaxis, normalize(ri - rj))]
 
     orbswap = true
     φ, θs = Hamster.get_angular_descriptors(ri, rj, iaxis, jaxis)
@@ -116,7 +116,7 @@ end
 
     iaxis = [1.0, 0.0, 0.0]
     jaxis = [1.0, 0.0, 0.0]  # Parallel axes
-    φ, θs = Hamster.get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis)
+    φ, θs = Hamster.get_angular_descriptors(ri, rj, iaxis, jaxis)
     @test isapprox(φ, 0.0, atol=1e-6)  # Parallel axes should have angle 0
 
     # Test 3: test complete descriptor set
