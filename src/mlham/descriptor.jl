@@ -1,27 +1,4 @@
 """
-    fcut(r, rcut)
-
-Cut-off function whose value smoothly transitions to zero as `r` approaches `rcut`.
-Ensures continuity by using a cosine-based smoothing function.
-
-# Arguments
-- `r`: The input distance.
-- `rcut`: The cutoff radius beyond which the function returns zero.
-
-# Returns
-- A smoothly varying value between 1 and 0, with `fcut(r, rcut) = 0` for `r > rcut`.
-"""
-function fcut(r, rcut)
-    if r > rcut
-        return 0.0
-    elseif rcut ≠ 0
-        return 1/2 * (cos(π*r/rcut) + 1)
-    else
-        return 1.0
-    end
-end
-
-"""
     get_tb_descriptor(model, strc, conf)
 
 Calculate the TB descriptor for a given a TB `model`, a structure `strc` and a TBConfig file `conf`.
@@ -79,7 +56,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
                 θs = @. θs / 2π * strc_scale
             end
 
-            if Δr ≤ rcut
+            if Δr_dist ≤ rcut
                 ii, jj = orbswap ? (j, i) : (i, j)
                 push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
             end
