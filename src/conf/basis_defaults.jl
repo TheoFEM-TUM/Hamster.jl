@@ -63,7 +63,7 @@ get_itp_xmin(conf::Config)::Float64 = conf("itp_xmin") == "default" ? 0. : conf(
 
 The `itp_xmax` tag sets the maximal x value used for the adaptive interpolation.
 """
-get_itp_xmax(conf::Config)::Float64 = conf("itp_xmax") == "default" ? get_rcut(conf)+5 : conf("itp_xmax")
+get_itp_xmax(conf::Config)::Float64 = conf("itp_xmax") == "default" ? get_rcut(conf)+get_rcut_tol(conf)+1 : conf("itp_xmax")
 
 """
     itp_Ninit=10
