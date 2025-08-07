@@ -131,7 +131,7 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config(); tmethod=get_t
                         orbconfig = get_orbconfig(oc_dicts, k, ion_label, jorb1, jorb2)
                         if overlap_contributes_to_matrix_element(Cllm, orb1, orb2, ion_label)
                             v = get_param_index(Cllm, nnlabel, basis.parameters, orb1, orb2, i, j)
-                            hval = Cllm(orbconfig, mode, θ₁, φ₁, θ₂, φ₂) * Rllm(r) * fcut(r, rcut+rcut_tol)
+                            hval = Cllm(orbconfig, mode, θ₁, φ₁, θ₂, φ₂) * Rllm(r) #* fcut(r, rcut+rcut_tol)
 
                             if haskey(hs[chunk_id], (v, i, j, R)) && abs(hval) ≥ sp_tol
                                 hs[chunk_id][(v, i, j, R)] += hval
