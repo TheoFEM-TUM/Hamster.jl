@@ -13,6 +13,7 @@ gaas_poscar = string(@__DIR__) * "/../parse/test_files/POSCAR_gaas"
     set_value!(conf, "rllm_file", string(@__DIR__)*"/test_files/rllm_true.dat")
     set_value!(conf, "verbosity", 0)
     set_value!(conf, "rcut", 5)
+    set_value!(conf, "rcut_tol", 100)
 
     strc = Structure(conf, poscar_path=gaas_poscar)
     basis = Basis(strc, conf)

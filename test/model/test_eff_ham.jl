@@ -13,6 +13,7 @@ path = string(@__DIR__) * "/test_files/"
     set_value!(conf, "load_rllm", true)
     set_value!(conf, "rllm_file", joinpath(path, "rllm_true.dat"))
     set_value!(conf, "rcut", 5)
+    set_value!(conf, "rcut_tol", 100)
     set_value!(conf, "init_params", joinpath(path, "params.dat"))
     set_value!(conf, "verbosity", 0)
 
