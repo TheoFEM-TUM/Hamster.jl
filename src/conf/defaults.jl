@@ -43,9 +43,16 @@ get_save_vecs(conf::Config)::Bool = conf("save_vecs") == "default" ? false : con
 """
     eig_target=0.
 
-The `eig_target` tag sets the target energy when using Krylov-Shur.
+The `eig_target` tag sets the target energy when using Krylov-Schur.
 """
 get_eig_target(conf::Config)::Float64 = conf("eig_target") == "default" ? 0. : conf("eig_target")
+
+"""
+    diag_method=shift-invert
+
+The `diag-method` tag sets the method to be used for calculating eigenvalues when `sp_diag=true`.
+"""
+get_diag_method(conf::Config)::String = conf("diag_method") == "default" ? "shift-invert" : conf("diag_method")
 
 """
     nthreads_kpoints=JULIA_NUM_THREADS

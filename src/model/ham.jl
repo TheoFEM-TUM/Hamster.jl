@@ -39,34 +39,35 @@ function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Dense(); wei
 end
 
 """
-    diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0)
+    diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0, method="shift-invert")
 
 Diagonalizes a vector of Hamiltonian matrices `Hk` and returns the specified number of eigenvalues and eigenvectors for each matrix.
 
 # Arguments:
 - `Hk::Vector{<:AbstractMatrix}`: A vector of Hamiltonian matrices to be diagonalized. Each matrix typically corresponds to a different momentum `k` in a band structure calculation.
 - `Neig::Int=size(Hk[1], 1)`: The number of eigenvalues and corresponding eigenvectors to compute for each Hamiltonian matrix. Defaults to the full diagonalization (`size(Hk[1], 1)`).
-- `target::Real=0`: The target eigenvalue around which to focus the computation. This is useful when using methods like the Lanczos algorithm to compute eigenvalues near a specific energy.
+- `target::Real=0`: The target eigenvalue when computing eigenvalues of a sparse matrix.
+- `method::String`: The method to be used for calculating eigenvalues of a sparse matrix.
 
 # Returns:
 - `Es::Matrix{Float64}`: A matrix where each column `Es[:, k]` contains the `Neig` eigenvalues of the `k`-th Hamiltonian matrix in `Hk`.
 - `vs::Array{ComplexF64, 3}`: A 3D array where each `vs[:, :, k]` contains the `Neig` eigenvectors corresponding to the `k`-th Hamiltonian matrix in `Hk`. The dimensions of `vs` are `(Nε, Neig, Nk)`, where `Nε` is the size of each Hamiltonian matrix, `Neig` is the number of eigenvectors, and `Nk` is the number of Hamiltonian matrices.
 """
-function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0)
+function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0, method="shift-invert")
     Nε = size(Hk[1], 1)
     Nk = length(Hk)
     Es = zeros(Neig, Nk)
     vs = zeros(ComplexF64, Nε, Neig, Nk)
 
     Threads.@threads for k in eachindex(Hk)
-        Es[:, k], vs[:, :, k] = diagonalize(Hk[k], Neig=Neig, target=target)
+        Es[:, k], vs[:, :, k] = diagonalize(Hk[k], Neig=Neig, target=target, method=method)
     end
 
     return Es, vs
 end
 
 """
-    diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0)
+    diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0, method="shift-invert")
 
 Fully diagonalizes a Hermitian Hamiltonian matrix `Hk` and returns the eigenvalues and eigenvectors.
 
@@ -74,12 +75,13 @@ Fully diagonalizes a Hermitian Hamiltonian matrix `Hk` and returns the eigenvalu
 - `Hk::AbstractMatrix`: A Hermitian matrix (Hamiltonian) to be diagonalized. The matrix should be square and typically complex-valued.
 - `Neig::Int=size(Hk, 1)`: The number of eigenvalues and corresponding eigenvectors to compute. Not used.
 - `target::Real=0`: The target eigenvalue around which to focus the computation. Not used.
+- `method::String`: The method to be used for calculating eigenvalues of a sparse matrix.
 
 # Returns:
 - `real_values::Vector{Float64}`: A vector containing the real parts of the eigenvalues of `Hk`. The eigenvalues are computed using the Hermitian matrix, so they are guaranteed to be real.
 - `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to an eigenvalue of `Hk`. The eigenvectors are computed in the standard basis and are complex-valued.
 """
-function diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0)
+function diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0, method="shift-invert")
     if abs(sum(Hk .- Hermitian(Hk))) > 1e-5
         maxdiff, inds = findmax(abs.(Hk .- Hermitian(Hk)))
         @warn "Hamiltonian not hermitian! Maximum missmatch: $maxdiff at $inds."
@@ -89,7 +91,7 @@ function diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0)
 end
 
 """
-    diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0)
+    diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert")
 
 Diagonalizes a sparse Hermitian matrix `Hk` to find a specified number of eigenvalues and eigenvectors, optionally focusing on eigenvalues near a given target.
 
@@ -97,27 +99,28 @@ Diagonalizes a sparse Hermitian matrix `Hk` to find a specified number of eigenv
 - `Hk::SparseMatrixCSC`: A sparse Hermitian matrix in compressed sparse column format to be diagonalized. The matrix should be square and Hermitian.
 - `Neig::Int=6`: The number of eigenvalues and corresponding eigenvectors to compute. Defaults to `6`, but can be adjusted based on the required precision or size of the spectrum.
 - `target::Real=0`: The target eigenvalue around which to focus the computation. This is used to prioritize finding eigenvalues closest to this value. Defaults to `0`.
+- `method::String`: The method to be used for calculating eigenvalues of a sparse matrix.
 
 # Returns:
 - `eigenvalues::Vector{Float64}`: A vector of the real parts of the computed eigenvalues, focusing on those closest to the target. The number of eigenvalues returned is equal to `Neig`.
 - `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to one of the computed eigenvalues.
 """
 function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert")
-    #if method == "sift-invert"
-    #    Es, vs, _, _, _, _ = eigs(Hk, nev=Neig, sigma=target)
-    #    if abs(Es[1] - target) > abs(Es[end] - target)
-    #        return real.(Es[end-Neig:end]), vs[:, end-Neig:end]
-    #    else
-    #        return real.(Es[1:Neig]), vs[:, 1:Neig]
-    #    end
-    #elseif method == "krylov-schur"
-    Es, vs = eigsolve(Hk, Neig, EigSorter(λ->abs(target-λ), rev=false), ishermitian=true, maxiter=500)
-    if abs(Es[1] - target) > abs(Es[end] - target)
-        return real.(Es[end-Neig:end]), hcat(vs[end-Neig:end]...)
-    else
-        return real.(Es[1:Neig]), hcat(vs[1:Neig]...)
+    if method == "shift-invert"
+        Es, vs, _, _, _, _ = eigs(Hk, nev=Neig, sigma=target)
+        if abs(Es[1] - target) > abs(Es[end] - target)
+            return real.(Es[end-Neig:end]), vs[:, end-Neig:end]
+        else
+            return real.(Es[1:Neig]), vs[:, 1:Neig]
+        end
+    elseif method == "krylov-schur"
+        Es, vs = eigsolve(Hk, Neig, EigSorter(λ->abs(target-λ), rev=false), ishermitian=true, maxiter=500)
+        if abs(Es[1] - target) > abs(Es[end] - target)
+            return real.(Es[end-Neig:end]), hcat(vs[end-Neig:end]...)
+        else
+            return real.(Es[1:Neig]), hcat(vs[1:Neig]...)
+        end
     end
-    #end
 end
 
 """
