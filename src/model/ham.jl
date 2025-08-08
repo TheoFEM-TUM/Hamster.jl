@@ -102,14 +102,22 @@ Diagonalizes a sparse Hermitian matrix `Hk` to find a specified number of eigenv
 - `eigenvalues::Vector{Float64}`: A vector of the real parts of the computed eigenvalues, focusing on those closest to the target. The number of eigenvalues returned is equal to `Neig`.
 - `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to one of the computed eigenvalues.
 """
-function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0)
-    #Es, vs = eigsolve(Hk, Neig, EigSorter(λ->abs(target-λ), rev=false), ishermitian=true, maxiter=500)
-    Es, vs, _, _, _, _ = eigs(Hk, nev=Neig, sigma=target)
+function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert")
+    #if method == "sift-invert"
+    #    Es, vs, _, _, _, _ = eigs(Hk, nev=Neig, sigma=target)
+    #    if abs(Es[1] - target) > abs(Es[end] - target)
+    #        return real.(Es[end-Neig:end]), vs[:, end-Neig:end]
+    #    else
+    #        return real.(Es[1:Neig]), vs[:, 1:Neig]
+    #    end
+    #elseif method == "krylov-schur"
+    Es, vs = eigsolve(Hk, Neig, EigSorter(λ->abs(target-λ), rev=false), ishermitian=true, maxiter=500)
     if abs(Es[1] - target) > abs(Es[end] - target)
-        return real.(Es[end-Neig:end]), vs[:, end-Neig:end]
+        return real.(Es[end-Neig:end]), hcat(vs[end-Neig:end]...)
     else
-        return real.(Es[1:Neig]), vs[:, 1:Neig]
+        return real.(Es[1:Neig]), hcat(vs[1:Neig]...)
     end
+    #end
 end
 
 """
