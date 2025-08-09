@@ -5,13 +5,14 @@ Read the configurations in the `xdatcar` file and store them in an `Xdatcar` obj
 
 # Arguments
 - `xdatcar::AbstractString`: The path to the XDATCAR file.
+- `frac::Bool=true`: If false, coordinates are transformed to cartesian from fractional.
+- `verbosity::Int64=1`: If greater 1, progress is printed.
 
 # Returns
 - `lattice::Array{Float64, 3}`: A 3x3 array representing the lattice vectors.
 - `configs::Array{Float64, 3}`: A 3D array of shape (3, Nion, Nconfig), where each 3xNion slice represents the atomic positions in a configuration.
-
 """
-function read_xdatcar_stream(xdatcar="XDATCAR"; frac=true)
+function read_xdatcar(xdatcar="XDATCAR"; frac=true, verbosity=1)
     Nconfig = 0
     Nion = 0
     a = 0.
@@ -48,7 +49,9 @@ function read_xdatcar_stream(xdatcar="XDATCAR"; frac=true)
             if occursin("Direct", line)
                 ion_block = true
                 found_configs += 1
-                @show found_configs
+                if verbosity > 1
+                    println("Config $found_configs / $Nconfig")
+                end
             elseif ion_block
                 found_ions += 1
                 eachsplit
