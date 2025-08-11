@@ -7,6 +7,7 @@ Ensures continuity by using a cosine-based smoothing function.
 # Arguments
 - `r`: The input distance.
 - `rcut`: The cutoff radius beyond which the function returns zero.
+- `rcut_tol`: A tolerance applied to the cut-off radius, can be positive or negative.
 
 # Returns
 - A smoothly varying value between 1 and 0, with `fcut(r, rcut) = 0` for `r > rcut`.
@@ -18,6 +19,16 @@ function fcut(r, rcut)
         return 1/2 * (cos(π*r/rcut) + 1)
     else
         return 1.0
+    end
+end
+
+function fcut(r, rcut, rcut_tol)
+    if rcut_tol > 0 && r > rcut
+        fcut(r - rcut, rcut_tol)
+    elseif sign(rcut_tol) == -1 && rcut - abs(rcut_tol) ≤ r ≤ rcut
+        fcut(r-rcut+abs(rcut_tol), abs(rcut_tol))
+    else
+        return 1.
     end
 end
 
