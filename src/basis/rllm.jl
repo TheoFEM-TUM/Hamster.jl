@@ -24,9 +24,9 @@ end
 
 function fcut(r, rcut, rcut_tol)
     if rcut_tol > 0 && r > rcut
-        fcut(r - rcut, rcut_tol)
-    elseif sign(rcut_tol) == -1 && rcut - abs(rcut_tol) ≤ r ≤ rcut
-        fcut(r-rcut+abs(rcut_tol), abs(rcut_tol))
+        return fcut(r - rcut, rcut_tol)
+    elseif rcut_tol < 0 && (rcut - abs(rcut_tol) ≤ r ≤ rcut)
+        return fcut(r-rcut+abs(rcut_tol), abs(rcut_tol))
     else
         return 1.
     end
