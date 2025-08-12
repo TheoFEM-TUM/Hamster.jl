@@ -34,7 +34,7 @@ cspbbr_poscar = string(@__DIR__) * "/../strc/test_files/POSCAR_CsPbBr3"
     @test fcut(-1.0, 1.0) ≈ 0.0 atol=1e-6  # Cosine function is even, so negative r behaves like positive
 
     # Test 9: Positive tolerance, r > rcut
-    @test isapprox(fcut(6.0, 5.0, 1.0), fcut(1.0, 1.0))
+    @test isapprox(fcut(5.5, 5.0, 1.0), fcut(0.5, 1.0))
 
     # Positive tolerance, r <= rcut
     @test fcut(4.0, 5.0, 1.0) == 1.0
