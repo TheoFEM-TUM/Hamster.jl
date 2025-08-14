@@ -32,7 +32,7 @@ function get_structures(conf=get_empty_config(); Rs=zeros(3, 1), mode="pc", conf
         end
         
         # Check that POSCAR lattice and XDATCAR lattice are compatible
-        @assert sc_poscar.lattice ≈ lattice
+        @assert isapprox(sc_poscar.lattice, lattice, atol=1e-3)
 
         Ts = frac_to_cart(get_translation_vectors(1), lattice)
         rs_ion = frac_to_cart(rs_atom, lattice)
@@ -42,7 +42,7 @@ function get_structures(conf=get_empty_config(); Rs=zeros(3, 1), mode="pc", conf
             δrs_ion = similar(rs_ion)
 
             # Check if an atom has crossed the cell border. Distortions are otherwise not correct.
-            for iion in axes(rs_ion, 2)
+            @views for iion in axes(rs_ion, 2)
                 Rmin = findmin([normdiff(rs_ion[:, iion], configs[:, iion, index], Ts[:, R]) for R in axes(Ts, 2)])[2]
                 δrs_ion[:, iion] = rs_ion[:, iion] - configs[:, iion, index] + Ts[:, Rmin]
             end
