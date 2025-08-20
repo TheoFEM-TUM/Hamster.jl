@@ -31,9 +31,6 @@ Performs a standard calculation for an effective Hamiltonian model.
 """
 function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1, verbosity=get_verbosity(conf))
     config_inds, _ = get_config_index_sample(conf)
-    if get_config_inds(conf) ≠ "none"
-        config_inds = read_from_file(get_config_inds(conf), type=Int64)
-    end
    
     if rank == 0
        write_to_file(config_inds, "config_inds")
