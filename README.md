@@ -3,6 +3,11 @@
 [![CI](https://github.com/mschwade-code/Hamster.jl/actions/workflows/runtests.yaml/badge.svg)](https://github.com/mschwade-code/Hamster.jl/actions/workflows/runtests.yaml)
 [![codecov](https://codecov.io/gh/mschwade-code/Hamster.jl/graph/badge.svg?token=8MW6VZYIE2)](https://codecov.io/gh/mschwade-code/Hamster.jl)
 
+<p align="center">
+  <img width="250" height="250" src="docs/src/assets/logo.png">
+</p>
+
+
 Hamster.jl is a powerful Julia package to fit and run calculations with effective Hamiltonians to compute temperature-dependent optoelectronic properties.
 
 ## Installation
