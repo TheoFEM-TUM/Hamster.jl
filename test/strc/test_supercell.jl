@@ -1,4 +1,4 @@
-path = string(@__DIR__) * "/test_files/"
+path = joinpath(@__DIR__, "test_files")
 
 @testset "Test Config indices" begin
     # Test 1: no validation, no Nconf_min
@@ -39,17 +39,50 @@ path = string(@__DIR__) * "/test_files/"
     @test train_indices == [1]
     @test length(val_indices) == 10
 
-    # Test 7: test splitting indices into chunks (basic functionality)
+    # Test 7: Test providing indices
+    conf = get_empty_config()
+    set_value!(conf, "config_inds", "Supercell", "1 3 4")
+    train_indices, val_indices = Hamster.get_config_index_sample(conf, train_mode="md")
+    @test train_indices == [1, 3, 4]
+    @test val_indices == Int64[]
+
+    # Test 8: Test providing val indices and train indices partially
+    conf = get_empty_config()
+    set_value!(conf, "config_inds", "Supercell", "1")
+    set_value!(conf, "val_config_inds", "Supercell", "2")
+    train_indices, val_indices = Hamster.get_config_index_sample(conf, train_mode="md", val_mode="md", validate=true, Nconf=10, Nconf_max=100, val_ratio=0.2)
+    @test train_indices[1] == 1
+    @test length(train_indices) == 10
+    @test val_indices[1] == 2
+    @test length(val_indices) == 2
+
+    # Test 9: Test reading indices from *.dat file
+    conf = get_empty_config()
+    set_value!(conf, "config_inds", "Supercell", joinpath(path, "config_inds.dat"))
+    set_value!(conf, "val_config_inds", "Supercell", joinpath(path, "config_inds.dat"))
+    train_indices, val_indices = Hamster.get_config_index_sample(conf, train_mode="md", val_mode="md", validate=true)
+    @test train_indices == [2, 5, 6]
+    @test val_indices == [2, 5, 6]
+
+    # Test 10: Test reading indices from *.h5 file
+    conf = get_empty_config()
+    set_value!(conf, "config_inds", "Supercell", joinpath(path, "config_inds.h5"))
+    set_value!(conf, "val_config_inds", "Supercell", joinpath(path, "config_inds.h5"))
+    train_indices, val_indices = Hamster.get_config_index_sample(conf, train_mode="md", val_mode="md", validate=true)
+    @test train_indices == [2, 5, 6]
+    @test val_indices == [2, 5, 6]
+
+    # Test 11: Test splitting indices into chunks (basic functionality)
     indices = collect(1:9)
     @test Hamster.split_indices_into_chunks(indices, 3, rank=0) == [1, 2, 3]
     @test Hamster.split_indices_into_chunks(indices, 3, rank=1) == [4, 5, 6]
     @test Hamster.split_indices_into_chunks(indices, 3, rank=2) == [7, 8, 9]
 
-    # Test 8: Empty list
+    # Test 12: Empty list
     indices = []
     @test Hamster.split_indices_into_chunks(indices, 1, rank=0) == []
 
-    # Test 9: Out of range
+    # Test 13: Out of range
     indices = [1, 2]
     @test Hamster.split_indices_into_chunks(indices, 3, rank=0) == [1]
     @test Hamster.split_indices_into_chunks(indices, 3, rank=1) == [2]
@@ -59,8 +92,8 @@ end
 @testset "Multiple Structures from XDATCAR" begin
     # Test 1: Test basic functionality
     conf = get_empty_config()
-    set_value!(conf, "XDATCAR", "Supercell", path*"XDATCAR_gaas")
-    set_value!(conf, "POSCAR", "Supercell", path*"SC_POSCAR_gaas")
+    set_value!(conf, "XDATCAR", "Supercell", joinpath(path, "XDATCAR_gaas"))
+    set_value!(conf, "POSCAR", "Supercell", joinpath(path, "SC_POSCAR_gaas"))
     set_value!(conf, "Nconf", "Supercell", 10)
     set_value!(conf, "Nconf_min", "Supercell", 100)
     set_value!(conf, "Nconf_max", "Supercell", 200)
@@ -101,7 +134,7 @@ end
     # Test 1: Test basic functionality
     conf = get_empty_config()
     set_value!(conf, "XDATCAR", "Supercell", joinpath(path, "xdatcar_gaas.h5"))
-    set_value!(conf, "POSCAR", "Supercell", path*"SC_POSCAR_gaas")
+    set_value!(conf, "POSCAR", "Supercell", joinpath(path, "SC_POSCAR_gaas"))
     set_value!(conf, "Nconf", "Supercell", 10)
     set_value!(conf, "Nconf_min", "Supercell", 100)
     set_value!(conf, "Nconf_max", "Supercell", 200)

@@ -166,11 +166,11 @@ function get_sparse_iterator(strc, basis, conf=get_empty_config(), rcut=get_rcut
     Norb_per_ion = soc ? 2 .* length.(basis.orbitals) : length.(basis.orbitals)
     ij_map = get_ion_orb_to_index_map(Norb_per_ion)
     Ts = frac_to_cart(strc.Rs, strc.lattice)
-    indices = [Tuple{Int64, Int64}[] for R in axes(strc.Rs, 2)]
+    indices = [Tuple{Int64, Int64}[] for _ in axes(strc.Rs, 2)]
     
     for (iion, jion, R) in nn_grid_points
-        r⃗₁ = strc.ions[iion].pos - strc.ions[jion].dist
-        r⃗₂ = strc.ions[jion].pos - strc.ions[jion].dist - Ts[:, R]
+        r⃗₁ = strc.ions[iion].pos
+        r⃗₂ = strc.ions[jion].pos - Ts[:, R]
         r = normdiff(r⃗₁, r⃗₂)
         if r ≤ rcut
             for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]

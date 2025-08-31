@@ -6,6 +6,13 @@ The parameter `rcut` sets the cut-off radius beyond which all interactions are n
 get_rcut(conf::Config)::Float64 = get(conf, "rcut", 7.0)
 
 """
+    rcut_tol=1.
+
+The parameter `rcut_tol` sets a tolerance for the cutoff function.
+"""
+get_rcut_tol(conf::Config)::Float64 = get(conf, "rcut_tol", 1.0)
+
+"""
     Rmax=1
 
 The parameter `Rmax` sets the maximum magnitude of a translation vector used for periodic boundaty conditions. Note that this is determined automatically if `rcut` is set.

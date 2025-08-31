@@ -41,6 +41,13 @@ Sets the scaling factor that is multiplied with the environmental descriptor.
 get_env_scale(conf::Config)::Float64 = conf("env_scale", "ML") == "default" ? 1.0 : conf("env_scale", "ML")
 
 """
+    strc_scale=1.
+
+Sets the scaling factor that is multiplied with the structural descriptor entries.
+"""
+get_strc_scale(conf::Config)::Float64 = conf("strc_scale", "ML") == "default" ? 1.0 : conf("strc_scale", "ML")
+
+"""
     sim_params=0.1
 
 Sets the parameter for the similarity function of the kernel model.

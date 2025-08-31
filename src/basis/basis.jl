@@ -94,7 +94,7 @@ Constructs the geometry tensor based on the structure of the system, the orbital
 # Returns
 - The reshaped geometry tensor, represented as a matrix of sparse matrices, which encodes the overlap contributions for the system's orbital interactions for each parameter.
 """
-function get_geometry_tensor(strc, basis, conf=get_empty_config(); tmethod=get_tmethod(conf), rcut=get_rcut(conf), sp_tol=get_sp_tol(conf))
+function get_geometry_tensor(strc, basis, conf=get_empty_config(); tmethod=get_tmethod(conf), rcut=get_rcut(conf), sp_tol=get_sp_tol(conf), rcut_tol=get_rcut_tol(conf))
     npar = Threads.nthreads() 
     
     ij_map = get_ion_orb_to_index_map(length.(basis.orbitals))
@@ -111,8 +111,9 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config(); tmethod=get_t
             r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
             r⃗₂ = strc.ions[iion2].pos - strc.ions[iion2].dist - Ts[:, R]
             
+            r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos .- Ts[:, R])
             r = normdiff(r⃗₁, r⃗₂)
-            if r ≤ rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
+            if r_nd ≤ rcut && r-abs(rcut_tol) < rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
                 Û = get_sk_transform_matrix(r⃗₁, r⃗₂, basis.orbitals[iion1][1].axis, tmethod)
                 nnlabel = get_nn_label(r, nn_dict[ion_label], conf)
                 for jorb1 in eachindex(basis.orbitals[iion1]), jorb2 in eachindex(basis.orbitals[iion2])
@@ -122,7 +123,7 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config(); tmethod=get_t
                     j = ij_map[(iion2, jorb2)]
                     θ₁, φ₁ = get_rotated_angles(Û, orb1.axis)
                     θ₂, φ₂ = get_rotated_angles(Û, orb2.axis)
-                    
+
                     for k in eachindex(basis.overlaps)
                         Cllm = basis.overlaps[k]
                         Rllm = basis.rllm[string(Cllm, apply_oc=true)]
@@ -130,7 +131,8 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config(); tmethod=get_t
                         orbconfig = get_orbconfig(oc_dicts, k, ion_label, jorb1, jorb2)
                         if overlap_contributes_to_matrix_element(Cllm, orb1, orb2, ion_label)
                             v = get_param_index(Cllm, nnlabel, basis.parameters, orb1, orb2, i, j)
-                            hval = Cllm(orbconfig, mode, θ₁, φ₁, θ₂, φ₂) * Rllm(r)
+
+                            hval = Cllm(orbconfig, mode, θ₁, φ₁, θ₂, φ₂) * Rllm(r) * fcut(r, rcut, rcut_tol)
 
                             if haskey(hs[chunk_id], (v, i, j, R)) && abs(hval) ≥ sp_tol
                                 hs[chunk_id][(v, i, j, R)] += hval

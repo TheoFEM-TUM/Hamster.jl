@@ -23,9 +23,42 @@ get_Nconf_max(conf::Config)::Int64 = get(conf, "Nconf_max", "Supercell", 1)
     config_inds=none
 
 The `config_inds` tag sets a file from which configuration indices are read. By default, indices are not read from file.
+It is also possible to provide a list of integers directly.
 """
-get_config_inds(conf::Config)::String = get(conf, "config_inds", "Supercell", "none")
+function get_config_inds(conf::Config)::Union{String, Vector{Int64}}
+    if conf("config_inds", "Supercell") == "default" 
+        return "none" 
+    else 
+        config_inds = conf("config_inds", "Supercell")
+        if config_inds isa Int64
+            return [config_inds]
+        elseif config_inds isa Vector{Int64}
+            return config_inds
+        else
+            return string(config_inds)
+        end
+    end
+end
+"""
+    config_inds=none
 
+The `config_inds` tag sets a file from which configuration indices are read. By default, indices are not read from file.
+It is also possible to provide a list of integers directly.
+"""
+function get_val_config_inds(conf::Config)::Union{String, Vector{Int64}}
+    if conf("val_config_inds", "Supercell") == "default" 
+        return "none" 
+    else 
+        config_inds = conf("val_config_inds", "Supercell")
+        if config_inds isa Int64
+            return [config_inds]
+        elseif config_inds isa Vector{Int64}
+            return config_inds
+        else
+            return string(config_inds)
+        end
+    end
+end
 """
     nbatch=1
 

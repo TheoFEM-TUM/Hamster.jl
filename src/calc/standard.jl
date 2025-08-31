@@ -31,9 +31,6 @@ Performs a standard calculation for an effective Hamiltonian model.
 """
 function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1, verbosity=get_verbosity(conf))
     config_inds, _ = get_config_index_sample(conf)
-    if get_config_inds(conf) ≠ "none"
-        config_inds = read_from_file(get_config_inds(conf), type=Int64)
-    end
    
     if rank == 0
        write_to_file(config_inds, "config_inds")
@@ -96,7 +93,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
             strc_ind += 1
             ham_time_local = @elapsed Hk = get_hamiltonian(ham, index, ks)
             Neig = ham.sp_diag isa Sparse ? get_neig(conf) : size(Hk[1], 1)
-            diag_time_local = @elapsed Es, vs = diagonalize(Hk, Neig=Neig, target=get_eig_target(conf))
+            diag_time_local = @elapsed Es, vs = diagonalize(Hk, Neig=Neig, target=get_eig_target(conf), method=get_diag_method(conf))
 
             ham_time = MPI.Reduce(ham_time_local, +, comm, root=0)
             diag_time = MPI.Reduce(diag_time_local, +, comm, root=0)
@@ -141,5 +138,7 @@ function get_kpoints_from_config(conf::Config; kpoints_file=get_kpoints_file(con
         elseif ks isa Array{Float64, 3}
             return ks[:, :, 1]
         end
+    elseif occursin("gamma", lowercase(kpoints_file))
+        return zeros(3, 1)
     end
 end

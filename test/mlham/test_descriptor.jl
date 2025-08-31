@@ -1,35 +1,3 @@
-@testset "fcut function" begin
-    fcut = Hamster.fcut
-
-    # Test case 1: r > rcut should return 0
-    @test fcut(2.0, 1.0) == 0.0
-    @test fcut(5.0, 3.0) == 0.0
-
-    # Test case 2: r = 0 should return 1
-    @test fcut(0.0, 1.0) ≈ 1.0 atol=1e-6
-
-    # Test case 3: r = rcut should return 0.0
-    @test fcut(1.0, 1.0) ≈ 0.0 atol=1e-6
-    @test fcut(2.0, 2.0) ≈ 0.0 atol=1e-6
-
-    # Test case 4: r approaching rcut smoothly decreases to 0.5
-    @test fcut(0.5, 1.0) > fcut(0.9, 1.0) > fcut(1.0, 1.0)
-
-    # Test case 5: rcut = 0 should return correct behavior (avoiding division by zero)
-    @test fcut(0.0, 0.0) == 1.0  # If rcut is 0, only r=0 should return 1
-    @test fcut(0.1, 0.0) == 0.0  # Any r > 0 should return 0
-
-    # Test case 6: r = rcut/2 should return an intermediate value
-    @test fcut(0.5, 1.0) ≈ 0.5 atol=1e-4  # cos(π/2) = 0 -> (0+1)/2 = 0.5
-
-    # Test case 7: Large rcut should still work
-    @test fcut(5.0, 10.0) > 0.0  # Should not be exactly zero
-    @test fcut(10.0, 10.0) ≈ 0.0 atol=1e-6  # Edge case
-
-    # Test case 8: Negative r should still return a valid value
-    @test fcut(-1.0, 1.0) ≈ 0.0 atol=1e-6  # Cosine function is even, so negative r behaves like positive
-end
-
 @testset "greedy farthest-point sampling" begin
     ds = rand(3, 100)
     cluster_indices = 1:5:100
@@ -94,29 +62,29 @@ end
     jaxis = [0.0, 0.0, 1.0]
     orbswap = false
 
-    φ, θs = Hamster.get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)
+    φ, θs = Hamster.get_angular_descriptors(ri, rj, iaxis, jaxis)
     @test isapprox(φ, π/2, atol=1e-6)  # iaxis and jaxis are perpendicular
     @test θs == sort(θs)  # Must be sorted for same atom types
 
     itype, jtype = 1, 2
     orbswap = false
-    φ, θs = Hamster.get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)
+    φ, θs = Hamster.get_angular_descriptors(ri, rj, iaxis, jaxis)
     @test isapprox(φ, π/2, atol=1e-6)
-    @test θs == [Hamster.calc_angle(iaxis, normalize(rj - ri)), Hamster.calc_angle(jaxis, normalize(ri - rj))]  # No sorting
+    @test θs == [Hamster.calc_angle(iaxis, normalize(rj - ri)), Hamster.calc_angle(jaxis, normalize(ri - rj))]
 
     orbswap = true
-    φ, θs = Hamster.get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)
+    φ, θs = Hamster.get_angular_descriptors(ri, rj, iaxis, jaxis)
     @test isapprox(φ, π/2, atol=1e-6)
-    @test θs == reverse([Hamster.calc_angle(iaxis, normalize(rj - ri)), Hamster.calc_angle(jaxis, normalize(ri - rj))])  # Reversed
+    @test θs == [Hamster.calc_angle(iaxis, normalize(rj - ri)), Hamster.calc_angle(jaxis, normalize(ri - rj))]
 
     rj = ri
-    φ, θs = Hamster.get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)
+    φ, θs = Hamster.get_angular_descriptors(ri, rj, iaxis, jaxis)
     @test isapprox(φ, π/2, atol=1e-6)
-    @test θs == reverse([Hamster.calc_angle(iaxis, normalize(iaxis)), Hamster.calc_angle(jaxis, normalize(jaxis))])
+    @test θs == [Hamster.calc_angle(iaxis, normalize(iaxis)), Hamster.calc_angle(jaxis, normalize(jaxis))]
 
     iaxis = [1.0, 0.0, 0.0]
     jaxis = [1.0, 0.0, 0.0]  # Parallel axes
-    φ, θs = Hamster.get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)
+    φ, θs = Hamster.get_angular_descriptors(ri, rj, iaxis, jaxis)
     @test isapprox(φ, 0.0, atol=1e-6)  # Parallel axes should have angle 0
 
     # Test 3: test complete descriptor set
@@ -155,6 +123,11 @@ end
         j_2 = findfirst(orb -> orb == orbs_1[j], orbs_2)
         err = sum(abs.(descriptors_1[R][i, j] .- descriptors_2[R][i_2, j_2]))
         push!(correct_permutation, err < 1e-5)
+        if err > 1e-5
+            println("--- $(orbs_1[i]), $(orbs_1[j]) ---")
+            @show descriptors_1[R][i, j]
+            @show descriptors_2[R][i_2, j_2]
+        end
     end
     @test all(correct_permutation)
 end

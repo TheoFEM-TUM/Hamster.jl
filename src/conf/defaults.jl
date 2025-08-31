@@ -24,7 +24,7 @@ get_init_params(conf::Config)::String = conf("init_params") == "default" ? "ones
 
 The `kpoints` tag sets a file or method to determine the set of k-points.
 """
-get_kpoints_file(conf::Config)::String = conf("kpoints") == "default" ? "none" : conf("kpoints")
+get_kpoints_file(conf::Config)::String = conf("kpoints") == "default" ? "gamma" : conf("kpoints")
 
 """
     neig=6 (only if sp_diag=true)
@@ -43,9 +43,16 @@ get_save_vecs(conf::Config)::Bool = conf("save_vecs") == "default" ? false : con
 """
     eig_target=0.
 
-The `eig_target` tag sets the target energy when using Krylov-Shur.
+The `eig_target` tag sets the target energy when using Krylov-Schur.
 """
 get_eig_target(conf::Config)::Float64 = conf("eig_target") == "default" ? 0. : conf("eig_target")
+
+"""
+    diag_method=shift-invert
+
+The `diag-method` tag sets the method to be used for calculating eigenvalues when `sp_diag=true`.
+"""
+get_diag_method(conf::Config)::String = conf("diag_method") == "default" ? "shift-invert" : conf("diag_method")
 
 """
     nthreads_kpoints=JULIA_NUM_THREADS
@@ -74,3 +81,14 @@ get_nthreads_blas(conf::Config)::Int64 = conf("nthreads_blas") == "default" ? 1 
 The `nhamster` tag sets the number of `Hamster` processes to be spawned for parallel tasks.
 """
 get_nhamster(conf::Config)::Int64 = conf("nhamster") == "default" ? 1 : conf("nhamster")
+
+"""
+    seed=none
+
+The `seed` tag can be used to set a custom seed for RNG.
+"""
+function set_seed!(conf::Config; rank=0)
+    if conf("seed") ≠ "default"
+        Random.seed!(conf("seed") + rank)
+    end
+end

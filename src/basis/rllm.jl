@@ -1,4 +1,38 @@
 """
+    fcut(r, rcut)
+
+Cut-off function whose value smoothly transitions to zero as `r` approaches `rcut`.
+Ensures continuity by using a cosine-based smoothing function.
+
+# Arguments
+- `r`: The input distance.
+- `rcut`: The cutoff radius beyond which the function returns zero.
+- `rcut_tol`: A tolerance applied to the cut-off radius, can be positive or negative.
+
+# Returns
+- A smoothly varying value between 1 and 0, with `fcut(r, rcut) = 0` for `r > rcut`.
+"""
+function fcut(r, rcut)
+    if r > rcut
+        return 0.0
+    elseif rcut ≠ 0
+        return 1/2 * (cos(π*r/rcut) + 1)
+    else
+        return 1.0
+    end
+end
+
+function fcut(r, rcut, rcut_tol)
+    if rcut_tol > 0 && r > rcut
+        return fcut(r - rcut, rcut_tol)
+    elseif rcut_tol < 0 && (rcut - abs(rcut_tol) ≤ r ≤ rcut)
+        return fcut(r-rcut+abs(rcut_tol), abs(rcut_tol))
+    else
+        return 1.
+    end
+end
+
+"""
     get_rllm(overlaps, conf=get_empty_config(); load_rllm=get_load_rllm(conf), rllm_file=get_rllm_file(conf), interpolate_rllm=get_interpolate_rllm(conf))
 
 Retrieves or computes the radial orbital integral look-up table (RLLM) for a given set of overlaps, based on configuration settings.

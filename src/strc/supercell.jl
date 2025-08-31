@@ -32,7 +32,7 @@ function get_structures(conf=get_empty_config(); Rs=zeros(3, 1), mode="pc", conf
         end
         
         # Check that POSCAR lattice and XDATCAR lattice are compatible
-        @assert sc_poscar.lattice ≈ lattice
+        @assert isapprox(sc_poscar.lattice, lattice, atol=1e-3)
 
         Ts = frac_to_cart(get_translation_vectors(1), lattice)
         rs_ion = frac_to_cart(rs_atom, lattice)
@@ -42,7 +42,7 @@ function get_structures(conf=get_empty_config(); Rs=zeros(3, 1), mode="pc", conf
             δrs_ion = similar(rs_ion)
 
             # Check if an atom has crossed the cell border. Distortions are otherwise not correct.
-            for iion in axes(rs_ion, 2)
+            @views for iion in axes(rs_ion, 2)
                 Rmin = findmin([normdiff(rs_ion[:, iion], configs[:, iion, index], Ts[:, R]) for R in axes(Ts, 2)])[2]
                 δrs_ion[:, iion] = rs_ion[:, iion] - configs[:, iion, index] + Ts[:, Rmin]
             end
@@ -86,17 +86,41 @@ Randomly selects training and validation configuration indices from a given rang
 - `val_config_inds`: A vector of indices for validation configurations.
 """
 function get_config_index_sample(conf=get_empty_config(); Nconf=get_Nconf(conf), Nconf_min=get_Nconf_min(conf), Nconf_max=get_Nconf_max(conf),
-            validate=get_validate(conf), val_ratio=get_val_ratio(conf), train_mode=get_train_mode(conf), val_mode = get_val_mode(conf))
+            validate=get_validate(conf), val_ratio=get_val_ratio(conf), train_mode=get_train_mode(conf), val_mode = get_val_mode(conf), 
+            inds_conf=get_config_inds(conf), val_inds_conf=get_val_config_inds(conf))::Tuple{Vector{Int64}, Vector{Int64}}
 
-    train_config_inds = [1]
-    if Nconf > 1 && lowercase(train_mode) == lowercase(val_mode)
-        train_config_inds = sample(Nconf_min:Nconf_max, Nconf, replace=false, ordered=true)
+    # Training config inds
+    train_config_inds = Int64[]
+    if inds_conf isa Vector{Int64}
+        train_config_inds = inds_conf
+    elseif inds_conf isa String && occursin(".dat", inds_conf)
+        train_config_inds = read_from_file(inds_conf, type=Int64)
+    elseif inds_conf isa String && occursin(".h5", inds_conf)
+        train_config_inds = h5read(inds_conf, "train_config_inds")
     end
 
-    val_config_inds = Int64[]    
-    Nval = train_mode == val_mode ? round(Int64, Nconf * val_ratio) : Nconf
-    remaining_indices = lowercase(train_mode) == "pc" ? (Nconf_min:Nconf_max) : setdiff(Nconf_min:Nconf_max, train_config_inds)
-    val_config_inds = sample(remaining_indices, Nval, replace=false, ordered=true)
+    if (lowercase(train_mode) == "md" || lowercase(train_mode) == lowercase(val_mode)) && length(train_config_inds) < Nconf
+        append!(train_config_inds, sample(Nconf_min:Nconf_max, Nconf - length(train_config_inds), replace=false, ordered=true))
+    elseif length(train_config_inds) == 0
+        push!(train_config_inds, 1)
+    end
+
+    # Validation config inds
+    val_config_inds = Int64[]
+    if val_inds_conf isa Vector{Int64}
+        val_config_inds = val_inds_conf
+    elseif val_inds_conf isa String && occursin(".dat", val_inds_conf)
+        val_config_inds = read_from_file(val_inds_conf, type=Int64)
+    elseif val_inds_conf isa String && occursin(".h5", val_inds_conf)
+        val_config_inds = h5read(val_inds_conf, "val_config_inds")
+    end
+
+    if length(val_config_inds) < Nconf && lowercase(val_mode) == "md"
+        Nval = train_mode == val_mode ? round(Int64, Nconf * val_ratio) : Nconf
+        remaining_indices = lowercase(train_mode) == "pc" ? (Nconf_min:Nconf_max) : setdiff(Nconf_min:Nconf_max, train_config_inds)
+        remaining_indices = setdiff(remaining_indices, val_config_inds)
+        append!(val_config_inds, sample(remaining_indices, Nval - length(val_config_inds), replace=false, ordered=true))
+    end
     
     if Nconf == 1 && validate && lowercase(val_mode) == "pc"
         val_config_inds = [1] # only one config, e.g., pc
