@@ -28,7 +28,7 @@ You can run start Hamster by calling the `hamster` executable. To make use of MP
 
 While keyword arguments can be passed directly via the command line, it is more practical to provide Hamster with a config file `hconf` (see examples).
 
-## References
+## Publications
 
 [1] [M. Schwade, M. J. Schilcher, C. Reverón Baecker, M. Grumet, and D. A. Egger, J. Chem. Phys. 160, 134102 (2024)](https://pubs.aip.org/aip/jcp/article/160/13/134102/3280389/Temperature-transferable-tight-binding-model-using)
 
