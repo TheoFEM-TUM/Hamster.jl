@@ -20,5 +20,5 @@ makedocs(
 # See "Hosting Documentation" and deploydocs() in the Documenter manual
 # for more information.
 deploydocs(
-    repo = "https://github.com/TheoFEM-TUM/Hamster.jl"
+    repo = "github.com/TheoFEM-TUM/Hamster.jl"
 )
