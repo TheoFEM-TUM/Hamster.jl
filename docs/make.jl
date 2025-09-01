@@ -12,7 +12,15 @@ makedocs(
     size_threshold_warn=nothing,
     ),
     pages = [
-        "Home" => "index.md"
+        "Home" => "index.md",
+        "Input Tags" => [
+            "conf/general_tags.md",
+            "conf/block_tags.md"
+        ],
+        "Examples" => [
+            "examples/gaas_tb_hyperopt.md"
+        ],
+        "Library" => "library/library.md"
     ]
 )
 
