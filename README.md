@@ -22,7 +22,7 @@ Since `Hamster.jl` is not (yet) a registered Julia package, we provide an instal
 julia hamster_install.jl [--add_path yes/no] [--exec_name hamster] [--bashrc default] [--add_test_exec]
 ```
 
-## Running Hamster
+## Quickstart
 
 You can run start Hamster by calling the `hamster` executable. To make use of MPI parallelization you need add `mpiexecjl` or `srun` in front.
 

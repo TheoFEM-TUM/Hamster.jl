@@ -13,11 +13,13 @@ makedocs(
     ),
     pages = [
         "Home" => "index.md",
-        "Input Tags" => [
+        "Config File" => [
+            "conf/config.md",
             "conf/general_tags.md",
             "conf/block_tags.md"
         ],
         "Examples" => [
+            "examples/examples.md",
             "examples/gaas_tb_hyperopt.md"
         ],
         "Library" => "library/library.md"

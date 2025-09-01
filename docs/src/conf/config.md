@@ -1,0 +1,1 @@
+# [Main Input File](@id man-config)
