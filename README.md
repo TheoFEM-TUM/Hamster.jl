@@ -8,8 +8,9 @@
   <img width="250" height="250" src="docs/src/assets/logo.png">
 </p>
 
+**H**amiltonian-learning **A**pproach for **M**ultiscale **S**imulations using a **T**ransferable and **E**fficient **R**epresentation
 
-`Hamster.jl` is a pure-Julia package for fitting and running effective Hamiltonians to study temperature-dependent optoelectronic properties. Developed by the [TheoFEM group](https://theofem.de/) at TU Munich (Prof. D. A. Egger), it implements a Δ-machine-learning approach to correct tight-binding Hamiltonians in response to changes in the atomic environment. Spin–orbit coupling (SOC) is supported.
+`Hamster.jl` is a pure-Julia package for fitting and running effective Hamiltonians to study temperature-dependent optoelectronic properties. Originally created by Martin Schwade and developed by the [TheoFEM group](https://theofem.de/) at TU Munich (Prof. D. A. Egger), it implements a Δ-machine-learning approach to correct tight-binding Hamiltonians in response to changes in the atomic environment. Spin–orbit coupling (SOC) is supported.
 
 📖 Documentation: [Hamster.jl/dev](https://theofem-tum.github.io/Hamster.jl/dev/)
 
