@@ -2,13 +2,16 @@
 
 [![CI](https://github.com/mschwade-code/Hamster.jl/actions/workflows/runtests.yaml/badge.svg)](https://github.com/mschwade-code/Hamster.jl/actions/workflows/runtests.yaml)
 [![codecov](https://codecov.io/gh/mschwade-code/Hamster.jl/graph/badge.svg?token=8MW6VZYIE2)](https://codecov.io/gh/mschwade-code/Hamster.jl)
+[![Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://theofem-tum.github.io/Hamster.jl/dev/)
 
 <p align="center">
   <img width="250" height="250" src="docs/src/assets/logo.png">
 </p>
 
 
-Hamster.jl is a powerful Julia package to fit and run calculations with effective Hamiltonians to compute temperature-dependent optoelectronic properties.
+`Hamster.jl` is a pure-Julia package for fitting and running effective Hamiltonians to study temperature-dependent optoelectronic properties. Developed by the [TheoFEM group](https://theofem.de/) at TU Munich (Prof. D. A. Egger), it implements a Δ-machine-learning approach to correct tight-binding Hamiltonians in response to changes in the atomic environment. Spin–orbit coupling (SOC) is supported.
+
+📖 Documentation: [Hamster.jl/dev](https://theofem-tum.github.io/Hamster.jl/dev/)
 
 ## Installation
 
@@ -27,6 +30,13 @@ You can run start Hamster by calling the `hamster` executable. To make use of MP
 ```
 
 While keyword arguments can be passed directly via the command line, it is more practical to provide Hamster with a config file `hconf` (see examples).
+
+## License
+This project is licensed under the MIT License.
+
+## Citing
+If you use `Hamster.jl` in your work, please cite our work.  
+A list of relevant publications is provided below.
 
 ## Publications
 
