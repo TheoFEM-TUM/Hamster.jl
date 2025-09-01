@@ -1,0 +1,32 @@
+begin Options
+    rcut = 7
+    poscar = POSCAR_gaas
+end
+
+begin Optimizer
+    lr = 0.2
+    niter = 300
+    loss = MAE
+    wE = 1 1 1 1 1 1 0.1 0.1
+    wk_1 = 5
+    train_data = EIGENVAL_train
+    val_data = EIGENVAL_val
+end
+
+begin HyperOpt
+    lowerbounds = 1 1
+    upperbounds = 30 30
+    stepsizes = 1e-5 1e-5
+    niter = 200
+    mode = tpe
+    params = Ga_alpha As_alpha
+end
+
+begin atom Ga
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+end
+
+begin atom As
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+    nnaxes = true
+end
