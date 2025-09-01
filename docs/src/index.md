@@ -2,25 +2,7 @@
 
 Documentation for Hamster.jl
 
-```@docs
-Hamster.get_config
+```@autodocs
+Modules = [Hamster]
+Filter = x -> !(startswith(string(x), "_"))
 ```
-
-```@docs
-Hamster.set_value!
-```
-
-```@docs
-Hamster.Config
-```
-
-```@docs
-Hamster.get_empty_config
-```
-
-
-```@docs
-Base.haskey
-```
-
-@autodocs
