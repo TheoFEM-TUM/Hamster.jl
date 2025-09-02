@@ -17,7 +17,7 @@ Returns a transformation matrix that aligns the z-axis along the vector connecti
   between `r⃗₁` and `r⃗₂`.
 """
 function get_sk_transform_matrix(r⃗₁, r⃗₂, axis, tmethod)
-  if tmethod == "GramSchmidt"
+  if lowercase(tmethod)[1] == 'g'
       return get_transformed_system(r⃗₁, r⃗₂, axis)
   else
       return get_transformed_system(r⃗₁, r⃗₂)
