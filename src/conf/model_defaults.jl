@@ -18,16 +18,17 @@ The `tb_model` tag switches on the use of a TB model in the effective Hamiltonia
 get_tb_model(conf::Config)::Bool = conf("tb_model") == "default" ? true : conf("tb_model")
 
 """
-    sp_tol=1e-10
+**sp_tol**=1e-10
 
-The `sp_tol` tag sets a tolerance for value to be considered zero.
+The `sp_tol::Float` tag sets a tolerance for values to be considered zero.
 """
 get_sp_tol(conf::Config)::Float64 = conf("sp_tol") == "default" ? 1e-10 : conf("sp_tol")
 
 """
-    sp_mode=dense
+**sp_mode**=false
 
-The `sp_mode` tag switches between dense and sparse matrix methods.
+The `sp_mode::Bool` tag switches between dense and sparse matrix methods. 
+This will only affect the computation of Hᴿ (not Hᵏ or diagonalization) and gradient computations when doing optimization.
 """
 function get_sp_mode(conf::Config)::Union{Sparse, Dense}
     if conf("sp_mode") == "default"
@@ -38,9 +39,10 @@ function get_sp_mode(conf::Config)::Union{Sparse, Dense}
 end
 
 """
-    sp_diag=dense
+**sp_diag**=false
 
-The `sp_diag` tag switches between dense and sparse methods for matrix diagonalization.
+The `sp_diag::Bool` tag switches between dense and sparse methods for matrix diagonalization (only affects Hᵏ and diagonalization).
+This can not be combined with optimization.
 """
 function get_sp_diag(conf::Config)::Union{Sparse, Dense}
     if conf("sp_diag") == "default"
