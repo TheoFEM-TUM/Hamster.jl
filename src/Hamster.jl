@@ -7,9 +7,9 @@ include("parse/utils.jl"); include("parse/poscar.jl"); include("parse/eigenval.j
 include("parse/commandline.jl")
 
 include("conf/config.jl"); include("conf/read_config.jl")
-include("conf/defaults.jl"); include("conf/strc_defaults.jl"); include("conf/basis_defaults.jl"); include("conf/model_defaults.jl")
-include("conf/optim_defaults.jl"); include("conf/supercell_defaults.jl"); include("conf/ml_defaults.jl"); include("conf/soc_defaults.jl")
-include("conf/hyperopt_defaults.jl")
+include("conf/defaults.jl"); include("conf/strc_defaults.jl"); include("conf/atom_defaults.jl"); include("conf/basis_defaults.jl")
+include("conf/model_defaults.jl"); include("conf/optim_defaults.jl"); include("conf/supercell_defaults.jl") 
+include("conf/ml_defaults.jl"); include("conf/soc_defaults.jl"); include("conf/hyperopt_defaults.jl")
 
 include("out/output.jl")
 

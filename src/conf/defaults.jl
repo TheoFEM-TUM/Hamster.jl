@@ -33,9 +33,9 @@ Possible options:
 get_init_params(conf::Config)::String = conf("init_params") == "default" ? "ones" : conf("init_params")
 
 """
-    kpoints=gamma
+**kpoints**=gamma
 
-The `kpoints` tag specifies the file or method used to define the set of k-points.
+The `kpoints::String` tag specifies the file or method used to define the set of k-points.
 
 Possible options:
 - `gamma`: use only the Gamma point (default).
@@ -45,23 +45,23 @@ Possible options:
 get_kpoints_file(conf::Config)::String = conf("kpoints") == "default" ? "gamma" : conf("kpoints")
 
 """
-    neig=6 (only if sp_diag=true)
+**neig**=6 (only if sp_diag=true)
 
-The `neig` tag sets the number of eigenvalues that are calculated when using Krylov-Shur.
+The `neig::Int` tag sets the number of eigenvalues that are calculated when using a sparse eigensolver.
 """
 get_neig(conf::Config)::Int64 = conf("Neig") == "default" ? 6 : conf("Neig")
 
 """
-    save_vecs=false
+**save_vecs**=false
 
-The `save_vecs` tag determines whether the eigenvectors are written to a file.
+The `save_vecs::Bool` tag determines whether the eigenvectors are written to a file.
 """
 get_save_vecs(conf::Config)::Bool = conf("save_vecs") == "default" ? false : conf("save_vecs")
 
 """
 **eig_target**=0.
 
-The `eig_target` tag sets the target energy when using a sparse eigensolver.
+The `eig_target::Float` tag sets the target energy when using a sparse eigensolver.
 """
 get_eig_target(conf::Config)::Float64 = conf("eig_target") == "default" ? 0. : conf("eig_target")
 
@@ -77,23 +77,23 @@ Possible options:
 get_diag_method(conf::Config)::String = conf("diag_method") == "default" ? "shift-invert" : conf("diag_method")
 
 """
-    nthreads_kpoints=JULIA_NUM_THREADS
+**nthreads_kpoints**=JULIA_NUM_THREADS
 
-The `nthreads_kpoints` tag sets the number of tasks to work on kpoints simultaneously.
+The `nthreads_kpoints::Int` tag sets the number of tasks to work on kpoints simultaneously.
 """
 get_nthreads_kpoints(conf::Config)::Int64 = conf("nthreads_kpoints") == "default" ? Threads.nthreads() : conf("nthreads_kpoints") 
 
 """
-    nthreads_bands=JULIA_NUM_THREADS
+**nthreads_bands**=JULIA_NUM_THREADS
 
-The `nthreads_bands` tag sets the number of tasks to work on energy bands simultaneously.
+The `nthreads_bands::Int` tag sets the number of tasks to work on energy bands simultaneously.
 """
 get_nthreads_bands(conf::Config)::Int64 = conf("nthreads_bands") == "default" ? Threads.nthreads() : conf("nthreads_bands")
 
 """
-    nthreads_blas=1
+**nthreads_blas**=1
 
-The `nthreads_blas` tag sets the number of threads used by the BLAS library.
+The `nthreads_blas::Int` tag sets the number of threads used by the BLAS library.
 """
 get_nthreads_blas(conf::Config)::Int64 = conf("nthreads_blas") == "default" ? 1 : conf("nthreads_blas")
 

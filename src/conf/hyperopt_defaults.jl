@@ -1,7 +1,8 @@
 """
-    params=[""]
+**params**=[""]
 
-The `params` tag sets the hyperparameters that are to be optimized
+The `params` tag defines the hyperparameters to be optimized.  
+For parameters belonging to a specific block, use the syntax `block_param`.
 """
 function get_hyperopt_params(conf::Config)::Vector{String} 
     if conf("params", "HyperOpt") == "default"
@@ -16,9 +17,9 @@ function get_hyperopt_params(conf::Config)::Vector{String}
 end
 
 """
-    lowerbounds=[0]
+**lowerbounds**=[0]
 
-The `lowerbounds` define the lower bounds of the search space.
+The `lowerbounds::Vector{Float}` define the lower bounds of the search space.
 """
 function get_hyperopt_lowerbounds(conf::Config)::Vector{Float64}
     if conf("lowerbounds", "HyperOpt") == "default" 
@@ -33,9 +34,9 @@ function get_hyperopt_lowerbounds(conf::Config)::Vector{Float64}
 end
 
 """
-    upperbounds=[0]
+**upperbounds**=[0]
 
-The `upperbounds` define the upper bounds of the search space.
+The `upperbounds::Vector{Float64}` define the upper bounds of the search space.
 """
 function get_hyperopt_upperbounds(conf::Config)::Vector{Float64}
     if conf("upperbounds", "HyperOpt") == "default" 
@@ -51,9 +52,9 @@ end
 
 
 """
-    stepsizes=[1e-5]
+**stepsizes**=[1e-5]
 
-The `stepsizes` defines the minimum difference between two points that are sampled as trial hyperparameters.
+The `stepsizes::Vector{Float}` defines the minimum difference between two points that are sampled as trial hyperparameters.
 """
 function get_hyperopt_stepsizes(conf::Config)::Vector{Float64}
     Nparams = length(get_hyperopt_params(conf))
@@ -69,15 +70,21 @@ function get_hyperopt_stepsizes(conf::Config)::Vector{Float64}
 end
 
 """
-    niter=10
+**niter**=10
 
-The `niter` tags sets the maximum number of iterations in the hyperparameter optimization.
+The `niter::Int` tags sets the maximum number of iterations in the hyperparameter optimization.
 """
 get_hyperopt_niter(conf::Config)::Int64 = conf("niter", "HyperOpt") == "default" ? 1 : conf("niter", "HyperOpt")
 
 """
-    mode=random
+**mode** = random
 
-The `mode` tag determines by which method new hyperparameter pairs are generated. Default is 'random'.
+The `mode::String` tag specifies the strategy for generating new hyperparameter candidates.  
+The default is `random`.
+
+Possible options:
+- `random`: random search (default)
+- `grid`: grid search
+- `tpe`: Tree-structured Parzen Estimator
 """
 get_hyperopt_mode(conf::Config)::String = conf("mode", "HyperOpt") == "default" ? "random" : conf("mode", "HyperOpt")
