@@ -30,7 +30,7 @@ You can run start Hamster by calling the `hamster` executable. To make use of MP
 [mpiexecjl -n NODES / srun] hamster [kwargs]
 ```
 
-While keyword arguments can be passed directly via the command line, it is more practical to provide Hamster with a config file `hconf` (see examples).
+While keyword arguments can be passed directly via the command line, it is more practical to provide Hamster with a config file `hconf`. Examples can be found [here](https://theofem-tum.github.io/Hamster.jl/dev/examples/examples/).
 
 ## License
 This project is licensed under the MIT License.

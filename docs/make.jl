@@ -20,6 +20,7 @@ makedocs(
         ],
         "Examples" => [
             "examples/examples.md",
+            "examples/model_eval.md",
             "examples/gaas_tb_hyperopt.md"
         ],
         "Library" => "library/library.md"

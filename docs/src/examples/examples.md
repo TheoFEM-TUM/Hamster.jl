@@ -1,4 +1,5 @@
 # [Overview](@id examples)
 
 A few examples on using `Hamster.jl` are provided:
-- TB hyperparameter optimization for GaAs
+- [Model evaluation with existing parameters](@ref standard-gaas)
+- [TB hyperparameter optimization for GaAs](@ref hyperopt-gaas)

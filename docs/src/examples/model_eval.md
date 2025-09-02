@@ -1,0 +1,5 @@
+# [Standard run for GaAs](@id standard-gaas)
+
+If no optimization blocks are defined, Hamster defaults to a standard run, computing the Hamiltonian and eigenvalues. In this case, an optimized parameter set must be provided via the `init_params` tag. The distance-dependence functions can either be supplied directly or re-interpolated as needed. Note that the cutoff `rcut` and the distance-dependence parameters `alpha` must remain consistent across calculations; otherwise, the results may be erroneous. Input files are found [here](https://github.com/TheoFEM-TUM/Hamster.jl/tree/main/examples/gaas_model_eval).
+
+For each material to be modeled, an orbital basis must be specified. Hybrid orbitals are a special case since they are identical apart from their spatial orientation. The `nnaxes` argument can be used to automatically set these orientations based on the bonding axes between an atom and its nearest neighbors (e.g., As in this case).

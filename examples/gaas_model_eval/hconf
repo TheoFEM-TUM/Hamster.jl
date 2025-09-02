@@ -1,0 +1,16 @@
+begin Options
+    rcut = 7
+    poscar = POSCAR_gaas
+    kpoints = EIGENVAL_bands
+    init_params = params.dat
+    load_rllm = true
+end
+
+begin atom Ga
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+end
+
+begin atom As
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+    nnaxes = true
+end
