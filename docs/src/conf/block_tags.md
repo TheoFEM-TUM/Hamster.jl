@@ -10,6 +10,13 @@ end
 
 Tags placed outside their designated blocks are ignored. The following blocks are available:
 
+## Atom tags
+
+```@autodocs
+Modules = [Hamster]
+Pages = ["atom_defaults.jl"]
+```
+
 ## Supercell
 
 ```@autodocs
@@ -31,14 +38,14 @@ Modules = [Hamster]
 Pages = ["soc_defaults.jl"]
 ```
 
-## Optim
+## [Optim](@id optim-tags)
 
 ```@autodocs
 Modules = [Hamster]
 Pages = ["optim_defaults.jl"]
 ```
 
-## HyperOpt
+## [HyperOpt](@id hyperopt-tags)
 
 ```@autodocs
 Modules = [Hamster]
