@@ -75,7 +75,7 @@ get_eig_target(conf::Config)::Float64 = conf("eig_target") == "default" ? 0. : c
 """
 **diag_method**=shift-invert
 
-The `diag-method` tag sets the method to be used for calculating eigenvalues when `sp_diag=true`, ignored otherwise.
+The `diag_method` tag sets the method to be used for calculating eigenvalues when `sp_diag=true`, ignored otherwise.
 
 Possible options:
 - `shift-invert` (default): call `eigs` function from `Arpack`.

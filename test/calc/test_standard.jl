@@ -31,5 +31,5 @@ end
         @test mean(abs.(Es_dft[:, :, ind] .- Es_tb[:, :, i])) < 0.3
     end
 
-    mm("hamster.out"); rm("Es.dat")
+    rm("hamster.out"); rm("Es.dat")
 end
