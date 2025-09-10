@@ -92,3 +92,82 @@ function read_hr(filename="hamster_hr.dat"; sp_mode=false, verbose=1)
     if verbose ≥ 1; println("Time to read: $time s"); end
     return Hr, Rs
 end
+
+"""
+    write_ham(H, vecs, comm, ind=0; filename="ham.h5", space="k")
+
+Write a Hamiltonian, represented as a vector of sparse matrices, into an HDF5 file
+in a parallel MPI setting.
+
+# Arguments
+- `H::Vector{SparseMatrixCSC}`: Vector of sparse matrices that form the Hamiltonian blocks.
+- `vecs::AbstractArray`: Array of vectors with one vector per block (k or R vectors).
+- `comm::MPI.Comm`: MPI communicator used to open the HDF5 file in parallel mode.
+- `ind::Int=0`: Optional index label (e.g., for each atomic configuration).
+
+# File structure
+The Hamiltonian is stored under a group named:
+- `"H\$space"` if `ind == 0`
+- `"H\${space}_\$ind"` otherwise
+
+Inside this group:
+- `"vecs"`: dataset containing the supplied `vecs` (k or R vectors).
+- Subgroups `"1"`, `"2"`, …, one for each block in `H`, containing:
+  - `"rowval"`, `"colptr"`, `"nzval"`: the CSC representation of the sparse matrix.
+  - `"m"`, `"n"`: matrix dimensions.
+"""
+function write_ham(H, vecs, comm, ind=0; filename="ham.h5", space="k")
+    h5open(filename, "cw", comm) do file
+        h_group = ind == 0 ? "H$space" : "H$(space)_$ind"
+        g = create_group(file, h_group)
+        g["vecs"] = vecs
+        for (i, mat) in enumerate(H)
+            smat = issparse(mat) ? mat : sparse(mat)
+            grp = create_group(g, "$i")
+            grp["rowval"] = smat.rowval
+            grp["colptr"] = smat.colptr
+            grp["nzval"]  = smat.nzval
+            grp["m"]      = size(smat, 1)
+            grp["n"]      = size(smat, 2)
+        end
+    end
+end
+
+"""
+    read_ham(comm, ind=0; filename="ham.h5", space="k")
+
+Read a Hamiltonian and associated vectors from an HDF5 file previously written with `write_ham`.
+
+# Arguments
+- `comm::MPI.Comm`: MPI communicator used to open the HDF5 file in parallel mode.
+- `ind::Int=0`: Optional index to identify which Hamiltonian group to read.
+
+# Keyword Arguments
+- `filename::AbstractString="ham.h5"`: Name of the HDF5 file to read from.
+- `space::AbstractString="k"`: Label used in the Hamiltonian group name (e.g., `"Hk"` or `"Hk_1"`).
+
+# Returns
+- `H::Vector{SparseMatrixCSC}`: Vector of Hamiltonian blocks reconstructed as sparse matrices.
+- `vecs::Array`: The stored array of vectors associated with the Hamiltonian.
+"""
+function read_ham(comm, ind=0; filename="ham.h5", space="k")
+    H = SparseMatrixCSC[]
+    vecs = nothing
+    h5open(filename, "r", comm) do file
+        h_group = ind == 0 ? "H$space" : "H$(space)_$ind"
+        g = file[h_group]
+        vecs = read(g["vecs"])
+        # Ensure blocks are read in order "1", "2", ...
+        block_names = sort(filter(x -> x != "vecs", keys(g)))
+        for name in block_names
+            grp = g[name]
+            m = read(grp["m"])
+            n = read(grp["n"])
+            rowval = read(grp["rowval"])
+            colptr = read(grp["colptr"])
+            nzval  = read(grp["nzval"])
+            push!(H, SparseMatrixCSC(m, n, colptr, rowval, nzval))
+        end
+    end
+    return H, vecs
+end

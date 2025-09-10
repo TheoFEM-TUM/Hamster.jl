@@ -59,6 +59,13 @@ The `save_vecs::Bool` tag determines whether the eigenvectors are written to a f
 get_save_vecs(conf::Config)::Bool = conf("save_vecs") == "default" ? false : conf("save_vecs")
 
 """
+**write_hk**=false
+
+The `write_hk::Bool` tag determines whether the Hamiltonians in k-space are written to a file.
+"""
+get_write_hk(conf::Config)::Bool = conf("write_hk") == "default" ? false : conf("write_hk")
+
+"""
 **eig_target**=0.
 
 The `eig_target::Float` tag sets the target energy when using a sparse eigensolver.

@@ -61,6 +61,7 @@ if test_all || test_only == "Model"
         include("model/test_ham_grad.jl")
         include("model/test_model.jl")
         include("model/test_eff_ham.jl")
+        include("model/test_ham_write.jl")
     end
 end
 
