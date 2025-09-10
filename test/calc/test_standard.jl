@@ -10,7 +10,7 @@
     Es_tb = read_from_file("Es.dat")
     _, Es_dft, _ = Hamster.read_eigenval(conf("kpoints"), 8)
     @test mean(abs.(Es_tb .- Es_dft)) < 0.3
-    rm("hamster.out"); rm("config_inds.dat"); rm("Es.dat")
+    rm("hamster.out"); rm("Es.dat")
 end
 
 @testset "Standard MD calculation" begin
@@ -26,10 +26,10 @@ end
     prof = Hamster.main(comm, conf, rank=rank)
     Es_dft = h5read(joinpath(path, "eigenval.h5"), "eigenvalues")
     Es_tb = read_from_file("Es.dat")
-    inds = Int.(read_from_file("config_inds.dat"))
+    inds = h5read("hamster_out.h5", "config_inds.dat")
     for (i, ind) in enumerate(inds)
         @test mean(abs.(Es_dft[:, :, ind] .- Es_tb[:, :, i])) < 0.3
     end
 
-    rm("hamster.out"); rm("config_inds.dat"); rm("Es.dat")
+    mm("hamster.out"); rm("Es.dat")
 end

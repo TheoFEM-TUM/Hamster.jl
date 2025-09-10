@@ -35,7 +35,7 @@ include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hype
 
 include("main.jl")
 
-export write_to_file, read_from_file
+export write_to_file, read_from_file, clear_hamster_output
 
 export Config, get_config, get_empty_config, set_value!
 
