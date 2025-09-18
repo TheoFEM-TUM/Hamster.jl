@@ -85,7 +85,15 @@ Computes eigenvalues and eigenvectors of the Hamiltonian for a set of structures
 - `nranks`: Total number of MPI ranks (default: `1`).
 - `verbosity`: Level of verbosity for printed output (default: `get_verbosity(conf)`).
 """
-function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf=get_empty_config(); Nbatch=get_nbatch(conf), save_vecs=get_save_vecs(conf), rank=0, nranks=1, write_hk=get_write_hk(conf), verbosity=get_verbosity(conf))
+function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf=get_empty_config(); 
+        Nbatch=get_nbatch(conf), 
+        save_vecs=get_save_vecs(conf), 
+        rank=0, 
+        nranks=1, 
+        write_hk=get_write_hk(conf),
+        skip_diag=get_skip_diag(conf),
+        verbosity=get_verbosity(conf))
+    
     strc_ind = 0
     ks = get_kpoints_from_config(conf)
     Nstrc_tot = MPI.Reduce(ham.Nstrc, +, comm, root=0)
