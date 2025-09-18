@@ -84,6 +84,13 @@ Possible options:
 get_diag_method(conf::Config)::String = conf("diag_method") == "default" ? "shift-invert" : conf("diag_method")
 
 """
+**skip_diag**=false
+
+If `skip_diag` is set to true, no eigenvalues are computed for the Hamiltonian.
+"""
+get_skip_diag(conf::Config)::Bool = conf("skip_diag") == "default" ? false : conf("skip_diag")
+
+"""
 **nthreads_kpoints**=JULIA_NUM_THREADS
 
 The `nthreads_kpoints::Int` tag sets the number of tasks to work on kpoints simultaneously.

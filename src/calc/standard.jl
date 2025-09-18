@@ -95,7 +95,13 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
             strc_ind += 1
             ham_time_local = @elapsed Hk = get_hamiltonian(ham, index, ks)
             Neig = ham.sp_diag isa Sparse ? get_neig(conf) : size(Hk[1], 1)
-            diag_time_local = @elapsed Es, vs = diagonalize(Hk, Neig=Neig, target=get_eig_target(conf), method=get_diag_method(conf))
+
+            Es = zeros(1, 1); vs = zeros(ComplexF64, 1, 1, 1)
+            diag_time_local = @elapsed begin
+                if !skip_diag
+                    Es, vs = diagonalize(Hk, Neig=Neig, target=get_eig_target(conf), method=get_diag_method(conf))
+                end
+            end
 
             ham_time = MPI.Reduce(ham_time_local, +, comm, root=0)
             diag_time = MPI.Reduce(diag_time_local, +, comm, root=0)
