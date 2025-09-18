@@ -28,8 +28,8 @@ Runs the optimization process for an effective Hamiltonian model using the speci
 function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1, write_output=true)
    train_config_inds, val_config_inds = get_config_index_sample(conf)
 
-   if rank == 0
-      h5open("hamster_out.h5", "w") do file
+   if rank == 0 && write_output
+      h5open("hamster_out.h5", "cw") do file
          file["train_config_inds"] = train_config_inds
          file["val_config_inds"] = val_config_inds
       end
@@ -69,7 +69,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    MPI.Barrier(comm)
    if rank == 0 && write_output
       write_params(ham_train, conf)
-      h5open("hamster_out.h5", "w") do file
+      h5open("hamster_out.h5", "cw") do file
          file["L_train"] = dropdims(sum(prof.L_train, dims=1), dims=1)
          file["L_val"] = prof.L_val
       end

@@ -33,7 +33,9 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1,
     config_inds, _ = get_config_index_sample(conf)
    
     if rank == 0
-       write_to_file(config_inds, "config_inds")
+       h5open("hamster_out.h5", "cw") do file
+         file["config_inds"] = config_inds
+      end
     end
     
     MPI.Bcast!(config_inds, comm, root=0)
@@ -83,7 +85,15 @@ Computes eigenvalues and eigenvectors of the Hamiltonian for a set of structures
 - `nranks`: Total number of MPI ranks (default: `1`).
 - `verbosity`: Level of verbosity for printed output (default: `get_verbosity(conf)`).
 """
-function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf=get_empty_config(); Nbatch=get_nbatch(conf), save_vecs=get_save_vecs(conf), rank=0, nranks=1, verbosity=get_verbosity(conf))
+function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf=get_empty_config(); 
+        Nbatch=get_nbatch(conf), 
+        save_vecs=get_save_vecs(conf), 
+        rank=0, 
+        nranks=1, 
+        write_hk=get_write_hk(conf),
+        skip_diag=get_skip_diag(conf),
+        verbosity=get_verbosity(conf))
+    
     strc_ind = 0
     ks = get_kpoints_from_config(conf)
     Nstrc_tot = MPI.Reduce(ham.Nstrc, +, comm, root=0)
@@ -93,12 +103,21 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
             strc_ind += 1
             ham_time_local = @elapsed Hk = get_hamiltonian(ham, index, ks)
             Neig = ham.sp_diag isa Sparse ? get_neig(conf) : size(Hk[1], 1)
-            diag_time_local = @elapsed Es, vs = diagonalize(Hk, Neig=Neig, target=get_eig_target(conf), method=get_diag_method(conf))
+
+            Es = zeros(1, 1); vs = zeros(ComplexF64, 1, 1, 1)
+            diag_time_local = @elapsed begin
+                if !skip_diag
+                    Es, vs = diagonalize(Hk, Neig=Neig, target=get_eig_target(conf), method=get_diag_method(conf))
+                end
+            end
 
             ham_time = MPI.Reduce(ham_time_local, +, comm, root=0)
             diag_time = MPI.Reduce(diag_time_local, +, comm, root=0)
 
             write_begin = MPI.Wtime()
+            if write_hk
+                write_ham(Hk, ks, comm, local_inds[index])
+            end
             if Nstrc_tot == 1 && rank == 0
                 write_to_file(Es, "Es")
                 if save_vecs; write_to_file(vs, "vs"); end

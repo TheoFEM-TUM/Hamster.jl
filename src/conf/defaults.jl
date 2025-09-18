@@ -59,6 +59,13 @@ The `save_vecs::Bool` tag determines whether the eigenvectors are written to a f
 get_save_vecs(conf::Config)::Bool = conf("save_vecs") == "default" ? false : conf("save_vecs")
 
 """
+**write_hk**=false
+
+The `write_hk::Bool` tag determines whether the Hamiltonians in k-space are written to a file.
+"""
+get_write_hk(conf::Config)::Bool = conf("write_hk") == "default" ? false : conf("write_hk")
+
+"""
 **eig_target**=0.
 
 The `eig_target::Float` tag sets the target energy when using a sparse eigensolver.
@@ -68,13 +75,20 @@ get_eig_target(conf::Config)::Float64 = conf("eig_target") == "default" ? 0. : c
 """
 **diag_method**=shift-invert
 
-The `diag-method` tag sets the method to be used for calculating eigenvalues when `sp_diag=true`, ignored otherwise.
+The `diag_method` tag sets the method to be used for calculating eigenvalues when `sp_diag=true`, ignored otherwise.
 
 Possible options:
 - `shift-invert` (default): call `eigs` function from `Arpack`.
 - `krylov-schur`: call `eigsolve` function from `KrylovKit`.
 """
 get_diag_method(conf::Config)::String = conf("diag_method") == "default" ? "shift-invert" : conf("diag_method")
+
+"""
+**skip_diag**=false
+
+If `skip_diag` is set to true, no eigenvalues are computed for the Hamiltonian.
+"""
+get_skip_diag(conf::Config)::Bool = conf("skip_diag") == "default" ? false : conf("skip_diag")
 
 """
 **nthreads_kpoints**=JULIA_NUM_THREADS

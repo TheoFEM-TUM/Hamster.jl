@@ -1,4 +1,7 @@
 function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity(conf))
+    # Clear output files from previous Hamster runs
+    clear_hamster_output()
+    
     set_seed!(conf, rank=rank)
     hostnames = MPI.gather(readchomp(`hostname`), comm, root=0)
     if rank == 0

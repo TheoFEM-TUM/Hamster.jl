@@ -35,7 +35,7 @@ include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hype
 
 include("main.jl")
 
-export write_to_file, read_from_file
+export write_to_file, read_from_file, clear_hamster_output
 
 export Config, get_config, get_empty_config, set_value!
 
@@ -45,7 +45,7 @@ export ParameterLabel, read_params, write_params, Basis, get_geometry_tensor, np
 
 export TBModel, EffectiveHamiltonian, get_params, set_params!, copy_params!
 export get_hamiltonian, diagonalize, get_hr, init_params!
-export write_hr, read_hr
+export write_hr, read_hr, write_ham, read_ham
 
 export SOCModel
 

@@ -18,7 +18,7 @@ function get_update_tb(conf::Config, NV)::Vector{Bool}
 end
 
 """
-    loss=MAE
+**loss**=MAE
 
 The `loss` tag sets the loss function to be used for the optimization.
 """
