@@ -119,13 +119,13 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
                 write_ham(Hk, ks, comm, local_inds[index])
             end
             if Nstrc_tot == 1 && rank == 0
-                write_to_file(Es, "Es")
-                if save_vecs; write_to_file(vs, "vs"); end
+                if !skip_diag; write_to_file(Es, "Es"); end
+                if save_vecs && !skip_diag; write_to_file(vs, "vs"); end
             else
                 if !("tmp" in readdir(pwd())) && rank == 0; mkdir("tmp"); end
                 MPI.Barrier(comm)
-                write_to_file(Es, "tmp/Es$(local_inds[index])")
-                if save_vecs; write_to_file(vs, "tmp/vs$(local_inds[index])"); end
+                if !skip_diag; write_to_file(Es, "tmp/Es$(local_inds[index])"); end
+                if save_vecs && !skip_diag; write_to_file(vs, "tmp/vs$(local_inds[index])"); end
             end
             write_time = MPI.Wtime() - write_begin
             prof.timings[1, strc_ind, 3] = write_time
