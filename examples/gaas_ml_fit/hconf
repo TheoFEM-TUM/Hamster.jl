@@ -1,0 +1,42 @@
+begin Options
+    rcut = 7
+    poscar = POSCAR_gaas
+    kpoints = EIGENVAL_bands
+    init_params = params.dat
+    load_rllm = true
+    sp_mode = true
+end
+
+begin Supercell
+    Nconf = 10
+    Nconf_min = 1
+    Nconf_max = 200
+    xdatcar = structures.h5
+    poscar = SC_POSCAR
+end
+
+begin Optimizer
+    update_tb = false
+    lr = 0.01
+    niter = 200
+    loss = MAE
+    train_data = eigenval.h5
+    train_mode = md
+    val_mode = md
+    val_ratio = 1
+    val_data = eigenval.h5
+end
+
+begin ML
+    ncluster = 25
+    npoints = 250
+end
+
+begin atom Ga
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+end
+
+begin atom As
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+    nnaxes = true
+end
