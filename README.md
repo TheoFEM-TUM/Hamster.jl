@@ -10,22 +10,28 @@
 
 **H**amiltonian-learning **A**pproach for **M**ultiscale **S**imulations using a **T**ransferable and **E**fficient **R**epresentation
 
-`Hamster.jl` is a pure-Julia package for fitting and running physics-informed effective Hamiltonian models to study temperature-dependent optoelectronic properties. Originally created by Martin Schwade and developed by the [TheoFEM group](https://theofem.de/) at TU Munich (Prof. D. A. Egger), it implements a Δ-machine-learning approach to correct tight-binding Hamiltonians in response to changes in the atomic environment. Spin–orbit coupling (SOC) is supported.
+`Hamster.jl` is a pure-Julia package for fitting and running physics-informed effective Hamiltonian models to study temperature-dependent optoelectronic properties with linear scaling in the number of atoms. Originally created by Martin Schwade and developed by the [TheoFEM group](https://theofem.de/) at TU Munich (Prof. D. A. Egger), it implements a Δ-machine-learning approach to correct tight-binding Hamiltonians in response to changes in the atomic environment and including spin–orbit coupling (SOC).
 
 📖 [Documentation](https://theofem-tum.github.io/Hamster.jl/dev/)
 
 ## Hardware requirements
 
-The hardware requirements for running `Hamster.jl` are moderate, but they strongly depend on the system size. Small systems with only a few atoms typically finish in under 10 minutes on a standard personal computer. Larger calculations involving thousands of atoms are best run on dedicated workstations or clusters, where they may take several hours.
+The hardware requirements for running `Hamster.jl` are moderate, but they strongly depend on the system size. Small systems with only a few atoms typically finish in under 10 minutes on a standard personal computer. Larger calculations involving thousands of atoms are best run on dedicated workstations or clusters, where they may take several hours. Note that GPUs are currently not supported.
 
 ## Installation & Dependencies
 
-To get started, you need a working [Julia](https://julialang.org/install/) installation. `Hamster.jl` is currently tested only with Julia **v1.11.5** on **Ubuntu**. If you are using a different Julia version or operating system, please verify on your own that everything works as expected (e.g., by running the test suite or one of the [examples](https://theofem-tum.github.io/Hamster.jl/dev/examples/examples/).
+To get started, you need a working [Julia](https://julialang.org/install/) installation. `Hamster.jl` is tested with Julia **v1.11.5** on **Ubuntu**. If you are using a different Julia version or operating system, please verify on your own that everything works as expected (e.g., by running the test suite or one of the [examples](https://theofem-tum.github.io/Hamster.jl/dev/examples/examples/).
 
-Since `Hamster.jl` is not (yet) a registered Julia package, we provide an installation script that sets up dependencies, sets the PATH variable and creates the `hamster` executable.
+Since `Hamster.jl` is not (yet) a registered Julia package, we provide an installation script that sets up all dependencies, updates your `PATH`, and creates the `hamster` executable.
+
+The script accepts the following optional keywords:
+- `add_path`: `yes` or `no` (default: `yes`). If enabled, the location of the `Hamster.jl` folder is added to your `.bashrc`.  
+- `bashrc`: Path to the `.bashrc` (or an alias file). Defaults to `$HOME/.bashrc`.  
+- `exec_name`: Name of the executable (default: `hamster`).  
+- `add_test_exec`: Boolean (default: `false`). If `true`, also creates a `hamster_test` executable for running the test suite.
 
 ```bash
-julia hamster_install.jl [--add_path yes/no] [--exec_name hamster] [--bashrc default] [--add_test_exec]
+julia hamster_install.jl [--add_path yes/no] [--bashrc default] [--exec_name hamster] [--add_test_exec]
 ```
 
 Installing dependencies and running the test suite may take up to 10 minutes. A detailed list of dependencies can be found in the 
