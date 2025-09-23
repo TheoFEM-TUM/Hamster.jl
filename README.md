@@ -14,13 +14,22 @@
 
 📖 [Documentation](https://theofem-tum.github.io/Hamster.jl/dev/)
 
-## Installation
+## Hardware requirements
+
+The hardware requirements for running `Hamster.jl` are moderate, but they strongly depend on the system size. Small systems with only a few atoms typically finish in under 10 minutes on a standard personal computer. Larger calculations involving thousands of atoms are best run on dedicated workstations or clusters, where they may take several hours.
+
+## Installation & Dependencies
+
+To get started, you need a working [Julia](https://julialang.org/install/) installation. `Hamster.jl` is currently tested only with Julia **v1.11.5** on **Ubuntu**. If you are using a different Julia version or operating system, please verify on your own that everything works as expected (e.g., by running the test suite or one of the [examples](https://theofem-tum.github.io/Hamster.jl/dev/examples/examples/).
 
 Since `Hamster.jl` is not (yet) a registered Julia package, we provide an installation script that sets up dependencies, sets the PATH variable and creates the `hamster` executable.
 
 ```bash
 julia hamster_install.jl [--add_path yes/no] [--exec_name hamster] [--bashrc default] [--add_test_exec]
 ```
+
+Installing dependencies and running the test suite may take up to 10 minutes. A detailed list of dependencies can be found in the 
+`Project.toml` file.
 
 ## Quickstart
 
