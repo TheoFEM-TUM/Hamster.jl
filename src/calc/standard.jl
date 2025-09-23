@@ -91,6 +91,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
         rank=0, 
         nranks=1, 
         write_hk=get_write_hk(conf),
+        write_hr=get_write_hr(conf),
         skip_diag=get_skip_diag(conf),
         verbosity=get_verbosity(conf))
     
@@ -101,7 +102,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
     for (batch_id, indices) in enumerate(chunks(1:ham.Nstrc, n=Nbatch))
         for index in indices
             strc_ind += 1
-            ham_time_local = @elapsed Hk = get_hamiltonian(ham, index, ks)
+            ham_time_local = @elapsed Hk = get_hamiltonian(ham, index, ks, comm, write_hr=write_hr, global_index=local_inds[index])
             Neig = ham.sp_diag isa Sparse ? get_neig(conf) : size(Hk[1], 1)
 
             Es = zeros(1, 1); vs = zeros(ComplexF64, 1, 1, 1)

@@ -57,12 +57,20 @@ Construct the Hamiltonian matrix for given k-points `ks` from the real-space Ham
 - `ham::EffectiveHamiltonian`: The effective Hamiltonian object.
 - `index::Int`: The index of the structure for which the Hamiltonian is to be calculated.
 - `ks`: The k-points for which the Hamiltonian matrix is to be calculated.
+- `comm` (optional): The MPI communicator.
 
 # Returns
 - `Hk`: The Hamiltonian matrix in reciprocal space corresponding to the given k-points.
 """
-function get_hamiltonian(ham::EffectiveHamiltonian, index, ks)
+function get_hamiltonian(ham::EffectiveHamiltonian, index, ks; write_hr=false, global_index=index)
     Hr = get_hr(ham, index)
+    Hk = get_hamiltonian(Hr, ham.Rs[index], ks, ham.sp_diag)
+    return Hk
+end
+
+function get_hamiltonian(ham::EffectiveHamiltonian, index, ks, comm; write_hr=false, global_index=index)
+    Hr = get_hr(ham, index)
+    if write_hr; write_ham(Hr, ham.Rs[index], comm, global_index, space="r"); end
     Hk = get_hamiltonian(Hr, ham.Rs[index], ks, ham.sp_diag)
     return Hk
 end

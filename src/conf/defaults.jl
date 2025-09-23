@@ -66,6 +66,13 @@ The `write_hk::Bool` tag determines whether the Hamiltonians in k-space are writ
 get_write_hk(conf::Config)::Bool = conf("write_hk") == "default" ? false : conf("write_hk")
 
 """
+**write_hr**=false
+
+The `write_hr::Bool` tag determines whether the Hamiltonians in real-space are written to a file.
+"""
+get_write_hr(conf::Config)::Bool = conf("write_hr") == "default" ? false : conf("write_hr")
+
+"""
 **eig_target**=0.
 
 The `eig_target::Float` tag sets the target energy when using a sparse eigensolver.
