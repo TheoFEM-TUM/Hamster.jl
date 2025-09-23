@@ -20,7 +20,7 @@ The hardware requirements for running `Hamster.jl` are moderate, but they strong
 
 ## Installation & Dependencies
 
-To get started, you need a working [Julia](https://julialang.org/install/) installation. `Hamster.jl` is tested with Julia **v1.11.5** on **Ubuntu**. If you are using a different Julia version or operating system, please verify on your own that everything works as expected (e.g., by running the test suite or one of the [examples](https://theofem-tum.github.io/Hamster.jl/dev/examples/examples/).
+To get started, you need a working [Julia](https://julialang.org/install/) installation. `Hamster.jl` is tested with Julia **v1.11.5** on **Ubuntu 22.04 LTS (Jammy Jellyfish)**. If you are using a different Julia version or operating system, please verify on your own that everything works as expected (e.g., by running the test suite or one of the [examples](https://theofem-tum.github.io/Hamster.jl/dev/examples/examples/).
 
 Since `Hamster.jl` is not (yet) a registered Julia package, we provide an installation script that sets up all dependencies, updates your `PATH`, and creates the `hamster` executable.
 
