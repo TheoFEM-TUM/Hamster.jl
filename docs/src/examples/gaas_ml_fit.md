@@ -28,7 +28,6 @@ In practice, it is recommended to perform hyperparameter optimization for the ML
 - `env_scale`: Scaling factor applied only to the environment value.  
 - `apply_distortion`: If enabled, all values in the descriptor vector are updated according to distorted atomic positions.
 
-
 ## Optimization
 
 Both `train_mode` and `val_mode` should be set to `md`. The optimization can be parallelized over the number of structures using MPI. Set `update_tb` to `false` so that only the ML parameters are updated. Using a small learning rate (e.g., 0.01) is recommended to improve optimization stability.
