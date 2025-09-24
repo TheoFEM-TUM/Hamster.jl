@@ -1,0 +1,61 @@
+begin Options
+    rcut = 5.5
+    poscar = POSCAR
+    verbosity = 1
+    sp_mode = true
+    load_rllm = true
+    init_params = params.dat
+end
+
+begin Supercell
+    Nconf = 12
+    Nconf_min = 1
+    Nconf_max = 2000
+    xdatcar = XDATCAR
+    poscar = POSCAR
+end
+
+begin Optimizer
+    update_tb = false
+    lr = 0.01
+    niter = 100
+    bandmin = 105
+    wE_96-112 = 0.1
+    wE_72-73 = 5
+    loss = MAE
+    train_data = eigenval.h5
+    train_mode = md
+    val_mode = md
+    val_ratio = 1
+    val_data = eigenval.h5
+end
+
+begin ML
+    update = true
+    init_params = zeros
+end
+
+begin HyperOpt
+    niter = 200
+    params = ML_ncluster ML_npoints ML_sim_params
+    lowerbounds = 10 100 0
+    upperbounds = 500 1000 2
+    stepsizes = 10 10 1e-5
+    mode = tpe
+end
+
+begin atom Cs
+  alpha = 3.77385
+  orbitals = s
+end
+
+begin atom Pb
+  alpha = 29.83655
+  orbitals = s px py pz
+end
+
+begin atom Br
+  alpha = 16.93986
+  orbitals = px py pz
+end
+

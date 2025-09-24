@@ -1,0 +1,39 @@
+begin Options
+    rcut = 5.5
+    load_rllm = true
+    poscar = POSCAR
+    verbosity = 2
+    sp_mode = true
+    init_params = params.dat
+    kpoints = EIGENVAL
+    soc = true
+end
+
+begin Supercell
+    Nconf = 100
+    Nconf_min = 1
+    Nconf_max = 100
+    xdatcar = structures.h5
+    poscar = POSCAR
+end
+
+begin ML
+    init_params = ml_params.dat
+    sim_params = 0.5
+end
+
+begin atom Cs
+  alpha = 25.05821
+  orbitals = s
+end
+
+begin atom Pb
+  alpha = 29.83655
+  orbitals = s px py pz
+end
+
+begin atom Br
+  alpha = 16.93986
+  orbitals = px py pz
+end
+

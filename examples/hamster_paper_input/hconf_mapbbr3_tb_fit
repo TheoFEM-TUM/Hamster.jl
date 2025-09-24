@@ -1,0 +1,26 @@
+begin Options
+    rcut = 5.5
+    verbosity = 1
+end
+
+begin Optimizer
+    lr = 0.3
+    update_tb = true
+    niter = 1000
+    loss = MAE
+    wE = 1 1 1 1 1 1 1 1 3 3 1 0.1 0.1
+    wk_260 = 20
+    bandmin = 17
+    train_data = EIGENVAL_train
+    val_data = EIGENVAL_val
+end
+
+begin atom Pb
+  alpha = 26.56343
+  orbitals = s px py pz
+end
+
+begin atom Br
+  alpha = 14.60105
+  orbitals = px py pz
+end

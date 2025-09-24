@@ -1,0 +1,2 @@
+This folder contains the input files used in the original paper presenting the `Hamster.jl` package.  
+For the two materials, CsPbBr₃ and MAPbBr₃, we provide the configuration files used for hyperparameter optimization (TB and ML), parameter optimization (TB and ML), and model evaluation on large-scale MD data.
