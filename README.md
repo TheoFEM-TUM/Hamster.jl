@@ -58,7 +58,7 @@ For optimization, two datasets of energy eigenvalues (training and validation), 
   <img width="300" height="250" src="docs/src/assets/code_functionality.png">
 </p>
 
-For the results shown in Ref. 2, Hamster configuration (`hconf`) files are provided [here](https://theofem-tum.github.io/Hamster.jl/examples/hamster_paper_input).
+For the results shown in Ref. 2, Hamster configuration (`hconf`) files are provided [here](https://github.com/TheoFEM-TUM/Hamster.jl/tree/devel/examples/hamster_paper_input).
 
 ## License
 This project is licensed under the MIT License.
