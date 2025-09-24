@@ -92,6 +92,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
         nranks=1, 
         write_hk=get_write_hk(conf),
         write_hr=get_write_hr(conf),
+        ham_file=get_ham_file(conf),
         skip_diag=get_skip_diag(conf),
         verbosity=get_verbosity(conf))
     
@@ -117,7 +118,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
 
             write_begin = MPI.Wtime()
             if write_hk
-                write_ham(Hk, ks, comm, local_inds[index])
+                write_ham(Hk, ks, comm, local_inds[index], filename=ham_file)
             end
             if Nstrc_tot == 1 && rank == 0
                 if !skip_diag; write_to_file(Es, "Es"); end

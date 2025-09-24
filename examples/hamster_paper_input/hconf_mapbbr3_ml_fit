@@ -1,0 +1,56 @@
+begin Options
+    rcut = 5.5
+    verbosity = 1
+    load_rllm = true
+    init_params = params.dat
+    sp_mode = true
+end
+
+begin Supercell
+    nconf = 12
+    nconf_max = 100
+    xdatcar = structures.h5
+    poscar = POSCAR
+end
+
+begin Optimizer
+    lr = 0.005
+    update_tb = false
+    niter = 200
+    loss = MAE
+    wE_177-208 = 0.1
+    wE_144-145 = 7
+    wk_1 = 7
+    bandmin = 257
+    train_mode = MD
+    train_data = eigenval.h5
+    val_mode = MD
+    val_ratio = 1
+    val_data = eigenval.h5
+    val_weights = true
+end
+
+begin ML
+   update = true
+   apply_distortion = true
+   sim_params = 0.25
+   ncluster = 40
+   npoints = 750
+   env_scale = 2 
+end
+
+begin SOC
+   init_params = params.dat
+   update = false
+end
+
+begin atom Pb
+  alpha = 26.56343
+  orbitals = s px py pz
+end
+
+begin atom Br
+  alpha = 14.60105
+  orbitals = px py pz
+end
+

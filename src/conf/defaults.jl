@@ -73,6 +73,13 @@ The `write_hr::Bool` tag determines whether the Hamiltonians in real-space are w
 get_write_hr(conf::Config)::Bool = conf("write_hr") == "default" ? false : conf("write_hr")
 
 """
+**ham_file**=ham.h5
+
+The `ham_file::String` sets the file where Hamiltonians are stored.
+"""
+get_ham_file(conf::Config)::String = conf("ham_file") == "default" ? "ham.h5" : conf("ham_file")
+
+"""
 **eig_target**=0.
 
 The `eig_target::Float` tag sets the target energy when using a sparse eigensolver.

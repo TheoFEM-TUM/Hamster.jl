@@ -1,0 +1,36 @@
+begin Options
+    rcut = 7
+    verbosity = 1
+end
+
+begin Optimizer
+    lr = 0.3
+    update_tb = true
+    niter = 200
+    loss = MAE
+    wE = 1 1 1 1 1 1 1 1 1 1 1 1 0.1 0.1
+    wk_84 = 5 
+    bandmin = 14
+    train_data = EIGENVAL_train
+    val_data = EIGENVAL_bands
+end
+
+begin HyperOpt
+    niter = 300
+    params = Cs_alpha Pb_alpha Br_alpha rcut
+    lowerbounds = 1 1 1 5
+    upperbounds = 60 60 60 9
+    mode = tpe
+end
+
+begin atom Cs
+  orbitals = s
+end
+
+begin atom Pb
+  orbitals = s px py pz
+end
+
+begin atom Br
+  orbitals = px py pz
+end

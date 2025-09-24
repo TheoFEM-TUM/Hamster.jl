@@ -1,0 +1,39 @@
+begin Options
+    rcut = 5.5
+    load_rllm = true
+    poscar = POSCAR
+    verbosity = 2
+    sp_mode = true
+    sp_diag = true
+    eig_target = 0.9
+    init_params = params.dat
+    soc = true
+end
+
+begin Supercell
+    Nconf = 20
+    config_inds = 5613 5618 4593 5932 4203 3727 4878 5317 3560 4293 5898 5071 3491 5957 3440 5075 5160 3682 5437 4930
+    xdatcar = ../XDATCAR
+    poscar = ../POSCAR
+end
+
+begin ML
+    init_params = ml_params.dat
+    sim_params = 0.5
+end
+
+begin atom Cs
+  alpha = 25.05821
+  orbitals = s
+end
+
+begin atom Pb
+  alpha = 29.83655
+  orbitals = s px py pz
+end
+
+begin atom Br
+  alpha = 16.93986
+  orbitals = px py pz
+end
+

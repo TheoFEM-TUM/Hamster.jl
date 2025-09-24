@@ -20,7 +20,7 @@ The hardware requirements for running `Hamster.jl` are moderate, but they strong
 
 ## Installation & Dependencies
 
-To get started, you need a working [Julia](https://julialang.org/install/) installation. `Hamster.jl` is tested with Julia **v1.11.5** on **Ubuntu 22.04 LTS (Jammy Jellyfish)**. If you are using a different Julia version or operating system, please verify on your own that everything works as expected (e.g., by running the test suite or one of the [examples](https://theofem-tum.github.io/Hamster.jl/dev/examples/examples/).
+To get started, you need a working [Julia](https://julialang.org/install/) installation. `Hamster.jl` is tested with Julia **v1.11.5** on **Ubuntu 22.04 LTS (Jammy Jellyfish)**. If you are using a different Julia version or operating system, please verify on your own that everything works as expected (e.g., by running the test suite or one of the [examples](https://theofem-tum.github.io/Hamster.jl/dev/examples/examples/)).
 
 Since `Hamster.jl` is not (yet) a registered Julia package, we provide an installation script that sets up all dependencies, updates your `PATH`, and creates the `hamster` executable.
 
@@ -46,6 +46,19 @@ You can run start Hamster by calling the `hamster` executable. To make use of MP
 ```
 
 While keyword arguments can be passed directly via the command line, it is more practical to provide Hamster with a config file `hconf`. Examples that can be run on a personal computer in under 10 minutes are available [here](https://theofem-tum.github.io/Hamster.jl/dev/examples/examples/).
+
+## Code functionality
+
+An effective Hamiltonian model in `Hamster.jl` consists of three building blocks: TB [1], ML [2], and SOC [2]. These components can be combined, trained individually, extended, or replaced (e.g., by a different ML model) in a modular fashion. Each block has its own hyperparameters (except for SOC), which should be optimized in advance (see flowchart below).
+
+The input to the model is a set of atomic configurations.
+For optimization, two datasets of energy eigenvalues (training and validation), typically obtained from DFT, are also required.
+
+<p align="center">
+  <img width="300" height="250" src="docs/src/assets/code_functionality.png">
+</p>
+
+For the results shown in Ref. 2, Hamster configuration (`hconf`) files are provided [here](https://github.com/TheoFEM-TUM/Hamster.jl/tree/devel/examples/hamster_paper_input).
 
 ## License
 This project is licensed under the MIT License.

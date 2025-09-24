@@ -31,3 +31,7 @@ In practice, it is recommended to perform hyperparameter optimization for the ML
 ## Optimization
 
 Both `train_mode` and `val_mode` should be set to `md`. The optimization can be parallelized over the number of structures using MPI. Set `update_tb` to `false` so that only the ML parameters are updated. Using a small learning rate (e.g., 0.01) is recommended to improve optimization stability.
+
+## Output
+
+The ML model parameters are written to a file `ml_params.dat`. The training and validation losses are found in the output file `hamster_out.h5`.
