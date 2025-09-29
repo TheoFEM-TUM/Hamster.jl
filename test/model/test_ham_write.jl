@@ -4,8 +4,12 @@
     
     write_ham(H_original, vecs_original, comm, rank; space="k")
     H_loaded, vecs_loaded = read_ham(comm, rank; space="k")
+
+    H_loaded_2, vecs_loaded_2 = read_ham(rank; space="k")
     
     @test vecs_loaded ≈ vecs_original
+    @test H_loaded == H_loaded_2
+    @test vecs_loaded == vecs_loaded_2
     
     # Test that blocks are sparse and same shape
     @test all(issparse.(H_loaded))
