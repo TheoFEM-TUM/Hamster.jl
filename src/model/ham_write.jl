@@ -171,3 +171,5 @@ function read_ham(comm, ind=0; filename="ham.h5", space="k")
     end
     return H, vecs
 end
+
+read_ham(ind::Integer=0; filename="ham.h5", space="k") = read_ham(MPI.COMM_WORLD, ind; filename=filename, space=space)
