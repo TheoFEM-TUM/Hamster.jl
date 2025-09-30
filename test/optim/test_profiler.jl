@@ -103,6 +103,6 @@ end
 
     rm(filename; force=true)
 
-    Hamster.write_prof(prof, 1, filename=filename)
+    Hamster.save(prof, 1, filename=filename)
     @test !isfile(filename)
 end
