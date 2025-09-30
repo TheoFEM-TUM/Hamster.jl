@@ -25,11 +25,18 @@ The `loss` tag sets the loss function to be used for the optimization.
 get_loss(conf::Config)::String = conf("loss", "Optimizer") == "default" ? "MAE" : conf("loss", "Optimizer")
 
 """
-    lr=0.1
+**lr**=0.1
 
 The `lr` parameter defines the learning rate for the gradient descent parameter optimization.
 """
 get_lr(conf::Config)::Float64 = conf("lr", "Optimizer") == "default" ? 0.1 : conf("lr", "Optimizer")
+
+"""
+**lr_min**=0.1
+
+The `lr_min` parameter defines the final learning rate when applying learning rate decay (when not equal to `lr`).
+"""
+get_lr_min(conf::Config)::Float64 = conf("lr_min", "Optimizer") == "default" ? 0.1 : conf("lr_min", "Optimizer")
 
 """
     niter=1

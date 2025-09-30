@@ -67,7 +67,12 @@ Performs a single training step on a Hamiltonian model by computing gradients an
 - Updates the model parameters in-place within `ham_train`.
 - Writes timing information and training loss to `prof`.
 """
-function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id, comm, conf=get_empty_config(); rank=0, nranks=1)
+function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id, comm, conf=get_empty_config(); 
+    rank=0, 
+    nranks=1,
+    lr=get_lr(conf),
+    lr_min=get_lr_min(conf))
+
     verbosity = get_verbosity(conf)
     Nstrc_tot = MPI.Reduce(length(indices), +, comm, root=0)
     forward_times = Float64[]
@@ -90,6 +95,8 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         MPI.Bcast!(params, comm, root=0)
         set_params!(model, params)
     end
+    optim.adam.eta = lr_min + 0.5 * (lr - lr_min) * (1 + cos(π * iter / optim.Niter))
+    @show optim.adam.eta
     update_time_local = MPI.Wtime() - update_begin
 
     L_train = MPI.Reduce(sum(Ls_train), +, comm, root=0)
