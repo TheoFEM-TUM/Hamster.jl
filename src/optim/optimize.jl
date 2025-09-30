@@ -96,7 +96,6 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         set_params!(model, params)
     end
     optim.adam.eta = lr_min + 0.5 * (lr - lr_min) * (1 + cos(π * iter / optim.Niter))
-    @show optim.adam.eta
     update_time_local = MPI.Wtime() - update_begin
 
     L_train = MPI.Reduce(sum(Ls_train), +, comm, root=0)
