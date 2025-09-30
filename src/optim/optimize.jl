@@ -71,9 +71,9 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     rank=0, 
     nranks=1,
     lr=get_lr(conf),
-    lr_min=get_lr_min(conf))
+    lr_min=get_lr_min(conf),
+    verbosity=get_verbosity(conf))
 
-    verbosity = get_verbosity(conf)
     Nstrc_tot = MPI.Reduce(length(indices), +, comm, root=0)
     forward_times = Float64[]
     backward_times = Float64[]
