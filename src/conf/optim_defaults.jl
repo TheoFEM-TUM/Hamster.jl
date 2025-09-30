@@ -34,7 +34,8 @@ get_lr(conf::Config)::Float64 = conf("lr", "Optimizer") == "default" ? 0.1 : con
 """
 **lr_min**=0.1
 
-The `lr_min` parameter defines the final learning rate when applying learning rate decay (when not equal to `lr`).
+The `lr_min` parameter defines the final learning rate when applying learning rate decay.
+Learning rate decay (using a cosine function) is automatically applied when `lr_min` is set to a value unequal `lr`.
 """
 get_lr_min(conf::Config)::Float64 = conf("lr_min", "Optimizer") == "default" ? 0.1 : conf("lr_min", "Optimizer")
 
