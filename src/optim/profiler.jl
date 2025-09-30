@@ -74,14 +74,18 @@ function print_train_status(prof, iter, batch_id; verbosity=1)
     
     printit = decide_printit(batch_id, Nbatch, iter, prof.printeachbatch, prof.printeachiter; verbosity=verbosity)
 
-    time_iter = sum(prof.timings[:, iter, :])
-    time_left = sum(prof.timings[:, 1:iter, :]) / iter * (Niter - iter)
+    time_iter = sum(prof.timings[batch_id, iter, :])
+
+    time_so_far = sum(prof.timings[:, 1:iter-1, :]) + sum(prof.timings[1:batch_id, iter, :])
+    batches_so_far = (iter - 1) * Nbatch + batch_id
+    batches_left = (Niter - iter) * Nbatch + Nbatch - batch_id
+    time_left = time_so_far / batches_so_far * batches_left
     if iter > 1     # account for validation time (only for iter > 1 since validation is performed after training print)
         time_left += sum(prof.val_times[1:iter-1]) / (iter - 1) * (Niter - iter + 1)
     end
 
     if printit && prof.printeachbatch
-        print_iteration_status(iter, Niter, batch_id, Nbatch, mean(prof.L_train[:, iter]), time_iter, time_left)
+        print_iteration_status(iter, Niter, batch_id, Nbatch, prof.L_train[batch_id, iter], time_iter, time_left)
     elseif printit && !prof.printeachbatch
         print_iteration_status(iter, Niter, 0, 0, mean(prof.L_train[:, iter]), time_iter, time_left)
     end
@@ -240,6 +244,32 @@ function decide_printit(batch_id, Nbatch, iter, printeachbatch, printeachiter; v
             return true
         else
             return batch_id == Nbatch && mod(iter, printeachiter) == 0
+        end
+    end
+end
+
+"""
+    write_prof(prof::HamsterProfiler; filename="hamster_out.h5")
+
+Write the contents of a `HamsterProfiler` object to an HDF5 file (only if `rank==0`).
+
+# Arguments
+- `prof::HamsterProfiler`: The profiler instance.
+- `filename::String="hamster_out.h5"`: Path to the HDF5 file to write.
+"""
+function save(prof::HamsterProfiler, rank=0; filename="hamster_out.h5")
+    if rank == 0
+        h5open(filename, "cw") do file
+            file["L_train"]      = prof.L_train
+            file["L_val"]        = prof.L_val
+            file["timings"]      = prof.timings
+            file["val_times"]    = prof.val_times
+            file["param_values"] = prof.param_values
+
+            # write scalars as attributes
+            attrs = attributes(file)
+            attrs["printeachbatch"] = prof.printeachbatch
+            attrs["printeachiter"]  = prof.printeachiter
         end
     end
 end

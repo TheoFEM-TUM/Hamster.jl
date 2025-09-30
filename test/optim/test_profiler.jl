@@ -64,3 +64,45 @@ end
     @test all([Hamster.decide_printit(batch_id, 1, iter, true, 1) for iter in 1:3 for batch_id in 1:4])
     @test all([Hamster.decide_printit(batch_id, 1, iter, true, 2) for iter in 1:3 for batch_id in 1:4])
 end
+
+@testset "Profiler save to file" begin
+    filename = "test_prof.h5"
+
+    # Step 1: Write some unrelated dataset
+    h5open(filename, "w") do file
+        file["unrelated_data"] = [1, 2, 3, 4, 5]
+    end
+
+    # Step 2: Save profiler (should not remove unrelated_data)
+    prof = HamsterProfiler(
+        rand(3, 3),
+        rand(3),
+        true,
+        42,
+        rand(2, 2, 2),
+        rand(4),
+        rand(5, 5)
+    )
+    Hamster.save(prof, filename=filename)
+
+    # Step 3: Check both profiler fields AND unrelated dataset still exist
+    h5open(filename, "r") do file
+        @test haskey(file, "unrelated_data")
+        @test read(file["unrelated_data"]) == collect(1:5)
+
+        @test read(file["L_train"]) == prof.L_train
+        @test read(file["L_val"]) == prof.L_val
+        @test read(file["timings"]) == prof.timings
+        @test read(file["val_times"]) == prof.val_times
+        @test read(file["param_values"]) == prof.param_values
+
+        attrs = attributes(file)
+        @test read(attrs["printeachbatch"]) == prof.printeachbatch
+        @test read(attrs["printeachiter"]) == prof.printeachiter
+    end
+
+    rm(filename; force=true)
+
+    Hamster.save(prof, 1, filename=filename)
+    @test !isfile(filename)
+end

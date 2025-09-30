@@ -262,16 +262,16 @@ function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc
     dparams = zeros(length(kernel.params))
     if kernel.update
         for n in eachindex(dparams)
-            for index in indices
+            for (bi, index) in enumerate(indices)
                 h_env = kernel.structure_descriptors[index]
-                for R in eachindex(dL_dHr[index])
+                for R in eachindex(dL_dHr[bi])
                     for (i, j, hin) in zip(findnz(h_env[R])...)
                         if !soc
-                            dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) .* real(dL_dHr[index][R][i, j])
+                            dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) .* real(dL_dHr[bi][R][i, j])
                         else
                             i1 = 2*i-1; j1 = 2*j-1
                             i2 = 2*i; j2 = 2*j
-                            dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) .* real(dL_dHr[index][R][i1, j1] + dL_dHr[index][R][i2, j2])
+                            dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) .* real(dL_dHr[bi][R][i1, j1] + dL_dHr[bi][R][i2, j2])
                         end
                     end
                 end

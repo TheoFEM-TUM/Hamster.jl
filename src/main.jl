@@ -25,6 +25,7 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity
     end
     task = decide_which_task_to_perform(conf)
     out = run_calculation(task, comm, conf, rank=rank, nranks=nranks)
+    save(out, rank, filename="hamster_out.h5")
     if isdir("tmp") && rank == 0
         files = ["Es"]
         if get_save_vecs(conf); push!(files, "vs"); end
