@@ -121,15 +121,5 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
         println("========================================")
     end
     # COV_EXCL_STOP
-
-    if rank == 0
-        h5open("hamster_out.h5", "w") do file
-            file["L_train"] = prof.L_train[1, :]
-            for (index, param) in enumerate(params)
-                file[param] = prof.param_values[index, :]
-            end
-            file["params"] = params
-        end
-    end
     return prof
 end

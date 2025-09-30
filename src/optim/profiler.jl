@@ -247,3 +247,29 @@ function decide_printit(batch_id, Nbatch, iter, printeachbatch, printeachiter; v
         end
     end
 end
+
+"""
+    write_prof(prof::HamsterProfiler; filename="hamster_out.h5")
+
+Write the contents of a `HamsterProfiler` object to an HDF5 file (only if `rank==0`).
+
+# Arguments
+- `prof::HamsterProfiler`: The profiler instance.
+- `filename::String="hamster_out.h5"`: Path to the HDF5 file to write.
+"""
+function save(prof::HamsterProfiler, rank=0; filename="hamster_out.h5")
+    if rank == 0
+        h5open(filename, "cw") do file
+            file["L_train"]      = prof.L_train
+            file["L_val"]        = prof.L_val
+            file["timings"]      = prof.timings
+            file["val_times"]    = prof.val_times
+            file["param_values"] = prof.param_values
+
+            # write scalars as attributes
+            attrs = attributes(file)
+            attrs["printeachbatch"] = prof.printeachbatch
+            attrs["printeachiter"]  = prof.printeachiter
+        end
+    end
+end
