@@ -83,7 +83,7 @@ end
         rand(4),
         rand(5, 5)
     )
-    Hamster.write_prof(prof, filename=filename)
+    Hamster.save(prof, filename=filename)
 
     # Step 3: Check both profiler fields AND unrelated dataset still exist
     h5open(filename, "r") do file
