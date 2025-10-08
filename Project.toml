@@ -1,7 +1,7 @@
 name = "Hamster"
 uuid = "18155ac2-9efd-4ce8-82c3-162aa40282e9"
 authors = ["martin <ga63loc@mytum.de>"]
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
