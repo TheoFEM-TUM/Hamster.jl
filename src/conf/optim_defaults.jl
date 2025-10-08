@@ -40,7 +40,7 @@ Learning rate decay (using a cosine function) is automatically applied when `lr_
 get_lr_min(conf::Config)::Float64 = conf("lr_min", "Optimizer") == "default" ? get_lr(conf) : conf("lr_min", "Optimizer")
 
 """
-    niter=1
+**niter**=1
 
 The `niter` parameter sets the maximum number of iterations (through the training data set).
 """
