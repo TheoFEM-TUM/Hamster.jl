@@ -70,7 +70,7 @@ function sparse_hellman_feynman!(dE_dHr, Ψ, dHk_dHr, sp_iterator; nthreads_kpoi
         is = Vector{Int64}(undef, max_nnz),
         js = Vector{Int64}(undef, max_nnz),
         vals = Vector{ComplexF64}(undef, max_nnz)
-    ) for tid in 1:Threads.nthreads())
+    ) for tid in 1:nthreads_bands+nthreads_kpoints)
 
     tforeach(axes(Ψ, 3), nchunks=nthreads_kpoints) do k
         tforeach(axes(Ψ, 2), nchunks=nthreads_bands) do m
