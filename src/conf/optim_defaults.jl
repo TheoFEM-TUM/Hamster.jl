@@ -47,7 +47,7 @@ The `niter` parameter sets the maximum number of iterations (through the trainin
 get_niter(conf::Config)::Int64 = conf("niter", "Optimizer") == "default" ? 1 : conf("niter", "Optimizer")
 
 """
-    wE=ones
+**wE**=ones
 
 The `wE` tag sets the weight of each energy band for the calculation of the loss. Individual weights can also be set with, e.g., `wE_3 = 2`.
 """
