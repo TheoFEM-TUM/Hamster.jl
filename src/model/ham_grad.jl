@@ -63,6 +63,7 @@ end
 
 function sparse_hellman_feynman!(dE_dHr, Ψ, dHk_dHr, sp_iterator; nthreads_kpoints=Threads.nthreads(), nthreads_bands=Threads.nthreads(), sp_tol=1e-10)
     max_nnz = maximum([length(inds) for inds in sp_iterator])
+    max_nt = nthreads_bands + nthreads_kpoints
     Nε = size(Ψ, 1)
     
     # Preallocate thread-local buffers
@@ -70,7 +71,7 @@ function sparse_hellman_feynman!(dE_dHr, Ψ, dHk_dHr, sp_iterator; nthreads_kpoi
         is = Vector{Int64}(undef, max_nnz),
         js = Vector{Int64}(undef, max_nnz),
         vals = Vector{ComplexF64}(undef, max_nnz)
-    ) for tid in 1:nthreads_bands+nthreads_kpoints)
+    ) for tid in 1:max_nt)
 
     tforeach(axes(Ψ, 3), nchunks=nthreads_kpoints) do k
         tforeach(axes(Ψ, 2), nchunks=nthreads_bands) do m
@@ -106,7 +107,8 @@ Applies the chain rule to compute the gradient of the loss with respect to the r
 - `dL_dHr`: A real-space Hamiltonian gradient array, where each element contains the accumulated gradient for a specific lattice vector in `R`. Its shape is determined by the Hamiltonian structure and `mode`.
 """
 function chain_rule(dL_dE, dE_dHr, mode; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads(), sp_tol=1e-10)
-    dL_dHr_thread = [get_empty_complex_hamiltonians(size(dE_dHr, 2), size(dE_dHr, 1), mode) for _ in 1:Threads.nthreads()]
+    max_nt = nthreads_bands + nthreads_kpoints
+    dL_dHr_thread = [get_empty_complex_hamiltonians(size(dE_dHr, 2), size(dE_dHr, 1), mode) for _ in 1:max_nt]
     tforeach(axes(dE_dHr, 3), nchunks=nthreads_kpoints) do k
         tforeach(axes(dE_dHr, 2), nchunks=nthreads_bands) do m
             for R in axes(dE_dHr, 1)
