@@ -17,7 +17,7 @@ gaas_poscar = string(@__DIR__) * "/../parse/test_files/POSCAR_gaas"
     strc = Structure(conf, poscar_path=gaas_poscar)
     basis = Basis(strc, conf)
     model = TBModel(strc, basis, conf, initas=string(@__DIR__)*"/test_files/params.dat")
-    Hr = get_hr(model, model.V)
+    Hr = get_hr(model, model.params)
     ks = read_from_file(string(@__DIR__)*"/test_files/kpoints.dat")
     Hk = get_hamiltonian(Hr, strc.Rs, ks)
     Es, vs = diagonalize(Hk)
@@ -51,13 +51,13 @@ end
 
 @testset "Test init_params" begin
     # Test 1: Test parameter initialization
-    model = TBModel(nothing, zeros(3), zeros(3), [true, true, true])
+    model = TBModel(nothing, zeros(3), zeros(3), [zeros(Int64, 3)], [true, true, true])
     basis = nothing
     Hamster.init_params!(model, basis, initas="ones")
-    @test model.V == ones(3)
+    @test model.params == ones(3)
     @test get_params(model) == ones(3)
     Hamster.init_params!(model, basis, initas="random")
-    @test all(0 .< model.V .< 1)
+    @test all(0 .< model.params .< 1)
 
     # Test 2: test setting parameters
     set_params!(model, [1, 2, 3])
