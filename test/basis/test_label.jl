@@ -20,6 +20,26 @@
     @test Hamster.areswapped("Ge", "Si") == true
     @test Hamster.areswapped(1, 2) == false
     @test Hamster.areswapped(5, 2) == true
+
+    # Test: IonLabel as key in Dict
+    a = Hamster.IonLabel(1, 2)
+    b = Hamster.IonLabel(1, 2)
+    c = Hamster.IonLabel(2, 3)
+
+    dict = Dict{Hamster.IonLabel, String}()
+    dict[a] = "first"
+    dict[c] = "second"
+
+    @test dict[b] == "first"
+    @test dict[c] == "second"
+    @test haskey(dict, a)
+    @test haskey(dict, b)
+    @test haskey(dict, c)
+    
+    d = Hamster.IonLabel(3, 4)
+    @test !haskey(dict, d)
+    e = Hamster.IonLabel(3, 2)
+    @test haskey(dict, e)
 end
 
 @testset "NN Label" begin

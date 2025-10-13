@@ -10,12 +10,14 @@ and overlap label.
 - `overlap_label::SVector{3, Int64}`: A 3D static vector representing the overlap label in terms of `ll'm`.
 """
 struct ParameterLabel
-    nnlabel :: Int64
+    nnlabel :: UInt8
     ion_label :: IonLabel
-    overlap_label :: SVector{3, Int64}
+    overlap_label :: SVector{3, Int8}
 end
 
 Base.isequal(label1::ParameterLabel, label2::ParameterLabel) = label1.nnlabel == label2.nnlabel && isequal(label1.ion_label, label2.ion_label) && label1.overlap_label == label2.overlap_label
+
+Base.hash(label::ParameterLabel, h::UInt) = hash((label.nnlabel, label.ion_label, label.overlap_label), h)
 
 """
     string(param_label::ParameterLabel) -> String
