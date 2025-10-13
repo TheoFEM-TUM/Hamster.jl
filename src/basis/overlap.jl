@@ -37,6 +37,8 @@ function Base.isequal(ov1::OV1, ov2::OV2) where {OV1,OV2<:TBOverlap}
     return cond1 && cond2 && cond3
 end
 
+Base.hash(tbo::TBOverlap, h::UInt) = hash((tbo.type, tbo.orbconfig, tbo.ion_label), h)
+
 """
     get_overlaps(ions, orbitals, conf=get_empty_config())
 
