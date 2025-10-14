@@ -4,8 +4,6 @@
 Precompute the spin-orbit coupling (SOC) matrices for a given structure.
 """
 function get_soc_matrices(strc::Structure, basis::Basis, conf=get_empty_config(); verbosity=get_verbosity(conf))
-
-    # Extract axes for all atoms from the structure
     atom_axes_list = get_axes_from_orbitals(basis.orbitals)
     hybridisation = Dict(-2 => "sp3dr2", -1 => "sp3")
 
@@ -19,11 +17,15 @@ function get_soc_matrices(strc::Structure, basis::Basis, conf=get_empty_config()
         # ... other mappings as necessary ...
     )
 
-    # Array to store SOC matrices for each ion
-    soc_matrices = Matrix{ComplexF64}[] # one atom, one Msoc
-    soc_order = Vector{String}[] # one atom, one orb_order
-    # Iterate over each ion
-    for (iion, ion) in enumerate(strc.ions)
+    # OrderedDict to store SOC matrices for each ion
+    soc_matrices = OrderedDict{UInt8, Matrix{ComplexF64}}()
+    soc_order = OrderedDict{UInt8, Vector{String}}()
+
+    unique_ion_types = filter(type->haskey(conf.blocks, type), get_ion_types(strc.ions, uniq=true))
+
+    for ion_type in unique_ion_types
+        iion = findnext_ion_of_type(ion_type, strc.ions)
+        ion = strc.ions[iion]
         if length(basis.orbitals[iion]) > 0
             ls = unique([orb.type.l for orb in basis.orbitals[iion]])
             soc_blocks = Matrix{ComplexF64}[] # skipped/empty for hybrid
@@ -31,7 +33,7 @@ function get_soc_matrices(strc::Structure, basis::Basis, conf=get_empty_config()
             if ls[1] < 0 # Hybrid
                 # Get the correct orientation axes and calculate Msoc_ho for the current atom
                 axes = atom_axes_list[iion]
-                push!(soc_matrices, get_Msoc_ho(axes, mode=hybridisation[ls[1]])) # TODO
+                soc_matrices[element_to_number(ion.type)] = get_Msoc_ho(axes, mode=hybridisation[ls[1]])
 
                 # Define the basis order that expresses Msoc
                 if hybridisation[ls[1]] == "sp3"
@@ -39,7 +41,7 @@ function get_soc_matrices(strc::Structure, basis::Basis, conf=get_empty_config()
                 elseif hybridisation[ls[1]] == "sp3dr2"
                     orb_order = ["sp3d2₁↑", "sp3d2₁↓", "sp3d2₂↑", "sp3d2₂↓", "sp3d2₃↑", "sp3d2₃↓", "sp3d2₄↑", "sp3d2₄↓"]
                 end
-                push!(soc_order, orb_order)
+                soc_order[element_to_number(ion.type)] = orb_order
             else
                 for l in ls # AOs
                     ms = [orb.type.m for orb in basis.orbitals[iion] if orb.type.l == l]
@@ -51,13 +53,40 @@ function get_soc_matrices(strc::Structure, basis::Basis, conf=get_empty_config()
                 end
                 # Allocate different l-matrices into one block-diagonal matrix
                 ion_soc_matrix = Matrix(BlockDiagonal(soc_blocks))
-                push!(soc_matrices, ion_soc_matrix)
-                push!(soc_order, orb_order)
+                
+                
+                soc_matrices[element_to_number(ion.type)] = ion_soc_matrix
+                soc_order[element_to_number(ion.type)] = orb_order
             end
         end
     end
-    if verbosity > 2; @show soc_order; end # Only for debugging
+    if verbosity > 2; @show soc_order; end
     return soc_matrices
+end
+
+"""
+    merge_soc_matrices!(dict1::Dict, dict2::Dict)
+
+Merge `dict2` into `dict1` in-place, where both dictionaries
+map keys to SOC matrices.
+
+# Arguments
+- `dict1::Dict`: The dictionary to be updated in-place.
+- `dict2::Dict`: The dictionary to merge into `dict1`.
+
+# Returns
+- `dict1::Dict`: The updated dictionary containing all keys from both.
+"""
+function merge_soc_matrices!(dict1, dict2)
+    for (k, v2) in dict2
+        if haskey(dict1, k)
+            v1 = dict1[k]
+            @assert v1 ≈ v2 "Duplicate key $k with unequal soc matrices!"
+        else
+            dict1[k] = v2
+        end
+    end
+    return dict1
 end
 
 """
