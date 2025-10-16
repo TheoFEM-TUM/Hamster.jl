@@ -40,7 +40,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
             itype = strc.ions[iion].type; l_i = l_map[i]
             jtype = strc.ions[jion].type; l_j = l_map[j]
             
-            Zs = [element_to_number(strc.ions[iion].type), element_to_number(strc.ions[jion].type)]
+            Zs = [strc.ions[iion].type, strc.ions[jion].type]
             iaxis = basis.orbitals[iion][iorb].axis
             jaxis = basis.orbitals[jion][jorb].axis
             φ, θs = get_angular_descriptors(ri, rj, iaxis, jaxis)
@@ -107,7 +107,7 @@ This helps maintain consistent descriptor or feature vector construction in syst
 # Returns
 - `true` if the orbitals should be swapped to maintain ordering; `false` otherwise.
 """
-decide_orbswap(itype, jtype, l_i, env_i, l_j, env_j) = (itype == jtype && l_i > l_j) || (itype == jtype && l_i == l_j && env_i > env_j) || (element_to_number(itype) > element_to_number(jtype))
+decide_orbswap(itype, jtype, l_i, env_i, l_j, env_j) = (itype == jtype && l_i > l_j) || (itype == jtype && l_i == l_j && env_i > env_j) || (itype > jtype)
 
 """
     get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)

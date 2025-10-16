@@ -30,8 +30,8 @@ function SOCModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, conf=get_emp
     Rs_info = zeros(Int64, 2, length(strcs))
     
     for n in eachindex(strcs)
-        types_for_strc = filter(type->haskey(conf.blocks, type), [ion.type for ion in strcs[n].ions])
-        push!(types_per_strc, element_to_number.(types_for_strc))
+        types_for_strc = filter(type->haskey(conf.blocks, number_to_element(type)), [ion.type for ion in strcs[n].ions])
+        push!(types_per_strc, types_for_strc)
 
         soc_matrices = get_soc_matrices(strcs[n], bases[n], conf)
         merge_soc_matrices!(soc_matrices_per_type, soc_matrices)

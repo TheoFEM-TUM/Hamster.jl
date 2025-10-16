@@ -7,12 +7,12 @@ Defines an orbital associated with an ion, characterized by its type, angular mo
 - `O<:Angular`: Specifies the angular momentum type, such as s, p, or d orbitals.
 
 # Fields
-- `ion_type::Int64`: An integer representing the type or species of the ion this orbital is associated with.
+- `ion_type::UInt8`: An integer representing the type or species of the ion this orbital is associated with.
 - `type::O`: The angular momentum type of the orbital, parameterized by `O`, which defines the orbital's angular properties (e.g., s, p, d orbitals).
 - `axis::SVector{3, Float64}`: A 3D unit vector representing the orientation or axis of the orbital in Cartesian coordinates.
 """
 struct Orbital{O<:Angular}
-    ion_type :: Int64
+    ion_type :: UInt8
     type :: O
     axis :: SVector{3, Float64}
 end
@@ -41,11 +41,11 @@ function get_orbitals(strc::Structure, conf=get_empty_config())
 
     for iion in eachindex(strc.ions)
         ion_orbitals = Orbital[]
-        orbital_list = str_to_orb.(get_orbitals(conf, strc.ions[iion].type))
+        orbital_list = str_to_orb.(get_orbitals(conf, number_to_element(strc.ions[iion].type)))
         push!(Norbs, length(orbital_list))
         axes = get_axes(iion, strc, orbital_list, conf)
         for jorb in eachindex(orbital_list)
-            push!(ion_orbitals, Orbital(element_to_number(strc.ions[iion].type), orbital_list[jorb], normalize(axes[jorb])))
+            push!(ion_orbitals, Orbital(strc.ions[iion].type, orbital_list[jorb], normalize(axes[jorb])))
         end
         push!(orbitals, ion_orbitals)
     end
@@ -77,7 +77,7 @@ Compute the axes (or orientations) for a set of orbitals associated with a speci
 - `conf`: Configuration object (optional) that contains settings for computing axes. Default is `get_empty_config()`.
 - `NNaxes`: A Boolean flag that determines whether to compute nearest-neighbor axes (`true`) or directly use predefined orbital axes (`false`).
 """
-function get_axes(iion::Int64, strc::Structure, orbital_list, conf=get_empty_config(); NNaxes=get_nnaxes(conf, strc.ions[iion].type))
+function get_axes(iion::Int64, strc::Structure, orbital_list, conf=get_empty_config(); NNaxes=get_nnaxes(conf, number_to_element(strc.ions[iion].type)))
     axes = SVector{3, Float64}[]
     if NNaxes
         rs_ion = get_ion_positions(strc.ions)

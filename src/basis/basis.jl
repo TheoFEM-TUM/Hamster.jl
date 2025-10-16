@@ -98,7 +98,7 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config(); tmethod=get_t
     npar = Threads.nthreads() 
     
     ij_map = get_ion_orb_to_index_map(length.(basis.orbitals))
-    ion_types = element_to_number.(get_ion_types(strc.ions))
+    ion_types = get_ion_types(strc.ions)
     nn_dict = get_nn_thresholds(strc.ions, frac_to_cart(strc.Rs, strc.lattice), strc.point_grid, conf)
     hs = [Dict{Tuple{Int64, Int64, Int64, Int64}, Float64}() for _ in 1:npar]
     oc_dicts, mode_dicts = get_oc_and_mode_dicts(basis.overlaps, strc.ions)

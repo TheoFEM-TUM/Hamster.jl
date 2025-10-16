@@ -35,7 +35,8 @@ function Structure(conf=get_empty_config(); Rs=zeros(3, 1), poscar_path=get_posc
         poscar = read_poscar(poscar_path)
         @unpack rs_atom, lattice, atom_types = poscar
         Rs = Rs == zeros(3, 1) ? get_translation_vectors(frac_to_cart(rs_atom, lattice), lattice, rcut=rcut) : Rs
-        strc = Structure(Rs, frac_to_cart(rs_atom, lattice), atom_types, lattice, conf, rcut=rcut, grid_size=grid_size)
+        strc = Structure(Rs, frac_to_cart(rs_atom, lattice), atom_types, lattice, conf, 
+                            rcut=rcut, grid_size=grid_size)
     end
     if verbosity > 0
         append_output_block("Structure Information:", 

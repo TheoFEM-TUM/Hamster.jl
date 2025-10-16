@@ -20,7 +20,7 @@ struct IonLabel
     types :: SVector{2}{UInt8}
 end
 
-IonLabel(type1::Int64, type2::Int64; sorted=true) = sorted ? IonLabel(sort(SVector{2, UInt8}(type1, type2))) : IonLabel(SVector{2, UInt8}(type1, type2))
+IonLabel(type1::Integer, type2::Integer; sorted=true) = sorted ? IonLabel(sort(SVector{2, UInt8}(type1, type2))) : IonLabel(SVector{2, UInt8}(type1, type2))
 
 IonLabel(type1::String, type2::String; sorted=true) = IonLabel(element_to_number(type1), element_to_number(type2), sorted=sorted)
 

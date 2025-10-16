@@ -1,18 +1,15 @@
-element_to_number(element) = elements[Symbol(element)].number
-number_to_element(number) = elements[number].symbol
-
 """
     Ion
 
 A mutable structure representing an ion in a crystal lattice.
 
 # Fields
-- `type::String`: The type or species of the ion, usually denoted by its chemical symbol (e.g., "Na" for sodium, "Cl" for chlorine).
+- `type::UInt8`: The type or species of the ion, denoted by its proton number.
 - `pos::StaticArray{3, Float64}`: A 3D static array representing the position of the ion in Cartesian coordinates.
 - `dist::StaticArray{3, Float64}`: A 3D static array representing any distortion applied to the ion's position.
 """
 mutable struct Ion
-    type :: String
+    type :: UInt8
     pos :: SVector{3, Float64}
     dist :: SVector{3, Float64}
 end
@@ -52,7 +49,7 @@ Return an array containing the types of all ions in the vector `ions`.
 - `Vector{String}`: An array of ion types. The array will contain all ion types present in the input vector `ions`. If `uniq` is set to `true`, only unique types will be included. If `sorted` is set to `true`, the types will be sorted alphabetically.
 """
 function get_ion_types(ions::Vector{Ion}; uniq=false, sorted=false)
-    ion_types = Vector{String}(undef, length(ions))
+    ion_types = Vector{UInt8}(undef, length(ions))
     for (iion, ion) in enumerate(ions)
         ion_types[iion] = ion.type
     end
@@ -74,10 +71,17 @@ Find the index of the next ion in the vector `Ions` that has the specified `type
 - The index `iion` of the first ion in `ions` whose `type` matches the input `type`. 
 - If no ion with the specified `type` is found, the function returns `0`.
 """
-function findnext_ion_of_type(ion_type, ions::Vector{Ion})
-    typestring = typeof(ion_type) <: AbstractString ? ion_type : number_to_element(ion_type)
+function findnext_ion_of_type(ion_type::Integer, ions::Vector{Ion})
     for iion in eachindex(ions)
-        if ions[iion].type == typestring; return iion; end
+        if ions[iion].type == ion_type; return iion; end
+    end
+    return 0
+end
+
+function findnext_ion_of_type(ion_type, ions::Vector{Ion})
+    type = element_to_number(ion_type)
+    for iion in eachindex(ions)
+        if ions[iion].type == type; return iion; end
     end
     return 0
 end

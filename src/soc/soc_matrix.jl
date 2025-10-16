@@ -21,7 +21,8 @@ function get_soc_matrices(strc::Structure, basis::Basis, conf=get_empty_config()
     soc_matrices = OrderedDict{UInt8, Matrix{ComplexF64}}()
     soc_order = OrderedDict{UInt8, Vector{String}}()
 
-    unique_ion_types = filter(type->haskey(conf.blocks, type), get_ion_types(strc.ions, uniq=true))
+    ion_types = number_to_element.(get_ion_types(strc.ions, uniq=true))
+    unique_ion_types = filter(type->haskey(conf.blocks, type), ion_types)
 
     for ion_type in unique_ion_types
         iion = findnext_ion_of_type(ion_type, strc.ions)
@@ -33,7 +34,7 @@ function get_soc_matrices(strc::Structure, basis::Basis, conf=get_empty_config()
             if ls[1] < 0 # Hybrid
                 # Get the correct orientation axes and calculate Msoc_ho for the current atom
                 axes = atom_axes_list[iion]
-                soc_matrices[element_to_number(ion.type)] = get_Msoc_ho(axes, mode=hybridisation[ls[1]])
+                soc_matrices[ion.type] = get_Msoc_ho(axes, mode=hybridisation[ls[1]])
 
                 # Define the basis order that expresses Msoc
                 if hybridisation[ls[1]] == "sp3"
@@ -41,7 +42,7 @@ function get_soc_matrices(strc::Structure, basis::Basis, conf=get_empty_config()
                 elseif hybridisation[ls[1]] == "sp3dr2"
                     orb_order = ["sp3d2₁↑", "sp3d2₁↓", "sp3d2₂↑", "sp3d2₂↓", "sp3d2₃↑", "sp3d2₃↓", "sp3d2₄↑", "sp3d2₄↓"]
                 end
-                soc_order[element_to_number(ion.type)] = orb_order
+                soc_order[ion.type] = orb_order
             else
                 for l in ls # AOs
                     ms = [orb.type.m for orb in basis.orbitals[iion] if orb.type.l == l]
@@ -55,8 +56,8 @@ function get_soc_matrices(strc::Structure, basis::Basis, conf=get_empty_config()
                 ion_soc_matrix = Matrix(BlockDiagonal(soc_blocks))
                 
                 
-                soc_matrices[element_to_number(ion.type)] = ion_soc_matrix
-                soc_order[element_to_number(ion.type)] = orb_order
+                soc_matrices[ion.type] = ion_soc_matrix
+                soc_order[ion.type] = orb_order
             end
         end
     end
