@@ -12,12 +12,26 @@ struct DataLoader{A, B}
     val_data :: Vector{B}
 end
 
-function DataLoader(train_config_inds, val_config_inds, Nε_train, Nε_val, conf=get_empty_config(); train_path=get_train_data(conf), val_path=get_val_data(conf), 
-    validate=get_validate(conf), bandmin=get_bandmin(conf), val_bandmin=get_val_bandmin(conf), train_mode=get_train_mode(conf), val_mode=get_val_mode(conf), hr_fit=get_hr_fit(conf), eig_val=get_eig_val(conf))
+function DataLoader(train_config_inds, val_config_inds, Nε_train, Nε_val, conf=get_empty_config(); 
+                    train_path=get_train_data(conf), 
+                    val_path=get_val_data(conf),
+                    validate=get_validate(conf), 
+                    bandmin=get_bandmin(conf), 
+                    val_bandmin=get_val_bandmin(conf), 
+                    train_mode=get_train_mode(conf), 
+                    val_mode=get_val_mode(conf), 
+                    hr_fit=get_hr_fit(conf), 
+                    eig_val=get_eig_val(conf))
 
     hr_val = !eig_val
-    train_data = hr_fit ? get_hr_data(train_mode, train_path, inds=train_config_inds) : get_eig_data(train_mode, train_path, Nε_train[1], Nε_train[2], inds=train_config_inds, bandmin=bandmin)
-    val_data = hr_val ? get_hr_data(val_mode, val_path, inds=val_config_inds, empty=!validate) : get_eig_data(val_mode, val_path, Nε_val[1], Nε_val[2], inds=val_config_inds, bandmin=val_bandmin, empty=!validate)
+    train_data = mapreduce(vcat, train_config_inds) do (system, train_inds)
+        hr_fit ? get_hr_data(train_mode, train_path, inds=train_inds) : 
+                 get_eig_data(train_mode, train_path, Nε_train[system], inds=train_inds, bandmin=bandmin)
+    end
+    val_data = mapreduce(vcat, val_config_inds) do (system, val_inds)
+        hr_val ? get_hr_data(val_mode, val_path, inds=val_inds, empty=!validate) : 
+                 get_eig_data(val_mode, val_path, Nε_val[system], inds=val_inds, bandmin=val_bandmin, empty=!validate)
+    end
     return DataLoader(train_data, val_data)
 end
 
@@ -63,14 +77,17 @@ Get the number of eigenvalues and the number of k-points from a collection of da
 get_neig_and_nk(data::Vector{EigData}) = (size(data[1].Es, 1), size(data[1].kp, 2))
 get_neig_and_nk(data::Vector{<:HrData}) = (0, 0)
 
-function get_eig_data(mode, path, PC_Nε, SC_Nε; inds=Int64[], bandmin=1, empty=false)
+function get_eig_data(mode, path, Nε; inds=Int64[], bandmin=1, empty=false, system="")
     data = EigData[]
     if (mode == "pc" || mode == "mixed") && !empty
         kp, Es = read_eigenval(path)
-        push!(data, EigData(kp, Es[bandmin:bandmin+PC_Nε-1, :]))
+        push!(data, EigData(kp, Es[bandmin:bandmin+Nε-1, :]))
     end
     if (mode == "md" || mode == "mixed") && !empty
-        append!(data, read_eigenvalue_data_from_path(path, inds, bandmin, SC_Nε))
+        append!(data, read_eigenvalue_data_from_path(path, inds, bandmin, Nε))
+    end
+    if (mode == "universal") && !empty
+        append!(data, read_eigenvalue_data_from_path(path, inds, bandmin, Nε, system=system))
     end
     return data
 end
@@ -87,14 +104,17 @@ function get_hr_data(mode, path; inds=Int64[], empty=false)
     return data
 end
 
-function read_eigenvalue_data_from_path(path, inds, bandmin, Nε)
+function read_eigenvalue_data_from_path(path, inds, bandmin, Nε; system="")
     if occursin(".h5", path)
-        kp = h5read(path, "kpoints")
-        Es = h5read(path, "eigenvalues")
-        if kp isa Matrix{Float64}
-            return [EigData(kp, Es[bandmin:bandmin+Nε-1, :, n]) for n in inds]
-        elseif kp isa Array{Float64, 3}
-            return [EigData(kp[:, :, n], Es[bandmin:bandmin+Nε-1, :, n]) for n in inds]
+        h5open(path, "r") do file
+            g = system == "" ? file : file[system]
+            kp = read(g["kpoints"])
+            Es = read(g["eigenvalues"])
+            if kp isa Matrix{Float64}
+                return [EigData(kp, Es[bandmin:bandmin+Nε-1, :, n]) for n in inds]
+            elseif kp isa Array{Float64, 3}
+                return [EigData(kp[:, :, n], Es[bandmin:bandmin+Nε-1, :, n]) for n in inds]
+            end
         end
     else
         kp, Es = read_eigenval(path)

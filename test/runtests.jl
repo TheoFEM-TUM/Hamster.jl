@@ -1,5 +1,5 @@
 using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Statistics, 
-FiniteDiff, HDF5, TensorOperations, Suppressor, MPI, Logging, BlockDiagonals
+FiniteDiff, HDF5, TensorOperations, Suppressor, MPI, Logging, BlockDiagonals, DataStructures
 
 MPI.Init()
 comm = MPI.COMM_WORLD

@@ -148,7 +148,7 @@ get_train_mode(conf)::String = conf("train_mode", "Optimizer") == "default" ? "p
 
 The `val_mode` flag switches between different modes for model validation (PC, MD, mixed, multi; not case sensitive).
 """
-get_val_mode(conf::Config)::String = conf("val_mode", "Optimizer") == "default" ? "pc" : lowercase(conf("val_mode", "Optimizer"))
+get_val_mode(conf::Config)::String = conf("val_mode", "Optimizer") == "default" ? get_train_mode(conf) : lowercase(conf("val_mode", "Optimizer"))
 
 """
     validate=false (true if `val_mode` is set)
