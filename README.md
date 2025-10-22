@@ -3,6 +3,7 @@
 [![CI](https://github.com/mschwade-code/Hamster.jl/actions/workflows/runtests.yaml/badge.svg)](https://github.com/mschwade-code/Hamster.jl/actions/workflows/runtests.yaml)
 [![codecov](https://codecov.io/gh/TheoFEM-TUM/Hamster.jl/graph/badge.svg?token=8MW6VZYIE2)](https://codecov.io/gh/TheoFEM-TUM/Hamster.jl)
 [![Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://theofem-tum.github.io/Hamster.jl/dev/)
+[![Lines of code](https://tokei.rs/b1/github/TheoFEM-TUM/Hamster.jl)](https://tokei.rs/b1/github/TheoFEM-TUM/Hamster.jl)
 
 <p align="center">
   <img width="250" height="250" src="docs/src/assets/logo.png">
