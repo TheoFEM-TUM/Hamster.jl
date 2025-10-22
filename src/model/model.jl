@@ -40,11 +40,20 @@ function TBModel(strc::Structure, basis::Basis, conf=get_empty_config(); update_
     return model
 end
 
-function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, conf=get_empty_config(); update_tb=get_update_tb(conf, nparams(bases[1])), initas=get_init_params(conf))
+function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=get_empty_config();
+                update_tb=get_update_tb(conf, nparams(bases[1])), 
+                initas=get_init_params(conf))
+    
     hs = map(eachindex(strcs)) do n
         get_geometry_tensor(strcs[n], bases[n], conf)
     end
-    param_labels = unique(Iterators.flatten([basis.parameters for basis in bases]))
+
+    param_labels_local = unique(Iterators.flatten([basis.parameters for basis in bases]))
+    param_labels = MPI.gather(param_labels_local, comm, root=0)
+    param_labels = unique(param_labels)
+    MPI.Bcast!(param_labels, comm, root=0)
+    MPI.Barrier(comm)
+
     params_per_strc = [[findfirst(p->p==param, param_labels) for param in basis.parameters] for basis in bases]
     model = TBModel(hs, ones(length(param_labels)), param_labels, params_per_strc, update_tb)
     init_params!(model, bases[1], conf, initas=initas)
