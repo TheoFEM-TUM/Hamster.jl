@@ -1,53 +1,65 @@
 """
+    get_systems(conf) -> Vector{String}
+
+Return the list of system names available for a given configuration `conf`.
+
+# Arguments
+- `conf`: A configuration object.
+
+# Returns
+- `Vector{String}`: A list of system names (HDF5 group names or a single system).
+"""
+function get_systems(conf)
+    strc_file = get_xdatcar(conf)
+    if isfile(strc_file) && get_train_mode(conf) == "universal"
+        h5open(strc_file, "r") do file
+            systems = keys(file)
+            return systems
+        end
+    else
+        return [""]
+    end
+end
+
+"""
     get_structures(conf=get_empty_config(); index_file="config_inds.dat", xdatcar=get_xdatcar(conf), sc_poscar=get_sc_poscar(conf))
 
 Generates a list of `Structure` objects based on the configurations from an XDATCAR file (or an h5 file) and the initial POSCAR structure. 
 
 # Arguments
-- `conf`: A configuration object, typically used to store simulation parameters. By default, it calls `get_empty_config()`.
+- `conf`: A configuration object. By default, `get_empty_config()`.
 - `index_file`: A string specifying the filename containing the configuration indices. If this file exists, the configuration indices are read from it. If not, they are sampled using `get_config_index_sample()`.
 - `xdatcar`: The path to the XDATCAR file, containing configuration data for the system. 
 - `sc_poscar`: The path to the POSCAR file, representing the initial supercell structure.
 
 # Returns
 - `strcs`: A vector of `Structure` objects. Each structure represents the ion positions and their displacements relative to the initial configuration.
-- `config_indices`: The indices of the configurations used to create the structures.
 """
-function get_structures(conf=get_empty_config(); Rs=zeros(3, 1), mode="pc", config_indices=[1], xdatcar=get_xdatcar(conf), sc_poscar=get_sc_poscar(conf), poscar=get_poscar(conf))
-    if lowercase(mode) == "md" || lowercase(mode) == "mixed"
-        sc_poscar = read_poscar(sc_poscar)
-        @unpack rs_atom, atom_types = sc_poscar
+function get_structures(conf=get_empty_config();
+                        Rs=zeros(3, 1), 
+                        mode="pc",
+                        system="",
+                        config_indices=[1], 
+                        poscar=get_poscar(conf))
+    
 
-        if occursin(".h5", xdatcar)
-            pos_key = ""
-            h5open(xdatcar, "r") do file
-                pos_key = haskey(file, "configs") ? "configs" : "positions"
-            end
-            lattice, configs = (h5read(xdatcar, "lattice")[:, :, 1], h5read(xdatcar, pos_key))
-            for n in axes(configs, 3)
-                configs[:, :, n] .= frac_to_cart(configs[:, :, n], lattice)
-            end
-        else
-            lattice, configs = read_xdatcar(xdatcar, frac=false)
-        end
-        
-        # Check that POSCAR lattice and XDATCAR lattice are compatible
-        @assert isapprox(sc_poscar.lattice, lattice, atol=1e-3)
-
-        Ts = frac_to_cart(get_translation_vectors(1), lattice)
-        rs_ion = frac_to_cart(rs_atom, lattice)
-        Rs = Rs == zeros(3, 1) ? get_translation_vectors(rs_ion, lattice, rcut=get_rcut(conf)) : Rs
+    if lowercase(mode) == "md" || lowercase(mode) == "mixed" || lowercase(mode) == "universal"
+        rs_0, atom_types, lattice, rs_all = read_structure_file(system, conf)
+        lattice_0 = lattice isa AbstractMatrix ? lattice : lattice[:, :, 1]
+        Rs = Rs == zeros(3, 1) ? get_translation_vectors(rs_0, lattice_0, rcut=get_rcut(conf)) : Rs
         
         strcs = map(config_indices) do index
-            δrs_ion = similar(rs_ion)
+            δrs_ion = similar(rs_0)
+            lattice_i = lattice isa AbstractMatrix ? lattice : lattice[:, :, index]
+            Ts = frac_to_cart(get_translation_vectors(1), lattice_i)
 
             # Check if an atom has crossed the cell border. Distortions are otherwise not correct.
-            @views for iion in axes(rs_ion, 2)
-                Rmin = findmin([normdiff(rs_ion[:, iion], configs[:, iion, index], Ts[:, R]) for R in axes(Ts, 2)])[2]
-                δrs_ion[:, iion] = rs_ion[:, iion] - configs[:, iion, index] + Ts[:, Rmin]
+            @views for iion in axes(rs_0, 2)
+                Rmin = findmin([normdiff(rs_0[:, iion], rs_all[:, iion, index], Ts[:, R]) for R in axes(Ts, 2)])[2]
+                δrs_ion[:, iion] = rs_0[:, iion] - rs_all[:, iion, index] + Ts[:, Rmin]
             end
 
-            Structure(Rs, rs_ion, δrs_ion, atom_types, lattice, conf)
+            Structure(Rs, rs_0, δrs_ion, atom_types, lattice, conf)
         end
 
         if lowercase(mode) == "md"
@@ -64,6 +76,104 @@ function get_structures(conf=get_empty_config(); Rs=zeros(3, 1), mode="pc", conf
     else
         return Structure[]
     end
+end
+
+"""
+    read_structure_file(system, conf=get_empty_config(); mode="md", sc_poscar=get_sc_poscar(conf), xdatcar=get_xdatcar(conf))
+        -> (rs_atom, atom_types, lattice, configs)
+
+Read atomic structures and lattice information for a given system from POSCAR/XDATCAR
+or HDF5 files, depending on the selected mode.
+
+# Arguments
+- `system::String`: Name of the system (material) to load, used when reading from an HDF5 file.
+- `conf`: Configuration object containing simulation paths and metadata.
+  Defaults to `get_empty_config()`.
+- `mode::String` (keyword, default = `"md"`): Determines data source and type.
+  - `"md"` → single dataset.
+  - `"universal"` → read from system group in an HDF5 file.
+- `sc_poscar`: Path to the POSCAR or supercell POSCAR file.
+- `xdatcar`: Path to the XDATCAR or `.h5` file containing configurations.
+
+# Returns
+A tuple containing:
+1. `rs_atom::Matrix{Float64}` — Cartesian positions of atoms in the reference structure.  
+2. `atom_types::Vector{String}` — Atomic species labels.  
+3. `lattice::Matrix{Float64}` — Lattice vectors (3×3 matrix).  
+4. `configs::Array{Float64,3}` — Atomic positions for all configurations  
+   (shape: `3 × N_atoms × N_configs`).
+"""
+function read_structure_file(system, conf=get_empty_config(); mode="md", sc_poscar=get_sc_poscar(conf), xdatcar=get_xdatcar(conf))
+    if mode == "md"
+        sc_poscar = read_poscar(sc_poscar)
+        @unpack rs_atom, atom_types, lattice = sc_poscar
+        rs_atom = frac_to_cart(rs_atom, lattice)
+        if occursin(".h5", xdatcar)
+            pos_key = ""
+            h5open(xdatcar, "r") do file
+                pos_key = haskey(file, "configs") ? "configs" : "positions"
+            end
+            lattice, configs = (h5read(xdatcar, "lattice")[:, :, 1], h5read(xdatcar, pos_key))
+            for n in axes(configs, 3)
+                configs[:, :, n] .= frac_to_cart(configs[:, :, n], lattice)
+            end
+        else
+            lattice, configs = read_xdatcar(xdatcar, frac=false)
+        end
+        return rs_atom, atom_types, lattice, configs
+    elseif mode == "universal"
+        h5open(xdatcar, "r") do file
+            system_group = file[system]
+            configs = read(system_group["positions"])
+            lattice = read(system_group["lattice"])
+            atom_types = read(system_group["atom_types"])
+            for n in axes(configs, 3)
+                configs[:, :, n] .= frac_to_cart(configs[:, :, n], lattice)
+            end
+            return configs[:, :, 1], atom_types, lattice, configs
+        end
+    end
+end
+
+"""
+    get_config_inds_for_systems(systems, comm; rank=0) -> (train_inds, val_inds)
+
+Distribute and synchronize configuration indices for multiple systems across MPI
+processes, returning training and validation index sets for each system.
+
+# Arguments
+- `systems::Vector{String}`: List of system names (e.g. materials or datasets).
+- `comm`: MPI communicator used to synchronize configuration indices between ranks.
+- `rank::Int` (keyword, default = `0`): Current MPI process rank.
+
+# Returns
+- `(train_config_inds, val_config_inds)`:
+  Two dictionaries mapping each system name (`String`) to a vector of integer
+  indices (`Vector{Int64}`) representing the selected configurations for training
+  and validation, respectively.
+"""
+function get_config_inds_for_systems(systems, comm, conf=get_empty_config(); rank=0, write_output=false)
+   train_config_inds = Dict{String, Vector{Int64}}()
+   val_config_inds = Dict{String, Vector{Int64}}()
+
+   for system in systems
+      system_train_inds, system_val_inds = get_config_index_sample(conf)
+   
+      if rank == 0 && write_output
+         h5open("hamster_out.h5", "cw") do file
+            g = system == "" ? file : create_group(file, system)
+            write(g, "train_config_inds", train_config_inds)
+            write(g, "val_config_inds", val_config_inds)
+         end
+      end
+
+      MPI.Bcast!(system_train_inds, comm, root=0)
+      MPI.Bcast!(system_val_inds, comm, root=0)
+      MPI.Barrier(comm)
+      train_config_inds[system] = system_train_inds
+      val_config_inds[system] = system_val_inds
+   end
+   return train_config_inds, val_config_inds
 end
 
 """
@@ -85,9 +195,16 @@ Randomly selects training and validation configuration indices from a given rang
 - `train_config_inds`: A vector of indices for training configurations.
 - `val_config_inds`: A vector of indices for validation configurations.
 """
-function get_config_index_sample(conf=get_empty_config(); Nconf=get_Nconf(conf), Nconf_min=get_Nconf_min(conf), Nconf_max=get_Nconf_max(conf),
-            validate=get_validate(conf), val_ratio=get_val_ratio(conf), train_mode=get_train_mode(conf), val_mode = get_val_mode(conf), 
-            inds_conf=get_config_inds(conf), val_inds_conf=get_val_config_inds(conf))::Tuple{Vector{Int64}, Vector{Int64}}
+function get_config_index_sample(conf=get_empty_config(); 
+                                Nconf=get_Nconf(conf), 
+                                Nconf_min=get_Nconf_min(conf), 
+                                Nconf_max=get_Nconf_max(conf),
+                                validate=get_validate(conf), 
+                                val_ratio=get_val_ratio(conf), 
+                                train_mode=get_train_mode(conf), 
+                                val_mode = get_val_mode(conf), 
+                                inds_conf=get_config_inds(conf), 
+                                val_inds_conf=get_val_config_inds(conf)) :: Tuple{Vector{Int64}, Vector{Int64}}
 
     # Training config inds
     train_config_inds = Int64[]
@@ -152,3 +269,49 @@ function split_indices_into_chunks(indices::AbstractVector{T}, nchunks; rank=0) 
        return T[]
     end
  end
+
+function split_indices_into_chunks(indices::Dict{String, Vector{T}}, nchunks; rank=0) where {T}
+    all_pairs = [(sys, i) for (sys, idxs) in indices for i in idxs]
+
+    chunk_indices = collect(chunks(all_pairs, n=nchunks))
+
+    if length(chunk_indices) ≥ rank + 1
+        local_inds = OrderedDict{String, Vector{T}}()
+        for (sys, i) in chunk_indices[rank+1]
+            push!(get!(local_inds, sys, T[]), i)
+        end
+        return local_inds
+    else
+        return Dict{String, Vector{T}}()
+    end
+end
+
+"""
+    get_number_of_bands_per_structure(bases, indices; soc=false) -> Dict{String, Int}
+
+Compute the number of electronic bands per system, given a list of
+Basis and a mapping from systems to configuration indices.
+
+# Arguments
+- `bases`: A vector of bases.
+- `indices`: A `Dict{String, Vector{Int}}` containing atomic configuration indices.
+- `soc` (keyword, default = `false`): If `true`, doubles the band count per to account for SOC.
+
+# Returns
+- `Dict{String, Int}`: A dictionary mapping each system name to its number of bands.
+"""
+function get_number_of_bands_per_structure(bases, indices; soc=false)
+    Nε_all = Dict{String, Int64}()
+    i = 0
+    for (system, index_list) in indices
+        Nε_system = Int64[]
+        for index in index_list
+            i += 1
+            Nε = soc ? 2*length(bases[i]) : length(bases[i])
+            push!(Nε_system, Nε)
+        end
+        @assert length(unique(Nε_system)) == 1
+        Nε_all[system] = Nε_system[1]
+    end
+    return Nε_all
+end
