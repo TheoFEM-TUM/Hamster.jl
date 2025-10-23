@@ -31,7 +31,7 @@ Performs a standard calculation for an effective Hamiltonian model.
 """
 function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1, verbosity=get_verbosity(conf), write_output=true)
     systems = get_systems(conf)
-    config_inds, _ = get_config_inds_for_systems(systems, comm, conf, rank=rank, write_output=write_output)
+    config_inds, _ = get_config_inds_for_systems(systems, comm, conf, rank=rank, write_output=write_output, optimize=false)
     local_inds = split_indices_into_chunks(config_inds, nranks, rank=rank)
 
     mode = haskey(conf, "Supercell") ? (length(systems) > 1 ? "universal" : "md") : "pc"
@@ -55,7 +55,8 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1,
     ham_time = MPI.Wtime() - begin_time
     if rank == 0 && verbosity > 1; println(" Model time: $ham_time s"); end
 
-    prof = HamsterProfiler(3, conf, Niter=length(local_inds), Nbatch=1)
+    Niter = sum(length.(values(local_inds)))
+    prof = HamsterProfiler(3, conf, Niter=Niter, Nbatch=1)
 
     get_eigenvalues(ham, prof, local_inds, comm, conf, rank=rank, nranks=nranks)
     return prof

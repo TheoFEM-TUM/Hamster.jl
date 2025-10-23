@@ -152,7 +152,7 @@ processes, returning training and validation index sets for each system.
   indices (`Vector{Int64}`) representing the selected configurations for training
   and validation, respectively.
 """
-function get_config_inds_for_systems(systems, comm, conf=get_empty_config(); rank=0, write_output=false)
+function get_config_inds_for_systems(systems, comm, conf=get_empty_config(); rank=0, write_output=false, optimize=true)
    train_config_inds = Dict{String, Vector{Int64}}()
    val_config_inds = Dict{String, Vector{Int64}}()
 
@@ -162,8 +162,13 @@ function get_config_inds_for_systems(systems, comm, conf=get_empty_config(); ran
       if rank == 0 && write_output
          h5open("hamster_out.h5", "cw") do file
             g = system == "" ? file : create_group(file, system)
-            write(g, "train_config_inds", system_train_inds)
-            write(g, "val_config_inds", system_val_inds)
+            
+            if optimize
+                write(g, "train_config_inds", system_train_inds)
+                write(g, "val_config_inds", system_val_inds)
+            else
+                write(g, "config_inds", system_train_inds)
+            end
          end
       end
 
