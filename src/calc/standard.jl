@@ -38,7 +38,7 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1,
     if rank == 0 && verbosity > 1; println("Getting structures..."); end
     begin_time = MPI.Wtime()
     strcs = mapreduce(vcat, local_inds, init=Structure[]) do (system, inds)
-        get_structures(conf, config_indices=inds, Rs=Rs, mode=mode, system=system)
+        get_structures(conf, config_indices=inds, mode=mode, system=system)
     end
     strc_time = MPI.Wtime() - begin_time
     if rank == 0 && verbosity > 1; println(" Structure time: $strc_time s"); end
@@ -96,7 +96,8 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
     for (batch_id, indices) in enumerate(chunks(1:ham.Nstrc, n=Nbatch))
         for index in indices
             strc_ind += 1
-            ham_time_local = @elapsed Hk = get_hamiltonian(ham, index, ks, comm, write_hr=write_hr, global_index=local_inds[index])
+            system, config_index = get_system_and_config_index(index, local_inds)
+            ham_time_local = @elapsed Hk = get_hamiltonian(ham, index, ks, comm, write_hr=write_hr, config_index=config_index, system=system)
             Neig = ham.sp_diag isa Sparse ? get_neig(conf) : size(Hk[1], 1)
 
             Es = zeros(1, 1); vs = zeros(ComplexF64, 1, 1, 1)
@@ -111,7 +112,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
 
             write_begin = MPI.Wtime()
             if write_hk
-                write_ham(Hk, ks, comm, local_inds[index], filename=ham_file)
+                write_ham(Hk, ks, comm, config_index, filename=ham_file, system=system)
             end
             if Nstrc_tot == 1 && rank == 0
                 if !skip_diag; write_to_file(Es, "Es"); end
@@ -119,8 +120,8 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
             else
                 if !("tmp" in readdir(pwd())) && rank == 0; mkdir("tmp"); end
                 MPI.Barrier(comm)
-                if !skip_diag; write_to_file(Es, "tmp/Es$(local_inds[index])"); end
-                if save_vecs && !skip_diag; write_to_file(vs, "tmp/vs$(local_inds[index])"); end
+                if !skip_diag; write_to_file(Es, "tmp/Es$config_index"); end
+                if save_vecs && !skip_diag; write_to_file(vs, "tmp/vs$config_index"); end
             end
             write_time = MPI.Wtime() - write_begin
             prof.timings[1, strc_ind, 3] = write_time

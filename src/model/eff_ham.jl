@@ -62,15 +62,15 @@ Construct the Hamiltonian matrix for given k-points `ks` from the real-space Ham
 # Returns
 - `Hk`: The Hamiltonian matrix in reciprocal space corresponding to the given k-points.
 """
-function get_hamiltonian(ham::EffectiveHamiltonian, index, ks; write_hr=false, global_index=index)
+function get_hamiltonian(ham::EffectiveHamiltonian, index, ks; write_hr=false, config_index=index, system="")
     Hr = get_hr(ham, index)
     Hk = get_hamiltonian(Hr, ham.Rs[index], ks, ham.sp_diag)
     return Hk
 end
 
-function get_hamiltonian(ham::EffectiveHamiltonian, index, ks, comm; write_hr=false, global_index=index)
+function get_hamiltonian(ham::EffectiveHamiltonian, index, ks, comm; write_hr=false, config_index=index, system="")
     Hr = get_hr(ham, index)
-    if write_hr; write_ham(Hr, ham.Rs[index], comm, global_index, space="r"); end
+    if write_hr; write_ham(Hr, ham.Rs[index], comm, config_index, space="r", system=""); end
     Hk = get_hamiltonian(Hr, ham.Rs[index], ks, ham.sp_diag)
     return Hk
 end

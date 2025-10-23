@@ -315,3 +315,26 @@ function get_number_of_bands_per_structure(bases, indices; soc=false)
     end
     return Nε_all
 end
+
+"""
+    get_system_and_config_index(index, local_inds)
+
+Map a global index to a specific system and configuration index.
+
+# Arguments
+- `index::Int`: The global configuration index to look up.
+- `local_inds::Dict{<:Any, Vector{<:Int}}`: A dictionary mapping system names to lists of local configuration indices.
+
+# Returns
+- `(system, config_index)`: A tuple where `system` is the key corresponding to the system, and `config_index` is the local index within that system.
+"""
+
+function get_system_and_config_index(index, local_inds)
+    running_ind = 0
+    for (system, indices) in local_inds, config_index in indices
+        running_ind += 1
+        if running_ind == index
+            return system, config_index
+        end
+    end
+end
