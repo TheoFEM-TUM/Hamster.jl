@@ -67,7 +67,13 @@ end
 end
 
 @testset "DataLoader Mixed Eigs" begin
+    # Create two EigData objects with different Nε
+    d1 = Hamster.EigData(rand(5, 10), rand(3, 10))
+    d2 = Hamster.EigData(rand(6, 10), rand(3, 10))
 
+    data = [d1, d2]
+    neig, nk = Hamster.get_neig_and_nk(data)
+    @test neig == 0 && nk == 0
 end
 
 @testset "DataLoader PC Hr" begin

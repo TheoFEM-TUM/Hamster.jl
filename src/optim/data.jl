@@ -1,41 +1,4 @@
 """
-    DataLoader{A, B}
-
-A struct to store and manage training and validation datasets.
-
-# Fields
-- `train_data::Vector{A}`: A vector containing the training dataset. The type `A` represents the data type of the training set.
-- `val_data::Vector{B}`: A vector containing the validation dataset. The type `B` represents the data type of the validation set.
-"""
-struct DataLoader{A, B}
-    train_data :: Vector{A}
-    val_data :: Vector{B}
-end
-
-function DataLoader(train_config_inds, val_config_inds, Nε_train, Nε_val, conf=get_empty_config(); 
-                    train_path=get_train_data(conf), 
-                    val_path=get_val_data(conf),
-                    validate=get_validate(conf), 
-                    bandmin=get_bandmin(conf), 
-                    val_bandmin=get_val_bandmin(conf), 
-                    train_mode=get_train_mode(conf), 
-                    val_mode=get_val_mode(conf), 
-                    hr_fit=get_hr_fit(conf), 
-                    eig_val=get_eig_val(conf))
-
-    hr_val = !eig_val
-    train_data = mapreduce(vcat, train_config_inds) do (system, train_inds)
-        hr_fit ? get_hr_data(train_mode, train_path, inds=train_inds) : 
-                 get_eig_data(train_mode, train_path, Nε_train[system], inds=train_inds, bandmin=bandmin)
-    end
-    val_data = mapreduce(vcat, val_config_inds) do (system, val_inds)
-        hr_val ? get_hr_data(val_mode, val_path, inds=val_inds, empty=!validate) : 
-                 get_eig_data(val_mode, val_path, Nε_val[system], inds=val_inds, bandmin=val_bandmin, empty=!validate)
-    end
-    return DataLoader(train_data, val_data)
-end
-
-"""
     EigData
 
 A struct for storing eigenvalue data associated with k-points.
@@ -64,6 +27,54 @@ struct HrData{M}
 end
 
 """
+    DataLoader{A, B}
+
+A struct to store and manage training and validation datasets.
+
+# Fields
+- `train_data::Vector{A}`: A vector containing the training dataset. The type `A` represents the data type of the training set.
+- `val_data::Vector{B}`: A vector containing the validation dataset. The type `B` represents the data type of the validation set.
+"""
+struct DataLoader
+    train_data :: Vector{<:Union{EigData,HrData}}
+    val_data   :: Vector{<:Union{EigData,HrData}}
+end
+
+function DataLoader(train_config_inds, val_config_inds, Nε_train, Nε_val, conf=get_empty_config(); 
+                    train_path=get_train_data(conf), 
+                    val_path=get_val_data(conf),
+                    validate=get_validate(conf), 
+                    bandmin=get_bandmin(conf), 
+                    val_bandmin=get_val_bandmin(conf), 
+                    train_mode=get_train_mode(conf), 
+                    val_mode=get_val_mode(conf), 
+                    hr_fit=get_hr_fit(conf), 
+                    eig_val=get_eig_val(conf))
+
+    hr_val = !eig_val
+    if hr_fit
+        train_data = mapreduce(vcat, train_config_inds, init=HrData[]) do (system, train_inds)
+            get_hr_data(train_mode, train_path, inds=train_inds)
+        end
+    else
+        train_data = mapreduce(vcat, train_config_inds, init=EigData[]) do (system, train_inds)
+            get_eig_data(train_mode, train_path, Nε_train[system], inds=train_inds, bandmin=bandmin)
+        end
+    end
+
+    if hr_val
+        val_data = mapreduce(vcat, val_config_inds, init=HrData[]) do (system, val_inds)
+            get_hr_data(val_mode, val_path, inds=val_inds, empty=!validate)
+        end
+    else
+        val_data = mapreduce(vcat, val_config_inds, init=EigData[]) do (system, val_inds)
+            get_eig_data(val_mode, val_path, Nε_val[system], inds=val_inds, bandmin=val_bandmin, empty=!validate)
+        end
+    end
+    return DataLoader(train_data, val_data)
+end
+
+"""
     get_neig_and_nk(data::Vector)
 
 Get the number of eigenvalues and the number of k-points from a collection of data.
@@ -74,7 +85,14 @@ Get the number of eigenvalues and the number of k-points from a collection of da
 # Returns
 - `(Neig, Nk)`: The number of eigenvalues and k-points of the first data point. `Return 0 for HrData`.
 """
-get_neig_and_nk(data::Vector{EigData}) = (size(data[1].Es, 1), size(data[1].kp, 2))
+function get_neig_and_nk(data::Vector{EigData})
+    Nε_all = map(d->size(d.Es, 1), data)
+    if length(unique(Nε_all)) == 1
+        return (size(data[1].Es, 1), size(data[1].kp, 2))
+    else
+        return (0, 0)
+    end
+end
 get_neig_and_nk(data::Vector{<:HrData}) = (0, 0)
 
 function get_eig_data(mode, path, Nε; inds=Int64[], bandmin=1, empty=false, system="")
