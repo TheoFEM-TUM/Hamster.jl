@@ -30,23 +30,16 @@ Performs a standard calculation for an effective Hamiltonian model.
 - `prof::HamsterProfiler`: An object containing profiling information about the Hamiltonian calculation.
 """
 function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1, verbosity=get_verbosity(conf))
-    config_inds, _ = get_config_index_sample(conf)
-   
-    if rank == 0
-       h5open("hamster_out.h5", "cw") do file
-         file["config_inds"] = config_inds
-      end
-    end
-    
-    MPI.Bcast!(config_inds, comm, root=0)
-    MPI.Barrier(comm)
- 
-    mode = haskey(conf, "Supercell") ? "md" : "pc"
+    systems = get_systems(conf)
+    config_inds, _ = get_config_inds_for_systems(systems, comm, conf, rank=rank, write_output=write_output)
     local_inds = split_indices_into_chunks(config_inds, nranks, rank=rank)
-    
+
+    mode = haskey(conf, "Supercell") ? (length(systems) > 1 ? "universal" : "md") : "pc"
     if rank == 0 && verbosity > 1; println("Getting structures..."); end
     begin_time = MPI.Wtime()
-    strcs = get_structures(conf, config_indices=local_inds, mode=mode)
+    strcs = mapreduce(vcat, local_inds, init=Structure[]) do (system, inds)
+        get_structures(conf, config_indices=inds, Rs=Rs, mode=mode, system=system)
+    end
     strc_time = MPI.Wtime() - begin_time
     if rank == 0 && verbosity > 1; println(" Structure time: $strc_time s"); end
 
