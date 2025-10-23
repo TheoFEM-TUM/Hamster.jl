@@ -40,6 +40,9 @@
     @test !haskey(dict, d)
     e = Hamster.IonLabel(3, 2)
     @test haskey(dict, e)
+
+    # Check that ion label is a bits type (compatible with MPI operations)
+    @test isbitstype(Hamster.IonLabel)
 end
 
 @testset "NN Label" begin

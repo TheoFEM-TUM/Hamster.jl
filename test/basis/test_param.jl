@@ -37,6 +37,9 @@ cspbbr_poscar = string(@__DIR__) * "/../strc/test_files/POSCAR_CsPbBr3"
     @test dict[p1] == "updated"
 
     @test length(dict) == 3
+
+    # Check that param label is a bits type (compatible with MPI operations)
+    @test isbitstype(ParameterLabel)
 end
 
 @testset "Parameters GaAs" begin
