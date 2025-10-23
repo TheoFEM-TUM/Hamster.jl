@@ -38,14 +38,14 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    train_strcs = mapreduce(vcat, local_train_inds, init=Structure[]) do (system, train_inds)
       get_structures(conf, config_indices=train_inds, Rs=Rs, mode=get_train_mode(conf), system=system)
    end
-   train_bases = Basis[Basis(strc, conf) for strc in train_strcs]
+   train_bases = Basis[Basis(strc, conf, comm=comm) for strc in train_strcs]
    ham_train = EffectiveHamiltonian(train_strcs, train_bases, comm, conf, rank=rank, nranks=nranks)
 
    # EffectiveHamiltonian model for validation set
    val_strcs = mapreduce(vcat, local_val_inds, init=Structure[]) do (system, val_inds)
       get_structures(conf, config_indices=val_inds, Rs=Rs, mode=get_val_mode(conf), system=system)
    end
-   val_bases = Basis[Basis(strc, conf) for strc in val_strcs]
+   val_bases = Basis[Basis(strc, conf, comm=comm) for strc in val_strcs]
    ham_val = EffectiveHamiltonian(val_strcs, val_bases, comm, conf, rank=rank, nranks=nranks, ml_data_points=get_ml_data_points(ham_train, conf))
 
    Nε_train = get_number_of_bands_per_structure(train_bases, local_train_inds, soc=get_soc(conf))

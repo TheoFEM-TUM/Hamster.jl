@@ -40,18 +40,26 @@ Retrieves or computes the radial orbital integral look-up table (RLLM) for a giv
 # Arguments
 - `overlaps::Vector`: A list of overlap objects for which RLLM data is required.
 - `conf::Config`: Configuration object controlling the behavior of RLLM retrieval or generation. Defaults to an empty configuration.
+- `comm`: (Keyword argument) MPI communicator, defaults to `nothing`.
 - `load_rllm::Bool`: (Keyword argument) If `true`, load the RLLM data from a file. The file location is provided by `rllm_file`. Defaults to the value from `conf`.
 - `rllm_file::String`: (Keyword argument) Filename for loading or saving the RLLM data. Defaults to the value from `conf`.
 - `interpolate_rllm::Bool`: (Keyword argument) If `true`, interpolate new RLLM data based on the overlaps and save it to a file. Defaults to the value from `conf`.
+- `verbosity::Int`: (Keyword argument) Controls level of verbosity.
 
 # Returns
 - `rllm_dict::Dict{String, CubicSpline}`: A dictionary mapping overlap string representations to cubic spline interpolations of the radial integrals. If `load_rllm` is `true`, the data is read from the file. If `interpolate_rllm` is `true`, it is interpolated and saved.
 """
-function get_rllm(overlaps, conf=get_empty_config(); load_rllm=get_load_rllm(conf), rllm_file=get_rllm_file(conf), interpolate_rllm=get_interpolate_rllm(conf), verbosity=get_verbosity(conf))
+function get_rllm(overlaps, conf=get_empty_config();
+                    comm=nothing,
+                    load_rllm=get_load_rllm(conf), 
+                    rllm_file=get_rllm_file(conf), 
+                    interpolate_rllm=get_interpolate_rllm(conf), 
+                    verbosity=get_verbosity(conf))
+    
     rllm_dict = Dict{String, CubicSpline{Float64}}()
     if load_rllm
         if verbosity > 0; println(" Reading distance dependence from file..."); end
-        time = @elapsed read_rllm(rllm_dict, filename=rllm_file)
+        time = @elapsed read_rllm(overlaps, comm, rllm_dict, filename=rllm_file)
         if verbosity > 0; println(" Finished in $time s."); end
     elseif interpolate_rllm
         i = 0
@@ -63,7 +71,7 @@ function get_rllm(overlaps, conf=get_empty_config(); load_rllm=get_load_rllm(con
             if verbosity > 0; println("   ($i / $Nover) ", string(overlap, apply_oc=true)); end
         end
         if verbosity > 0; println(" Finished in $time s."); end
-        save_rllm(rllm_dict, filename=rllm_file)
+        save_rllm(rllm_dict, comm, filename=rllm_file)
     end
     return rllm_dict
 end
@@ -121,23 +129,44 @@ end
 Saves overlap data, including the associated Rllm values, to a file.
 
 # Arguments
-- `overlaps`: A collection of overlap objects, where each overlap contains an `rllm` field with `xs` (x values) and `ys` (y values).
+- `rllm_dict`: A collection of overlap objects, where each overlap contains an `rllm` field with `xs` (x values) and `ys` (y values).
+- `comm`: The MPI communicator.
 - `filename::String`: The name of the file where the Rllm data will be saved. Defaults to `"rllm.dat"`.
 """
-function save_rllm(rllm_dict; filename="rllm.dat")
-    file = open(filename, "w")
-    for (overlap, spline) in rllm_dict
-        println(file, overlap)
-        for x in spline.xs
-            print(file, "  "*string(x))
+function save_rllm(rllm_dict, comm; filename="rllm.dat")
+    if occursin(".h5", filename)
+        if isnothing(comm)
+            h5open(filename, "cw") do file
+                for (overlap, spline) in rllm_dict
+                    if !haskey(file, overlap)
+                        file[overlap] = hcat(spline.xs, spline.ys)
+                    end
+                end
+            end
+        else
+            h5open(filename, "cw", comm) do file
+                for (overlap, spline) in rllm_dict
+                    if !haskey(file, overlap)
+                        file[overlap] = hcat(spline.xs, spline.ys)
+                    end
+                end
+            end
         end
-        print(file, "\n")
-        for y in spline.ys
-            print(file, "  "*string(y))
+    else
+        file = open(filename, "w")
+        for (overlap, spline) in rllm_dict
+            println(file, overlap)
+            for x in spline.xs
+                print(file, "  "*string(x))
+            end
+            print(file, "\n")
+            for y in spline.ys
+                print(file, "  "*string(y))
+            end
+            print(file, "\n")
         end
-        print(file, "\n")
+        close(file)
     end
-    close(file)
 end
 
 """
@@ -151,14 +180,34 @@ Reads the `rllm.dat` file and returns a dictionary mapping overlap labels to tup
 # Returns
 - A dictionary where each key is an overlap label, and each value a tuple of x/y value vectors.
 """
-function read_rllm(rllm_dict=Dict{String, CubicSpline{Float64}}(); filename="rllm.dat")
-    lines = open_and_read(filename)
-    lines = split_lines(lines)
-    for i in 1:3:length(lines)
-        overlap = lines[i][1]
-        xs = parse.(Float64, lines[i+1])
-        ys = parse.(Float64, lines[i+2])
-        rllm_dict[overlap] = CubicSpline(xs, ys)
+function read_rllm(overlaps, comm, rllm_dict=Dict{String, CubicSpline{Float64}}(); filename="rllm.dat")
+    if occursin(".h5", filename)
+        if isnothing(comm)
+            h5open(filename, "r") do file
+                for overlap in overlaps
+                    overlap_str = string(overlap, apply_oc=true)
+                    data = file[overlap_str]
+                    rllm_dict[overlap_str] = CubicSpline(data[:, 1], data[:, 2])
+                end
+            end
+        else
+            h5open(filename, "r", comm) do file
+                for overlap in overlaps
+                    overlap_str = string(overlap, apply_oc=true)
+                    data = file[overlap_str]
+                    rllm_dict[overlap_str] = CubicSpline(data[:, 1], data[:, 2])
+                end
+            end
+        end
+    else
+        lines = open_and_read(filename)
+        lines = split_lines(lines)
+        for i in 1:3:length(lines)
+            overlap = lines[i][1]
+            xs = parse.(Float64, lines[i+1])
+            ys = parse.(Float64, lines[i+2])
+            rllm_dict[overlap] = CubicSpline(xs, ys)
+        end
+        return rllm_dict
     end
-    return rllm_dict
 end

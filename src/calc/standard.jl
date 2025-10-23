@@ -45,7 +45,7 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1,
 
     if rank == 0 && verbosity > 1; println("Getting bases..."); end
     begin_time = MPI.Wtime()
-    bases = Basis[Basis(strc, conf) for strc in strcs]
+    bases = Basis[Basis(strc, conf, comm=comm) for strc in strcs]
     bases_time = MPI.Wtime() - begin_time
     if rank == 0 && verbosity > 1; println(" Basis time: $bases_time s"); end
 

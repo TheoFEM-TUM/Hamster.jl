@@ -28,11 +28,11 @@ Construct a `Basis` object from a given `Structure` and configuration.
 # Returns
 - `Basis`: A `Basis` object.
 """
-function Basis(strc::Structure, conf=get_empty_config())
+function Basis(strc::Structure, conf=get_empty_config(); comm=nothing)
     orbitals = get_orbitals(strc, conf)
     overlaps = get_overlaps(strc.ions, orbitals, conf)
     parameters = get_parameters_from_overlaps(overlaps, conf)
-    rllm = get_rllm(overlaps, conf)
+    rllm = get_rllm(overlaps, conf, comm=comm)
     return Basis(orbitals, overlaps, parameters, rllm)
 end
 

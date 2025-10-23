@@ -67,7 +67,7 @@ end
     overlaps_gaas = Hamster.get_overlaps(strc_gaas.ions, orbitals_gaas, conf)
 
     rllm = Hamster.get_rllm(overlaps_gaas, conf)
-    rllm_correct = Hamster.read_rllm(filename=string(@__DIR__)*"/test_files/rllm_true.dat")
+    rllm_correct = Hamster.read_rllm(overlaps_gaas, comm, filename=string(@__DIR__)*"/test_files/rllm_true.dat")
 
     is_correct = Bool[]
     for key in keys(rllm)
@@ -78,4 +78,17 @@ end
     end
     @test all(is_correct)
     rm(string(@__DIR__)*"/test_files/rllm.dat")
+
+    # Test with .h5 format
+    Hamster.save_rllm(rllm, comm, filename="rllm.h5")
+    rllm_2 = Hamster.read_rllm(overlaps_gaas, comm, filename="rllm.h5")
+    is_correct = Bool[]
+    for key in keys(rllm)
+        f1 = rllm[key]
+        f2 = rllm_correct[key]
+        xs = rand(100) .* 5.
+        is_correct = mean(abs.(f1.(xs) .- f2.(xs) )) < 0.001
+    end
+    @test all(is_correct)
+    rm("rllm.h5")
 end
