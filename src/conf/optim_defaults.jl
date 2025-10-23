@@ -137,11 +137,25 @@ The `eig_val` tag switches on validating the effective Hamiltonian model with ei
 get_eig_val(conf::Config)::Bool = conf("eig_val", "Optimizer") == "default" ? get_eig_fit(conf) : conf("eig_val", "Optimizer")
 
 """
-    train_mode=PC
+**train_mode**=PC
 
-The `train_mode` flag switches between different optimization modes (PC, MD, mixed, multi; not case sensitive).
+The `train_mode` flag switches between different optimization modes (`PC`, `MD`, `universal`; not case sensitive).
+
+Defaults:
+ - `"pc"` — if no `Supercell` block is present.
+ - `"md"` — if a `Supercell` block is present but only one system is found.
 """
-get_train_mode(conf)::String = conf("train_mode", "Optimizer") == "default" ? "pc" : lowercase(conf("train_mode", "Optimizer"))
+function get_train_mode(conf)::String
+    if conf("train_mode", "Optimizer") == "default" 
+        if haskey(conf, "Supercell")
+            return "md"
+        else
+            return "pc"
+        end
+    else
+        return lowercase(conf("train_mode", "Optimizer"))
+    end
+end
 
 """
     val_mode=PC
