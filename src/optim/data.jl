@@ -58,7 +58,7 @@ function DataLoader(train_config_inds, val_config_inds, Nε_train, Nε_val, conf
         end
     else
         train_data = mapreduce(vcat, train_config_inds, init=EigData[]) do (system, train_inds)
-            get_eig_data(train_mode, train_path, Nε_train[system], inds=train_inds, bandmin=bandmin)
+            get_eig_data(train_mode, train_path, Nε_train[system], inds=train_inds, bandmin=bandmin, system=system)
         end
     end
 
@@ -68,7 +68,7 @@ function DataLoader(train_config_inds, val_config_inds, Nε_train, Nε_val, conf
         end
     else
         val_data = mapreduce(vcat, val_config_inds, init=EigData[]) do (system, val_inds)
-            get_eig_data(val_mode, val_path, Nε_val[system], inds=val_inds, bandmin=val_bandmin, empty=!validate)
+            get_eig_data(val_mode, val_path, Nε_val[system], inds=val_inds, bandmin=val_bandmin, empty=!validate, system=system)
         end
     end
     return DataLoader(train_data, val_data)

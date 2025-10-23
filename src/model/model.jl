@@ -54,6 +54,7 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
     MPI.Bcast!(param_labels, comm, root=0)
     MPI.Barrier(comm)
 
+    update_tb = all(update_tb) ? fill(true, length(param_labels)) : fill(false, length(param_labels))
     params_per_strc = [[findfirst(p->p==param, param_labels) for param in basis.parameters] for basis in bases]
     model = TBModel(hs, ones(length(param_labels)), param_labels, params_per_strc, update_tb)
     init_params!(model, bases[1], conf, initas=initas)

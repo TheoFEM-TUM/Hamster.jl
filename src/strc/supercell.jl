@@ -44,7 +44,7 @@ function get_structures(conf=get_empty_config();
     
 
     if lowercase(mode) == "md" || lowercase(mode) == "mixed" || lowercase(mode) == "universal"
-        rs_0, atom_types, lattice, rs_all = read_structure_file(system, conf)
+        rs_0, atom_types, lattice, rs_all = read_structure_file(system, conf, mode=mode)
         lattice_0 = lattice isa AbstractMatrix ? lattice : lattice[:, :, 1]
         Rs = Rs == zeros(3, 1) ? get_translation_vectors(rs_0, lattice_0, rcut=get_rcut(conf)) : Rs
         
@@ -59,10 +59,10 @@ function get_structures(conf=get_empty_config();
                 δrs_ion[:, iion] = rs_0[:, iion] - rs_all[:, iion, index] + Ts[:, Rmin]
             end
 
-            Structure(Rs, rs_0, δrs_ion, atom_types, lattice, conf)
+            Structure(Rs, rs_0, δrs_ion, atom_types, lattice_i, conf)
         end
 
-        if lowercase(mode) == "md"
+        if lowercase(mode) == "md" || lowercase(mode) == "universal"
             return strcs
         else
             return [Structure(conf), strcs...]
@@ -113,9 +113,10 @@ function read_structure_file(system, conf=get_empty_config(); mode="md", sc_posc
             h5open(xdatcar, "r") do file
                 pos_key = haskey(file, "configs") ? "configs" : "positions"
             end
-            lattice, configs = (h5read(xdatcar, "lattice")[:, :, 1], h5read(xdatcar, pos_key))
+            lattice, configs = (h5read(xdatcar, "lattice"), h5read(xdatcar, pos_key))
             for n in axes(configs, 3)
-                configs[:, :, n] .= frac_to_cart(configs[:, :, n], lattice)
+                lattice_n = lattice isa Matrix ? lattice : lattice[:, :, n]
+                configs[:, :, n] .= frac_to_cart(configs[:, :, n], lattice_n)
             end
         else
             lattice, configs = read_xdatcar(xdatcar, frac=false)
@@ -128,7 +129,7 @@ function read_structure_file(system, conf=get_empty_config(); mode="md", sc_posc
             lattice = read(system_group["lattice"])
             atom_types = read(system_group["atom_types"])
             for n in axes(configs, 3)
-                configs[:, :, n] .= frac_to_cart(configs[:, :, n], lattice)
+                configs[:, :, n] .= frac_to_cart(configs[:, :, n], lattice[:, :, n])
             end
             return configs[:, :, 1], atom_types, lattice, configs
         end
