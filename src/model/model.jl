@@ -50,7 +50,7 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
 
     param_labels_local = unique(Iterators.flatten([basis.parameters for basis in bases]))
     param_labels = MPI.gather(param_labels_local, comm, root=0)
-    param_labels = unique(param_labels)
+    param_labels = unique(Iterators.flatten(param_labels))
     MPI.Bcast!(param_labels, comm, root=0)
     MPI.Barrier(comm)
 
