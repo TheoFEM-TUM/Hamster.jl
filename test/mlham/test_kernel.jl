@@ -64,7 +64,7 @@ end
     set_value!(conf, "verbosity", 0)
     strc = Structure(conf)
     basis = Basis(strc, conf)
-    model = TBModel([strc], [basis], conf)
+    model = TBModel([strc], [basis], comm, conf)
 
     kernel = HamiltonianKernel([strc], [basis], model, comm, conf)
     Hr = get_hr(kernel, Hamster.Dense(), 1)
