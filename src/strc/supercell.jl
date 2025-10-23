@@ -162,8 +162,8 @@ function get_config_inds_for_systems(systems, comm, conf=get_empty_config(); ran
       if rank == 0 && write_output
          h5open("hamster_out.h5", "cw") do file
             g = system == "" ? file : create_group(file, system)
-            write(g, "train_config_inds", train_config_inds)
-            write(g, "val_config_inds", val_config_inds)
+            write(g, "train_config_inds", system_train_inds)
+            write(g, "val_config_inds", system_val_inds)
          end
       end
 
