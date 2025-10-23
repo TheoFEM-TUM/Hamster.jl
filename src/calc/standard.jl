@@ -29,7 +29,7 @@ Performs a standard calculation for an effective Hamiltonian model.
 # Returns
 - `prof::HamsterProfiler`: An object containing profiling information about the Hamiltonian calculation.
 """
-function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1, verbosity=get_verbosity(conf))
+function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1, verbosity=get_verbosity(conf), write_output=true)
     systems = get_systems(conf)
     config_inds, _ = get_config_inds_for_systems(systems, comm, conf, rank=rank, write_output=write_output)
     local_inds = split_indices_into_chunks(config_inds, nranks, rank=rank)
