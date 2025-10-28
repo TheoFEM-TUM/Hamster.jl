@@ -4,7 +4,7 @@ struct EffectiveHamiltonian{T, S1, S2, IT}
     sp_mode :: S1
     sp_diag :: S2
     sp_tol :: Float64
-    sp_iterator :: IT
+    sp_iterators :: IT
     soc :: Bool
     Rs :: Vector{Matrix{Float64}}
 end
@@ -15,7 +15,9 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_mode
     end
     
     Rs = [strc.Rs for strc in strcs]
-    sp_iterator = get_sparse_iterator(strcs[1], bases[1], conf, soc=soc)
+    sp_iterators = map(zip(strcs, bases)) do (strc, basis)
+        get_sparse_iterator(strc, basis, conf, soc=soc)
+    end
 
     models = ()
     if tb_model
