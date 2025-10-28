@@ -11,7 +11,7 @@ end
 
 function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_model=get_tb_model(conf), ml_model=get_ml_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), sp_tol=get_sp_tol(conf), soc=get_soc(conf), ml_data_points=nothing, rank=0, nranks=1, verbosity=get_verbosity(conf))
     if isempty(strcs) && isempty(bases)
-        return EffectiveHamiltonian(0, nothing, Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)])
+        return EffectiveHamiltonian(0, Nothing[], Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)])
     end
     
     Rs = [strc.Rs for strc in strcs]
@@ -47,7 +47,7 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_mode
         if rank == 0 && verbosity > 1; println("    SOC time: $soc_time s"); end
     end
 
-    return EffectiveHamiltonian(length(strcs), models, sp_mode, sp_diag, sp_tol, sp_iterator, soc, Rs)
+    return EffectiveHamiltonian(length(strcs), models, sp_mode, sp_diag, sp_tol, sp_iterators, soc, Rs)
 end
 
 """

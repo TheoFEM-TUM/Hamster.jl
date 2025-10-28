@@ -128,10 +128,11 @@ function read_eigenvalue_data_from_path(path, inds, bandmin, Nε; system="")
             g = system == "" ? file : file[system]
             kp = read(g["kpoints"])
             Es = read(g["eigenvalues"])
+            inds_ = length(inds) ≤ size(Es, 3) ? inds : collect(1:size(Es, 3))
             if kp isa Matrix{Float64}
-                return [EigData(kp, Es[bandmin:bandmin+Nε-1, :, n]) for n in inds]
+                return [EigData(kp, Es[bandmin:bandmin+Nε-1, :, n]) for n in inds_]
             elseif kp isa Array{Float64, 3}
-                return [EigData(kp[:, :, n], Es[bandmin:bandmin+Nε-1, :, n]) for n in inds]
+                return [EigData(kp[:, :, n], Es[bandmin:bandmin+Nε-1, :, n]) for n in inds_]
             end
         end
     else

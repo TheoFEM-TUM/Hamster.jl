@@ -48,7 +48,8 @@ function get_structures(conf=get_empty_config();
         lattice_0 = lattice isa AbstractMatrix ? lattice : lattice[:, :, 1]
         Rs = Rs == zeros(3, 1) ? get_translation_vectors(rs_0, lattice_0, rcut=get_rcut(conf)) : Rs
         
-        strcs = map(config_indices) do index
+        config_indices_ = length(config_indices) < size(rs_all, 3) ? config_indices : collect(1:size(rs_all, 3)) 
+        strcs = map(config_indices_) do index
             δrs_ion = similar(rs_0)
             lattice_i = lattice isa AbstractMatrix ? lattice : lattice[:, :, index]
             Ts = frac_to_cart(get_translation_vectors(1), lattice_i)
@@ -158,10 +159,10 @@ function get_config_inds_for_systems(systems, comm, conf=get_empty_config(); ran
    val_config_inds = Dict{String, Vector{Int64}}()
 
    for system in systems
-      system_train_inds, system_val_inds = get_config_index_sample(conf)
-   
-      if rank == 0 && write_output
-         h5open("hamster_out.h5", "cw") do file
+        system_train_inds, system_val_inds = get_config_index_sample(conf)
+        
+        if rank == 0 && write_output
+            h5open("hamster_out.h5", "cw") do file
             g = system == "" ? file : create_group(file, system)
             
             if optimize
@@ -170,16 +171,16 @@ function get_config_inds_for_systems(systems, comm, conf=get_empty_config(); ran
             else
                 write(g, "config_inds", system_train_inds)
             end
-         end
-      end
+            end
+        end
 
-      MPI.Bcast!(system_train_inds, comm, root=0)
-      MPI.Bcast!(system_val_inds, comm, root=0)
-      MPI.Barrier(comm)
-      train_config_inds[system] = system_train_inds
-      val_config_inds[system] = system_val_inds
-   end
-   return train_config_inds, val_config_inds
+        MPI.Bcast!(system_train_inds, comm, root=0)
+        MPI.Bcast!(system_val_inds, comm, root=0)
+        MPI.Barrier(comm)
+        train_config_inds[system] = system_train_inds
+        val_config_inds[system] = system_val_inds
+    end
+    return train_config_inds, val_config_inds
 end
 
 """
@@ -222,7 +223,7 @@ function get_config_index_sample(conf=get_empty_config();
         train_config_inds = h5read(inds_conf, "train_config_inds")
     end
 
-    if (lowercase(train_mode) == "md" || lowercase(train_mode) == lowercase(val_mode)) && length(train_config_inds) < Nconf
+    if (lowercase(train_mode) ∈ ["md", "universal"] || lowercase(train_mode) == lowercase(val_mode)) && length(train_config_inds) < Nconf
         append!(train_config_inds, sample(Nconf_min:Nconf_max, Nconf - length(train_config_inds), replace=false, ordered=true))
     elseif length(train_config_inds) == 0
         push!(train_config_inds, 1)
@@ -238,7 +239,7 @@ function get_config_index_sample(conf=get_empty_config();
         val_config_inds = h5read(val_inds_conf, "val_config_inds")
     end
 
-    if length(val_config_inds) < Nconf && lowercase(val_mode) == "md"
+    if length(val_config_inds) < Nconf && (lowercase(val_mode) ∈ ["md", "universal"]) 
         Nval = train_mode == val_mode ? round(Int64, Nconf * val_ratio) : Nconf
         remaining_indices = lowercase(train_mode) == "pc" ? (Nconf_min:Nconf_max) : setdiff(Nconf_min:Nconf_max, train_config_inds)
         remaining_indices = setdiff(remaining_indices, val_config_inds)
