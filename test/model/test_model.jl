@@ -53,10 +53,10 @@ end
     # Test 1: Test parameter initialization
     model = TBModel(nothing, zeros(3), zeros(3), [zeros(Int64, 3)], [true, true, true])
     basis = nothing
-    Hamster.init_params!(model, basis, initas="ones")
+    Hamster.init_params!(model, initas="ones")
     @test model.params == ones(3)
     @test get_params(model) == ones(3)
-    Hamster.init_params!(model, basis, initas="random")
+    Hamster.init_params!(model, initas="random")
     @test all(0 .< model.params .< 1)
 
     # Test 2: test setting parameters

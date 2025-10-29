@@ -36,7 +36,7 @@ function TBModel(strc::Structure, basis::Basis, conf=get_empty_config(); update_
     h = get_geometry_tensor(strc, basis, conf)
     Nparams = length(basis.parameters)
     model = TBModel(h, ones(Nparams), basis.parameters, [collect(1:Nparams)], update_tb)
-    init_params!(model, basis, conf, initas=initas)
+    init_params!(model, conf, initas=initas)
     return model
 end
 
@@ -57,7 +57,12 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
     update_tb = all(update_tb) ? fill(true, length(param_labels)) : fill(false, length(param_labels))
     params_per_strc = [[findfirst(p->p==param, param_labels) for param in basis.parameters] for basis in bases]
     model = TBModel(hs, ones(length(param_labels)), param_labels, params_per_strc, update_tb)
-    init_params!(model, bases[1], conf, initas=initas)
+    init_params!(model, conf, initas=initas)
+
+    for (p, param_label) in enumerate(param_labels)
+        println(string(param_label), ": ", model.params[p])
+    end
+
     return model
 end
 
@@ -175,7 +180,6 @@ Initialize the parameters of a `model` based on the provided configuration and i
 
 # Arguments
 - `model`: The model whose parameter array `V` will be initialized.
-- `basis`: The `Basis` structure containing orbital and overlap information, as well as the parameters that will be initialized in the model.
 - `conf`: Configuration settings that can be used to customize how parameters are initialized. By default, an empty configuration is used.
 - `initas`: Initialization method (e.g., `ones`, `random` or a file).
 
@@ -183,7 +187,7 @@ Initialize the parameters of a `model` based on the provided configuration and i
 - `conf`: Configuration settings.
 - `initas`: The initialization method or file path for parameters. Defaults to `ones`.
 """
-function init_params!(model, basis, conf=get_empty_config(); initas=get_init_params(conf))
+function init_params!(model, conf=get_empty_config(); initas=get_init_params(conf))
     if initas[1] == 'o'
         set_params!(model, ones(length(model.params)))
     elseif initas[1] == 'r'
@@ -193,8 +197,8 @@ function init_params!(model, basis, conf=get_empty_config(); initas=get_init_par
     else
         parameters, parameter_values, _, _, conf_values = read_params(initas)
         check_consistency(conf_values, conf)
-        for (v1, basis_param) in enumerate(basis.parameters), (v2, file_param) in enumerate(parameters)
-            if basis_param == file_param
+        for (v1, model_param) in enumerate(model.param_labels), (v2, file_param) in enumerate(parameters)
+            if model_param == file_param
                 model.params[v1] = parameter_values[v2]
             end
         end
