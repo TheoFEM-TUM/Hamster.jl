@@ -31,7 +31,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    train_config_inds, val_config_inds = get_config_inds_for_systems(systems, comm, conf, rank=rank, write_output=write_output)
    local_train_inds = split_indices_into_chunks(train_config_inds, nranks, rank=rank)
    local_val_inds = split_indices_into_chunks(val_config_inds, nranks, rank=rank)
-   
+
    Rs = get_translation_vectors_for_hr_fit(conf)
    
    # EffectiveHamiltonian model for training set

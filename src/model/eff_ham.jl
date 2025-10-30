@@ -23,7 +23,7 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_mode
     if tb_model
         if rank == 0 && verbosity > 1; println("   Getting TB model..."); end
         begin_time = MPI.Wtime()
-        models = (models..., TBModel(strcs, bases, comm, conf))
+        models = (models..., TBModel(strcs, bases, comm, conf, rank=rank))
         tb_time = MPI.Wtime() - begin_time
         if rank == 0 && verbosity > 1; println("    TB time: $tb_time s"); end
     end
@@ -41,7 +41,7 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_mode
     if soc
         if rank == 0 && verbosity > 1; println("   Getting SOC model..."); end
         begin_time = MPI.Wtime()
-        soc_model = SOCModel(strcs, bases, comm, conf)
+        soc_model = SOCModel(strcs, bases, comm, conf, rank=rank)
         models = (models..., soc_model)
         soc_time = MPI.Wtime() - begin_time
         if rank == 0 && verbosity > 1; println("    SOC time: $soc_time s"); end
@@ -70,9 +70,9 @@ function get_hamiltonian(ham::EffectiveHamiltonian, index, ks; write_hr=false, c
     return Hk
 end
 
-function get_hamiltonian(ham::EffectiveHamiltonian, index, ks, comm; write_hr=false, config_index=index, system="")
+function get_hamiltonian(ham::EffectiveHamiltonian, index, ks, comm; write_hr=false, config_index=index, system="", rank=rank, nranks=nranks)
     Hr = get_hr(ham, index)
-    if write_hr; write_ham(Hr, ham.Rs[index], comm, config_index, space="r", system=""); end
+    if write_hr; write_ham(Hr, ham.Rs[index], comm, config_index, space="r", system=system, rank=rank, nranks=nranks); end
     Hk = get_hamiltonian(Hr, ham.Rs[index], ks, ham.sp_diag)
     return Hk
 end

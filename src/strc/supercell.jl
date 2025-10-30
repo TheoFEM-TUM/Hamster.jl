@@ -159,18 +159,29 @@ function get_config_inds_for_systems(systems, comm, conf=get_empty_config(); ran
    val_config_inds = Dict{String, Vector{Int64}}()
 
    for system in systems
-        system_train_inds, system_val_inds = get_config_index_sample(conf)
+        Nconf = get_Nconf(conf)
+        Nconf_max = get_Nconf_max(conf)
+        
+        if length(systems) > 1
+            h5open(get_xdatcar(conf), "r", comm) do file
+                Nconf_total = size(read(file[system]["positions"]), 3)
+                if Nconf_total < Nconf; Nconf = Nconf_total; end
+                if Nconf_total < Nconf_max; Nconf_max = Nconf_total; end
+            end
+        end
+
+        system_train_inds, system_val_inds = get_config_index_sample(conf, Nconf=Nconf, Nconf_max=Nconf_max)
         
         if rank == 0 && write_output
             h5open("hamster_out.h5", "cw") do file
-            g = system == "" ? file : create_group(file, system)
-            
-            if optimize
-                write(g, "train_config_inds", system_train_inds)
-                write(g, "val_config_inds", system_val_inds)
-            else
-                write(g, "config_inds", system_train_inds)
-            end
+                g = system == "" ? file : (haskey(file, system) ? file[system] : create_group(file, system))
+                
+                if optimize
+                    write(g, "train_config_inds", system_train_inds)
+                    write(g, "val_config_inds", system_val_inds)
+                else
+                    write(g, "config_inds", system_train_inds)
+                end
             end
         end
 
@@ -241,9 +252,12 @@ function get_config_index_sample(conf=get_empty_config();
 
     if length(val_config_inds) < Nconf && (lowercase(val_mode) ∈ ["md", "universal"]) 
         Nval = train_mode == val_mode ? round(Int64, Nconf * val_ratio) : Nconf
+        Nval -= length(val_config_inds)
         remaining_indices = lowercase(train_mode) == "pc" ? (Nconf_min:Nconf_max) : setdiff(Nconf_min:Nconf_max, train_config_inds)
         remaining_indices = setdiff(remaining_indices, val_config_inds)
-        append!(val_config_inds, sample(remaining_indices, Nval - length(val_config_inds), replace=false, ordered=true))
+        if length(remaining_indices) ≥ Nval
+            append!(val_config_inds, sample(remaining_indices, Nval, replace=false, ordered=true))
+        end
     end
     
     if Nconf == 1 && validate && lowercase(val_mode) == "pc"
