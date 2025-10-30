@@ -41,6 +41,7 @@ function TBModel(strc::Structure, basis::Basis, conf=get_empty_config(); update_
 end
 
 function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=get_empty_config();
+                rank = 0,
                 update_tb=get_update_tb(conf, nparams(bases[1])), 
                 initas=get_init_params(conf))
     
@@ -50,13 +51,24 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
 
     param_labels_local = unique(Iterators.flatten([basis.parameters for basis in bases]))
     param_labels = MPI.gather(param_labels_local, comm, root=0)
-    param_labels = unique(Iterators.flatten(param_labels))
+    if rank == 0
+        param_labels = unique(Iterators.flatten(param_labels))
+        nparams = length(param_labels)
+    else
+        param_labels = Vector{ParameterLabel}()
+        nparams = 0
+    end
+    nparams = MPI.Bcast(nparams, 0, comm)
+
+    if rank ≠ 0
+        resize!(param_labels, nparams)
+    end
     MPI.Bcast!(param_labels, comm, root=0)
     MPI.Barrier(comm)
 
-    update_tb = all(update_tb) ? fill(true, length(param_labels)) : fill(false, length(param_labels))
+    update_tb = all(update_tb) ? fill(true, nparams) : fill(false, nparams)
     params_per_strc = [[findfirst(p->p==param, param_labels) for param in basis.parameters] for basis in bases]
-    model = TBModel(hs, ones(length(param_labels)), param_labels, params_per_strc, update_tb)
+    model = TBModel(hs, ones(nparams), param_labels, params_per_strc, update_tb)
     init_params!(model, conf, initas=initas)
     return model
 end

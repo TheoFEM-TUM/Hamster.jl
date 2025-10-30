@@ -24,7 +24,7 @@ mutable struct SOCModel{V, M}
     update :: Bool
 end
 
-function SOCModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=get_empty_config())
+function SOCModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=get_empty_config(); rank=0)
     soc_matrices_per_type = OrderedDict{UInt8, Matrix{ComplexF64}}()
     types_per_strc = Vector{UInt8}[]
     Rs_info = zeros(Int64, 2, length(strcs))
@@ -42,7 +42,18 @@ function SOCModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=g
 
     param_labels_local = UInt8.(collect(keys(soc_matrices_per_type)))
     param_labels = MPI.gather(param_labels_local, comm, root=0)
-    param_labels = unique(Iterators.flatten(param_labels))
+    if rank == 0
+        param_labels = unique(Iterators.flatten(param_labels))
+        nparams = length(param_labels)
+    else
+        param_labels = UInt8[]
+        nparams = 0
+    end
+    nparams = MPI.Bcast(nparams, 0, comm)
+
+    if rank ≠ 0
+        resize!(param_labels, nparams)
+    end
     MPI.Bcast!(param_labels, comm, root=0)
     MPI.Barrier(comm)
 
