@@ -30,7 +30,9 @@ function read_eigenval(file::AbstractString, nmax::Int=1000000)
             kpoints[:, k] = parse.(Float64, lines[i+1][1:3])
             for j in 1:nbands
                 @inbounds E_bands[j, k] = parse(Float64, lines[i+1+j][2])
-                @inbounds occs[j, k] = parse(Float64, lines[i+1+j][3])
+                if length(lines[i+1+j]) ≥ 3
+                    @inbounds occs[j, k] = parse(Float64, lines[i+1+j][3])
+                end
             end
         end
     end
