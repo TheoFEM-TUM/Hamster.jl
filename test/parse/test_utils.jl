@@ -44,6 +44,26 @@ split_line = Hamster.split_line
     @test split_line("This is a very long string to test the splitting function with a default space delimiter") == ["This", "is", "a", "very", "long", "string", "to", "test", "the", "splitting", "function", "with", "a", "default", "space", "delimiter"]
 end
 
+@testset "get_rank_filename tests" begin
+    @test Hamster.get_rank_filename("data.h5", 3) == "tmp/data_3.h5"
+
+    @test Hamster.get_rank_filename("output.txt", 1) == "tmp/output_1.txt"
+
+    @test Hamster.get_rank_filename("/home/user/sim/results.hdf5", 4) == "tmp/results_4.hdf5"
+
+    @test Hamster.get_rank_filename("matrixfile", 10) == "tmp/matrixfile_10"
+
+    @test Hamster.get_rank_filename("data/run1/sample.h5", 7) == "tmp/sample_7.h5"
+
+    @test Hamster.get_rank_filename("data.h5", 2; temp=false) == "data_2.h5"
+
+    @test Hamster.get_rank_filename("rawdata", 42; temp=false) == "rawdata_42"
+
+    @test Hamster.get_rank_filename("archive.tar.gz", 8) == "tmp/archive.tar_8.gz"
+
+    @test Hamster.get_rank_filename("foo.h5", 0) isa String
+end
+
 @testset "Write and read to/from file" begin
     # Test 1: test random vector
     M = rand(8)
