@@ -1,6 +1,10 @@
 function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity(conf))
     # Clear output files from previous Hamster runs
     clear_hamster_output()
+
+    # Create a temporary folder
+    if "tmp" in readdir(pwd()) && rank == 0; rm("tmp", recursive=true); end
+    if !("tmp" in readdir(pwd())) && rank == 0; mkdir("tmp"); end
     
     set_seed!(conf, rank=rank)
     hostnames = MPI.gather(readchomp(`hostname`), comm, root=0)
@@ -26,7 +30,7 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity
     task = decide_which_task_to_perform(conf)
     out = run_calculation(task, comm, conf, rank=rank, nranks=nranks)
     save(out, rank, filename="hamster_out.h5")
-    if isdir("tmp") && rank == 0
+    if rank == 0
         files = ["Es"]
         if get_save_vecs(conf); push!(files, "vs"); end
         collapse_time = @elapsed for str in files

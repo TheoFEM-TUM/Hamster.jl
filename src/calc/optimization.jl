@@ -44,6 +44,8 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    end
    train_bases = Basis[Basis(strc, conf, comm=comm) for strc in train_strcs]
    ham_train = EffectiveHamiltonian(train_strcs, train_bases, comm, conf, rank=rank, nranks=nranks)
+   
+   combine_local_rllm_files(get_rllm_file(conf), comm; rank=rank, nranks=nranks)
 
    # EffectiveHamiltonian model for validation set
    val_strcs = mapreduce(vcat, local_val_inds, init=Structure[]) do (system, val_inds)
@@ -58,6 +60,8 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    ham_val = EffectiveHamiltonian(val_strcs, val_bases, comm, conf, rank=rank, nranks=nranks, ml_data_points=get_ml_data_points(ham_train, conf))
    Nε_train = get_number_of_bands_per_structure(train_bases, local_train_inds, soc=get_soc(conf))
    Nε_val = get_number_of_bands_per_structure(val_bases, local_val_inds, soc=get_soc(conf))
+
+   combine_local_rllm_files(get_rllm_file(conf), comm; rank=rank, nranks=nranks)
 
    dl = DataLoader(local_train_inds, local_val_inds, Nε_train, Nε_val, conf)
    Nε, Nk = get_neig_and_nk(dl.train_data)

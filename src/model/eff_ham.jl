@@ -13,11 +13,15 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_mode
     if isempty(strcs) && isempty(bases)
         return EffectiveHamiltonian(0, Nothing[], Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)])
     end
-    
+
     Rs = [strc.Rs for strc in strcs]
+    if rank == 0 && verbosity > 1; println("   Getting sparse iterators..."); end
+    begin_time = MPI.Wtime()
     sp_iterators = map(zip(strcs, bases)) do (strc, basis)
         get_sparse_iterator(strc, basis, conf, soc=soc)
     end
+    sp_time = MPI.Wtime() - begin_time
+    if rank == 0 && verbosity > 1; println("    Sparse iterator time: $sp_time s"); end
 
     models = ()
     if tb_model

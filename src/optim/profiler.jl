@@ -43,7 +43,7 @@ A constructor function for initializing a `HamsterProfiler` instance.
 - `Niter::Int`: The number of iterations (optional). Default is determined by the value of `get_niter(conf)`.
 - `printeachbatch::Bool`: A flag to determine whether to print detailed status for each batch (optional). Default is determined by the value of `get_printeachbatch(conf)`.
 - `printeachiter::Int`: Specifies the frequency of printing status updates (optional). Default is determined by the value of `get_printeachiter(conf)`.
--`Nparams::Int`: The number of parameters that are optimized.
+- `Nparams::Int`: The number of parameters that are optimized.
 
 # Returns
 - An instance of the `HamsterProfiler` struct.

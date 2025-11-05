@@ -46,7 +46,7 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
                 initas=get_init_params(conf))
     
     hs = map(eachindex(strcs)) do n
-        get_geometry_tensor(strcs[n], bases[n], conf)
+        get_geometry_tensor(strcs[n], bases[n], conf, comm=comm)
     end
 
     param_labels_local = unique(Iterators.flatten([basis.parameters for basis in bases]))
