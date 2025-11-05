@@ -55,7 +55,7 @@ Split each line of the input vector of strings into its constituent non-empty el
 - `split_lines::Vector{Vector{String}}`: A vector of vectors of strings, where each inner vector 
 contains the non-empty elements of the corresponding line from the input.
 """
-function split_lines(lines; char=" ")
+function split_lines(lines; char=r"\s+")
     split_lines = Vector{Vector{String}}(undef, length(lines))
     Threads.@threads for l in eachindex(lines)
         split_lines[l] = split_line(lines[l]; char=char)
@@ -74,7 +74,7 @@ Splits a line of text into individual words, removing any extra spaces.
 # Returns
 - `Vector{String}`: An array of words from the input line, excluding any empty elements.
 """
-split_line(line; char=" ") = filter(!isempty, split(line, char))
+split_line(line; char=r"\s+") = filter(!isempty, split(line, char))
 
 """
     parse_lines_as_array(lines; i1=1, i2=3, type=Float64)
@@ -116,6 +116,23 @@ function next_line_with(keywords::AbstractArray, lines)
 end
 
 next_line_with(s::String, lines) = next_line_with([s], lines)
+
+"""
+    get_rank_filename(filename::AbstractString, rank::Integer) -> String
+
+Return a modified file path of the form `tmp/<basename>_<rank>.<ext>`.
+Example:
+    rank_filename("data.h5", 3) == "tmp/data_3.h5"
+"""
+function get_rank_filename(filename::AbstractString, rank::Integer; temp=true)
+    base = splitext(basename(filename))[1]
+    ext  = splitext(filename)[2]
+    if temp
+        return joinpath("tmp", @sprintf("%s_%d%s", base, rank, ext))
+    else
+        return @sprintf("%s_%d%s", base, rank, ext)
+    end
+end
 
 """
     write_to_file(M, filename)
