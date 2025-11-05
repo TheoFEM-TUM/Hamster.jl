@@ -66,7 +66,7 @@ function get_rllm(overlaps, conf=get_empty_config();
         read_rllm(overlaps, comm, rllm_dict, filename=rllm_file)
     else
         i = 0
-        if isfile(rllm_file) && !occursin(".h5", rllm_file) && rank == 0; rm(rllm_file); end
+        if isfile(rllm_file) && rank == 0 && interpolate_rllm; rm(rllm_file); end
         
         rank_rllm_file = nranks > 1 ? get_rank_filename(rllm_file, rank) : rllm_file
         overlaps_str = [string(overlap, apply_oc=true) for overlap in overlaps]
