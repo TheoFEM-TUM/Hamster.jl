@@ -83,12 +83,13 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       prof = HamsterProfiler(3, conf)
       
       optimize_model!(ham_train, ham_val, optim, dl, prof, comm_active, conf, rank=active_rank, nranks=active_size)
+      if rank == 0 && write_output
+         write_params(ham_train, conf)
+      end
    else
       prof = HamsterProfiler(3, conf)
    end
    MPI.Barrier(comm)
-   if rank == 0 && write_output
-      write_params(ham_train, conf)
-   end
+
    return prof
 end
