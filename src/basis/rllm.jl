@@ -72,7 +72,7 @@ function get_rllm(overlaps, conf=get_empty_config();
         overlaps_str = [string(overlap, apply_oc=true) for overlap in overlaps]
 
         # Check the global rllm file
-        if occursin(".h5", rllm_file) && isfile(rllm_file)
+        if occursin(".h5", rllm_file) && isfile(rllm_file) && !interpolate_rllm
             i1 = length(rllm_dict)
             check_for_previous_interpolations!(rllm_dict, i, overlaps_str, comm; rllm_file=rllm_file, verbosity=verbosity, nranks=nranks)
             i2 = length(rllm_dict)

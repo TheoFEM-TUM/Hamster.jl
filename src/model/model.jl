@@ -41,12 +41,13 @@ function TBModel(strc::Structure, basis::Basis, conf=get_empty_config(); update_
 end
 
 function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=get_empty_config();
-                rank = 0,
+                rank=0,
+                nranks=nranks,
                 update_tb=get_update_tb(conf, nparams(bases[1])), 
                 initas=get_init_params(conf))
     
     hs = map(eachindex(strcs)) do n
-        get_geometry_tensor(strcs[n], bases[n], conf, comm=comm)
+        get_geometry_tensor(strcs[n], bases[n], conf, comm=comm, rank=rank, nranks=nranks)
     end
 
     param_labels_local = unique(Iterators.flatten([basis.parameters for basis in bases]))

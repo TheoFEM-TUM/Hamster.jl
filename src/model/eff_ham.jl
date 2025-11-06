@@ -14,6 +14,9 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_mode
         return EffectiveHamiltonian(0, Nothing[], Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)])
     end
 
+    if rank == 0 && verbosity > 0; println("Building effective Hamiltonian model..."); end
+    eff_ham_begin_time = MPI.Wtime() 
+
     Rs = [strc.Rs for strc in strcs]
     if rank == 0 && verbosity > 1; println("   Getting sparse iterators..."); end
     begin_time = MPI.Wtime()
@@ -27,7 +30,7 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_mode
     if tb_model
         if rank == 0 && verbosity > 1; println("   Getting TB model..."); end
         begin_time = MPI.Wtime()
-        models = (models..., TBModel(strcs, bases, comm, conf, rank=rank))
+        models = (models..., TBModel(strcs, bases, comm, conf, rank=rank, nranks=nranks))
         tb_time = MPI.Wtime() - begin_time
         if rank == 0 && verbosity > 1; println("    TB time: $tb_time s"); end
     end
@@ -50,6 +53,9 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_mode
         soc_time = MPI.Wtime() - begin_time
         if rank == 0 && verbosity > 1; println("    SOC time: $soc_time s"); end
     end
+
+    eff_ham_time = MPI.Wtime() - eff_ham_begin_time
+    if rank == 0 && verbosity > 0; println("Effective Hamiltonian model time: $eff_ham_time s"); end
 
     return EffectiveHamiltonian(length(strcs), models, sp_mode, sp_diag, sp_tol, sp_iterators, soc, Rs)
 end
