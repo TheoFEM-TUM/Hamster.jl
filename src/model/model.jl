@@ -42,7 +42,7 @@ end
 
 function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=get_empty_config();
                 rank=0,
-                nranks=nranks,
+                nranks=1,
                 update_tb=get_update_tb(conf, nparams(bases[1])), 
                 initas=get_init_params(conf))
     

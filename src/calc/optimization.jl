@@ -32,7 +32,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    local_train_inds = split_indices_into_chunks(train_config_inds, nranks, rank=rank)
    local_val_inds = split_indices_into_chunks(val_config_inds, nranks, rank=rank)
 
-   has_data = !isempty(local_train_inds) && !isempty(local_val_inds)
+   has_data = !isempty(local_train_inds) && (!isempty(local_val_inds) || !get_validate(conf))
    color = has_data ? 1 : nothing
    comm_active = MPI.Comm_split(comm, color, rank)
 
