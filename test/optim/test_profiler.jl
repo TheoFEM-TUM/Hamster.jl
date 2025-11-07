@@ -76,9 +76,9 @@ end
     # Step 2: Save profiler (should not remove unrelated_data)
     prof = HamsterProfiler(
         rand(3, 3),
-        Dict{String, Matrix{Float64}}("A"=>rand(1, 3)),
+        Dict{String, Matrix{Float64}}("A"=>rand(1, 3), "B"=>rand(1, 3)),
         rand(3),
-        Dict{String, Vector{Float64}}("A"=>rand(3)),
+        Dict{String, Vector{Float64}}("A"=>rand(3), "B"=>rand(3)),
         true,
         42,
         rand(2, 2, 2),
@@ -99,7 +99,8 @@ end
         @test read(file["param_values"]) == prof.param_values
         @test read(file["A"]["L_train"]) == prof.L_train_system["A"]
         @test read(file["A"]["L_val"]) == prof.L_val_system["A"]
-
+        @test read(file["B"]["L_train"]) == prof.L_train_system["B"]
+        @test read(file["B"]["L_val"]) == prof.L_val_system["B"]
 
         attrs = attributes(file)
         @test read(attrs["printeachbatch"]) == prof.printeachbatch
