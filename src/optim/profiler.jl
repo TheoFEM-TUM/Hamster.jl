@@ -276,16 +276,18 @@ function save(prof::HamsterProfiler, rank=0; filename="hamster_out.h5")
             file["val_times"]    = prof.val_times
             file["param_values"] = prof.param_values
 
-            for (system, L_train_system) in prof.L_train_system
-                g = haskey(file, system) ? file[system] : create_group(file, system)
-                if haskey(file, system)
-                    g["L_train"] = L_train_system
+            if length(prof.L_train_system) > 1
+                for (system, L_train_system) in prof.L_train_system
+                    g = haskey(file, system) ? file[system] : create_group(file, system)
+                    if haskey(file, system)
+                        g["L_train"] = L_train_system
+                    end
                 end
-            end
-            for (system, L_val_system) in prof.L_val_system
-                g = haskey(file, system) ? file[system] : create_group(file, system)
-                if haskey(file, system)
-                    g["L_val"] = L_val_system
+                for (system, L_val_system) in prof.L_val_system
+                    g = haskey(file, system) ? file[system] : create_group(file, system)
+                    if haskey(file, system)
+                        g["L_val"] = L_val_system
+                    end
                 end
             end
 
