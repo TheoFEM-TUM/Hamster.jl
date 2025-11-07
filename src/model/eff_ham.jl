@@ -1,6 +1,7 @@
 struct EffectiveHamiltonian{T, S1, S2, IT}
     Nstrc :: Int64
     models :: T
+    systems :: Vector{String}
     sp_mode :: S1
     sp_diag :: S2
     sp_tol :: Float64
@@ -9,9 +10,21 @@ struct EffectiveHamiltonian{T, S1, S2, IT}
     Rs :: Vector{Matrix{Float64}}
 end
 
-function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_model=get_tb_model(conf), ml_model=get_ml_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), sp_tol=get_sp_tol(conf), soc=get_soc(conf), ml_data_points=nothing, rank=0, nranks=1, verbosity=get_verbosity(conf))
+function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); 
+                              tb_model=get_tb_model(conf), 
+                              ml_model=get_ml_model(conf), 
+                              sp_mode=get_sp_mode(conf), 
+                              sp_diag=get_sp_diag(conf), 
+                              sp_tol=get_sp_tol(conf), 
+                              soc=get_soc(conf), 
+                              ml_data_points=nothing, 
+                              rank=0, 
+                              nranks=1,
+                              systems=[strc.system for strc in strcs],
+                              verbosity=get_verbosity(conf))
+
     if isempty(strcs) && isempty(bases)
-        return EffectiveHamiltonian(0, Nothing[], Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)])
+        return EffectiveHamiltonian(0, Nothing[], String[], Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)])
     end
 
     if rank == 0 && verbosity > 0; println("Building effective Hamiltonian model..."); end
@@ -57,7 +70,7 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_mode
     eff_ham_time = MPI.Wtime() - eff_ham_begin_time
     if rank == 0 && verbosity > 0; println("Effective Hamiltonian model time: $eff_ham_time s"); end
 
-    return EffectiveHamiltonian(length(strcs), models, sp_mode, sp_diag, sp_tol, sp_iterators, soc, Rs)
+    return EffectiveHamiltonian(length(strcs), models, systems, sp_mode, sp_diag, sp_tol, sp_iterators, soc, Rs)
 end
 
 """

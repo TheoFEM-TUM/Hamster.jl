@@ -60,7 +60,7 @@ function get_structures(conf=get_empty_config();
                 δrs_ion[:, iion] = rs_0[:, iion] - rs_all[:, iion, index] + Ts[:, Rmin]
             end
 
-            Structure(Rs, rs_0, δrs_ion, atom_types, lattice_i, conf)
+            Structure(Rs, rs_0, δrs_ion, atom_types, lattice_i, conf, system=system)
         end
 
         if lowercase(mode) == "md" || lowercase(mode) == "universal"

@@ -10,6 +10,7 @@ A data structure representing a crystal structure, including its lattice vectors
 - `point_grid::PointGrid`: A data structure used for efficiently finding neighboring ions based on their positions.
 """
 struct Structure
+    system :: String
     lattice :: Matrix{Float64}
     Rs :: Matrix{Float64}
     ions :: Vector{Ion}
@@ -30,13 +31,13 @@ Create a `Structure` instance from a POSCAR file.
 # Returns
 - `Structure`: A `Structure` instance.
 """
-function Structure(conf=get_empty_config(); Rs=zeros(3, 1), poscar_path=get_poscar(conf), rcut=get_rcut(conf), grid_size=get_grid_size(conf), verbosity=get_verbosity(conf))
+function Structure(conf=get_empty_config(); Rs=zeros(3, 1), poscar_path=get_poscar(conf), rcut=get_rcut(conf), grid_size=get_grid_size(conf), system=get_system(conf), verbosity=get_verbosity(conf))
     time = @elapsed begin
         poscar = read_poscar(poscar_path)
         @unpack rs_atom, lattice, atom_types = poscar
         Rs = Rs == zeros(3, 1) ? get_translation_vectors(frac_to_cart(rs_atom, lattice), lattice, rcut=rcut) : Rs
         strc = Structure(Rs, frac_to_cart(rs_atom, lattice), atom_types, lattice, conf, 
-                            rcut=rcut, grid_size=grid_size)
+                            rcut=rcut, grid_size=grid_size, system=system)
     end
     if verbosity > 0
         append_output_block("Structure Information:", 
@@ -65,13 +66,13 @@ Create a `Structure` instance from atomic information.
 # Returns
 - `Structure`: A `Structure` instance.
 """
-function Structure(Rs::M1, rs_ion::M2, δrs_ion::M3, ion_types, lattice::M4, conf::Config=get_empty_config(); rcut=get_rcut(conf), grid_size=get_grid_size(conf)) where {M1,M2,M3,M4<:Matrix{Float64}}
+function Structure(Rs::M1, rs_ion::M2, δrs_ion::M3, ion_types, lattice::M4, conf::Config=get_empty_config(); rcut=get_rcut(conf), grid_size=get_grid_size(conf), system=get_system(conf)) where {M1,M2,M3,M4<:Matrix{Float64}}
     point_grid = PointGrid(rs_ion, frac_to_cart(Rs, lattice), grid_size=grid_size)
     ions = get_ions(rs_ion, ion_types, δrs_ion)
 
-    return Structure(lattice, Rs, ions, point_grid)
+    return Structure(system, lattice, Rs, ions, point_grid)
 end
 
-function Structure(Rs::M1, rs_ion::M2, ion_types, lattice::M3, conf::Config=get_empty_config(); rcut=get_rcut(conf), grid_size=get_grid_size(conf)) where {M1,M2,M3<:Matrix{Float64}}
-    return Structure(Rs, rs_ion, zeros(3, size(rs_ion, 2)), ion_types, lattice, conf; rcut=rcut, grid_size=grid_size)
+function Structure(Rs::M1, rs_ion::M2, ion_types, lattice::M3, conf::Config=get_empty_config(); rcut=get_rcut(conf), grid_size=get_grid_size(conf), system=get_system(conf)) where {M1,M2,M3<:Matrix{Float64}}
+    return Structure(Rs, rs_ion, zeros(3, size(rs_ion, 2)), ion_types, lattice, conf; rcut=rcut, grid_size=grid_size, system=system)
 end
