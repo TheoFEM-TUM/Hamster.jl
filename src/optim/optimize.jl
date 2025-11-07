@@ -154,7 +154,7 @@ function val_step!(ham_val, loss, val_data, prof, iter, comm; rank=0, nranks=1, 
         forward(ham_val, index, loss, val_data[index])[1] / ham_val.Nstrc
     end
 
-    all_systems = MPI.gather(ham_val.systems[indices], comm, root=0)
+    all_systems = MPI.gather(ham_val.systems, comm, root=0)
     all_losses = MPI.gather(Ls_val, comm, root=0)
     if rank == 0
         all_systems = vcat(all_systems...)
