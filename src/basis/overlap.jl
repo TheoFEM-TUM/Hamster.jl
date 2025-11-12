@@ -37,6 +37,8 @@ function Base.isequal(ov1::OV1, ov2::OV2) where {OV1,OV2<:TBOverlap}
     return cond1 && cond2 && cond3
 end
 
+Base.hash(a::TBOverlap, h::UInt) = hash((a.type, a.orbconfig, a.ion_label), h)
+
 """
     get_overlaps(ions, orbitals, conf=get_empty_config())
 
@@ -87,9 +89,9 @@ function get_overlaps_for_orbitals(orbitals_1, orbitals_2, ion_label, ionswap)
     for (iorb, orb_i) in enumerate(orbitals_1), orb_j in orbitals_2[ifelse(sameions, iorb, 1):end]
         Ys_i = get_orbital_list(orb_i.type)
         Ys_j = get_orbital_list(orb_j.type)
-        baseorb = ionswap ? Tuple([orb_j.type, orb_i.type]) : Tuple([orb_i.type, orb_j.type])
+        base_ls = ionswap ? Tuple([orb_j.type.l, orb_i.type.l]) : Tuple([orb_i.type.l, orb_j.type.l])
         for Y_i in Ys_i, Y_j in Ys_j
-            me_label = get_me_label(Y_i, Y_j, baseorb)
+            me_label = get_me_label(Y_i, Y_j, base_ls)
             if !(typeof(me_label) <: ZeroOverlap)
                 orbconfig = OrbitalConfiguration(Y_i, Y_j, Ys_i, Ys_j, sameions=sameions, ionswap=ionswap)
                 push!(interaction_overlaps, TBOverlap(me_label, orbconfig, ion_label))
@@ -139,7 +141,9 @@ the given `TBOverlap` object.
 - A tuple `(l1, l2)` where `l1` is the angular momentum quantum number of the first orbital and 
   `l2` is that of the second orbital.
 """
-get_baseorb_ls(overlap::TBOverlap) = overlap.type.base[1].l, overlap.type.base[2].l
+function get_baseorb_ls(overlap::TBOverlap)
+    return overlap.type.base_ls[1], overlap.type.base_ls[2]
+end
 
 """
     same_ion_label(Vllm, ion_label)
@@ -154,7 +158,7 @@ end
 
 struct ZeroOverlap<:MatrixElement; end
 #(me::MatrixElement)(x...) = me(x...)
-get_me_label(::Angular, ::Angular, base)::MatrixElement = ZeroOverlap()
+get_me_label(::Angular, ::Angular, base_ls)::MatrixElement = ZeroOverlap()
 
 """
     decide_orbconfig(Vllm, ion_label)
@@ -183,193 +187,201 @@ function NConst(::ConjugateMode, base, l₁, l₂)
     return √(Nspd₁[l₁+1]*Nspd₂[l₂+1] / (sum(Nspd₁)*sum(Nspd₂)))
 end
 
+function phase(base)
+    if base[1].l ≥ 0 && base[2].l ≥ 0
+        return +1
+    else
+        return -1
+    end
+end
+
 """
     Vssσ
 """
-struct Vssσ{A1,A2<:Angular}<:MatrixElement
-    base :: Tuple{A1, A2}
+struct Vssσ<:MatrixElement
+    base_ls :: Tuple{Int64, Int64}
 end
 
-get_me_label(Y₁::s, Y₂::s, base)::MatrixElement = Vssσ(get_base_orb(base))
+get_me_label(Y₁::s, Y₂::s, base_ls)::MatrixElement = Vssσ(base_ls)
 
-copy(v::Vssσ) = Vssσ(v.base)
+copy(v::Vssσ) = Vssσ(v.base_ls)
 
 Base.string(::Vssσ) = "ssσ"
 
-(v::Vssσ)(orbconfig, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 0, 0) * 1.
+(v::Vssσ)(base, orbconfig, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 0, 0) * 1.
 
 """
     Vspσ
 """
-struct Vspσ{A1,A2<:Angular}<:MatrixElement
-    base :: Tuple{A1, A2}
+struct Vspσ<:MatrixElement
+    base_ls :: Tuple{Int64, Int64}
 end
 
-get_me_label(::s, ::pz, base)::MatrixElement = Vspσ(get_base_orb(base))
-get_me_label(::pz, ::s, base)::MatrixElement = Vspσ(get_base_orb(base))
+get_me_label(::s, ::pz, base_ls)::MatrixElement = Vspσ(base_ls)
+get_me_label(::pz, ::s, base_ls)::MatrixElement = Vspσ(base_ls)
 
-copy(v::Vspσ) = Vspσ(v.base)
+copy(v::Vspσ) = Vspσ(v.base_ls)
 
 Base.string(::Vspσ) = "spσ"
 
-(v::Vspσ)(::SymOrb, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 0, 1)*fpz(θ₂, φ₂) - NConst(mode, v.base, 1, 0)*fpz(θ₁, φ₁)
-(v::Vspσ)(::DefOrb, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 0, 1)*fpz(θ₂, φ₂)
-(v::Vspσ)(::MirrOrb, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = -NConst(mode, v.base, 1, 0)*fpz(θ₁, φ₁)
+(v::Vspσ)(base, ::SymOrb, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 0, 1)*fpz(θ₂, φ₂) + phase(base)*NConst(mode, base, 1, 0)*fpz(θ₁, φ₁)
+(v::Vspσ)(base, ::DefOrb, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 0, 1)*fpz(θ₂, φ₂)
+(v::Vspσ)(base, ::MirrOrb, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = phase(base)*NConst(mode, base, 1, 0)*fpz(θ₁, φ₁)
 
 """
     Vppσ
 """
-struct Vppσ{A1,A2<:Angular}<:MatrixElement
-    base :: Tuple{A1, A2}
+struct Vppσ<:MatrixElement
+    base_ls :: Tuple{Int64, Int64}
 end
 
-get_me_label(::pz, ::pz, base)::MatrixElement = Vppσ(get_base_orb(base))
+get_me_label(::pz, ::pz, base_ls)::MatrixElement = Vppσ(base_ls)
 
-copy(v::Vppσ) = Vppσ(v.base)
+copy(v::Vppσ) = Vppσ(v.base_ls)
 
 Base.string(::Vppσ) = "ppσ"
 
-(v::Vppσ)(orbconfig, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 1, 1)*fpz(θ₁, φ₁) * fpz(θ₂, φ₂)
+(v::Vppσ)(base, orbconfig, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 1)*fpz(θ₁, φ₁) * fpz(θ₂, φ₂)
 
 """
     Vppπ
 """
-struct Vppπ{A1,A2<:Angular}<:MatrixElement
-    base :: Tuple{A1, A2}
+struct Vppπ<:MatrixElement
+    base_ls :: Tuple{Int64, Int64}
 end
 
-get_me_label(::px, ::px, base)::MatrixElement = Vppπ(get_base_orb(base))
-get_me_label(::py, ::py, base)::MatrixElement = Vppπ(get_base_orb(base))
+get_me_label(::px, ::px, base_ls)::MatrixElement = Vppπ(base_ls)
+get_me_label(::py, ::py, base_ls)::MatrixElement = Vppπ(base_ls)
 
-copy(v::Vppπ) = Vppπ(v.base)
+copy(v::Vppπ) = Vppπ(v.base_ls)
 
 Base.string(::Vppπ) = "ppπ"
 
-(v::Vppπ)(orbconfig, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 1, 1)*fpx(θ₁, φ₁)*fpx(θ₂, φ₂) + NConst(mode, v.base, 1, 1)*fpy(θ₁, φ₁)*fpy(θ₂, φ₂)
+(v::Vppπ)(base, orbconfig, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 1)*fpx(θ₁, φ₁)*fpx(θ₂, φ₂) + NConst(mode, base, 1, 1)*fpy(θ₁, φ₁)*fpy(θ₂, φ₂)
 
 """
     Vsdσ
 """
-struct Vsdσ{A1,A2<:Angular}<:MatrixElement
-    base :: Tuple{A1, A2}
+struct Vsdσ<:MatrixElement
+    base_ls :: Tuple{Int64, Int64}
 end
 
-get_me_label(::s, ::dz2, base)::MatrixElement = Vsdσ(get_base_orb(base))
-get_me_label(::dz2, ::s, base)::MatrixElement = Vsdσ(get_base_orb(base))
+get_me_label(::s, ::dz2, base_ls)::MatrixElement = Vsdσ(base_ls)
+get_me_label(::dz2, ::s, base_ls)::MatrixElement = Vsdσ(base_ls)
 
-copy(v::Vsdσ) = Vsdσ(v.base)
+copy(v::Vsdσ) = Vsdσ(v.base_ls)
 
 Base.string(::Vsdσ) = "sdσ"
 
-(v::Vsdσ)(::SymOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 0, 2)*fdz2(v.base[2], θ₂, φ₂) + NConst(mode, v.base, 2, 0)*fdz2(v.base[1], θ₁, φ₁)
-(v::Vsdσ)(::SymOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 0, 2)*fdz2(v.base[1], θ₂, φ₂) + NConst(mode, v.base, 2, 0)*fdz2(v.base[2], θ₁, φ₁)
+(v::Vsdσ)(base, ::SymOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 0, 2)*fdz2(base[2], θ₂, φ₂) + NConst(mode, base, 2, 0)*fdz2(base[1], θ₁, φ₁)
+(v::Vsdσ)(base, ::SymOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 0, 2)*fdz2(base[1], θ₂, φ₂) + NConst(mode, base, 2, 0)*fdz2(base[2], θ₁, φ₁)
 
-(v::Vsdσ)(::DefOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 0, 2)*fdz2(v.base[2], θ₂, φ₂)
-(v::Vsdσ)(::DefOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 0, 2)*fdz2(v.base[1], θ₂, φ₂)
+(v::Vsdσ)(base, ::DefOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 0, 2)*fdz2(base[2], θ₂, φ₂)
+(v::Vsdσ)(base, ::DefOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 0, 2)*fdz2(base[1], θ₂, φ₂)
 
-(v::Vsdσ)(::MirrOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 0)*fdz2(v.base[1], θ₁, φ₁)
-(v::Vsdσ)(::MirrOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 0)*fdz2(v.base[2], θ₁, φ₁)
+(v::Vsdσ)(base, ::MirrOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 2, 0)*fdz2(base[1], θ₁, φ₁)
+(v::Vsdσ)(base, ::MirrOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 2, 0)*fdz2(base[2], θ₁, φ₁)
 
 """
     Vpdσ
 """
-struct Vpdσ{A1,A2<:Angular}<:MatrixElement
-    base :: Tuple{A1,A2}
+struct Vpdσ<:MatrixElement
+    base_ls :: Tuple{Int64, Int64}
 end
 
-get_me_label(::pz, ::dz2, base)::MatrixElement = Vpdσ(get_base_orb(base))
-get_me_label(::dz2, ::pz, base)::MatrixElement = Vpdσ(get_base_orb(base))
+get_me_label(::pz, ::dz2, base_ls)::MatrixElement = Vpdσ(base_ls)
+get_me_label(::dz2, ::pz, base_ls)::MatrixElement = Vpdσ(base_ls)
 
-copy(v::Vpdσ) = Vpdσ(v.base)
+copy(v::Vpdσ) = Vpdσ(v.base_ls)
 
 Base.string(::Vpdσ) = "pdσ"
 
-(v::Vpdσ)(::SymOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 1, 2)*fpz(θ₁, φ₁)*fdz2(v.base[2], θ₂, φ₂) - NConst(mode, v.base, 2, 1)*fdz2(v.base[1], θ₁, φ₁)*fpz(θ₂, φ₂)
-(v::Vpdσ)(::SymOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 1, 2)*fpz(θ₁, φ₁)*fdz2(v.base[1], θ₂, φ₂) - NConst(mode, v.base, 2, 1)*fdz2(v.base[2], θ₁, φ₁)*fpz(θ₂, φ₂)
+(v::Vpdσ)(base, ::SymOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpz(θ₁, φ₁)*fdz2(base[2], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdz2(base[1], θ₁, φ₁)*fpz(θ₂, φ₂)
+(v::Vpdσ)(base, ::SymOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpz(θ₁, φ₁)*fdz2(base[1], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdz2(base[2], θ₁, φ₁)*fpz(θ₂, φ₂)
 
-(v::Vpdσ)(::DefOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 1, 2)*fpz(θ₁, φ₁)*fdz2(v.base[2], θ₂, φ₂)
-(v::Vpdσ)(::DefOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 1, 2)*fpz(θ₁, φ₁)*fdz2(v.base[1], θ₂, φ₂)
+(v::Vpdσ)(base, ::DefOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpz(θ₁, φ₁)*fdz2(base[2], θ₂, φ₂)
+(v::Vpdσ)(base, ::DefOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpz(θ₁, φ₁)*fdz2(base[1], θ₂, φ₂)
 
-(v::Vpdσ)(::MirrOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = -NConst(mode, v.base, 2, 1)*fdz2(v.base[1], θ₁, φ₁)*fpz(θ₂, φ₂)
-(v::Vpdσ)(::MirrOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = -NConst(mode, v.base, 2, 1)*fdz2(v.base[2], θ₁, φ₁)*fpz(θ₂, φ₂)
+(v::Vpdσ)(base, ::MirrOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = phase(base)*NConst(mode, base, 2, 1)*fdz2(base[1], θ₁, φ₁)*fpz(θ₂, φ₂)
+(v::Vpdσ)(base, ::MirrOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = phase(base)*NConst(mode, base, 2, 1)*fdz2(base[2], θ₁, φ₁)*fpz(θ₂, φ₂)
 
 """
     Vpdπ
 """
-struct Vpdπ{A1,A2<:Angular}<:MatrixElement
-    base :: Tuple{A1, A2}
+struct Vpdπ<:MatrixElement
+    base_ls :: Tuple{Int64, Int64}
 end
 
-get_me_label(::px, ::dxz, base)::MatrixElement = Vpdπ(get_base_orb(base))
-get_me_label(::dxz, ::px, base)::MatrixElement = Vpdπ(get_base_orb(base))
-get_me_label(::py, ::dyz, base)::MatrixElement = Vpdπ(get_base_orb(base))
-get_me_label(::dyz, ::py, base)::MatrixElement = Vpdπ(get_base_orb(base))
+get_me_label(::px, ::dxz, base_ls)::MatrixElement = Vpdπ(base_ls)
+get_me_label(::dxz, ::px, base_ls)::MatrixElement = Vpdπ(base_ls)
+get_me_label(::py, ::dyz, base_ls)::MatrixElement = Vpdπ(base_ls)
+get_me_label(::dyz, ::py, base_ls)::MatrixElement = Vpdπ(base_ls)
 
-copy(v::Vpdπ) = Vpdπ(v.base)
+copy(v::Vpdπ) = Vpdπ(v.base_ls)
 
 Base.string(::Vpdπ) = "pdπ"
 
-(v::Vpdπ)(::SymOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 1, 2)*fpx(θ₁, φ₁)*fdxz(v.base[2], θ₂, φ₂) - NConst(mode, v.base, 2, 1)*fdxz(v.base[1], θ₁, φ₁)*fpx(θ₂, φ₂) + NConst(mode, v.base, 1, 2)*fpy(θ₁, φ₁)*fdyz(v.base[2], θ₂, φ₂) - NConst(mode, v.base, 2, 1)*fdyz(v.base[1], θ₁, φ₁)*fpy(θ₂, φ₂)
-(v::Vpdπ)(::SymOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 1, 2)*fpx(θ₁, φ₁)*fdxz(v.base[1], θ₂, φ₂) - NConst(mode, v.base, 2, 1)*fdxz(v.base[2], θ₁, φ₁)*fpx(θ₂, φ₂) + NConst(mode, v.base, 1, 2)*fpy(θ₁, φ₁)*fdyz(v.base[1], θ₂, φ₂) - NConst(mode, v.base, 2, 1)*fdyz(v.base[2], θ₁, φ₁)*fpy(θ₂, φ₂)
+(v::Vpdπ)(base, ::SymOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpx(θ₁, φ₁)*fdxz(base[2], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdxz(base[1], θ₁, φ₁)*fpx(θ₂, φ₂) + NConst(mode, base, 1, 2)*fpy(θ₁, φ₁)*fdyz(base[2], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdyz(base[1], θ₁, φ₁)*fpy(θ₂, φ₂)
+(v::Vpdπ)(base, ::SymOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpx(θ₁, φ₁)*fdxz(base[1], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdxz(base[2], θ₁, φ₁)*fpx(θ₂, φ₂) + NConst(mode, base, 1, 2)*fpy(θ₁, φ₁)*fdyz(base[1], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdyz(base[2], θ₁, φ₁)*fpy(θ₂, φ₂)
 
-(v::Vpdπ)(::DefOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 1, 2)*fpx(θ₁, φ₁)*fdxz(v.base[2], θ₂, φ₂) + NConst(mode, v.base, 1, 2)*fpy(θ₁, φ₁)*fdyz(v.base[2], θ₂, φ₂)
-(v::Vpdπ)(::DefOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 1, 2)*fpx(θ₁, φ₁)*fdxz(v.base[1], θ₂, φ₂) + NConst(mode, v.base, 1, 2)*fpy(θ₁, φ₁)*fdyz(v.base[1], θ₂, φ₂)
+(v::Vpdπ)(base, ::DefOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpx(θ₁, φ₁)*fdxz(base[2], θ₂, φ₂) + NConst(mode, base, 1, 2)*fpy(θ₁, φ₁)*fdyz(base[2], θ₂, φ₂)
+(v::Vpdπ)(base, ::DefOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpx(θ₁, φ₁)*fdxz(base[1], θ₂, φ₂) + NConst(mode, base, 1, 2)*fpy(θ₁, φ₁)*fdyz(base[1], θ₂, φ₂)
 
-(v::Vpdπ)(::MirrOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = -NConst(mode, v.base, 2, 1)*fdxz(v.base[1], θ₁, φ₁)*fpx(θ₂, φ₂) - NConst(mode, v.base, 2, 1)*fdyz(v.base[1], θ₁, φ₁)*fpy(θ₂, φ₂)
-(v::Vpdπ)(::MirrOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = -NConst(mode, v.base, 2, 1)*fdxz(v.base[2], θ₁, φ₁)*fpx(θ₂, φ₂) - NConst(mode, v.base, 2, 1)*fdyz(v.base[2], θ₁, φ₁)*fpy(θ₂, φ₂)
+(v::Vpdπ)(base, ::MirrOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = phase(base)*NConst(mode, base, 2, 1)*fdxz(base[1], θ₁, φ₁)*fpx(θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdyz(base[1], θ₁, φ₁)*fpy(θ₂, φ₂)
+(v::Vpdπ)(base, ::MirrOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = phase(base)*NConst(mode, base, 2, 1)*fdxz(base[2], θ₁, φ₁)*fpx(θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdyz(base[2], θ₁, φ₁)*fpy(θ₂, φ₂)
 
 """
     Vddσ
 
 Overlap parameter for overlaps between an s- and a d-orbital with |m|=0.
 """
-struct Vddσ{A1,A2<:Angular}<:MatrixElement
-    base :: Tuple{A1, A2}
+struct Vddσ<:MatrixElement
+    base_ls :: Tuple{Int64, Int64}
 end
 
-get_me_label(::dz2, ::dz2, base)::MatrixElement = Vddσ(get_base_orb(base))
+get_me_label(::dz2, ::dz2, base_ls)::MatrixElement = Vddσ(base_ls)
 
-copy(v::Vddσ) = Vddσ(v.base)
+copy(v::Vddσ) = Vddσ(v.base_ls)
 
 Base.string(::Vddσ) = "ddσ"
 
-(v::Vddσ)(orbconfig, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 2)*fdz2(v.base[1], θ₁, φ₁)*fdz2(v.base[2], θ₂, φ₂)
-(v::Vddσ)(orbconfig, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 2)*fdz2(v.base[2], θ₁, φ₁)*fdz2(v.base[1], θ₂, φ₂)
+(v::Vddσ)(base, orbconfig, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 2, 2)*fdz2(base[1], θ₁, φ₁)*fdz2(base[2], θ₂, φ₂)
+(v::Vddσ)(base, orbconfig, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 2, 2)*fdz2(base[2], θ₁, φ₁)*fdz2(base[1], θ₂, φ₂)
 
 """
     Vddπ
 
 Overlap parameter for overlaps between two d-orbitals with |m|=1.
 """
-struct Vddπ{A1,A2<:Angular}<:MatrixElement
-    base :: Tuple{A1, A2}
+struct Vddπ<:MatrixElement
+    base_ls :: Tuple{Int64, Int64}
 end
 
-get_me_label(::dxz, ::dxz, base)::MatrixElement = Vddπ(get_base_orb(base))
-get_me_label(::dyz, ::dyz, base)::MatrixElement = Vddπ(get_base_orb(base))
+get_me_label(::dxz, ::dxz, base_ls)::MatrixElement = Vddπ(base_ls)
+get_me_label(::dyz, ::dyz, base_ls)::MatrixElement = Vddπ(base_ls)
 
-copy(v::Vddπ) = Vddπ(v.base)
+copy(v::Vddπ) = Vddπ(v.base_ls)
 
 Base.string(::Vddπ) = "ddπ"
 
-(v::Vddπ)(orbconfig, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 2)*fdxz(v.base[1], θ₁, φ₁)*fdxz(v.base[2], θ₂, φ₂) + NConst(mode, v.base, 2, 2)*fdyz(v.base[1], θ₁, φ₁)*fdyz(v.base[2], θ₂, φ₂)
-(v::Vddπ)(orbconfig, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 2)*fdxz(v.base[2], θ₁, φ₁)*fdxz(v.base[1], θ₂, φ₂) + NConst(mode, v.base, 2, 2)*fdyz(v.base[2], θ₁, φ₁)*fdyz(v.base[1], θ₂, φ₂)
+(v::Vddπ)(base, orbconfig, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 2, 2)*fdxz(base[1], θ₁, φ₁)*fdxz(base[2], θ₂, φ₂) + NConst(mode, base, 2, 2)*fdyz(base[1], θ₁, φ₁)*fdyz(base[2], θ₂, φ₂)
+(v::Vddπ)(base, orbconfig, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 2, 2)*fdxz(base[2], θ₁, φ₁)*fdxz(base[1], θ₂, φ₂) + NConst(mode, base, 2, 2)*fdyz(base[2], θ₁, φ₁)*fdyz(base[1], θ₂, φ₂)
 
 """
     Vddδ
 
 Overlap parameter for overlaps between two d-orbitals with |m|=2.
 """
-struct Vddδ{A1,A2<:Angular}<:MatrixElement
-    base :: Tuple{A1, A2}
+struct Vddδ<:MatrixElement
+    base_ls :: Tuple{Int64, Int64}
 end
 
-get_me_label(::dxy, ::dxy, base)::MatrixElement = Vddδ(get_base_orb(base))
-get_me_label(::dx2_y2, ::dx2_y2, base)::MatrixElement = Vddδ(get_base_orb(base))
+get_me_label(::dxy, ::dxy, base_ls)::MatrixElement = Vddδ(base_ls)
+get_me_label(::dx2_y2, ::dx2_y2, base_ls)::MatrixElement = Vddδ(base_ls)
 
-copy(v::Vddδ) = Vddδ(v.base)
+copy(v::Vddδ) = Vddδ(v.base_ls)
 
 Base.string(::Vddδ) = "ddδ"
 
-(v::Vddδ)(orbconfig, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 2)*fdxy(v.base[1], θ₁, φ₁)*fdxy(v.base[2], θ₂, φ₂) + NConst(mode, v.base, 2, 2)*fdx2_y2(v.base[1], θ₁, φ₁)*fdx2_y2(v.base[2], θ₂, φ₂)
-(v::Vddδ)(orbconfig, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 2)*fdxy(v.base[2], θ₁, φ₁)*fdxy(v.base[1], θ₂, φ₂) + NConst(mode, v.base, 2, 2)*fdx2_y2(v.base[2], θ₁, φ₁)*fdx2_y2(v.base[1], θ₂, φ₂)
+(v::Vddδ)(base, orbconfig, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 2, 2)*fdxy(base[1], θ₁, φ₁)*fdxy(base[2], θ₂, φ₂) + NConst(mode, base, 2, 2)*fdx2_y2(base[1], θ₁, φ₁)*fdx2_y2(base[2], θ₂, φ₂)
+(v::Vddδ)(base, orbconfig, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 2, 2)*fdxy(base[2], θ₁, φ₁)*fdxy(base[1], θ₂, φ₂) + NConst(mode, base, 2, 2)*fdx2_y2(base[2], θ₁, φ₁)*fdx2_y2(base[1], θ₂, φ₂)

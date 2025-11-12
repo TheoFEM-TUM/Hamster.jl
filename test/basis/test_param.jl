@@ -63,6 +63,21 @@ end
     rm(string(@__DIR__)*"/params.dat")
 end
 
+@testset "Parameters GaAs overlaps (d-orbs)" begin
+    conf = get_empty_config()
+    set_value!(conf, "orbitals", "Ga", "s px py pz dxy dyz dxz dz2 dx2_y2")
+    set_value!(conf, "orbitals", "As", "s px py pz dxy dyz dxz dz2 dx2_y2")
+    set_value!(conf, "interpolate_rllm", false)
+    
+    strc_gaas = Structure(conf, poscar_path=gaas_poscar)
+    orbitals_gaas = Hamster.get_orbitals(strc_gaas, conf)
+
+    overlaps_gaas = Hamster.get_overlaps(strc_gaas.ions, orbitals_gaas, conf)
+    params_gaas = Hamster.get_parameters_from_overlaps(overlaps_gaas, conf, onsite=true)
+    @test length(overlaps_gaas) == 34
+    @test length(params_gaas) == 10*3 + 8*2
+end
+
 @testset "Parameters CsPbBr3" begin
     conf = get_empty_config()
     set_value!(conf, "orbitals", "Cs", "s")

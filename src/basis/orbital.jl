@@ -114,6 +114,9 @@ Returns the unit vector(s) representing the axis (or axes) of the given orbital 
 get_axis(h::sp3) = [SVector{3}([1., 1., 1.]), SVector{3}([1., -1., -1.]), SVector{3}([-1., 1., -1.]), SVector{3}([-1., -1., 1.])]
 get_axis(o::s) = SVector{3}([0., 0., 1.])
 get_axis(o::px) = SVector{3}([1., 0., 0.]); get_axis(o::py) = SVector{3}([0., 1., 0.]); get_axis(o::pz) = SVector{3}([0., 0., 1.])
+get_axis(o::dxz) = SVector{3}([0., 0., 1.]); get_axis(o::dxy) = SVector{3}([0., 0., 1.]); 
+get_axis(o::dyz) = SVector{3}([0., 0., 1.]); get_axis(o::dz2) = SVector{3}([0., 0., 1.]); 
+get_axis(o::dx2_y2) = SVector{3}([0., 0., 1.]);
 get_axis(o::pxdx2) =  SVector{3}([1., 0., 0.]); get_axis(o::pydy2) = SVector{3}([0., 1., 0.]); get_axis(o::pzdz2) = SVector{3}([0., 0., 1.])
 
 get_orbital_list(::s) = Angular[s()]
@@ -121,6 +124,11 @@ get_orbital_list(p::px) = Angular[px(), py(), py()]
 get_orbital_list(p::py) = Angular[px(), py(), pz()]
 get_orbital_list(p::pz) = Angular[px(), py(), pz()]
 get_orbital_list(h::sp3) = Angular[s(), px(), py(), pz()]
+get_orbital_list(d::dxz) = [dxz(), dxy(), dyz(), dx2_y2(), dz2()]
+get_orbital_list(d::dxy) = [dxz(), dxy(), dyz(), dx2_y2(), dz2()]
+get_orbital_list(d::dyz) = [dxz(), dxy(), dyz(), dx2_y2(), dz2()]
+get_orbital_list(d::dz2) = [dxz(), dxy(), dyz(), dx2_y2(), dz2()]
+get_orbital_list(d::dx2_y2) = [dxz(), dxy(), dyz(), dx2_y2(), dz2()]
 get_orbital_list(h::sp3dr2) = Angular[s(), px(), py(), pz(), dxz(), dxy(), dyz(), dx2_y2(), dz2()]
 get_orbital_list(h::pxdx2) = Angular[px(), py(), pz(), dxz(), dxy(), dyz(), dx2_y2(), dz2()]
 get_orbital_list(h::pydy2) = Angular[px(), py(), pz(), dxz(), dxy(), dyz(), dx2_y2(), dz2()]
