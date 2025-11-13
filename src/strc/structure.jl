@@ -41,8 +41,8 @@ function Structure(conf=get_empty_config(); Rs=zeros(3, 1), poscar_path=get_posc
     end
     if verbosity > 0
         append_output_block("Structure Information:", 
-        ["POSCAR", "rcut", "grid_size", "Number of atoms", "Unique atom species", "Number of R vectors", "Ion interactions", "Ion interaction total", "Structure time"], 
-        [poscar_path, rcut, grid_size, length(strc.ions), get_ion_types(strc.ions, uniq=true), size(strc.Rs, 2), length(iterate_nn_grid_points(strc.point_grid)), length(strc.ions)^2 * size(strc.Rs, 2), time])
+        ["POSCAR", "rcut", "grid_size", "Number of atoms", "Number of R vectors", "Ion interactions", "Ion interaction total", "Structure time"], 
+        [poscar_path, rcut, grid_size, length(strc.ions), size(strc.Rs, 2), length(iterate_nn_grid_points(strc.point_grid)), length(strc.ions)^2 * size(strc.Rs, 2), time])
     end
     return strc
 end
