@@ -40,7 +40,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
             itype = strc.ions[iion].type; l_i = l_map[i]
             jtype = strc.ions[jion].type; l_j = l_map[j]
             
-            Zs = [element_to_number(strc.ions[iion].type), element_to_number(strc.ions[jion].type)]
+            Zs = [strc.ions[iion].type, strc.ions[jion].type]
             iaxis = get_sym_axis(basis.orbitals[iion][iorb])
             jaxis = get_sym_axis(basis.orbitals[jion][jorb])
             φ, θs = get_angular_descriptors(ri, rj, iaxis, jaxis)
