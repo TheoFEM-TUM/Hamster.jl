@@ -179,12 +179,12 @@ components `l₁` and `l₂`.
 """
 function NConst(::NormalMode, base, l₁, l₂)
     Nspd₁ = Nspd(base[1]); Nspd₂ = Nspd(base[2])
-    return √(Nspd₁[l₁+1]*Nspd₂[l₂+1] / (sum(Nspd₁)*sum(Nspd₂)))
+    return √(Nspd₁[l₁+1]*Nspd₂[l₂+1] / (sum(Nspd₁)*sum(Nspd₂))) * get_sign(base)
 end
 
 function NConst(::ConjugateMode, base, l₁, l₂)
     Nspd₁ = Nspd(base[2]); Nspd₂ = Nspd(base[1])
-    return √(Nspd₁[l₁+1]*Nspd₂[l₂+1] / (sum(Nspd₁)*sum(Nspd₂)))
+    return √(Nspd₁[l₁+1]*Nspd₂[l₂+1] / (sum(Nspd₁)*sum(Nspd₂))) * get_sign(base)
 end
 
 function phase(base)
@@ -192,6 +192,14 @@ function phase(base)
         return +1
     else
         return -1
+    end
+end
+
+function get_sign(base)
+    if base[1].l ≥ 0 && base[1].l ≥ 0
+        return (-1)^(base[1].m + base[2].m)
+    else
+        return +1
     end
 end
 
@@ -224,9 +232,14 @@ copy(v::Vspσ) = Vspσ(v.base_ls)
 
 Base.string(::Vspσ) = "spσ"
 
-(v::Vspσ)(base, ::SymOrb, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 0, 1)*fpz(θ₂, φ₂) + phase(base)*NConst(mode, base, 1, 0)*fpz(θ₁, φ₁)
-(v::Vspσ)(base, ::DefOrb, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 0, 1)*fpz(θ₂, φ₂)
-(v::Vspσ)(base, ::MirrOrb, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = phase(base)*NConst(mode, base, 1, 0)*fpz(θ₁, φ₁)
+(v::Vspσ)(base, ::SymOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 0, 1)*fpz(base[2], θ₂, φ₂) + phase(base)*NConst(mode, base, 1, 0)*fpz(base[1], θ₁, φ₁)
+(v::Vspσ)(base, ::SymOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 0, 1)*fpz(base[1], θ₂, φ₂) + phase(base)*NConst(mode, base, 1, 0)*fpz(base[2], θ₁, φ₁)
+
+(v::Vspσ)(base, ::DefOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 0, 1)*fpz(base[2], θ₂, φ₂)
+(v::Vspσ)(base, ::DefOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 0, 1)*fpz(base[1], θ₂, φ₂)
+
+(v::Vspσ)(base, ::MirrOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = phase(base)*NConst(mode, base, 1, 0)*fpz(base[1], θ₁, φ₁)
+(v::Vspσ)(base, ::MirrOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = phase(base)*NConst(mode, base, 1, 0)*fpz(base[2], θ₁, φ₁)
 
 """
     Vppσ
@@ -241,7 +254,7 @@ copy(v::Vppσ) = Vppσ(v.base_ls)
 
 Base.string(::Vppσ) = "ppσ"
 
-(v::Vppσ)(base, orbconfig, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 1)*fpz(θ₁, φ₁) * fpz(θ₂, φ₂)
+(v::Vppσ)(base, orbconfig, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 1)*fpz(base[1], θ₁, φ₁) * fpz(base[2], θ₂, φ₂)
 
 """
     Vppπ
@@ -257,7 +270,7 @@ copy(v::Vppπ) = Vppπ(v.base_ls)
 
 Base.string(::Vppπ) = "ppπ"
 
-(v::Vppπ)(base, orbconfig, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 1)*fpx(θ₁, φ₁)*fpx(θ₂, φ₂) + NConst(mode, base, 1, 1)*fpy(θ₁, φ₁)*fpy(θ₂, φ₂)
+(v::Vppπ)(base, orbconfig, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 1)*fpx(base[1], θ₁, φ₁)*fpx(base[2], θ₂, φ₂) + NConst(mode, base, 1, 1)*fpy(base[1],θ₁, φ₁)*fpy(base[2], θ₂, φ₂)
 
 """
     Vsdσ
@@ -296,14 +309,14 @@ copy(v::Vpdσ) = Vpdσ(v.base_ls)
 
 Base.string(::Vpdσ) = "pdσ"
 
-(v::Vpdσ)(base, ::SymOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpz(θ₁, φ₁)*fdz2(base[2], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdz2(base[1], θ₁, φ₁)*fpz(θ₂, φ₂)
-(v::Vpdσ)(base, ::SymOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpz(θ₁, φ₁)*fdz2(base[1], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdz2(base[2], θ₁, φ₁)*fpz(θ₂, φ₂)
+(v::Vpdσ)(base, ::SymOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpz(base[1], θ₁, φ₁)*fdz2(base[2], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdz2(base[1], θ₁, φ₁)*fpz(base[2], θ₂, φ₂)
+(v::Vpdσ)(base, ::SymOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpz(base[2], θ₁, φ₁)*fdz2(base[1], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdz2(base[2], θ₁, φ₁)*fpz(base[1], θ₂, φ₂)
 
-(v::Vpdσ)(base, ::DefOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpz(θ₁, φ₁)*fdz2(base[2], θ₂, φ₂)
-(v::Vpdσ)(base, ::DefOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpz(θ₁, φ₁)*fdz2(base[1], θ₂, φ₂)
+(v::Vpdσ)(base, ::DefOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpz(base[1], θ₁, φ₁)*fdz2(base[2], θ₂, φ₂)
+(v::Vpdσ)(base, ::DefOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpz(base[2], θ₁, φ₁)*fdz2(base[1], θ₂, φ₂)
 
-(v::Vpdσ)(base, ::MirrOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = phase(base)*NConst(mode, base, 2, 1)*fdz2(base[1], θ₁, φ₁)*fpz(θ₂, φ₂)
-(v::Vpdσ)(base, ::MirrOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = phase(base)*NConst(mode, base, 2, 1)*fdz2(base[2], θ₁, φ₁)*fpz(θ₂, φ₂)
+(v::Vpdσ)(base, ::MirrOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = phase(base)*NConst(mode, base, 2, 1)*fdz2(base[1], θ₁, φ₁)*fpz(base[2], θ₂, φ₂)
+(v::Vpdσ)(base, ::MirrOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = phase(base)*NConst(mode, base, 2, 1)*fdz2(base[2], θ₁, φ₁)*fpz(base[1], θ₂, φ₂)
 
 """
     Vpdπ
@@ -321,14 +334,14 @@ copy(v::Vpdπ) = Vpdπ(v.base_ls)
 
 Base.string(::Vpdπ) = "pdπ"
 
-(v::Vpdπ)(base, ::SymOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpx(θ₁, φ₁)*fdxz(base[2], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdxz(base[1], θ₁, φ₁)*fpx(θ₂, φ₂) + NConst(mode, base, 1, 2)*fpy(θ₁, φ₁)*fdyz(base[2], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdyz(base[1], θ₁, φ₁)*fpy(θ₂, φ₂)
-(v::Vpdπ)(base, ::SymOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpx(θ₁, φ₁)*fdxz(base[1], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdxz(base[2], θ₁, φ₁)*fpx(θ₂, φ₂) + NConst(mode, base, 1, 2)*fpy(θ₁, φ₁)*fdyz(base[1], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdyz(base[2], θ₁, φ₁)*fpy(θ₂, φ₂)
+(v::Vpdπ)(base, ::SymOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpx(base[1], θ₁, φ₁)*fdxz(base[2], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdxz(base[1], θ₁, φ₁)*fpx(base[2], θ₂, φ₂) + NConst(mode, base, 1, 2)*fpy(base[1], θ₁, φ₁)*fdyz(base[2], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdyz(base[1], θ₁, φ₁)*fpy(base[2], θ₂, φ₂)
+(v::Vpdπ)(base, ::SymOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpx(base[2], θ₁, φ₁)*fdxz(base[1], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdxz(base[2], θ₁, φ₁)*fpx(base[1], θ₂, φ₂) + NConst(mode, base, 1, 2)*fpy(base[2], θ₁, φ₁)*fdyz(base[1], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdyz(base[2], θ₁, φ₁)*fpy(base[1], θ₂, φ₂)
 
-(v::Vpdπ)(base, ::DefOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpx(θ₁, φ₁)*fdxz(base[2], θ₂, φ₂) + NConst(mode, base, 1, 2)*fpy(θ₁, φ₁)*fdyz(base[2], θ₂, φ₂)
-(v::Vpdπ)(base, ::DefOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpx(θ₁, φ₁)*fdxz(base[1], θ₂, φ₂) + NConst(mode, base, 1, 2)*fpy(θ₁, φ₁)*fdyz(base[1], θ₂, φ₂)
+(v::Vpdπ)(base, ::DefOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpx(base[1], θ₁, φ₁)*fdxz(base[2], θ₂, φ₂) + NConst(mode, base, 1, 2)*fpy(base[1], θ₁, φ₁)*fdyz(base[2], θ₂, φ₂)
+(v::Vpdπ)(base, ::DefOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpx(base[2], θ₁, φ₁)*fdxz(base[1], θ₂, φ₂) + NConst(mode, base, 1, 2)*fpy(base[2], θ₁, φ₁)*fdyz(base[1], θ₂, φ₂)
 
-(v::Vpdπ)(base, ::MirrOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = phase(base)*NConst(mode, base, 2, 1)*fdxz(base[1], θ₁, φ₁)*fpx(θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdyz(base[1], θ₁, φ₁)*fpy(θ₂, φ₂)
-(v::Vpdπ)(base, ::MirrOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = phase(base)*NConst(mode, base, 2, 1)*fdxz(base[2], θ₁, φ₁)*fpx(θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdyz(base[2], θ₁, φ₁)*fpy(θ₂, φ₂)
+(v::Vpdπ)(base, ::MirrOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = phase(base)*NConst(mode, base, 2, 1)*fdxz(base[1], θ₁, φ₁)*fpx(base[2], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdyz(base[1], θ₁, φ₁)*fpy(base[2], θ₂, φ₂)
+(v::Vpdπ)(base, ::MirrOrb, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = phase(base)*NConst(mode, base, 2, 1)*fdxz(base[2], θ₁, φ₁)*fpx(base[1], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdyz(base[2], θ₁, φ₁)*fpy(base[1], θ₂, φ₂)
 
 """
     Vddσ
