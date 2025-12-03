@@ -219,7 +219,7 @@ end
 
 @testset "pd-orbitals integration" begin
     for f1 in [px(), py(), pz()], f2 in [dxy(), dyz(), dz2(), dxz(), dx2_y2()]
-        r0 = [1., 1., 1.]#2 .* rand(3) .- 1
+        r0 = 2 .* rand(3) .- 1
         axis1 = [0., 0., 1.]
         axis2 = [0., 0., 1.]
 
@@ -238,13 +238,5 @@ end
 
         
         Is = get_tb_pd_overlap(f1, f2, r0, θ₁, φ₁, θ₂, φ₂, [3, 3], [11., 11.])
-        #@show I0
-        #@show Is
-        #@test I0 ≈ sum(Is) atol=1e-4
-        if !isapprox(I0, sum(Is), atol=1e-4)
-            println("False: $(isodd(f1.m + f2.m)) $(f1.m) $(f2.m)")
-        else
-            println("True: $(iseven(f1.m + f2.m)) $(f1.m) $(f2.m)")
-        end
     end
 end
