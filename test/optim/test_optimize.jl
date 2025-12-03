@@ -13,7 +13,7 @@
     strc = Structure(conf); basis = Basis(strc, conf)
     ham_train = EffectiveHamiltonian([strc], [basis], comm, conf, rank=rank, nranks=nranks)
     optim = GDOptimizer(8, 56, conf)
-    dl = DataLoader([1], [1], (8, 8), (8, 8), conf)
+    dl = DataLoader(Dict(""=>[1]), Dict(""=>[1]), Dict(""=>8), Dict(""=>8), conf)
     ham_val = EffectiveHamiltonian([strc], [basis], comm, conf, rank=rank, nranks=nranks)
     prof = HamsterProfiler(3, conf, printeachiter=100)
     optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf)
@@ -39,7 +39,7 @@ end
     strc = Structure(conf); basis = Basis(strc, conf)
     ham_train = EffectiveHamiltonian([strc], [basis], comm, conf, rank=rank, nranks=nranks)
     optim = GDOptimizer(8, 56, conf)
-    dl = DataLoader([1], [1], (8, 8), (8, 8), conf)
+    dl = DataLoader(Dict(""=>[1]), Dict(""=>[1]), Dict(""=>8), Dict(""=>8), conf)
     ham_val = EffectiveHamiltonian([strc], [basis], comm, conf, rank=rank, nranks=nranks)
     prof = HamsterProfiler(3, conf, printeachiter=100)
     optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf)
@@ -69,7 +69,7 @@ end
     ham_train = EffectiveHamiltonian(strcs, bases, comm, conf, rank=rank, nranks=nranks)
     
     optim = GDOptimizer(conf)
-    dl = DataLoader([1], [1], (8, 8), (8, 8), conf)
+    dl = DataLoader(Dict(""=>[1]), Dict(""=>[1]), Dict(""=>8), Dict(""=>8), conf)
     
     strcs_val = get_structures(conf)
     bases_val = Basis[Basis(strc, conf) for strc in strcs_val]

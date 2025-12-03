@@ -107,7 +107,7 @@ This helps maintain consistent descriptor or feature vector construction in syst
 # Returns
 - `true` if the orbitals should be swapped to maintain ordering; `false` otherwise.
 """
-decide_orbswap(itype, jtype, l_i, env_i, l_j, env_j) = (itype == jtype && l_i > l_j) || (itype == jtype && l_i == l_j && env_i > env_j) || (element_to_number(itype) > element_to_number(jtype))
+decide_orbswap(itype, jtype, l_i, env_i, l_j, env_j) = (itype == jtype && l_i > l_j) || (itype == jtype && l_i == l_j && env_i > env_j) || (itype > jtype)
 
 """
     get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)

@@ -23,7 +23,9 @@ The `HamsterProfiler` struct is used in training workflows to:
 """
 struct HamsterProfiler
     L_train :: Matrix{Float64}
+    L_train_system :: Dict{String, Matrix{Float64}}
     L_val :: Vector{Float64}
+    L_val_system :: Dict{String, Vector{Float64}}
     printeachbatch :: Bool
     printeachiter :: Int64
     timings :: Array{Float64, 3}
@@ -43,7 +45,7 @@ A constructor function for initializing a `HamsterProfiler` instance.
 - `Niter::Int`: The number of iterations (optional). Default is determined by the value of `get_niter(conf)`.
 - `printeachbatch::Bool`: A flag to determine whether to print detailed status for each batch (optional). Default is determined by the value of `get_printeachbatch(conf)`.
 - `printeachiter::Int`: Specifies the frequency of printing status updates (optional). Default is determined by the value of `get_printeachiter(conf)`.
--`Nparams::Int`: The number of parameters that are optimized.
+- `Nparams::Int`: The number of parameters that are optimized.
 
 # Returns
 - An instance of the `HamsterProfiler` struct.
@@ -51,7 +53,15 @@ A constructor function for initializing a `HamsterProfiler` instance.
 function HamsterProfiler(Ntimes, conf=get_empty_config(); Nbatch=get_nbatch(conf), Niter=get_niter(conf), 
     printeachbatch=get_printeachbatch(conf), printeachiter=get_printeachiter(conf), Nparams=1)
     
-    return HamsterProfiler(zeros(Nbatch, Niter), zeros(Niter), printeachbatch, printeachiter, zeros(Nbatch, Niter, Ntimes), zeros(Niter), zeros(Nparams, Niter))
+    return HamsterProfiler( zeros(Nbatch, Niter),
+                            Dict{String, Matrix{Float64}}(),
+                            zeros(Niter),
+                            Dict{String, Vector{Float64}}(),
+                            printeachbatch,
+                            printeachiter,
+                            zeros(Nbatch, Niter, Ntimes),
+                            zeros(Niter),
+                            zeros(Nparams, Niter))
 end
 
 """
@@ -265,6 +275,21 @@ function save(prof::HamsterProfiler, rank=0; filename="hamster_out.h5")
             file["timings"]      = prof.timings
             file["val_times"]    = prof.val_times
             file["param_values"] = prof.param_values
+
+            if length(prof.L_train_system) > 1
+                for (system, L_train_system) in prof.L_train_system
+                    g = haskey(file, system) ? file[system] : create_group(file, system)
+                    if haskey(file, system)
+                        g["L_train"] = L_train_system
+                    end
+                end
+                for (system, L_val_system) in prof.L_val_system
+                    g = haskey(file, system) ? file[system] : create_group(file, system)
+                    if haskey(file, system)
+                        g["L_val"] = L_val_system
+                    end
+                end
+            end
 
             # write scalars as attributes
             attrs = attributes(file)

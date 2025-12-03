@@ -1,3 +1,6 @@
+element_to_number(element)::UInt8 = elements[Symbol(element)].number
+number_to_element(number) = elements[number].symbol
+
 """
     struct Poscar
 
@@ -14,10 +17,10 @@ A structure to represent the data contained in a VASP POSCAR file.
 struct Poscar
     a :: Float64
     lattice :: Array{Float64, 2}
-    atom_names :: Array{AbstractString, 1}
+    atom_names :: Vector{String}
     atom_numbers :: Array{Int64, 1}
     rs_atom :: Array{Float64, 2}
-    atom_types :: Array{String, 1}
+    atom_types :: Vector{UInt8}
 end
 
 """
@@ -51,12 +54,12 @@ function read_poscar(poscar)
     end
 
     # Atom names and numbers
-    atom_names = lines[6]
+    atom_names = string.(lines[6])
     atom_numbers = parse.(Int64, lines[7])
 
-    atom_types = String[]
+    atom_types = UInt8[]
     for (k, atom_number) in enumerate(atom_numbers), _ in 1:atom_number
-        push!(atom_types, atom_names[k])
+        push!(atom_types, element_to_number(atom_names[k]))
     end
 
     # Atom positions and types

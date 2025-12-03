@@ -21,11 +21,17 @@ end
 
 Constructor for a HamiltonianKernel model.
 """
-function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, model, comm, conf=get_empty_config(); verbosity=get_verbosity(conf),
-    Ncluster=get_ml_ncluster(conf), Npoints=get_ml_npoints(conf), sim_params=get_sim_params(conf), update_ml=get_ml_update(conf), rank=0, nranks=1)
+function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, model, comm, conf=get_empty_config(); 
+                            verbosity=get_verbosity(conf),
+                            Ncluster=get_ml_ncluster(conf),
+                            Npoints=get_ml_npoints(conf),
+                            sim_params=get_sim_params(conf), 
+                            update_ml=get_ml_update(conf),
+                            rank=0,
+                            nranks=1)
     
     structure_descriptors = map(eachindex(strcs)) do n
-        get_tb_descriptor(model.hs[n], model.V, strcs[n], bases[n], conf)
+        get_tb_descriptor(model.hs[n], model.params, strcs[n], bases[n], conf)
     end
     if get_ml_init_params(conf)[1] ∈ ['r', 'z', 'o']
         Npoints_local = floor(Int64, Npoints / nranks)

@@ -1,27 +1,49 @@
 struct EffectiveHamiltonian{T, S1, S2, IT}
     Nstrc :: Int64
     models :: T
+    systems :: Vector{String}
     sp_mode :: S1
     sp_diag :: S2
     sp_tol :: Float64
-    sp_iterator :: IT
+    sp_iterators :: IT
     soc :: Bool
     Rs :: Vector{Matrix{Float64}}
 end
 
-function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_model=get_tb_model(conf), ml_model=get_ml_model(conf), sp_mode=get_sp_mode(conf), sp_diag=get_sp_diag(conf), sp_tol=get_sp_tol(conf), soc=get_soc(conf), ml_data_points=nothing, rank=0, nranks=1, verbosity=get_verbosity(conf))
+function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); 
+                              tb_model=get_tb_model(conf), 
+                              ml_model=get_ml_model(conf), 
+                              sp_mode=get_sp_mode(conf), 
+                              sp_diag=get_sp_diag(conf), 
+                              sp_tol=get_sp_tol(conf), 
+                              soc=get_soc(conf), 
+                              ml_data_points=nothing, 
+                              rank=0, 
+                              nranks=1,
+                              systems=[strc.system for strc in strcs],
+                              verbosity=get_verbosity(conf))
+
     if isempty(strcs) && isempty(bases)
-        return EffectiveHamiltonian(0, nothing, Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)])
+        return EffectiveHamiltonian(0, Nothing[], String[], Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)])
     end
-    
+
+    if rank == 0 && verbosity > 0; println("Building effective Hamiltonian model..."); end
+    eff_ham_begin_time = MPI.Wtime() 
+
     Rs = [strc.Rs for strc in strcs]
-    sp_iterator = get_sparse_iterator(strcs[1], bases[1], conf, soc=soc)
+    if rank == 0 && verbosity > 1; println("   Getting sparse iterators..."); end
+    begin_time = MPI.Wtime()
+    sp_iterators = map(zip(strcs, bases)) do (strc, basis)
+        get_sparse_iterator(strc, basis, conf, soc=soc)
+    end
+    sp_time = MPI.Wtime() - begin_time
+    if rank == 0 && verbosity > 1; println("    Sparse iterator time: $sp_time s"); end
 
     models = ()
     if tb_model
         if rank == 0 && verbosity > 1; println("   Getting TB model..."); end
         begin_time = MPI.Wtime()
-        models = (models..., TBModel(strcs, bases, conf))
+        models = (models..., TBModel(strcs, bases, comm, conf, rank=rank, nranks=nranks))
         tb_time = MPI.Wtime() - begin_time
         if rank == 0 && verbosity > 1; println("    TB time: $tb_time s"); end
     end
@@ -39,13 +61,16 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); tb_mode
     if soc
         if rank == 0 && verbosity > 1; println("   Getting SOC model..."); end
         begin_time = MPI.Wtime()
-        soc_model = SOCModel(strcs[1], bases[1], conf)
+        soc_model = SOCModel(strcs, bases, comm, conf, rank=rank)
         models = (models..., soc_model)
         soc_time = MPI.Wtime() - begin_time
         if rank == 0 && verbosity > 1; println("    SOC time: $soc_time s"); end
     end
 
-    return EffectiveHamiltonian(length(strcs), models, sp_mode, sp_diag, sp_tol, sp_iterator, soc, Rs)
+    eff_ham_time = MPI.Wtime() - eff_ham_begin_time
+    if rank == 0 && verbosity > 0; println("Effective Hamiltonian model time: $eff_ham_time s"); end
+
+    return EffectiveHamiltonian(length(strcs), models, systems, sp_mode, sp_diag, sp_tol, sp_iterators, soc, Rs)
 end
 
 """
@@ -62,15 +87,15 @@ Construct the Hamiltonian matrix for given k-points `ks` from the real-space Ham
 # Returns
 - `Hk`: The Hamiltonian matrix in reciprocal space corresponding to the given k-points.
 """
-function get_hamiltonian(ham::EffectiveHamiltonian, index, ks; write_hr=false, global_index=index)
+function get_hamiltonian(ham::EffectiveHamiltonian, index, ks; write_hr=false, config_index=index, system="")
     Hr = get_hr(ham, index)
     Hk = get_hamiltonian(Hr, ham.Rs[index], ks, ham.sp_diag)
     return Hk
 end
 
-function get_hamiltonian(ham::EffectiveHamiltonian, index, ks, comm; write_hr=false, global_index=index)
+function get_hamiltonian(ham::EffectiveHamiltonian, index, ks, comm; write_hr=false, config_index=index, system="", rank=rank, nranks=nranks)
     Hr = get_hr(ham, index)
-    if write_hr; write_ham(Hr, ham.Rs[index], comm, global_index, space="r"); end
+    if write_hr; write_ham(Hr, ham.Rs[index], comm, config_index, space="r", system=system, rank=rank, nranks=nranks); end
     Hk = get_hamiltonian(Hr, ham.Rs[index], ks, ham.sp_diag)
     return Hk
 end

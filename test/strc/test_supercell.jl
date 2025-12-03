@@ -87,6 +87,85 @@ path = joinpath(@__DIR__, "test_files")
     @test Hamster.split_indices_into_chunks(indices, 3, rank=0) == [1]
     @test Hamster.split_indices_into_chunks(indices, 3, rank=1) == [2]
     @test Hamster.split_indices_into_chunks(indices, 3, rank=2) == []
+
+    # Test 14: test index splitting with system dict
+    indices = Dict(
+        "A" => [1, 2, 3, 4],
+        "B" => [10, 11],
+        "C" => [100, 101, 102]
+    )
+
+    chunks = [Hamster.split_indices_into_chunks(indices, 2; rank=i) for i in 0:1]
+
+    # Check that all chunks together reproduce original data
+    combined = Dict{String, Vector{Int}}()
+    for chunk in chunks
+        for (sys, vals) in chunk
+            push!(get!(combined, sys, Int[]), vals...)
+        end
+    end
+    for (sys, vals) in indices
+        @test sort(combined[sys]) == sort(vals)
+    end
+
+    chunks = [Hamster.split_indices_into_chunks(indices, 3; rank=i) for i in 0:2]
+    total_configs = sum(length(v) for chunk in chunks for v in values(chunk))
+    @test total_configs == sum(length(v) for v in values(indices))
+
+    empty_indices = Dict{String, Vector{Int}}()
+    res = Hamster.split_indices_into_chunks(empty_indices, 4; rank=0)
+    @test res == Dict{String, Vector{Int}}()
+
+    res = Hamster.split_indices_into_chunks(indices, 2; rank=5)
+    @test res == Dict{String, Vector{Int}}()
+
+    # For a simple input, verify rough balance
+    simple = Dict("X" => collect(1:10))
+    chunks = [Hamster.split_indices_into_chunks(simple, 3; rank=i) for i in 0:2]
+    sizes = [sum(length(v) for v in values(c)) for c in chunks]
+    @test maximum(sizes) - minimum(sizes) ≤ 1
+end
+
+@testset "get_number_of_bands_per_structure" begin
+    # Mock input data
+    bases = [
+        rand(10),  # system A, config 1
+        rand(10),  # system A, config 2
+        rand(8),   # system B, config 1
+        rand(8)    # system B, config 2
+    ]
+
+    indices = OrderedDict(
+        "A" => [1, 2],
+        "B" => [3, 4]
+    )
+
+    # --- Test 1: Basic case (no SOC) ---
+    result = Hamster.get_number_of_bands_per_structure(bases, indices)
+    @test result == Dict("A" => 10, "B" => 8)
+
+    # --- Test 2: With SOC doubling ---
+    result_soc = Hamster.get_number_of_bands_per_structure(bases, indices; soc=true)
+    @test result_soc == Dict("A" => 20, "B" => 16)
+
+    # --- Test 3: Inconsistent basis lengths should trigger an assertion ---
+    bases_bad = [
+        rand(10),  # system A, config 1
+        rand(12),  # system A, config 2 (inconsistent)
+        rand(8),
+        rand(8)
+    ]
+    @test_throws AssertionError Hamster.get_number_of_bands_per_structure(bases_bad, indices)
+
+    # --- Test 4: Single system, single config ---
+    bases_single = [rand(5)]
+    indices_single = Dict("C" => [1])
+    result_single = Hamster.get_number_of_bands_per_structure(bases_single, indices_single)
+    @test result_single == Dict("C" => 5)
+
+    # --- Test 5: SOC + single system ---
+    result_single_soc = Hamster.get_number_of_bands_per_structure(bases_single, indices_single; soc=true)
+    @test result_single_soc == Dict("C" => 10)
 end
 
 @testset "Multiple Structures from XDATCAR" begin

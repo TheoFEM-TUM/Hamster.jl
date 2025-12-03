@@ -22,7 +22,7 @@ end
     model = TBModel(strc, basis, conf)
 
     #Test 1: test environmental descriptor
-    env = Hamster.get_environmental_descriptor(model.hs, model.V, strc, basis, conf)
+    env = Hamster.get_environmental_descriptor(model.hs, model.params, strc, basis, conf)
 
     @test env isa Vector{Float64}
     @test length(env) == length(basis)
@@ -88,7 +88,7 @@ end
     @test isapprox(φ, 0.0, atol=1e-6)  # Parallel axes should have angle 0
 
     # Test 3: test complete descriptor set
-    descriptors = Hamster.get_tb_descriptor(model.hs, model.V, strc, basis, conf)
+    descriptors = Hamster.get_tb_descriptor(model.hs, model.params, strc, basis, conf)
     @test descriptors isa Vector{SparseMatrixCSC{SVector{8, Float64}, Int64}}
 
     # Test: test descriptor sampler
@@ -109,11 +109,11 @@ end
     set_value!(conf, "verbosity", 0)
 
     strc_1 = Structure(conf); basis_1 = Basis(strc_1, conf); model_1 = TBModel(strc_1, basis_1, conf)
-    descriptors_1 = Hamster.get_tb_descriptor(model_1.hs, model_1.V, strc_1, basis_1, conf)
+    descriptors_1 = Hamster.get_tb_descriptor(model_1.hs, model_1.params, strc_1, basis_1, conf)
 
     set_value!(conf, "orbitals", "Pb", "s py px pz"); set_value!(conf, "orbitals", "Br", "py px pz")
     strc_2 = Structure(conf); basis_2 = Basis(strc_2, conf); model_2 = TBModel(strc_2, basis_2, conf)
-    descriptors_2 = Hamster.get_tb_descriptor(model_2.hs, model_2.V, strc_2, basis_2, conf)
+    descriptors_2 = Hamster.get_tb_descriptor(model_2.hs, model_2.params, strc_2, basis_2, conf)
 
     orbs_1 = ["Pb_s", "Pb_px", "Pb_py", "Pb_pz", "Cs_s", "Br-1_px", "Br-1_py", "Br-1_pz", "Br-2_px", "Br-2_py", "Br-2_pz", "Br-3_px", "Br-3_py", "Br-3_pz"]
     orbs_2 = ["Pb_s", "Pb_py", "Pb_px", "Pb_pz", "Cs_s", "Br-1_py", "Br-1_px", "Br-1_pz", "Br-2_py", "Br-2_px", "Br-2_pz", "Br-3_py", "Br-3_px", "Br-3_pz"]

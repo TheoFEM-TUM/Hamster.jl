@@ -5,22 +5,22 @@ const ldict = Dict(0=>"s", 1=>"p", 2=>"d")
 const ldict_inv = Dict('s'=>0, 'p'=>1, 'd'=>2)
 
 """
-    IonLabel(types::SVector{2, Int64})
+    IonLabel(types::SVector{2, UInt8})
 
 A structure representing a label for overlaps between two ions, characterized by a 2-element static vector of integers that indicate the ion species.
 
 # Fields
-- `types::SVector{2, Int64}`: A static vector containing two `Int64` values representing the types or identifiers associated with the ion. The use of `SVector{2, Int64}` ensures that the two types are stored efficiently as a fixed-size array.
+- `types::SVector{2, UInt8}`: A static vector containing two `Int64` values representing the types or identifiers associated with the ion. The use of `SVector{2, Int64}` ensures that the two types are stored efficiently as a fixed-size array.
 
 # Constructors
 - `IonLabel(type1::Int64, type2::Int64; sorted=true)`: Creates an `IonLabel` from two integer types. If `sorted=true`, the types will be sorted before creating the label, ensuring consistent ordering.
 - `IonLabel(type1::String, type2::String; sorted=true)`: Creates an `IonLabel` from two element symbols (as `String`s). Converts the symbols to atomic numbers and optionally sorts them if `sorted=true`.
 """
 struct IonLabel
-    types :: SVector{2}{Int64}
+    types :: SVector{2}{UInt8}
 end
 
-IonLabel(type1::Int64, type2::Int64; sorted=true) = sorted ? IonLabel(sort(SVector{2, Int64}(type1, type2))) : IonLabel(SVector{2, Int64}(type1, type2))
+IonLabel(type1::Integer, type2::Integer; sorted=true) = sorted ? IonLabel(sort(SVector{2, UInt8}(type1, type2))) : IonLabel(SVector{2, UInt8}(type1, type2))
 
 IonLabel(type1::String, type2::String; sorted=true) = IonLabel(element_to_number(type1), element_to_number(type2), sorted=sorted)
 
@@ -38,6 +38,8 @@ Compares two `IonLabel` objects for equality.
 - `Bool`: Returns `true` if the `IonLabel` instances are considered equal based on their `types` fields (with or without sorting), and `false` otherwise.
 """
 Base.isequal(ion_label1::IonLabel, ion_label2::IonLabel; sorted=false) = sorted ? sort(ion_label1.types) == sort(ion_label2.types) : ion_label1.types == ion_label2.types
+
+Base.hash(ion_label::IonLabel, h::UInt) = hash(ion_label.types, h)
 
 """
     string(ion_label::IonLabel) -> String

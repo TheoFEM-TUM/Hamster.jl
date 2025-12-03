@@ -116,20 +116,25 @@ Inside this group:
   - `"rowval"`, `"colptr"`, `"nzval"`: the CSC representation of the sparse matrix.
   - `"m"`, `"n"`: matrix dimensions.
 """
-function write_ham(H, vecs, comm, ind=0; filename="ham.h5", space="k")
-    h5open(filename, "cw", comm) do file
-        h_group = ind == 0 ? "H$space" : "H$(space)_$ind"
-        g = create_group(file, h_group)
-        g["vecs"] = vecs
-        for (i, mat) in enumerate(H)
-            smat = issparse(mat) ? mat : sparse(mat)
-            grp = create_group(g, "$i")
-            grp["rowval"] = smat.rowval
-            grp["colptr"] = smat.colptr
-            grp["nzval"]  = smat.nzval
-            grp["m"]      = size(smat, 1)
-            grp["n"]      = size(smat, 2)
+function write_ham(H, vecs, comm, ind=0; filename="ham.h5", space="k", system="", rank=0, nranks=1)
+    for r in 0:nranks-1
+        if r == rank
+            h5open(filename, "cw") do file
+                h_group = ind == 0 ? "H$space" : "H$(space)_$(system)_$ind"
+                g = create_group(file, h_group)
+                g["vecs"] = vecs
+                for (i, mat) in enumerate(H)
+                    smat = issparse(mat) ? mat : sparse(mat)
+                    grp = create_group(g, "$i")
+                    grp["rowval"] = smat.rowval
+                    grp["colptr"] = smat.colptr
+                    grp["nzval"]  = smat.nzval
+                    grp["m"]      = size(smat, 1)
+                    grp["n"]      = size(smat, 2)
+                end
+            end
         end
+        MPI.Barrier(comm)
     end
 end
 
@@ -150,11 +155,11 @@ Read a Hamiltonian and associated vectors from an HDF5 file previously written w
 - `H::Vector{SparseMatrixCSC}`: Vector of Hamiltonian blocks reconstructed as sparse matrices.
 - `vecs::Array`: The stored array of vectors associated with the Hamiltonian.
 """
-function read_ham(comm, ind=0; filename="ham.h5", space="k")
+function read_ham(comm, ind=0; filename="ham.h5", space="k", system="")
     H = SparseMatrixCSC[]
     vecs = nothing
     h5open(filename, "r", comm) do file
-        h_group = ind == 0 ? "H$space" : "H$(space)_$ind"
+        h_group = ind == 0 ? "H$space" : "H$(space)_$(system)_$ind"
         g = file[h_group]
         vecs = read(g["vecs"])
         # Ensure blocks are read in order "1", "2", ...

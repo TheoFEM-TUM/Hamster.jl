@@ -87,7 +87,13 @@ get_interpolate_rllm(conf::Config)::Bool = conf("interpolate_rllm") == "default"
 
 The `rllm_file::String` tag sets the name of the file where the distance dependence is stored.
 """
-get_rllm_file(conf::Config)::String = conf("rllm_file") == "default" ? "rllm.dat" : conf("rllm_file")
+function get_rllm_file(conf::Config)::String 
+    if conf("rllm_file") == "default" 
+        return length(get_systems(conf)) > 1 ? "rllm.h5" : "rllm.dat"
+    else
+        return conf("rllm_file")
+    end
+end
 
 """
 **tmethod**=rotation

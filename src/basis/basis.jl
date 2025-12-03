@@ -9,11 +9,10 @@ A data structure that represents the basis of a system, containing information a
 - `parameters::P`: Parameters used for computing the matrix elements between orbitals. These can include interaction strengths, angular momentum values, and other system-specific constants.
 - `rllm::R`: Precomputed radial functions (RLLM), typically stored as spline objects for efficient interpolation. These functions depend on the distance between ions and are used in overlap integrals.
 """
-struct Basis{Orb, Ov, P, R}
+struct Basis{Orb, Ov, P}
     orbitals :: Orb
     overlaps :: Ov
     parameters :: P
-    rllm :: R
 end
 
 """
@@ -28,12 +27,11 @@ Construct a `Basis` object from a given `Structure` and configuration.
 # Returns
 - `Basis`: A `Basis` object.
 """
-function Basis(strc::Structure, conf=get_empty_config())
+function Basis(strc::Structure, conf=get_empty_config(); comm=nothing)
     orbitals = get_orbitals(strc, conf)
     overlaps = get_overlaps(strc.ions, orbitals, conf)
     parameters = get_parameters_from_overlaps(overlaps, conf)
-    rllm = get_rllm(overlaps, conf)
-    return Basis(orbitals, overlaps, parameters, rllm)
+    return Basis(orbitals, overlaps, parameters)
 end
 
 """
@@ -94,17 +92,26 @@ Constructs the geometry tensor based on the structure of the system, the orbital
 # Returns
 - The reshaped geometry tensor, represented as a matrix of sparse matrices, which encodes the overlap contributions for the system's orbital interactions for each parameter.
 """
-function get_geometry_tensor(strc, basis, conf=get_empty_config(); tmethod=get_tmethod(conf), rcut=get_rcut(conf), sp_tol=get_sp_tol(conf), rcut_tol=get_rcut_tol(conf))
-    npar = Threads.nthreads() 
-    
+function get_geometry_tensor(strc, basis, conf=get_empty_config();
+                                comm=nothing,
+                                rank=0,
+                                nranks=1,
+                                npar=Threads.nthreads(),
+                                tmethod=get_tmethod(conf), 
+                                rcut=get_rcut(conf), 
+                                sp_tol=get_sp_tol(conf), 
+                                rcut_tol=get_rcut_tol(conf))
+
     ij_map = get_ion_orb_to_index_map(length.(basis.orbitals))
-    ion_types = element_to_number.(get_ion_types(strc.ions))
+    ion_types = get_ion_types(strc.ions)
     nn_dict = get_nn_thresholds(strc.ions, frac_to_cart(strc.Rs, strc.lattice), strc.point_grid, conf)
     hs = [Dict{Tuple{Int64, Int64, Int64, Int64}, Float64}() for _ in 1:npar]
     oc_dicts, mode_dicts = get_oc_and_mode_dicts(basis.overlaps, strc.ions)
 
     Ts = frac_to_cart(strc.Rs, strc.lattice)
     nn_grid_points = iterate_nn_grid_points(strc.point_grid)
+
+    rllm_dict = get_rllm(basis.overlaps, conf, comm=comm, rank=rank, nranks=nranks)
     Threads.@threads for (chunk_id, indices) in enumerate(chunks(nn_grid_points, n=npar))
         for (iion1, iion2, R) in indices
             ion_label = IonLabel(ion_types[iion1], ion_types[iion2], sorted=false)
@@ -130,7 +137,7 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config(); tmethod=get_t
 
                     for k in eachindex(basis.overlaps)
                         Cllm = basis.overlaps[k]
-                        Rllm = basis.rllm[string(Cllm, apply_oc=true)]
+                        Rllm = rllm_dict[string(Cllm, apply_oc=true)]
                         mode = get_mode(mode_dicts, k, ion_label, jorb1, jorb2)
                         orbconfig = get_orbconfig(oc_dicts, k, ion_label, jorb1, jorb2)
                         base = Cllm.type.base_ls == (base[1].l, base[2].l) ? base : reverse(base) # check that base has same ordering as parameter definition

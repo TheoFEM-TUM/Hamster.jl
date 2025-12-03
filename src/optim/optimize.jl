@@ -85,6 +85,22 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         push!(forward_times, f_time); push!(backward_times, b_time); push!(Ls_train, L_train)
         return dL_dHr_index
     end
+    
+    all_systems = MPI.gather(ham_train.systems[indices], comm, root=0)
+    all_losses = MPI.gather(Ls_train, comm, root=0)
+    if rank == 0
+        all_systems = vcat(all_systems...)
+        all_losses = vcat(all_losses...)
+
+        for system in unique(all_systems)
+            if !haskey(prof.L_train_system, system)
+                prof.L_train_system[system] = zeros(size(prof.L_train))
+            end
+            idxs = findall(s -> s == system, all_systems)
+            loss_system = all_losses[idxs]
+            prof.L_train_system[system][batch_id, iter] = mean(loss_system)
+        end
+    end
 
     update_begin = MPI.Wtime()
     for model in ham_train.models
@@ -137,6 +153,23 @@ function val_step!(ham_val, loss, val_data, prof, iter, comm; rank=0, nranks=1, 
     Ls_val = map(1:ham_val.Nstrc) do index
         forward(ham_val, index, loss, val_data[index])[1] / ham_val.Nstrc
     end
+
+    all_systems = MPI.gather(ham_val.systems, comm, root=0)
+    all_losses = MPI.gather(Ls_val, comm, root=0)
+    if rank == 0
+        all_systems = vcat(all_systems...)
+        all_losses = vcat(all_losses...)
+
+        for system in unique(all_systems)
+            if !haskey(prof.L_val_system, system)
+                prof.L_val_system[system] = zeros(size(prof.L_val))
+            end
+            idxs = findall(s -> s == system, all_systems)
+            loss_system = all_losses[idxs]
+            prof.L_val_system[system][iter] = mean(loss_system)
+        end
+    end
+
     val_time_local = MPI.Wtime() - val_begin
     val_time = MPI.Reduce(val_time_local, +, comm, root=0)
     L_val = MPI.Reduce(sum(Ls_val), +, comm, root=0)
@@ -194,7 +227,7 @@ The function behavior varies depending on the type of `data`, which can be eithe
 function backward(ham::EffectiveHamiltonian, index, loss, data::EigData, cache, conf=get_empty_config(); nthreads_kpoints=get_nthreads_kpoints(conf), nthreads_bands=get_nthreads_bands(conf))
     Es_tb, vs = cache
     dL_dE = backward(loss, Es_tb, data.Es)
-    dE_dHr = get_eigenvalue_gradient(vs, ham.Rs[index], data.kp, ham.sp_mode, ham.sp_iterator, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=ham.sp_tol)
+    dE_dHr = get_eigenvalue_gradient(vs, ham.Rs[index], data.kp, ham.sp_mode, ham.sp_iterators[index], nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=ham.sp_tol)
     dL_dHr = chain_rule(dL_dE, dE_dHr, ham.sp_mode, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=ham.sp_tol)
     return dL_dHr
 end

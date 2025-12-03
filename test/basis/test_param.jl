@@ -16,6 +16,30 @@ cspbbr_poscar = string(@__DIR__) * "/../strc/test_files/POSCAR_CsPbBr3"
     @test param_label3 == Hamster.string_to_param_label("NN0_Si+Si_offdiag-2-2")
     @test string(param_label3) == "NN0_Si+Si_offdiag-2-2"
     @test Hamster.same_param_label(0, Hamster.IonLabel("Si", "Si"), SVector{3}([-2, -2, 1]), param_label3)
+
+    # Test: ParameterLabel as key in Dict
+    ion_label1 = Hamster.IonLabel(1, 2)
+    ion_label2 = Hamster.IonLabel(2, 3)
+
+    p1 = ParameterLabel(1, ion_label1, @SVector [0, 0, 0])
+    p2 = ParameterLabel(2, ion_label1, @SVector [1, 0, 0])
+    p3 = ParameterLabel(1, ion_label2, @SVector [0, 1, 0])
+    p4 = ParameterLabel(1, ion_label1, @SVector [0, 0, 0])  # identical to p1
+
+    dict = Dict(p1 => "first", p2 => "second", p3 => "third")
+
+    @test dict[p1] == "first"
+    @test dict[p4] == "first"
+    @test haskey(dict, p3)
+    @test !haskey(dict, ParameterLabel(3, ion_label1, @SVector [0, 0, 0]))
+
+    dict[p4] = "updated"
+    @test dict[p1] == "updated"
+
+    @test length(dict) == 3
+
+    # Check that param label is a bits type (compatible with MPI operations)
+    @test isbitstype(ParameterLabel)
 end
 
 @testset "Parameters GaAs" begin

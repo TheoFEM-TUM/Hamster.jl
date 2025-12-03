@@ -1,31 +1,69 @@
 """
-    mutable struct SOCModel{M}
+    mutable struct SOCModel{V, M}
 
 A mutable struct representing a model for Spin-Orbit Coupling (SOC) effects.
 
-# Fields:
+# Type Parameters
+- `V`: Type representing a structure-specific ion labeling or identifier.
+- `M`: Type of the matrices describing SOC interactions, e.g., `Matrix{ComplexF64}`.
+
+# Fields
 - `params::Vector{Float64}`: A vector of model parameters.
-- `unique_ion_types::Vector{String}`: A vector of unique ion types involved in the system, represented as strings.
-- `all_type_types::Vector{String}`: A vector containing all ion types, possibly with repetitions, represented as strings.
-- `matrices::Vector{M}`: A vector of matrices that describe the SOC interactions for the given orbital basis.
-- `Rs::Matrix{Float64}`: A matrix that contains the lattice translation vectors.
-- `update::Bool`: A boolean flag indicating whether the model is set to update its parameters or not.
+- `param_labels::Vector{UInt8}`: A vector of integer labels identifying which parameters belong to which ion.
+- `types_per_strc::Vector{V}`: A vector containing the ion labeling or types for each structure in the dataset.
+- `matrices::OrderedDict{UInt8, M}`: Ordered dictionary mapping integer type keys to SOC matrices for the orbital basis.
+- `Rs_info::Matrix{Int64}`: Matrix storing R0 and number of translation vectors for each structure.
+- `update::Bool`: Flag indicating whether the model is currently set to update its parameters.
 """
-mutable struct SOCModel{M}
+mutable struct SOCModel{V, M}
     params :: Vector{Float64}
-    unique_ion_types :: Vector{String}
-    all_type_types :: Vector{String}
-    matrices :: Vector{M}
-    Rs :: Matrix{Float64}
+    param_labels :: Vector{UInt8}
+    types_per_strc :: Vector{V}
+    matrices :: OrderedDict{UInt8, M}
+    Rs_info :: Matrix{Int64}
     update :: Bool
 end
 
-function SOCModel(strc::Structure, basis::Basis, conf=get_empty_config())
-    matrices = get_soc_matrices(strc, basis, conf)
-    params, unique_ion_types = init_soc_params(strc.ions, conf)
-    all_type_types = filter(type->haskey(conf.blocks, type), get_ion_types(strc.ions))
-    return SOCModel(params, unique_ion_types, all_type_types, matrices, strc.Rs, get_update_soc(conf))
+function SOCModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=get_empty_config(); rank=0)
+    soc_matrices_per_type = OrderedDict{UInt8, Matrix{ComplexF64}}()
+    types_per_strc = Vector{UInt8}[]
+    Rs_info = zeros(Int64, 2, length(strcs))
+    
+    for n in eachindex(strcs)
+        types_for_strc = filter(type->haskey(conf.blocks, number_to_element(type)), [ion.type for ion in strcs[n].ions])
+        push!(types_per_strc, types_for_strc)
+
+        soc_matrices = get_soc_matrices(strcs[n], bases[n], conf)
+        merge_soc_matrices!(soc_matrices_per_type, soc_matrices)
+
+        Rs_info[1, n] = size(strcs[n].Rs, 2)
+        Rs_info[2, n] = findR0(strcs[n].Rs)
+    end
+
+    param_labels_local = UInt8.(collect(keys(soc_matrices_per_type)))
+    param_labels = MPI.gather(param_labels_local, comm, root=0)
+    if rank == 0
+        param_labels = unique(Iterators.flatten(param_labels))
+        nparams = length(param_labels)
+    else
+        param_labels = UInt8[]
+        nparams = 0
+    end
+    nparams = MPI.Bcast(nparams, 0, comm)
+
+    if rank ≠ 0
+        resize!(param_labels, nparams)
+    end
+    MPI.Bcast!(param_labels, comm, root=0)
+    MPI.Barrier(comm)
+
+    params = init_soc_params(param_labels, conf)
+    return SOCModel(params, param_labels, types_per_strc, soc_matrices_per_type, Rs_info, get_update_soc(conf))
 end
+
+get_param(soc_model::SOCModel, type) = soc_model.params[findfirst(t->t==type, soc_model.param_labels)]
+
+check_param_type(soc_model, param_index, type) = findfirst(k->k==type, soc_model.param_labels) == param_index
 
 """
     get_hr(soc_model::SOCModel, sp_mode, index; apply_soc=true) -> BlockDiagonal
@@ -42,14 +80,10 @@ Constructs the Hamiltonian representation for a given spin-orbit coupling (SOC) 
 - A `BlockDiagonal` matrix where each block corresponds to an ion type, with parameters expanded and applied to SOC matrices.
 """
 function get_hr(soc_model::SOCModel, sp_mode, index; apply_soc=true)
-    expanded_params = map(soc_model.all_type_types) do ion_type
-        index = findfirst(type -> type == ion_type, soc_model.unique_ion_types)
-        return soc_model.params[index]
-    end
-    Msoc = BlockDiagonal(expanded_params .* soc_model.matrices)
+    Msoc = BlockDiagonal([get_param(soc_model, type) * soc_model.matrices[type] for type in soc_model.types_per_strc[index]])
     Msoc = convert_block_matrix_to_sparse(Msoc)
     Mzero = spzeros(ComplexF64, size(Msoc, 1), size(Msoc, 2))
-    Hr = [ifelse(R⃗ == zeros(3), Msoc, Mzero) for R⃗ in eachcol(soc_model.Rs)]
+    Hr = [ifelse(R == soc_model.Rs_info[2, index], Msoc, Mzero) for R in 1:soc_model.Rs_info[1, index]]
     return Hr
 end
 
@@ -82,20 +116,14 @@ Computes the gradient of loss w.r.t. the SOC model's parameters.
 - `dparams`: A vector containing the gradient of the loss w.r.t. the model parameters.
 """
 function get_model_gradient(soc_model::SOCModel, indices, reg, dL_dHr; soc=true)
-    iR0 = findR0(soc_model.Rs)
     dparams = zeros(length(soc_model.params))
     if soc_model.update
-        for param_index in eachindex(dparams)
-            expanded_params = map(soc_model.all_type_types) do ion_type
-                index = findfirst(type -> type == ion_type, soc_model.unique_ion_types)
-                return ifelse(index == param_index, 1, 0)
-            end
-            Msoc = BlockDiagonal(expanded_params .* soc_model.matrices)
+        for index in indices, param_index in eachindex(dparams)
+            iR0 = soc_model.Rs_info[2, index]
+            Msoc = BlockDiagonal([ifelse(check_param_type(soc_model, param_index, type), 1, 0) .* soc_model.matrices[type]
+                                for type in soc_model.types_per_strc[index]])
             Msoc = convert_block_matrix_to_sparse(Msoc)
-
-            for index in indices
-                dparams[param_index] += real(sum(dL_dHr[index][iR0] .* Msoc))
-            end
+            dparams[param_index] += real(sum(dL_dHr[index][iR0] .* Msoc))
         end
     end
     dparams_penal = backward(reg, soc_model.params)
@@ -116,20 +144,23 @@ Initializes spin-orbit coupling (SOC) parameters for a given set of ions based o
   - `'r'`: Initializes parameters with random values.
   - File path or identifier: Reads SOC parameters from an external source.
 """
-function init_soc_params(ions, conf=get_empty_config(); initas=get_soc_init_params(conf))
-    unique_ion_types = get_ion_types(ions, uniq=true)
-    filter!(type->haskey(conf.blocks, type), unique_ion_types)
-    Nparams = length(unique_ion_types)
+function init_soc_params(ion_types, conf=get_empty_config(); initas=get_soc_init_params(conf))
+    Nparams = length(ion_types)
     if initas[1] == 'z'
-        return zeros(Nparams), unique_ion_types
+        return zeros(Nparams)
     elseif initas[1] == 'o'
-        return ones(Nparams), unique_ion_types
+        return ones(Nparams)
     elseif initas[1] == 'r'
-        return rand(Nparams), unique_ion_types
+        return rand(Nparams)
     else
+        params = zeros(Nparams)
         _, _, unique_ion_types, soc_params, conf_values = read_params(initas)
         check_consistency(conf_values, conf)
-        return soc_params, unique_ion_types
+        for (n, type) in enumerate(element_to_number.(unique_ion_types))
+            params[findfirst(t->type==t, ion_types)] = soc_params[n]
+        end
+
+        return params
     end
 end
 
@@ -176,5 +207,5 @@ Writes the parameters of a spin-orbit coupling (SOC) model to a file.
 function write_params(soc_model::SOCModel, conf=get_empty_config())
     parameters, parameter_values, _, _, conf_values = read_params("params.dat")
     check_consistency(conf_values, conf)
-    write_params(parameters, parameter_values, soc_model.unique_ion_types, soc_model.params, conf)
+    write_params(parameters, parameter_values, number_to_element.(soc_model.param_labels), soc_model.params, conf)
 end

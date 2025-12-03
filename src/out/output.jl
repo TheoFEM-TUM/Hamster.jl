@@ -108,13 +108,12 @@ function write_output_line(hamster_out, key, value; L=25)
 end
 
 """
-    write_output_line(key, value, L)
+    append_output_line(line; filename="hamster.out")
 
-Append a line with `key` and `value` pair to the output file `dyntb.out`.
+Append a `line` to the output file `hamster.out`.
 """
-function append_output_line(key, value; L=25)
-    hamster_out = open("hamster.out", "a")
-    Lk = length(key); Lv = length(value)
-    println(hamster_out, "   ", key*" "^(L-Lk), " = ", " "^(L+15-Lv)*value)
-    close(dyntb_out)
+function append_output_line(line; filename="hamster.out")
+    open(filename, "a") do f
+        println(f, line)
+    end
 end

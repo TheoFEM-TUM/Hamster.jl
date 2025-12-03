@@ -3,6 +3,7 @@
 [![CI](https://github.com/mschwade-code/Hamster.jl/actions/workflows/runtests.yaml/badge.svg)](https://github.com/mschwade-code/Hamster.jl/actions/workflows/runtests.yaml)
 [![codecov](https://codecov.io/gh/TheoFEM-TUM/Hamster.jl/graph/badge.svg?token=8MW6VZYIE2)](https://codecov.io/gh/TheoFEM-TUM/Hamster.jl)
 [![Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://theofem-tum.github.io/Hamster.jl/dev/)
+[![Lines of code](https://tokei.rs/b1/github/TheoFEM-TUM/Hamster.jl)](https://tokei.rs/b1/github/TheoFEM-TUM/Hamster.jl)
 
 <p align="center">
   <img width="250" height="250" src="docs/src/assets/logo.png">
@@ -42,7 +43,7 @@ Installing dependencies and running the test suite may take up to 10 minutes. A 
 You can run start Hamster by calling the `hamster` executable. To make use of MPI parallelization you need add `mpiexecjl` or `srun` in front.
 
 ```bash
-[mpiexecjl -n NODES / srun] hamster [kwargs]
+[mpiexecjl -n NRANKS / srun] hamster [kwargs]
 ```
 
 While keyword arguments can be passed directly via the command line, it is more practical to provide Hamster with a config file `hconf`. Examples that can be run on a personal computer in under 10 minutes are available [here](https://theofem-tum.github.io/Hamster.jl/dev/examples/examples/).
