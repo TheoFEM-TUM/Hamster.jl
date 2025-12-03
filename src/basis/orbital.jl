@@ -111,13 +111,26 @@ Returns the unit vector(s) representing the axis (or axes) of the given orbital 
 - `o::pydy2`: Returns the axis `[0, 1, 0]` for a combined `py/dy²` orbital.
 - `o::pzdz2`: Returns the axis `[0, 0, 1]` for a combined `pz/dz²` orbital.
 """
-get_axis(h::sp3) = [SVector{3}([1., 1., 1.]), SVector{3}([1., -1., -1.]), SVector{3}([-1., 1., -1.]), SVector{3}([-1., -1., 1.])]
-get_axis(o::s) = SVector{3}([0., 0., 1.])
-get_axis(o::px) = SVector{3}([1., 0., 0.]); get_axis(o::py) = SVector{3}([0., 1., 0.]); get_axis(o::pz) = SVector{3}([0., 0., 1.])
-get_axis(o::dxz) = SVector{3}([0., 0., 1.]); get_axis(o::dxy) = SVector{3}([0., 0., 1.]); 
-get_axis(o::dyz) = SVector{3}([0., 0., 1.]); get_axis(o::dz2) = SVector{3}([0., 0., 1.]); 
-get_axis(o::dx2_y2) = SVector{3}([0., 0., 1.]);
+get_axis(h::sp3) = [SVector{3}([1., 1., 1.]), 
+                    SVector{3}([1., -1., -1.]), 
+                    SVector{3}([-1., 1., -1.]), 
+                    SVector{3}([-1., -1., 1.])]
+get_axis(o) = SVector{3}([0., 0., 1.])
 get_axis(o::pxdx2) =  SVector{3}([1., 0., 0.]); get_axis(o::pydy2) = SVector{3}([0., 1., 0.]); get_axis(o::pzdz2) = SVector{3}([0., 0., 1.])
+
+function get_sym_axis(orb::Orbital) :: SVector{3, Float64}
+    if orb.type isa sp3 || orb.type isa sp3dr2
+        return orb.axis
+    else
+        return get_sym_axis(orb.type)
+    end
+end
+get_sym_axis(o::s) = SVector{3}([0., 0., 1.])
+get_sym_axis(o::px) = SVector{3}([1., 0., 0.]); get_sym_axis(o::py) = SVector{3}([0., 1., 0.]); get_sym_axis(o::pz) = SVector{3}([0., 0., 1.])
+get_sym_axis(o::dxz) = SVector{3}([1., 0., 1.]); get_sym_axis(o::dxy) = SVector{3}([1., 1., 0.]); 
+get_sym_axis(o::dyz) = SVector{3}([0., 1., 1.]); get_sym_axis(o::dz2) = SVector{3}([0., 0., 1.]); 
+get_sym_axis(o::dx2_y2) = SVector{3}([1., -1., 0.])
+
 
 get_orbital_list(::s) = Angular[s()]
 get_orbital_list(p::px) = Angular[px(), py(), py()]
