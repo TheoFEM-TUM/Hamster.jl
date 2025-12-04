@@ -14,7 +14,58 @@ mutable struct HamiltonianKernel{T1, T2, T3}
     sim_params :: T2
     structure_descriptors :: Vector{T3}
     update :: Bool
+    desc_tuple :: Tuple
 end
+
+function get_kernel_features(structure_descriptors, data_points, sim_params, tol = 1e-8)
+    #desc(2,) (27,) (11, 11) (8,)
+    #dp(1155,) (8,) ()
+    #todo (2,) (27, 1155, 11, 11)
+    N_mats = size(structure_descriptors)[1]
+    N_dp = size(data_points)[1]
+    descr_sizes = [(size(structure_descriptors[i])[1], size(structure_descriptors[i][1])[1]) for i in 1:N_mats]
+    Desc_Vec = [ [[ spzeros(ComplexF64, descr_sizes[i][2], descr_sizes[i][2]) for _ in 1:descr_sizes[i][1] ] for d in 1:N_dp]
+      for i in 1:N_mats ]
+    N_test = 0
+    for i in 1:N_mats
+        h_env = structure_descriptors[i]
+        for d in 1:N_dp
+            data_point = data_points[d]
+            N_R, Ne = descr_sizes[i]
+            for R in 1:N_R
+                is = Vector{Int32}() 
+                js = Vector{Int32}() 
+                vals = Vector{Float64}() 
+                for (i_mat, j_mat, hin) in zip(findnz(h_env[R])...)
+                    val = exp_sim(data_point, hin, σ=sim_params)
+                    #println(val)
+                    if abs(val) > tol
+                        push!(is, i_mat)
+                        push!(js, j_mat)
+                        push!(vals, val)
+                        N_test+= 1
+                    end
+                end
+                if size(is)[1] > 0
+                    Desc_Vec[i][d][R] .+= sparse(is, js, vals, Ne, Ne)
+                end
+            end
+        end
+    end
+    println("N_test",N_test)
+    return Desc_Vec, (descr_sizes, N_dp)
+end
+
+function HamiltonianKernel(params :: Vector,
+    data_points :: Vector,
+    sim_params,
+    structure_descriptors :: Vector,
+    update :: Bool)
+
+    desc_tuple = get_kernel_features(structure_descriptors, data_points, sim_params)
+    return HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update,desc_tuple)
+end
+
 
 """
     HamiltonianKernel(strcs, bases, model, conf)
@@ -26,6 +77,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             Ncluster=get_ml_ncluster(conf),
                             Npoints=get_ml_npoints(conf),
                             sim_params=get_sim_params(conf), 
+                            sp_tol=get_sp_tol(conf),
                             update_ml=get_ml_update(conf),
                             rank=0,
                             nranks=1)
@@ -59,12 +111,17 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         _, data_points = read_ml_params(conf, filename=get_ml_init_params(conf))
     end
     params, data_points = init_ml_params!(data_points, conf)
-    return HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml)
+    sp_tol = 1e-8
+    desc_tuple = get_kernel_features(structure_descriptors, data_points, sim_params, sp_tol)
+    return HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml, desc_tuple)
 end
 
 exp_sim(x₁, x₂; σ=√0.05)::Float64 = exp(-normdiff(x₁, x₂)^2 / (2σ^2))
 
-(k::HamiltonianKernel)(xin) = mapreduce(wx->wx[1]*exp_sim(wx[2], xin, σ=k.sim_params), +, zip(k.params, k.data_points))
+#(k::HamiltonianKernel)(xin) = mapreduce(wx->wx[1]*exp_sim(wx[2], xin, σ=k.sim_params), +, zip(k.params, k.data_points))
+
+
+
 
 """
     get_hr(kernel::HamiltonianKernel, mode, index; apply_soc=false) -> Vector{Matrix{Float64}}
@@ -82,32 +139,21 @@ Constructs a set of real-space Hamiltonians from a `HamiltonianKernel`.
 # Returns
 - A vector of real-space Hamiltonian matrices, optionally modified with SOC transformations.
 """
-function get_hr(kernel::HamiltonianKernel, mode::Dense, index; apply_soc=false)
-    h_env = kernel.structure_descriptors[index]
-    Hr = get_empty_complex_hamiltonians(size(h_env[1], 1), length(h_env), mode)
-    for R in eachindex(h_env)
-        for (i, j, hin) in zip(findnz(h_env[R])...)
-            Hr[R][i, j] = kernel(hin)
-        end
+
+
+function get_hr(kernel::HamiltonianKernel, mode, index; apply_soc=false)
+    desc_vec  = kernel.desc_tuple[1][index]
+    N_dp = kernel.desc_tuple[2][2]
+    (NR, Ne) = kernel.desc_tuple[2][1][index]
+    Hr = get_empty_complex_hamiltonians(Ne, NR, mode)
+    for d in 1:N_dp
+        Hr .+= desc_vec[d] .* kernel.params[d]
+        #addmul!(Hr, desc_vec[d], kernel.params[d])
     end
     return apply_soc ? apply_spin_basis.(Hr) : Hr
 end
 
-function get_hr(kernel::HamiltonianKernel, mode::Sparse, index; apply_soc=false)
-    h_env = kernel.structure_descriptors[index]
-    Nε = size(h_env[1], 1)
-    Hr = get_empty_complex_hamiltonians(Nε, length(h_env), mode)
-    for R in eachindex(h_env)
-        is = Int64[]
-        js = Int64[]
-        vals = Float64[]
-        for (i, j, hin) in zip(findnz(h_env[R])...)
-            push!(is, i); push!(js, j); push!(vals, kernel(hin))
-        end
-        Hr[R] = sparse(is, js, vals, Nε, Nε)
-    end
-    return apply_soc ? apply_spin_basis.(Hr) : Hr
-end
+
 
 """
     update!(kernel::HamiltonianKernel, opt, grad)
@@ -265,6 +311,32 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 - `dparams`: A vector containing the computed gradients of the model parameters.
 """
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
+    dparams = zeros(length(kernel.params))
+    if kernel.update
+        for n in eachindex(dparams)
+            for (bi, index) in enumerate(indices)
+                desc_vec  = kernel.desc_tuple[1][index][n]
+                for R in eachindex(dL_dHr[bi])
+                    for (i, j, exp_val) in zip(findnz(desc_vec[R])...)
+                        if !soc
+                            dparams[n] += exp_val .* real(dL_dHr[bi][R][i, j])
+                        else
+                            i1 = 2*i-1; j1 = 2*j-1
+                            i2 = 2*i; j2 = 2*j
+                            dparams[n] += exp_val .* real(dL_dHr[bi][R][i1, j1] + dL_dHr[bi][R][i2, j2])
+                        end
+                    end
+                end
+            end
+        end
+        dparams_penal = backward(reg, kernel.params)
+        return dparams .+ dparams_penal
+    else 
+        return dparams
+    end
+end
+
+function get_model_gradient_old(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
     dparams = zeros(length(kernel.params))
     if kernel.update
         for n in eachindex(dparams)

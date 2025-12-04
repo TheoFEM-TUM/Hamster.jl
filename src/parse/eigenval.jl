@@ -36,5 +36,5 @@ function read_eigenval(file::AbstractString, nmax::Int=1000000)
             end
         end
     end
-    return kpoints, E_bands, occs
+    return kpoints, E_bands, nelec
 end
