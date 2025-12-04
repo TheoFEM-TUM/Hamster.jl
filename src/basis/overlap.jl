@@ -212,8 +212,6 @@ end
 
 get_me_label(Y₁::s, Y₂::s, base_ls)::MatrixElement = Vssσ(base_ls)
 
-copy(v::Vssσ) = Vssσ(v.base_ls)
-
 Base.string(::Vssσ) = "ssσ"
 
 (v::Vssσ)(base, orbconfig, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 0, 0) * 1.
@@ -227,8 +225,6 @@ end
 
 get_me_label(::s, ::pz, base_ls)::MatrixElement = Vspσ(base_ls)
 get_me_label(::pz, ::s, base_ls)::MatrixElement = Vspσ(base_ls)
-
-copy(v::Vspσ) = Vspσ(v.base_ls)
 
 Base.string(::Vspσ) = "spσ"
 
@@ -250,8 +246,6 @@ end
 
 get_me_label(::pz, ::pz, base_ls)::MatrixElement = Vppσ(base_ls)
 
-copy(v::Vppσ) = Vppσ(v.base_ls)
-
 Base.string(::Vppσ) = "ppσ"
 
 (v::Vppσ)(base, orbconfig, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 1)*fpz(base[1], θ₁, φ₁) * fpz(base[2], θ₂, φ₂)
@@ -266,8 +260,6 @@ end
 get_me_label(::px, ::px, base_ls)::MatrixElement = Vppπ(base_ls)
 get_me_label(::py, ::py, base_ls)::MatrixElement = Vppπ(base_ls)
 
-copy(v::Vppπ) = Vppπ(v.base_ls)
-
 Base.string(::Vppπ) = "ppπ"
 
 (v::Vppπ)(base, orbconfig, mode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 1)*fpx(base[1], θ₁, φ₁)*fpx(base[2], θ₂, φ₂) + NConst(mode, base, 1, 1)*fpy(base[1],θ₁, φ₁)*fpy(base[2], θ₂, φ₂)
@@ -281,8 +273,6 @@ end
 
 get_me_label(::s, ::dz2, base_ls)::MatrixElement = Vsdσ(base_ls)
 get_me_label(::dz2, ::s, base_ls)::MatrixElement = Vsdσ(base_ls)
-
-copy(v::Vsdσ) = Vsdσ(v.base_ls)
 
 Base.string(::Vsdσ) = "sdσ"
 
@@ -304,8 +294,6 @@ end
 
 get_me_label(::pz, ::dz2, base_ls)::MatrixElement = Vpdσ(base_ls)
 get_me_label(::dz2, ::pz, base_ls)::MatrixElement = Vpdσ(base_ls)
-
-copy(v::Vpdσ) = Vpdσ(v.base_ls)
 
 Base.string(::Vpdσ) = "pdσ"
 
@@ -330,8 +318,6 @@ get_me_label(::dxz, ::px, base_ls)::MatrixElement = Vpdπ(base_ls)
 get_me_label(::py, ::dyz, base_ls)::MatrixElement = Vpdπ(base_ls)
 get_me_label(::dyz, ::py, base_ls)::MatrixElement = Vpdπ(base_ls)
 
-copy(v::Vpdπ) = Vpdπ(v.base_ls)
-
 Base.string(::Vpdπ) = "pdπ"
 
 (v::Vpdπ)(base, ::SymOrb, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 1, 2)*fpx(base[1], θ₁, φ₁)*fdxz(base[2], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdxz(base[1], θ₁, φ₁)*fpx(base[2], θ₂, φ₂) + NConst(mode, base, 1, 2)*fpy(base[1], θ₁, φ₁)*fdyz(base[2], θ₂, φ₂) + phase(base)*NConst(mode, base, 2, 1)*fdyz(base[1], θ₁, φ₁)*fpy(base[2], θ₂, φ₂)
@@ -354,8 +340,6 @@ end
 
 get_me_label(::dz2, ::dz2, base_ls)::MatrixElement = Vddσ(base_ls)
 
-copy(v::Vddσ) = Vddσ(v.base_ls)
-
 Base.string(::Vddσ) = "ddσ"
 
 (v::Vddσ)(base, orbconfig, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 2, 2)*fdz2(base[1], θ₁, φ₁)*fdz2(base[2], θ₂, φ₂)
@@ -373,8 +357,6 @@ end
 get_me_label(::dxz, ::dxz, base_ls)::MatrixElement = Vddπ(base_ls)
 get_me_label(::dyz, ::dyz, base_ls)::MatrixElement = Vddπ(base_ls)
 
-copy(v::Vddπ) = Vddπ(v.base_ls)
-
 Base.string(::Vddπ) = "ddπ"
 
 (v::Vddπ)(base, orbconfig, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, base, 2, 2)*fdxz(base[1], θ₁, φ₁)*fdxz(base[2], θ₂, φ₂) + NConst(mode, base, 2, 2)*fdyz(base[1], θ₁, φ₁)*fdyz(base[2], θ₂, φ₂)
@@ -391,8 +373,6 @@ end
 
 get_me_label(::dxy, ::dxy, base_ls)::MatrixElement = Vddδ(base_ls)
 get_me_label(::dx2_y2, ::dx2_y2, base_ls)::MatrixElement = Vddδ(base_ls)
-
-copy(v::Vddδ) = Vddδ(v.base_ls)
 
 Base.string(::Vddδ) = "ddδ"
 
