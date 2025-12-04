@@ -12,16 +12,9 @@ function get_base_orb(base_1::A1, base_2::A2; bondswap=false) where {A1,A2<:Angu
     end
 end
 get_base_orb(orb::Angular) = orb
-#get_base_orb(orb::px) = porb()
-#get_base_orb(orb::py) = porb()
-#get_base_orb(orb::pz) = porb()
-
-get_base_orb(orb::pxdx2) = prdr2()
-get_base_orb(orb::pydy2) = prdr2()
-get_base_orb(orb::pzdz2) = prdr2()
 
 # s - orbital 
-fs(θ, φ, baseorb::Angular) = 1.
+fs(baseorb::s, θ, φ) = 1.
 
 # p - orbitals
 fpx(::px, θ, φ) = cos(φ)*cos(θ)
@@ -82,27 +75,21 @@ fdxz(baseorb::sp3dr2, θ, φ) = √3*sin(θ)*cos(θ)*cos(φ)
 fdz2(baseorb::sp3dr2, θ, φ) = (3*cos(θ)^2-1)/2
 fdx2_y2(baseorb::sp3dr2, θ, φ) = √3/2*(sin(θ)^2*cos(φ)^2 - sin(θ)^2*sin(φ)^2)
 
-fdxy(baseorb::prdr2, θ, φ) = √3*sin(θ)^2*sin(φ)*cos(φ)
-fdyz(baseorb::prdr2, θ, φ) = √3*sin(θ)*cos(θ)*sin(φ)
-fdxz(baseorb::prdr2, θ, φ) = √3*sin(θ)*cos(θ)*cos(φ)
-fdz2(baseorb::prdr2, θ, φ) = (3*cos(θ)^2-1)/2
-fdx2_y2(baseorb::prdr2, θ, φ) = √3/2*(sin(θ)^2*cos(φ)^2 - sin(θ)^2*sin(φ)^2)
-
 # Define normalization constants
-Nspd(baseorb::Angular) = Float64[1, 1, 1]
-Nspd(baseorb::s) = Float64[1, 0, 0]
-Nspd(baseorb::porb) = Float64[0, 3, 0]
-Nspd(baseorb::px) = Float64[0, 3, 0]
-Nspd(baseorb::py) = Float64[0, 3, 0]
-Nspd(baseorb::pz) = Float64[0, 3, 0]
-Nspd(baseorb::dorb) = Float64[0, 0, 5]
-Nspd(baseorb::dxy) = Float64[0, 0, 5]
-Nspd(baseorb::dxz) = Float64[0, 0, 5]
-Nspd(baseorb::dyz) = Float64[0, 0, 5]
-Nspd(baseorb::dz2) = Float64[0, 0, 5]
-Nspd(baseorb::dx2_y2) = Float64[0, 0, 5]
+const Nspd_s = Float64[1, 0, 0]
+const Nspd_p = Float64[0, 3, 0]
+const Nspd_d = Float64[0, 0, 5]
 const Nspd_sp3 = Float64[1, 3, 0]
-Nspd(baseorb::sp3) = Nspd_sp3
 const Nspd_sp3dr2 = Float64[1, 3, 5]
+
+Nspd(baseorb::s) = Nspd_s
+Nspd(baseorb::px) = Nspd_p
+Nspd(baseorb::py) = Nspd_p
+Nspd(baseorb::pz) = Nspd_p
+Nspd(baseorb::dxy) = Nspd_d
+Nspd(baseorb::dxz) = Nspd_d
+Nspd(baseorb::dyz) = Nspd_d
+Nspd(baseorb::dz2) = Nspd_d
+Nspd(baseorb::dx2_y2) = Nspd_d
+Nspd(baseorb::sp3) = Nspd_sp3
 Nspd(baseorb::sp3dr2) = Nspd_sp3dr2
-Nspd(baseorb::prdr2) = Float64[0, 3, 5]

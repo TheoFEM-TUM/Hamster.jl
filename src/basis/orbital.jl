@@ -116,7 +116,6 @@ get_axis(h::sp3) = [SVector{3}([1., 1., 1.]),
                     SVector{3}([-1., 1., -1.]), 
                     SVector{3}([-1., -1., 1.])]
 get_axis(o) = SVector{3}([0., 0., 1.])
-get_axis(o::pxdx2) =  SVector{3}([1., 0., 0.]); get_axis(o::pydy2) = SVector{3}([0., 1., 0.]); get_axis(o::pzdz2) = SVector{3}([0., 0., 1.])
 
 function get_sym_axis(orb::Orbital) :: SVector{3, Float64}
     if orb.type isa sp3 || orb.type isa sp3dr2
@@ -143,6 +142,3 @@ get_orbital_list(d::dyz) = [dxz(), dxy(), dyz(), dx2_y2(), dz2()]
 get_orbital_list(d::dz2) = [dxz(), dxy(), dyz(), dx2_y2(), dz2()]
 get_orbital_list(d::dx2_y2) = [dxz(), dxy(), dyz(), dx2_y2(), dz2()]
 get_orbital_list(h::sp3dr2) = Angular[s(), px(), py(), pz(), dxz(), dxy(), dyz(), dx2_y2(), dz2()]
-get_orbital_list(h::pxdx2) = Angular[px(), py(), pz(), dxz(), dxy(), dyz(), dx2_y2(), dz2()]
-get_orbital_list(h::pydy2) = Angular[px(), py(), pz(), dxz(), dxy(), dyz(), dx2_y2(), dz2()]
-get_orbital_list(h::pzdz2) = Angular[px(), py(), pz(), dxz(), dxy(), dyz(), dx2_y2(), dz2()]
