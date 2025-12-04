@@ -98,7 +98,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
         for index in indices
             strc_ind += 1
             system, config_index = get_system_and_config_index(index, local_inds)
-            ham_time_local = @elapsed Hk = get_hamiltonian(ham, index, ks, comm, write_hr=write_hr, config_index=config_index, system=system, rank=rank, nranks=nranks)
+            ham_time_local = @elapsed Hk = get_hamiltonian(ham, index, ks, comm, write_hr=write_hr, config_index=config_index, system=system, rank=rank, nranks=nranks, ham_file=ham_file)
             Neig = ham.sp_diag isa Sparse ? get_neig(conf) : size(Hk[1], 1)
 
             Es = zeros(1, 1); vs = zeros(ComplexF64, 1, 1, 1)
