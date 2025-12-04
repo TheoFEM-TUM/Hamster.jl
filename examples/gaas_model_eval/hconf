@@ -7,10 +7,12 @@ begin Options
 end
 
 begin atom Ga
+    alpha = 9
     orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
 end
 
 begin atom As
+    alpha = 13
     orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
     nnaxes = true
 end
