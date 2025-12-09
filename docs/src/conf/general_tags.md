@@ -1,4 +1,4 @@
-# General Options
+# [General Options](@id options-block)
 
 The general options are placed inside an `Options` block:
 
