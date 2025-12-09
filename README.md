@@ -43,7 +43,7 @@ Installing dependencies and running the test suite may take up to 10 minutes. A 
 You can run start Hamster by calling the `hamster` executable. To make use of MPI parallelization you need add `mpiexecjl` or `srun` in front.
 
 ```bash
-[mpiexecjl -n NRANKS / srun] hamster [kwargs]
+[mpiexecjl -n NRANKS / srun] hamster [-t NUMBER_OF_THREADS] [kwargs]
 ```
 
 While keyword arguments can be passed directly via the command line, it is more practical to provide Hamster with a config file `hconf`(see [here](https://theofem-tum.github.io/Hamster.jl/dev/conf/config/)). Examples that can be run on a personal computer in under 10 minutes are available [here](https://theofem-tum.github.io/Hamster.jl/dev/examples/examples/).
