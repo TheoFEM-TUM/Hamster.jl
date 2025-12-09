@@ -18,6 +18,12 @@ makedocs(
             "conf/general_tags.md",
             "conf/block_tags.md"
         ],
+        "Calculation Types" => [
+            "calc/standard.md",
+            "calc/optim.md",
+            "calc/hyperopt.md",
+            "calc/helper_functions.md"
+        ],
         "Examples" => [
             "examples/examples.md",
             "examples/model_eval.md",

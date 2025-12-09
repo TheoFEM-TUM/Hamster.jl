@@ -1,10 +1,3 @@
-# Calculation types
-
-```@autodocs
-Modules = [Hamster]
-Pages =  ["hyperopt.jl", "optimization.jl", "standard.jl"]
-```
-
 # Basis
 
 ```@autodocs

@@ -59,15 +59,55 @@ end
 """
     run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=1, verbosity=get_verbosity(conf))
 
-Performs random search hyperparameter optimization by repeatedly evaluating randomly sampled parameter configurations.
+Perform a hyperparameter optimization by evaluating the model over many parameter configurations and identifying the one that yields the lowest loss.
 
-# Arguments
-- `::Val{:hyper_optimization}`: Dispatch tag to indicate this function handles hyperparameter optimization.
-- `comm`: MPI communicator used for distributed computation.
-- `conf`: Configuration object used to retrieve hyperparameter bounds, optimization settings, and verbosity.
-- `rank::Int`: MPI rank (default = 0).
-- `nranks::Int`: Number of MPI processes (default = 1).
-- `verbosity::Int`: Controls the amount of output printed (default = retrieved from `conf`).
+This routine drives the full hyperparameter-search workflow, including parameter sampling, model evaluation, bookkeeping, and reporting of results. 
+It supports random search, grid search, and Tree-Parzen Estimator (TPE; Bayesian optimization).
+
+# Workflow
+
+1. **Determine search mode and iterations.**  
+   The algorithm selects the sampling strategy (`random`, `grid`, or `tpe`) and computes the total number of evaluations. For grid search, if `niter = 1`, the full Cartesian product of parameter ranges is used.
+
+2. **Construct the search space.**  
+   Parameter names, bounds, and step sizes from the `HyperOpt` block define the domain of the optimization.  
+   - For **TPE**, a probabilistic search space is built using quantized uniform distributions.
+   - For **random** and **grid** search, discrete candidate values are generated directly from `lowerbounds`, `upperbounds` and `stepsizes`.
+
+3. **Iterative evaluation.**  
+   For each iteration:
+   - A set of hyperparameters is sampled from the search space.  
+   - The model is executed with these parameters using `hyper_optimize`, which returns the training loss.  
+   - The profiler records the parameter values and corresponding losses.  
+   - For TPE, the sampled point and observed loss update the optimization history to refine future proposals.
+
+4. **Select the best configuration.**  
+   After all iterations, the routine identifies the parameter set that achieved the minimal training loss and prints a summary (if `verbosity > 0`).
+
+5. **Write output.**  
+   On rank 0, the sampled parameter values and metadata are written to `hamster_out.h5`, and standard output is written to `hamster.out`.
+
+# Required Inputs
+
+- **Training data set** (see `Optimizer`).  
+- **Validation data set** (optional; see `Optimizer`).
+
+# Settings (from the `HyperOpt` block)
+
+- `params` – Names of hyperparameters to optimize.  
+  *The substring before the first `_` is interpreted as the corresponding block name.*  
+- `lowerbounds`, `upperbounds` – Numerical bounds for each parameter.  
+- `stepsizes` – Step size used for random/grid sampling and quantization.  
+- `niter` – Number of iterations (ignored for full grid expansion if `niter = 1`).  
+- `mode` – Sampling strategy: `random`, `grid`, or `tpe`.
+
+# Output Files
+
+- `hamster.out` – Standard Hamster output.  
+- `hamster_out.h5` – HDF5 file containing:
+  - parameter values for all evaluated configurations,
+  - associated loss values,
+  - the list of optimized parameters.
 """
 function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=1, verbosity=get_verbosity(conf), 
             params=get_hyperopt_params(conf), lowerbounds=get_hyperopt_lowerbounds(conf), upperbounds=get_hyperopt_upperbounds(conf),

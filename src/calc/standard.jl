@@ -1,33 +1,50 @@
 """
     run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1)
 
-Performs a standard calculation for an effective Hamiltonian model.
+Performs a standard calculation for an effective Hamiltonian model, computing either the eigenvalues or the Hamiltonian itself for a given set of structures.
 
-# Arguments
-- `::Val{:standard}`: A type parameter indicating that this function performs a standard calculation.
-- `comm`: The MPI communicator used for parallel processing.
-- `conf::Config`: A configuration object that contains parameters for the calculation.
-- `rank`: The MPI rank of the current process (default: `0`).
-- `nranks`: The total number of MPI ranks (default: `1`).
+# Workflow
 
-# Function Behavior
-1. Retrieves the configuration indices using `get_config_index_sample(conf)`.
-2. If configuration indices are specified in the configuration file, they are read from a file.
-3. The root process (`rank == 0`) writes the configuration indices to a file.
-4. The indices are broadcast to all processes using `MPI.Bcast!`, ensuring consistency across ranks.
-5. Determines the mode of calculation:
-   - `"md"` (molecular dynamics) if the configuration contains `"Supercell"`.
-   - `"pc"` (phonon calculation) otherwise.
-6. Distributes the configuration indices among MPI ranks for parallel execution.
-7. Extracts atomic structures using `get_structures(conf, config_indices=local_inds, mode=mode)`.
-8. Constructs bases using the `Basis` type for each structure.
-9. Initializes the `EffectiveHamiltonian` for solving electronic or vibrational properties.
-10. Sets up a `HamsterProfiler` to profile the computation over multiple iterations.
-11. Computes eigenvalues using `get_eigenvalues`, which performs the main calculation.
-12. Returns the profiler object (`prof`), which contains performance and profiling data.
+1. **Configuration Sampling**  
+   - Retrieve configuration indices for the selected systems using `get_config_inds_for_systems`.  
+   - Write the indices to a file on the root process (`rank == 0`) and broadcast them to all ranks for consistency.  
+   - Split indices among MPI ranks for parallel execution.
 
-# Returns
-- `prof::HamsterProfiler`: An object containing profiling information about the Hamiltonian calculation.
+2. **Determine Calculation Mode**  
+   - `"md"` (molecular dynamics) if the configuration contains a `Supercell` and only one system.  
+   - `"universal"` if multiple systems are present with a `Supercell`.  
+   - `"pc"` (primitive cell) otherwise.
+
+3. **Structure Extraction**  
+   - Load the atomic structures for the assigned configuration indices using `get_structures`.
+
+4. **Basis Construction**  
+   - Build basis functions (`Basis`) for each structure to represent the effective Hamiltonian.
+
+5. **Hamiltonian Initialization**  
+   - Initialize the `EffectiveHamiltonian` model with the structures and their bases, ready for eigenvalue or Hamiltonian computations.
+
+6. **Profiler Setup**  
+   - Create a `HamsterProfiler` to record computational timings, performance metrics, and other profiling data.
+
+7. **Eigenvalue / Hamiltonian Calculation**  
+   - Execute `get_eigenvalues` (or the equivalent routine) to compute the eigenvalues or solve the Hamiltonian for the provided structures.
+
+# Required Inputs
+
+- **Structural configurations**  
+  - `train_mode = md`: see `get_xdatcar` and `get_sc_poscar`
+  - `train_mode = pc`: see `get_poscar`
+- **Eigenvalue or Hamiltonian data** as specified in the configuration.
+
+# Output Files
+
+- `ham.h5` — HDF5 file containing the Hamiltonian, generated if `write_hk` (k-space) or `write_hr` (real space) is `true`.
+- `hamster.out` — Standard Hamster output file with summary information.  
+- `hamster_out.h5` — HDF5 file containing:
+  - Loss values (for iterative calculations, if applicable)  
+  - Timings and profiling data
+- `Es.dat` — Plain text file containing computed eigenvalues for each structure (written only if `skip_diag` is `true`; default).
 """
 function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1, verbosity=get_verbosity(conf), write_output=true)
     systems = get_systems(conf)
