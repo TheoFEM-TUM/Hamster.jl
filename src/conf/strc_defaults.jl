@@ -22,7 +22,7 @@ get_Rmax(conf::Config)::Int64 = conf("Rmax") == "default" ? 1 : conf("Rmax")
 """
     poscar=POSCAR
 
-The parameter `poscar` sets the path to the POSCAR VASP file that defines the base system.
+The parameter `poscar` sets the path to the POSCAR VASP file that defines the base system. Only accepts VASP poscar format.
 """
 get_poscar(conf::Config)::String = conf("poscar") == "default" ? "POSCAR" : conf("poscar")
 
