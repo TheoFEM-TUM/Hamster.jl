@@ -1,29 +1,57 @@
 """
-   run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1)
+    run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1)
 
-Runs the optimization process for an effective Hamiltonian model using the specified configuration.
-
-# Arguments
-- `conf::Config`: A configuration instance.
+Performs the optimization using gradient descent of an effective Hamiltonian model using the specified configuration.  
+The routine iteratively adjusts model parameters to minimize the loss over a training set, while optionally validating performance on a separate validation set.
 
 # Workflow
-1. **Configuration Sampling**:
-   - Splits the configuration indices into training (`train_config_inds`) and validation (`val_config_inds`) sets.
-2. **Translation Vectors**:
-   - Reads translation vectors `Rs` (if `hr_fit`).
-3. **Training Data Preparation**:
-   - Retrieves training structures (`train_strcs`) and constructs basis functions (`train_bases`).
-   - Initializes the effective Hamiltonian (`ham_train`) for the training data.
-4. **Validation Data Preparation**:
-   - Retrieves validation structures (`val_strcs`) and constructs basis functions (`val_bases`).
-   - Initializes the effective Hamiltonian (`ham_val`) for the validation data.
-5. **Data Loader and Optimizer**:
-   - Initializes a `DataLoader` (`dl`) with the training and validation configuration indices.
-   - Sets up a gradient descent optimizer (`optim`) with the extracted parameters.
-6. **Profiler**:
-   - Creates a `HamsterProfiler` (`prof`) for profiling the optimization process.
-7. **Model Optimization**:
-   - Performs the optimization using `optimize_model!`, which iterates over the training and validation data to refine the model.
+
+1. **Configuration Sampling**  
+   - Partition configuration indices into training (`train_config_inds`) and validation (`val_config_inds`) sets.  
+   - Distribute indices among parallel ranks.
+
+2. **Translation Vectors (if `hr_fit`)**
+   - Retrieve translation vectors `Rs` for high-rank fitting, used in constructing the Hamiltonian basis.
+
+3. **Training Data Preparation**  
+   - Load the training structures (`train_strcs`) from the selected configurations.  
+   - Construct the corresponding basis functions (`train_bases`).  
+   - Initialize an `EffectiveHamiltonian` (`ham_train`) with the training data.
+
+4. **Validation Data Preparation**  
+   - Load validation structures (`val_strcs`) and construct basis functions (`val_bases`).  
+   - Initialize an `EffectiveHamiltonian` (`ham_val`) for validation, including only the relevant data points.
+
+5. **Data Loader and Optimizer Initialization**  
+   - Create a `DataLoader` (`dl`) containing training and validation datasets.  
+   - Initialize a gradient descent optimizer (`optim`) using the extracted training parameters.
+
+6. **Profiler Setup**  
+   - Create a `HamsterProfiler` (`prof`) to record losses, timings, and parameter evolution during optimization.
+
+7. **Model Optimization**  
+   - Execute `optimize_model!`, iterating over training and validation data to update model parameters.  
+   - On rank 0, optionally write optimized parameters to output files.
+
+# Required Inputs
+
+- **Structural configurations**:  
+  - `train_mode = md`: see `get_xdatcar` and `get_sc_poscar`  
+  - `train_mode = pc`: see `get_poscar`
+- **Eigenvalue training data**: see `get_train_data`
+- **Eigenvalue validation data** (optional): see `get_val_data`  
+  If not provided, the training data is split according to `val_ratio`.
+
+# Input Tags (`Optimizer`)
+
+- Configuration tags that specify how optimization is performed (see [here](@ref optim-tags)).
+
+# Output Files
+
+- `hamster.out` — standard Hamster output.  
+- `hamster_out.h5` — HDF5 file containing:
+  - Loss values over iterations
+  - Timings
 """
 function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1, write_output=true)
    systems = get_systems(conf)
