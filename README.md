@@ -46,15 +46,16 @@ You can run start Hamster by calling the `hamster` executable. To make use of MP
 [mpiexecjl -n NRANKS / srun] hamster [kwargs]
 ```
 
-While keyword arguments can be passed directly via the command line, it is more practical to provide Hamster with a [config file `hconf`](https://theofem-tum.github.io/Hamster.jl/dev/conf/config/). Examples that can be run on a personal computer in under 10 minutes are available [here](https://theofem-tum.github.io/Hamster.jl/dev/examples/examples/).
+While keyword arguments can be passed directly via the command line, it is more practical to provide Hamster with a config file `hconf`(see [here](https://theofem-tum.github.io/Hamster.jl/dev/conf/config/)). Examples that can be run on a personal computer in under 10 minutes are available [here](https://theofem-tum.github.io/Hamster.jl/dev/examples/examples/).
 
 ## Code functionality
 
 An effective Hamiltonian model in `Hamster.jl` consists of three building blocks: TB [1], ML [2], and SOC [2]. These components can be combined, trained individually, extended, or replaced (e.g., by a different ML model) in a modular fashion. Each block has its own hyperparameters (except for SOC), which should be optimized in advance (see flowchart below).
 
 The input to the model is a set of atomic configurations, which can be provided in VASP file format or an h5 file (see [here](https://theofem-tum.github.io/Hamster.jl/dev/conf/block_tags/#Hamster.get_xdatcar-Tuple{Config})).
-For [optimization](https://theofem-tum.github.io/Hamster.jl/dev/calc/optim/), two datasets of energy eigenvalues (training and validation), typically obtained from DFT, are also required.
-For more details on hyperparameter optimization, please check the [documentation](https://theofem-tum.github.io/Hamster.jl/dev/calc/hyperopt/)
+
+For optimization, two datasets of energy eigenvalues (training and validation), typically obtained from DFT, are also required (see [here](https://theofem-tum.github.io/Hamster.jl/dev/calc/optim/)).
+More details on hyperparameter optimization can be found [here](https://theofem-tum.github.io/Hamster.jl/dev/calc/hyperopt/).
 
 <p align="center">
   <img width="300" height="250" src="docs/src/assets/code_functionality.png">
