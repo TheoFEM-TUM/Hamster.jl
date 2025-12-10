@@ -69,6 +69,18 @@ function get_hyperopt_stepsizes(conf::Config)::Vector{Float64}
     end
 end
 
+function get_hyperopt_log_modes(conf::Config)::Vector{String}
+    Nparams = length(get_hyperopt_params(conf))
+    if conf("log_modes", "HyperOpt") == "default" 
+        return ["uni" for i in 1:Nparams]
+    else
+        if conf("log_modes", "HyperOpt") isa Vector
+            return conf("log_modes", "HyperOpt")
+        else
+            return [conf("log_modes", "HyperOpt")]
+        end
+    end
+end
 """
 **niter**=10
 

@@ -71,7 +71,7 @@ Performs random search hyperparameter optimization by repeatedly evaluating rand
 """
 function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=1, verbosity=get_verbosity(conf), 
             params=get_hyperopt_params(conf), lowerbounds=get_hyperopt_lowerbounds(conf), upperbounds=get_hyperopt_upperbounds(conf),
-            stepsizes=get_hyperopt_stepsizes(conf), mode=get_hyperopt_mode(conf), Niter=get_hyperopt_niter(conf))
+            stepsizes=get_hyperopt_stepsizes(conf), mode=get_hyperopt_mode(conf), Niter=get_hyperopt_niter(conf), log_modes = get_hyperopt_log_modes(conf))
 
     if verbosity == 1; set_value!(conf, "verbosity", 0); end # coverage: ignore
     
@@ -84,7 +84,14 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
     print_start_message(prof, verbosity=verbosity)
 
     if lowercase(mode[1]) == 't'
-        space = Dict(Symbol(param)=>HP.QuantUniform(Symbol(param), l, u, δ) for (param, l, u, δ) in zip(params, lowerbounds, upperbounds, stepsizes))
+        space = Dict(
+            Symbol(param) => (
+                log_mode == "log" ? 
+                HP.QuantLogUniform(Symbol(param), l, u, δ) :
+                HP.QuantUniform(Symbol(param), l, u, δ)
+            )   
+            for (param, l, u, δ, log_mode) in zip(params, lowerbounds, upperbounds, stepsizes, log_modes)
+        )
         TreeParzen.Graph.checkspace(space)
         tpe_config = TreeParzen.Config()
         trialhist = TreeParzen.Trials.Trial[]

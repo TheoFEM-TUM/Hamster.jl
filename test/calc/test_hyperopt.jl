@@ -35,6 +35,7 @@ end
     set_value!(conf, "poscar", joinpath(path, "POSCAR_gaas"))
     set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
     set_value!(conf, "mode", "HyperOpt", "tpe")
+    set_value!(conf, "log_modes", "HyperOpt", ["uni", "log"])
 
     prof = Hamster.main(comm, conf, rank=rank)
     @test std(prof.L_train) > 0
