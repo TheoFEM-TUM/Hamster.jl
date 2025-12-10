@@ -22,7 +22,7 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, con
     #dp(1155,) (8,) ()
     #todo (2,) (27, 1155, 11, 11)
     tol = sp_tol
-    tol = 1e-4
+    #tol = 1e-4
     N_mats = size(structure_descriptors)[1]
     N_dp = size(data_points)[1]
     descr_sizes = [(size(structure_descriptors[i])[1], size(structure_descriptors[i][1])[1]) for i in 1:N_mats]
