@@ -8,26 +8,27 @@ A kernel structure used for computing weighted similarity functions.
 - `xs :: Vector{T1}`: Sample points.
 - `sim_params :: T2`: Parameters for the similarity function.
 """
-mutable struct HamiltonianKernel{T1, T2, T3}
+mutable struct HamiltonianKernel{T2}
     params :: Vector{Float64}
-    data_points :: Vector{T1}
+    data_points :: Vector
     sim_params :: T2
-    structure_descriptors :: Vector{T3}
     update :: Bool
     desc_tuple :: Tuple
 end
 
-function get_kernel_features(structure_descriptors, data_points, sim_params, tol = 1e-8)
+function get_kernel_features(structure_descriptors, data_points, sim_params, conf=get_empty_config(); sp_tol=get_sp_tol(conf))
     #desc(2,) (27,) (11, 11) (8,)
     #dp(1155,) (8,) ()
     #todo (2,) (27, 1155, 11, 11)
+    tol = sp_tol
+    tol = 1e-4
     N_mats = size(structure_descriptors)[1]
     N_dp = size(data_points)[1]
     descr_sizes = [(size(structure_descriptors[i])[1], size(structure_descriptors[i][1])[1]) for i in 1:N_mats]
-    Desc_Vec = [ [[ spzeros(ComplexF64, descr_sizes[i][2], descr_sizes[i][2]) for _ in 1:descr_sizes[i][1] ] for d in 1:N_dp]
+    Desc_Vec = [ [[ spzeros(Float64, descr_sizes[i][2], descr_sizes[i][2]) for _ in 1:descr_sizes[i][1] ] for d in 1:N_dp]
       for i in 1:N_mats ]
     N_test = 0
-    for i in 1:N_mats
+    tforeach(1:N_mats) do i
         h_env = structure_descriptors[i]
         for d in 1:N_dp
             data_point = data_points[d]
@@ -47,7 +48,7 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
                     end
                 end
                 if size(is)[1] > 0
-                    Desc_Vec[i][d][R] .+= sparse(is, js, vals, Ne, Ne)
+                    Desc_Vec[i][d][R] = sparse(is, js, vals, Ne, Ne)
                 end
             end
         end
@@ -56,23 +57,27 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
     return Desc_Vec, (descr_sizes, N_dp)
 end
 
+
 function HamiltonianKernel(params :: Vector,
     data_points :: Vector,
     sim_params,
     structure_descriptors :: Vector,
-    update :: Bool)
-
+    update :: Bool
+    )
+    #sp_tol = 0
     desc_tuple = get_kernel_features(structure_descriptors, data_points, sim_params)
-    return HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update,desc_tuple)
+    return HamiltonianKernel(params,data_points, sim_params, update, desc_tuple)
 end
 
+
+#ham_val = EffectiveHamiltonian(val_strcs, val_bases, comm_active, conf, rank=active_rank, nranks=active_size, ml_data_points=get_ml_data_points(ham_train, conf))
 
 """
     HamiltonianKernel(strcs, bases, model, conf)
 
 Constructor for a HamiltonianKernel model.
 """
-function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, model, comm, conf=get_empty_config(); 
+function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, model, comm, conf=get_empty_config(), data_points = nothing; 
                             verbosity=get_verbosity(conf),
                             Ncluster=get_ml_ncluster(conf),
                             Npoints=get_ml_npoints(conf),
@@ -85,7 +90,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
     structure_descriptors = map(eachindex(strcs)) do n
         get_tb_descriptor(model.hs[n], model.params, strcs[n], bases[n], conf)
     end
-    if get_ml_init_params(conf)[1] ∈ ['r', 'z', 'o']
+    if get_ml_init_params(conf)[1] ∈ ['r', 'z', 'o'] && data_points === nothing
         Npoints_local = floor(Int64, Npoints / nranks)
         data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
         local_counts::Int32 = length(data_points_local)
@@ -107,14 +112,19 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
             @info "Number of samples changed from $Npoints to $N_real"
         end
         # COV_EXCL_STOP
-    else
+    elseif data_points === nothing
         _, data_points = read_ml_params(conf, filename=get_ml_init_params(conf))
+    else
+        
     end
     params, data_points = init_ml_params!(data_points, conf)
-    sp_tol = 1e-8
-    desc_tuple = get_kernel_features(structure_descriptors, data_points, sim_params, sp_tol)
-    return HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml, desc_tuple)
+    #sp_tol = 1e-8
+    #desc_tuple = get_kernel_features(structure_descriptors, data_points, sim_params, sp_tol)
+    return HamiltonianKernel(params, data_points, sim_params,structure_descriptors, update_ml)
 end
+
+
+
 
 exp_sim(x₁, x₂; σ=√0.05)::Float64 = exp(-normdiff(x₁, x₂)^2 / (2σ^2))
 
@@ -140,14 +150,19 @@ Constructs a set of real-space Hamiltonians from a `HamiltonianKernel`.
 - A vector of real-space Hamiltonian matrices, optionally modified with SOC transformations.
 """
 
+"""    for d in 1:N_dp
+        Hr .+= desc_vec[d] .* kernel.params[d]
+        #addmul!(Hr, desc_vec[d], kernel.params[d])
+    end"""
 
 function get_hr(kernel::HamiltonianKernel, mode, index; apply_soc=false)
     desc_vec  = kernel.desc_tuple[1][index]
     N_dp = kernel.desc_tuple[2][2]
     (NR, Ne) = kernel.desc_tuple[2][1][index]
     Hr = get_empty_complex_hamiltonians(Ne, NR, mode)
-    for d in 1:N_dp
-        Hr .+= desc_vec[d] .* kernel.params[d]
+
+    Hr = tmapreduce(.+, 1:N_dp) do d
+        desc_vec[d] .* kernel.params[d]
         #addmul!(Hr, desc_vec[d], kernel.params[d])
     end
     return apply_soc ? apply_spin_basis.(Hr) : Hr
@@ -310,10 +325,11 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 # Returns
 - `dparams`: A vector containing the computed gradients of the model parameters.
 """
+
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
     dparams = zeros(length(kernel.params))
     if kernel.update
-        for n in eachindex(dparams)
+        tforeach( eachindex(dparams)) do n
             for (bi, index) in enumerate(indices)
                 desc_vec  = kernel.desc_tuple[1][index][n]
                 for R in eachindex(dL_dHr[bi])

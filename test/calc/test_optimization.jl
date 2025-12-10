@@ -36,6 +36,8 @@ end
     set_value!(conf, "init_params", joinpath(path, "params.dat"))
 
     prof = Hamster.main(comm, conf, rank=rank)
+    println("Errors", prof.L_train[1, :])
+    println("Errors", prof.L_val[:])
     @test mean(prof.L_train[:, end]) < 0.1
     @test prof.L_val[end] < 0.3 # includes all bands
     rm("hamster.out"); rm("params.dat"); rm("ml_params.dat")
@@ -52,6 +54,8 @@ end
     set_value!(conf, "init_params", joinpath(path, "params.dat"))
 
     prof = Hamster.main(comm, conf, rank=rank)
+    println("Errors", prof.L_train[1, :])
+    println("Errors", prof.L_val[:])
     @test mean(prof.L_train[:, end]) < 0.1
     @test prof.L_val[end] < 0.3 # includes all bands
     rm("hamster.out"); rm("params.dat"); rm("ml_params.dat")

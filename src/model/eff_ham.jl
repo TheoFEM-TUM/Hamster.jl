@@ -50,9 +50,10 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
     if ml_model && tb_model
         if rank == 0 && verbosity > 1; println("   Getting ML model..."); end
         begin_time = MPI.Wtime()
-        kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, rank=rank, nranks=nranks)
         if ml_data_points ≠ nothing
-            kernel.data_points = ml_data_points
+            kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, ml_data_points, rank=rank, nranks=nranks)
+        else
+            kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, rank=rank, nranks=nranks)
         end
         models = (models..., kernel)
         ml_time = MPI.Wtime() - begin_time
