@@ -8,12 +8,13 @@ A kernel structure used for computing weighted similarity functions.
 - `xs :: Vector{T1}`: Sample points.
 - `sim_params :: T2`: Parameters for the similarity function.
 """
-mutable struct HamiltonianKernel{T2}
+mutable struct HamiltonianKernel{T1, T2}
     params :: Vector{Float64}
-    data_points :: Vector
+    data_points :: Vector{T1}
     sim_params :: T2
     update :: Bool
-    desc_tuple :: Tuple
+    feature_vec :: Vector{Vector{Vector{SparseMatrixCSC{Float64, Int64}}}}
+    feature_shape :: Tuple{Vector{Tuple{Int64, Int64}}, Int64}
 end
 
 function get_kernel_features(structure_descriptors, data_points, sim_params, conf=get_empty_config(); sp_tol=get_sp_tol(conf))
@@ -58,15 +59,15 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, con
 end
 
 
-function HamiltonianKernel(params :: Vector,
-    data_points :: Vector,
+function HamiltonianKernel(params :: Vector{Float64},
+    data_points,
     sim_params,
-    structure_descriptors :: Vector,
+    structure_descriptors,
     update :: Bool
     )
     #sp_tol = 0
-    desc_tuple = get_kernel_features(structure_descriptors, data_points, sim_params)
-    return HamiltonianKernel(params,data_points, sim_params, update, desc_tuple)
+    feature_vec, feature_shape = get_kernel_features(structure_descriptors, data_points, sim_params)
+    return HamiltonianKernel(params,data_points, sim_params, update, feature_vec, feature_shape)
 end
 
 
@@ -156,9 +157,9 @@ Constructs a set of real-space Hamiltonians from a `HamiltonianKernel`.
     end"""
 
 function get_hr(kernel::HamiltonianKernel, mode, index; apply_soc=false)
-    desc_vec  = kernel.desc_tuple[1][index]
-    N_dp = kernel.desc_tuple[2][2]
-    (NR, Ne) = kernel.desc_tuple[2][1][index]
+    desc_vec  = kernel.feature_vec[index]
+    N_dp = kernel.feature_shape[2]
+    (NR, Ne) = kernel.feature_shape[1][index]
     Hr = get_empty_complex_hamiltonians(Ne, NR, mode)
 
     Hr = tmapreduce(.+, 1:N_dp) do d
@@ -331,7 +332,7 @@ function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc
     if kernel.update
         tforeach( eachindex(dparams)) do n
             for (bi, index) in enumerate(indices)
-                desc_vec  = kernel.desc_tuple[1][index][n]
+                desc_vec  = kernel.feature_vec[index][n]
                 for R in eachindex(dL_dHr[bi])
                     for (i, j, exp_val) in zip(findnz(desc_vec[R])...)
                         if !soc
