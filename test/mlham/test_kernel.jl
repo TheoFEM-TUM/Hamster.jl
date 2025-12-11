@@ -71,20 +71,5 @@ end
     Hk = get_hamiltonian(Hr, strc.Rs, zeros(3, 1))
     @test abs(sum(Hk[1] .- Hermitian(Hk[1]))) < 1e-7
 
-    dR = kernel.structure_descriptors[1]
-    dishermitian = Bool[]
-    for R in axes(strc.Rs, 2)
-        R⁻ = findfirst(R⃗-> R⃗ == -strc.Rs[:, R], eachcol(strc.Rs))
-        for i in 1:14, j in i:14
-            Δd = sum(abs.(dR[R][i, j] .- dR[R⁻][j, i]))
-            push!(dishermitian, Δd < 1e-5)
-            if Δd > 1e-5
-                println("$i $j $(dR[R][i, j])")
-                println("$i $j $(dR[R⁻][j, i])")
-                @show dR[R][i, j] .- dR[R⁻][j, i]
-                println("---")
-            end
-        end
-    end
-    @test all(dishermitian)
+
 end

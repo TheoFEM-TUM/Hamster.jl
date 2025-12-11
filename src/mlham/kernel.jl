@@ -8,13 +8,13 @@ A kernel structure used for computing weighted similarity functions.
 - `xs :: Vector{T1}`: Sample points.
 - `sim_params :: T2`: Parameters for the similarity function.
 """
-mutable struct HamiltonianKernel{T1, T2}
+mutable struct HamiltonianKernel{T1, T2, T3}
     params :: Vector{Float64}
     data_points :: Vector{T1}
-    sim_params :: T2
+    sim_params :: Float64
     update :: Bool
-    feature_vec :: Vector{Vector{Vector{SparseMatrixCSC{Float64, Int64}}}}
-    feature_shape :: Tuple{Vector{Tuple{Int64, Int64}}, Int64}
+    feature_vec :: Vector{T3}
+    feature_shape :: Tuple{Vector{T2}, Int64}
 end
 
 function get_kernel_features(structure_descriptors, data_points, sim_params, tol = 1e-8)
@@ -64,13 +64,27 @@ function HamiltonianKernel(params :: Vector{Float64},
     sim_params,
     structure_descriptors,
     update :: Bool,
-    tol = 1e-8
+    tol :: Float64
     )
     #sp_tol = 0
     feature_vec, feature_shape = get_kernel_features(structure_descriptors, data_points, sim_params, tol)
     return HamiltonianKernel(params,data_points, sim_params, update, feature_vec, feature_shape)
 end
 
+function HamiltonianKernel(params :: Vector{Float64},
+    data_points,
+    sim_params,
+    structure_descriptors,
+    update :: Bool,
+    )
+
+    return HamiltonianKernel(params,
+    data_points,
+    sim_params,
+    structure_descriptors,
+    update,
+    1e-8)
+end
 
 #ham_val = EffectiveHamiltonian(val_strcs, val_bases, comm_active, conf, rank=active_rank, nranks=active_size, ml_data_points=get_ml_data_points(ham_train, conf))
 
