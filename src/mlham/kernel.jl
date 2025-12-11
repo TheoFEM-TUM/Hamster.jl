@@ -17,11 +17,11 @@ mutable struct HamiltonianKernel{T1, T2}
     feature_shape :: Tuple{Vector{Tuple{Int64, Int64}}, Int64}
 end
 
-function get_kernel_features(structure_descriptors, data_points, sim_params, conf=get_empty_config(); sp_tol=get_sp_tol(conf))
+function get_kernel_features(structure_descriptors, data_points, sim_params, tol = 1e-8)
     #desc(2,) (27,) (11, 11) (8,)
     #dp(1155,) (8,) ()
     #todo (2,) (27, 1155, 11, 11)
-    tol = sp_tol
+    println(tol)
     #tol = 1e-4
     N_mats = size(structure_descriptors)[1]
     N_dp = size(data_points)[1]
@@ -63,10 +63,11 @@ function HamiltonianKernel(params :: Vector{Float64},
     data_points,
     sim_params,
     structure_descriptors,
-    update :: Bool
+    update :: Bool,
+    tol = 1e-8
     )
     #sp_tol = 0
-    feature_vec, feature_shape = get_kernel_features(structure_descriptors, data_points, sim_params)
+    feature_vec, feature_shape = get_kernel_features(structure_descriptors, data_points, sim_params, tol)
     return HamiltonianKernel(params,data_points, sim_params, update, feature_vec, feature_shape)
 end
 
@@ -121,7 +122,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
     params, data_points = init_ml_params!(data_points, conf)
     #sp_tol = 1e-8
     #desc_tuple = get_kernel_features(structure_descriptors, data_points, sim_params, sp_tol)
-    return HamiltonianKernel(params, data_points, sim_params,structure_descriptors, update_ml)
+    return HamiltonianKernel(params, data_points, sim_params,structure_descriptors, update_ml, sp_tol)
 end
 
 
