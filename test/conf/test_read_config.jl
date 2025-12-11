@@ -8,4 +8,6 @@ conf = get_config(filename=conf_path)
 
     # test sp_geo=true without spaces
     @test conf("sp_geo") == true
+
+    @test conf("log_modes", "HyperOpt") == ["log", "log"]
 end

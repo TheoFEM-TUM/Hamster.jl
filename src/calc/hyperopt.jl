@@ -82,12 +82,11 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
     end
     prof = HamsterProfiler(1, conf, Niter=Niter, Nbatch=1, Nparams=length(params))
     print_start_message(prof, verbosity=verbosity)
-
     if lowercase(mode[1]) == 't'
         space = Dict(
             Symbol(param) => (
                 log_mode == "log" ? 
-                HP.QuantLogUniform(Symbol(param), l, u, δ) :
+                HP.LogQuantUniform(Symbol(param), log(l), log(u), δ) :
                 HP.QuantUniform(Symbol(param), l, u, δ)
             )   
             for (param, l, u, δ, log_mode) in zip(params, lowerbounds, upperbounds, stepsizes, log_modes)

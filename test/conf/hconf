@@ -55,6 +55,16 @@ begin Optimizer
     wPC = 5
 end
 
+begin HyperOpt
+    niter = 10
+    params = env_scale strc_scale
+    lowerbounds = 0.01 0.01
+    upperbounds = 100 100
+    stepsizes = 1 1
+    log_modes = log log
+    mode = tpe
+end
+
 begin MLTB
     optimize = true                         # Switch on optimization for ML model
     ov_scale = 0.                           # Multiply overlap descriptor by 0
