@@ -197,6 +197,7 @@ Selects a subset of descriptor vectors using K-Means clustering, weighted by clu
 - A matrix of selected descriptor vectors with `Npoints` columns.
 """
 function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random")
+    Random.seed!(1234)
     result = kmeans(descriptors, Ncluster)
     indices = result.assignments
     centroids = result.centers
