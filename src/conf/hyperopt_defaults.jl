@@ -69,6 +69,14 @@ function get_hyperopt_stepsizes(conf::Config)::Vector{Float64}
     end
 end
 
+"""
+**log_modes**=[""]
+
+The `log_modes` tag defines the logarithmic modes for each hyperparameter.  
+Possible options:
+- `log`: logarithmic scale
+- `uni`: uniform scale (default)
+"""
 function get_hyperopt_log_modes(conf::Config)::Vector{String}
     Nparams = length(get_hyperopt_params(conf))
     if conf("log_modes", "HyperOpt") == "default" 
