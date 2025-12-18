@@ -37,9 +37,9 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
       for i in 1:N_mats ]
     #N_test = 0
     tforeach(1:N_mats) do i
-        h_env = structure_descriptors[i]
+        @views h_env = structure_descriptors[i]
         for d in 1:N_dp
-            data_point = data_points[d]
+            @views data_point = data_points[d]
             N_R, Ne = descr_sizes[i]
             for R in 1:N_R
                 is = Vector{Int32}() 
@@ -60,6 +60,8 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
             end
         end
     end
+    structure_descriptors = nothing
+    GC.gc()
     #println("N_test",N_test)
     return Desc_Vec, (descr_sizes, N_dp)
 end
@@ -112,10 +114,19 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             update_ml=get_ml_update(conf),
                             rank=0,
                             nranks=1)
-    
-    structure_descriptors = map(eachindex(strcs)) do n
-        get_tb_descriptor(model.hs[n], model.params, strcs[n], bases[n], conf)
+    structure_descriptors = Vector{Any}(undef, length(strcs))
+    tmap!(structure_descriptors, eachindex(strcs)) do n
+        get_tb_descriptor(
+            model.hs[n],
+            model.params,
+            strcs[n],
+            bases[n],
+            conf
+        )
     end
+    strcs = nothing
+    bases = nothing
+    GC.gc()
     if get_ml_init_params(conf)[1] ∈ ['r', 'z', 'o'] && data_points === nothing
         Npoints_local = floor(Int64, Npoints / nranks)
         data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
@@ -177,7 +188,7 @@ Constructs a set of real-space Hamiltonians from a `HamiltonianKernel`.
 
 
 function get_hr(kernel::HamiltonianKernel, mode, index; apply_soc=false)
-    desc_vec  = kernel.feature_vec[index]
+    @views desc_vec = kernel.feature_vec[index]
     N_dp = kernel.feature_shape[2]
     (NR, Ne) = kernel.feature_shape[1][index]
     Hr = get_empty_complex_hamiltonians(Ne, NR, mode)
@@ -351,7 +362,7 @@ function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc
     if kernel.update
         tforeach( eachindex(dparams)) do n
             for (bi, index) in enumerate(indices)
-                desc_vec  = kernel.feature_vec[index][n]
+                @views desc_vec = kernel.feature_vec[index][n]
                 for R in eachindex(dL_dHr[bi])
                     for (i, j, exp_val) in zip(findnz(desc_vec[R])...)
                         if !soc
