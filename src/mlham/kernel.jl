@@ -137,7 +137,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         data_points_buf = nothing
         if rank == 0
             data_points_buf = MPI.VBuffer(similar(data_points_local, sum(counts)), counts)
-            println("Nclusters sampled: ", Ncluster)
+            println("Npoints_local sampled: ", Npoints_local)
             println("nranks: ", nranks)
         end
 

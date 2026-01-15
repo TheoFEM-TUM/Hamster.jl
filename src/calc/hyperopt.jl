@@ -82,21 +82,24 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
     end
     prof = HamsterProfiler(1, conf, Niter=Niter, Nbatch=1, Nparams=length(params))
     print_start_message(prof, verbosity=verbosity)
+
     if lowercase(mode[1]) == 't'
-        space = Dict(
-            Symbol(param) => (
-                log_mode == "log" ? 
-                HP.LogQuantUniform(Symbol(param), log(l), log(u), δ) :
-                HP.QuantUniform(Symbol(param), l, u, δ)
-            )   
-            for (param, l, u, δ, log_mode) in zip(params, lowerbounds, upperbounds, stepsizes, log_modes)
-        )
+        space = Dict(Symbol(param)=>HP.QuantUniform(Symbol(param), l, u, δ) for (param, l, u, δ) in zip(params, lowerbounds, upperbounds, stepsizes))
         TreeParzen.Graph.checkspace(space)
         tpe_config = TreeParzen.Config()
         trialhist = TreeParzen.Trials.Trial[]
         for iter in 1:Niter
             trial_i = ask(space, trialhist, tpe_config)
-            ps = trial_i.hyperparams
+            ps_raw = trial_i.hyperparams
+
+            ps = Dict(
+                k => (
+                    log_modes[findfirst(x -> x == String(k), params)] == "log" ?
+                    10.0^v :
+                    v
+                )
+                for (k, v) in ps_raw
+            )
             L_local = hyper_optimize(ps, params, prof, comm, conf, rank=rank, nranks=nranks, verbosity=verbosity)
             tell!(trialhist, trial_i, L_local)
         end
