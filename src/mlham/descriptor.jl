@@ -242,7 +242,7 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
         append!(selected_indices, selected)
     end
     summary = (nz_clusters = length(cluster_sizes), cluster_sizes = cluster_sizes, points_per_cluster = points_per_cluster, cluster_variances = cluster_variances)
-
+    Random.seed!()
     return SVector{size(descriptors, 1), Float64}[SVector{size(descriptors, 1)}(descriptors[:, index]) for index in selected_indices]
 end
 
