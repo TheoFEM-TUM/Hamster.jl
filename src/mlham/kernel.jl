@@ -260,6 +260,29 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filena
     end
 end
 
+function write_datapoints(data_points::Vector{SVector{8, Float64}}, target_dir::String, conf=get_empty_config(); filename=get_ml_filename(conf))
+    open(joinpath(target_dir, filename*".dat"), "w") do file
+        # Write header to file
+        #params = init_ml_params!(data_points, conf)[1]
+        Nparams = length(data_points)
+        params = zeros(Nparams)
+        println(file, "begin ", get_system(conf))
+        println(file, "  rcut = ", get_ml_rcut(conf))
+        println(file, "  sim_params = ", get_sim_params(conf))
+        println(file, "  env_scale = ", get_env_scale(conf))
+        println(file, "  apply_distortion = ", get_apply_distortion(conf))
+        println(file, "end")
+        println(file, "")
+        for n in eachindex(params)
+            print(file, params[n])
+            for data_point in data_points[n]
+                print(file, " "); print(file, data_point)
+            end
+            print(file, "\n")
+        end
+    end
+    println("Wrote datapoints to ", filename*".dat")
+end
 """
     read_ml_params(conf=get_empty_config(); filename=get_ml_filename(conf))
 
@@ -269,9 +292,9 @@ Reads the parameters for a HamiltonianKernel model from a file and returns the p
 - `conf`: A configuration object (default: `get_empty_config()`) containing simulation parameters and settings.
 - `filename`: The name of the `.dat` file to read from (default: `get_ml_filename(conf)`).
 """
-function read_ml_params(conf=get_empty_config(); filename=get_ml_filename(conf))
+function read_ml_params(target_dir::String, conf=get_empty_config(); filename=get_ml_filename(conf))
     if !occursin(".dat", filename); filename *= ".dat"; end
-    lines = open_and_read(filename)
+    lines = open_and_read(joinpath(target_dir, filename))
     lines = split_lines(lines)
     N = length(lines[8]) - 1
 
