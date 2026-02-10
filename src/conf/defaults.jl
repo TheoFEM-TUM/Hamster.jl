@@ -59,6 +59,20 @@ The `save_vecs::Bool` tag determines whether the eigenvectors are written to a f
 get_save_vecs(conf::Config)::Bool = conf("save_vecs") == "default" ? false : conf("save_vecs")
 
 """
+**write_current=false**
+
+The `write_current::Bool` tag determines whether the current vectors are written to a file ().
+"""
+get_write_current(conf::Config)::Bool = conf("write_current") == "default" ? false : conf("write_current")
+
+"""
+**current_file**=ham.h5
+
+The `current_file::String` sets the file where current vectors are stored.
+"""
+get_current_file(conf::Config)::String = conf("current_file") == "default" ? get_ham_file(conf) : conf("current_file")
+
+"""
 **write_hk**=false
 
 The `write_hk::Bool` tag determines whether the Hamiltonians in k-space are written to a file.
@@ -69,8 +83,18 @@ get_write_hk(conf::Config)::Bool = conf("write_hk") == "default" ? false : conf(
 **write_hr**=false
 
 The `write_hr::Bool` tag determines whether the Hamiltonians in real-space are written to a file.
+Defaults to `false`. However, if `write_current=true` is automatically set to `true` as Hamiltonian is needed
+current vectors.
 """
-get_write_hr(conf::Config)::Bool = conf("write_hr") == "default" ? false : conf("write_hr")
+function get_write_hr(conf::Config)::Bool
+    if conf("write_hr") == "default" && get_write_current(conf)
+        return true
+    elseif conf("write_hr") == "default" && !get_write_current(conf)
+        return false
+    else
+        conf("write_hr")
+    end
+end
 
 """
 **ham_file**=ham.h5
