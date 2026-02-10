@@ -47,35 +47,63 @@ Performs a standard calculation for an effective Hamiltonian model, computing ei
 - `Es.dat` — Plain text file containing computed eigenvalues for each structure (written only if `skip_diag` is `true`; default).
 """
 function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1, verbosity=get_verbosity(conf), write_output=true)
-    systems = get_systems(conf)
+    
+        systems = get_systems(conf)
     config_inds, _ = get_config_inds_for_systems(systems, comm, conf, rank=rank, write_output=write_output, optimize=false)
     local_inds = split_indices_into_chunks(config_inds, nranks, rank=rank)
 
-    mode = haskey(conf, "Supercell") ? (length(systems) > 1 ? "universal" : "md") : "pc"
-    if rank == 0 && verbosity > 1; println("Getting structures..."); end
-    begin_time = MPI.Wtime()
-    strcs = mapreduce(vcat, local_inds, init=Structure[]) do (system, inds)
-        get_structures(conf, config_indices=inds, mode=mode, system=system)
+    has_data = !isempty(local_inds)
+    color = has_data ? 1 : nothing
+    comm_active = MPI.Comm_split(comm, color, rank)
+
+    all_has_data = MPI.gather(Int(has_data), comm, root=0)
+    if rank == 0
+        for (r, flag) in enumerate(all_has_data)
+            if flag == 0
+                append_output_line("Warning: Rank $(r-1) has no data and will be idle. Revise your parallelization settings!")
+            end
+        end
     end
-    strc_time = MPI.Wtime() - begin_time
-    if rank == 0 && verbosity > 1; println(" Structure time: $strc_time s"); end
 
-    if rank == 0 && verbosity > 1; println("Getting bases..."); end
-    begin_time = MPI.Wtime()
-    bases = Basis[Basis(strc, conf, comm=comm) for strc in strcs]
-    bases_time = MPI.Wtime() - begin_time
-    if rank == 0 && verbosity > 1; println(" Basis time: $bases_time s"); end
+    if has_data
+        active_rank = MPI.Comm_rank(comm_active)
+        active_size = MPI.Comm_size(comm_active)
+        mode = haskey(conf, "Supercell") ? (length(systems) > 1 ? "universal" : "md") : "pc"
+        if rank == 0 && verbosity > 1; println("Getting structures..."); end
+        begin_time = MPI.Wtime()
+        strcs = mapreduce(vcat, local_inds, init=Structure[]) do (system, inds)
+            get_structures(conf, config_indices=inds, mode=mode, system=system)
+        end
+        strc_time = MPI.Wtime() - begin_time
+        if rank == 0 && verbosity > 1; println(" Structure time: $strc_time s"); end
 
-    if rank == 0 && verbosity > 1; println("Getting Hamiltonian models..."); end
-    begin_time = MPI.Wtime()
-    ham = EffectiveHamiltonian(strcs, bases, comm, conf, rank=rank, nranks=nranks)
-    ham_time = MPI.Wtime() - begin_time
-    if rank == 0 && verbosity > 1; println(" Model time: $ham_time s"); end
+        if rank == 0 && verbosity > 1; println("Getting bases..."); end
+        begin_time = MPI.Wtime()
+        bases = Basis[Basis(strc, conf, comm=comm_active) for strc in strcs]
+        bases_time = MPI.Wtime() - begin_time
+        if rank == 0 && verbosity > 1; println(" Basis time: $bases_time s"); end
 
-    Niter = sum(length.(values(local_inds)))
-    prof = HamsterProfiler(3, conf, Niter=Niter, Nbatch=1)
+        if rank == 0 && verbosity > 1; println("Getting Hamiltonian models..."); end
+        begin_time = MPI.Wtime()
+        ham = EffectiveHamiltonian(strcs, bases, comm_active, conf, rank=active_rank, nranks=active_size)
+        ham_time = MPI.Wtime() - begin_time
+        if rank == 0 && verbosity > 1; println(" Model time: $ham_time s"); end
 
-    get_eigenvalues(ham, prof, local_inds, comm, conf, rank=rank, nranks=nranks)
+        Niter = sum(length.(values(local_inds)))
+        prof = HamsterProfiler(3, conf, Niter=Niter, Nbatch=1)
+
+        get_eigenvalues(ham, prof, local_inds, comm_active, conf, rank=active_rank, nranks=active_size)
+
+        if rank == 0 && verbosity > 1; println("Post processing..."); end
+        begin_time = MPI.Wtime()
+        run_post_processing(strcs, bases, local_inds, comm_active, conf, rank=active_rank, nranks=active_size)
+        post_time = MPI.Wtime() - begin_time
+        if rank == 0 && verbosity > 1; println(" Post-processing time: $post_time s"); end
+    else
+        prof = HamsterProfiler(1, conf)
+    end
+    MPI.Barrier(comm)
+
     return prof
 end
 
@@ -173,5 +201,17 @@ function get_kpoints_from_config(conf::Config; kpoints_file=get_kpoints_file(con
         end
     elseif occursin("gamma", lowercase(kpoints_file))
         return zeros(3, 1)
+    end
+end
+
+function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_config(); rank=0, nranks=1, 
+            write_current_file=get_write_current(conf), current_file=get_current_file(conf), ham_file=get_ham_file(conf))
+
+    if write_current_file
+        for index in eachindex(strcs)
+            system, config_index = get_system_and_config_index(index, local_inds)
+            bonds = get_bonds(strcs[index], bases[index], conf)
+            write_current(bonds, comm, config_index; ham_file=ham_file, filename=current_file, system=system, rank=rank, nranks=nranks)
+        end
     end
 end
