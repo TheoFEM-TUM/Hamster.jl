@@ -62,9 +62,9 @@
 
     # Test 9: test write_current
     conf = get_empty_config()
-    @test Hamster.write_hr = false
+    @test Hamster.get_write_hr(conf) == false
     set_value!(conf, "write_current", true)
-    @test Hamster.write_hr = true
+    @test Hamster.get_write_hr(conf) == true
 end
 
 @testset "Optim defaults" begin
