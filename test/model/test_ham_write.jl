@@ -7,6 +7,7 @@
 
     H_loaded_2, vecs_loaded_2 = read_ham(rank; space="k")
     
+    @test eltype(typeof(vecs_loaded)) == Float64
     @test vecs_loaded ≈ vecs_original
     @test H_loaded == H_loaded_2
     @test vecs_loaded == vecs_loaded_2
@@ -26,15 +27,15 @@
     # Test for more R - vectors
     NR = 12
     Hrs = [rand(5, 5) for R in 1:NR]
-    Rs = rand(3, NR)
+    Rs = rand(-1:1, 3, NR)
     write_ham(Hrs, Rs, comm, rank; space="r")
     Hrs_loaded, Rs_loaded = read_ham(comm, rank; space="r")
     @test Hrs == Hrs_loaded
     @test Rs == Rs_loaded
+    @test eltype(typeof(Rs_loaded)) == Int64
 
     rm("ham.h5", force=true)
 end
-
 
 @testset "Current I/O" begin
     ħ_eVfs = 0.6582119569
@@ -55,13 +56,16 @@ end
     current_true = [-1im/ħ_eVfs .* bonds[R] .* Hr[R] for R in eachindex(Hr)]
 
     Hamster.write_current(bonds, comm, 0; filename="ham.h5", system="", rank=0, nranks=1)
-    current_trial, vecs = Hamster.read_current(rank)
+    cx, cy, cz, vecs = Hamster.read_current(rank)
 
     @test vecs == strc.Rs
+    @test eltype(typeof(vecs)) == Int64
 
     correct_current = Bool[]
     for R in eachindex(current_true), j in axes(current_true[R], 2), i in axes(current_true[R], 1)
-        push!(correct_current, norm(current_trial[R][i, j] .- current_true[R][i, j]) ≈ 0)
+        push!(correct_current, abs(current_true[R][i, j][1] - cx[R][i, j]) ≈ 0)
+        push!(correct_current, abs(current_true[R][i, j][2] - cy[R][i, j]) ≈ 0)
+        push!(correct_current, abs(current_true[R][i, j][3] - cz[R][i, j]) ≈ 0)
     end
     @test all(correct_current)
 
