@@ -122,7 +122,7 @@ function write_ham(H, vecs, comm, ind=0; filename="ham.h5", space="k", system=""
             h5open(filename, "cw") do file
                 h_group = ind == 0 ? "H$space" : "H$(space)_$(system)_$ind"
                 g = create_group(file, h_group)
-                g["vecs"] = vecs
+                g["vecs"] = space == "r" ? Int.(vecs) : vecs
                 for (i, mat) in enumerate(H)
                     smat = issparse(mat) ? mat : sparse(mat)
                     grp = create_group(g, "$i")
@@ -181,7 +181,7 @@ end
 
 read_ham(ind::Integer=0; filename="ham.h5", space="k") = read_ham(MPI.COMM_WORLD, ind; filename=filename, space=space)
 
-const ħ_eVfs = 0.6582119569
+const ħ_eVfs = 0.6582119569 # ħ in units of eV·fs
 """
     write_current(bonds, comm, ind=0;
                   ham_file="ham.h5",
@@ -223,6 +223,8 @@ components (`xnzval`, `ynzval`, `znzval`) of the nonzero entries.
 
 # Notes
 - The reduced Planck constant `ħ` is assumed to be given in units of eV·fs.
+- The current vectors have units of Å/fs and correspond to velocity matrix elements 
+  (current divided by electron charge).
 - The function performs no collective MPI I/O; writes are serialized across
   ranks using barriers.
 """
@@ -290,7 +292,9 @@ translation vectors.
 - The function assumes the file layout produced by `write_current`.
 """
 function read_current(comm, ind=0; filename="ham.h5", space="r", system="")
-    C = nothing
+    Cx = nothing
+    Cy = nothing
+    Cz = nothing
     vecs = nothing
     h5open(filename, "r", comm) do file
         h_group = ind == 0 ? "C$space" : "C$(space)_$(system)_$ind"
@@ -298,7 +302,9 @@ function read_current(comm, ind=0; filename="ham.h5", space="r", system="")
         vecs = read(g["vecs"])
         
         Nε = read(g[keys(g)[1]]["m"])
-        C = SparseMatrixCSC{SVector{3, ComplexF64}, Int64}[spzeros(SVector{3, ComplexF64}, Nε, Nε) for R in axes(vecs, 2)]
+        Cx = SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for R in axes(vecs, 2)]
+        Cy = SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for R in axes(vecs, 2)]
+        Cz = SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for R in axes(vecs, 2)]
 
         block_names = sort(filter(x -> x != "vecs", keys(g)))
         for name in block_names
@@ -308,11 +314,12 @@ function read_current(comm, ind=0; filename="ham.h5", space="r", system="")
             rowval = read(grp["rowval"])
             colptr = read(grp["colptr"])
             xs = read(grp["xnzval"]); ys = read(grp["ynzval"]); zs = read(grp["znzval"])
-            nzval = [SVector{3, ComplexF64}(x, y, z) for (x, y, z) in zip(xs, ys, zs)]
-            C[parse(Int64, name)] = SparseMatrixCSC(m, n, colptr, rowval, nzval)
+            Cx[parse(Int64, name)] = SparseMatrixCSC(m, n, colptr, rowval, xs)
+            Cy[parse(Int64, name)] = SparseMatrixCSC(m, n, colptr, rowval, ys)
+            Cz[parse(Int64, name)] = SparseMatrixCSC(m, n, colptr, rowval, zs)
         end
     end
-    return C, vecs
+    return Cx, Cy, Cz, vecs
 end
 
 read_current(ind::Integer=0; filename="ham.h5", space="r") = read_current(MPI.COMM_WORLD, ind; filename=filename, space=space)
