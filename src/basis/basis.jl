@@ -111,7 +111,10 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
     Ts = frac_to_cart(strc.Rs, strc.lattice)
     nn_grid_points = iterate_nn_grid_points(strc.point_grid)
 
-    rllm_dict = get_rllm(basis.overlaps, conf, comm=comm, rank=rank, nranks=nranks)
+    #rllm_dict = get_rllm(basis.overlaps, conf, comm=comm, rank=rank, nranks=nranks)
+    #println(basis.overlaps)
+    rllm_dict = get_rllm_from_file(basis.overlaps, conf, comm=comm)
+    #println(keys(rllm_dict))
     Threads.@threads for (chunk_id, indices) in enumerate(chunks(nn_grid_points, n=npar))
         for (iion1, iion2, R) in indices
             ion_label = IonLabel(ion_types[iion1], ion_types[iion2], sorted=false)
@@ -375,4 +378,20 @@ function reshape_geometry_tensor(h_dict, NV, NR, Nε)
         h_out[v, R] = sparse(is[v, R], js[v, R], vals[v, R], Nε, Nε)
     end
     return h_out
+end
+
+function get_unique_overlaps(overlaps_strings::Vector{String})
+
+    unique_overlaps_strings = unique(overlaps_strings)
+    return unique_overlaps_strings
+end
+
+function get_unique_overlaps(bases::Any)
+    overlaps_string_all = []
+    for basis in bases
+        overlaps = basis.overlaps
+        #overlaps_str = [string(overlap, apply_oc=true) for overlap in overlaps]
+        push!(overlaps_string_all, overlaps)
+    end
+    return unique(overlaps_string_all)
 end

@@ -49,6 +49,18 @@ Retrieves or computes the radial orbital integral look-up table (RLLM) for a giv
 # Returns
 - `rllm_dict::Dict{String, CubicSpline}`: A dictionary mapping overlap string representations to cubic spline interpolations of the radial integrals. If `load_rllm` is `true`, the data is read from the file. If `interpolate_rllm` is `true`, it is interpolated and saved.
 """
+function get_rllm_from_file(overlaps::Vector{TBOverlap},conf=get_empty_config(); comm = nothing, load_rllm=get_load_rllm(conf), rllm_file=get_rllm_file(conf),verbosity = get_verbosity(conf))
+    rllm_dict = Dict{String, CubicSpline{Float64}}()
+    yes = true
+    if verbosity > 0; println("     Getting distance dependence..."); end
+    time = @elapsed if yes
+        if verbosity > 1; println("     Reading distance dependence from file..."); end
+        read_rllm(overlaps, comm, rllm_dict, filename=rllm_file)
+    end
+    if verbosity > 0; println("     Finished in $time s."); end
+    return rllm_dict
+end
+
 function get_rllm(overlaps, conf=get_empty_config();
                     comm=nothing,
                     load_rllm=get_load_rllm(conf), 
@@ -67,8 +79,9 @@ function get_rllm(overlaps, conf=get_empty_config();
         read_rllm(overlaps, comm, rllm_dict, filename=rllm_file)
     else
         i = 0
-        if isfile(rllm_file) && rank == 0 && interpolate_rllm; rm(rllm_file); end
-        
+        println("interpolate_rllm:", interpolate_rllm)
+        #if isfile(rllm_file) && rank == 0 && interpolate_rllm; rm(rllm_file); end
+        #if isfile(rllm_file) && rank == 0 && interpolate_rllm; set_value!(conf, "interpolate_rllm", false); end
         rank_rllm_file = nranks > 1 ? get_rank_filename(rllm_file, rank) : rllm_file
         overlaps_str = [string(overlap, apply_oc=true) for overlap in overlaps]
 
@@ -278,4 +291,60 @@ function read_rllm(overlaps::Vector{T}, comm, rllm_dict=Dict{String, CubicSpline
         end
         return rllm_dict
     end
+end
+
+function precalc_rllm(bases::Any; comm = nothing, rank = 0, nranks = 1, conf)
+    rllm_file = get_rllm_file(conf)
+    verbosity = get_verbosity(conf)
+    unique_overlaps_strings_local = get_unique_overlaps(bases)
+    overlaps_strings = MPI.gather(unique_overlaps_strings_local, comm, root=0)
+    if rank == 0
+        overlaps_strings = collect(Iterators.flatten(overlaps_strings))
+        overlaps_strings = collect(Iterators.flatten(overlaps_strings))
+    else
+        overlaps_strings = nothing
+    end
+
+
+    if rank == 0
+        #overlaps_strings = [TBOverlap(me_label, orbconfig, ion_label) for (me_label, orbconfig, ion_label) in overlaps_strings]
+
+        unique_overlaps_strings = unique(overlaps_strings)
+        noverlaps = length(unique_overlaps_strings)
+    else
+        unique_overlaps_strings = nothing
+        noverlaps = 0
+    end
+    noverlaps = MPI.Bcast(noverlaps, 0, comm)
+
+    if rank ≠ 0
+        #resize!(unique_overlaps_strings, noverlaps)
+    end
+    #MPI.Bcast!(unique_overlaps_strings, comm, root=0)
+    unique_overlaps_strings = MPI.bcast(unique_overlaps_strings, 0, comm)
+    MPI.Barrier(comm)
+    chunk = div(noverlaps + nranks - 1, nranks)   # ceiling division
+    start = rank * chunk + 1
+    stop  = min((rank + 1) * chunk, noverlaps)
+    local_unique_overlaps_strings = unique_overlaps_strings[start:stop]
+    nlocal = length(local_unique_overlaps_strings)
+    println("Rank: $rank calculating $nlocal overlaps")
+    rank_rllm_file = nranks > 1 ? get_rank_filename(rllm_file, rank) : rllm_file
+    rllm_dict = Dict{String, CubicSpline{Float64}}()
+    i = 0
+    tforeach(local_unique_overlaps_strings) do overlap
+    #for overlap in local_unique_overlaps_strings
+        overlap_str = string(overlap, apply_oc=true)
+        if !haskey(rllm_dict, overlap_str)
+            rllm_dict[overlap_str] = interpolate_overlap(overlap, conf)
+            i += 1
+            if verbosity > 1 && rank == 0; println("       ($i / $(length(local_unique_overlaps_strings))) $overlap_str Rank ($rank/$nranks)"); end
+        end
+    end
+    println("Rank $rank finished rllm")
+    #MPI.Barrier(comm)
+    save_rllm(rllm_dict, comm, filename=rank_rllm_file, rank=rank, nranks=nranks)
+    MPI.Barrier(comm)
+    combine_local_rllm_files(rllm_file, comm; rank, nranks)
+
 end
