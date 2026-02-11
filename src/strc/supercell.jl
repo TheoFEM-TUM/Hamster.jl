@@ -154,28 +154,57 @@ processes, returning training and validation index sets for each system.
   indices (`Vector{Int64}`) representing the selected configurations for training
   and validation, respectively.
 """
-function get_config_inds_for_systems(systems, comm, conf=get_empty_config(); rank=0, write_output=false, optimize=true)
-   train_config_inds = Dict{String, Vector{Int64}}()
-   val_config_inds = Dict{String, Vector{Int64}}()
+function get_config_inds_for_systems(
+    systems,
+    comm,
+    conf=get_empty_config();
+    rank=0,
+    write_output=false,
+    optimize=true,
+)
 
-   for system in systems
-        Nconf = get_Nconf(conf)
+    train_config_inds = Dict{String, Vector{Int64}}()
+    val_config_inds   = Dict{String, Vector{Int64}}()
+
+    # -------------------------------------------------
+    # Open input HDF5 file ONCE (collective if using comm)
+    # -------------------------------------------------
+    file = nothing
+    if length(systems) > 1
+        file = h5open(get_xdatcar(conf), "r", comm)
+    end
+
+    for system in systems
+
+        Nconf     = get_Nconf(conf)
         Nconf_max = get_Nconf_max(conf)
-        
-        if length(systems) > 1
-            h5open(get_xdatcar(conf), "r", comm) do file
-                Nconf_total = size(read(file[system]["positions"]), 3)
-                if Nconf_total < Nconf; Nconf = Nconf_total; end
-                if Nconf_total < Nconf_max; Nconf_max = Nconf_total; end
+
+        if file !== nothing
+            # All ranks execute this collectively
+            Nconf_total = size(read(file[system]["positions"]), 3)
+
+            if Nconf_total < Nconf
+                Nconf = Nconf_total
+            end
+            if Nconf_total < Nconf_max
+                Nconf_max = Nconf_total
             end
         end
 
-        system_train_inds, system_val_inds = get_config_index_sample(conf, Nconf=Nconf, Nconf_max=Nconf_max)
-        
+        system_train_inds, system_val_inds =
+            get_config_index_sample(conf; Nconf=Nconf, Nconf_max=Nconf_max)
+
+        # -------------------------------------------------
+        # Only rank 0 writes output (serial HDF5)
+        # -------------------------------------------------
         if rank == 0 && write_output
-            h5open("hamster_out.h5", "cw") do file
-                g = system == "" ? file : (haskey(file, system) ? file[system] : create_group(file, system))
-                
+            h5open("hamster_out.h5", "cw") do outfile
+                g = system == "" ?
+                    outfile :
+                    (haskey(outfile, system) ?
+                        outfile[system] :
+                        create_group(outfile, system))
+
                 if optimize
                     write(g, "train_config_inds", system_train_inds)
                     write(g, "val_config_inds", system_val_inds)
@@ -185,14 +214,27 @@ function get_config_inds_for_systems(systems, comm, conf=get_empty_config(); ran
             end
         end
 
+        # -------------------------------------------------
+        # Broadcast to all ranks
+        # -------------------------------------------------
         MPI.Bcast!(system_train_inds, comm, root=0)
-        MPI.Bcast!(system_val_inds, comm, root=0)
+        MPI.Bcast!(system_val_inds,   comm, root=0)
         MPI.Barrier(comm)
+
         train_config_inds[system] = system_train_inds
-        val_config_inds[system] = system_val_inds
+        val_config_inds[system]   = system_val_inds
     end
+
+    # -------------------------------------------------
+    # Close input file collectively
+    # -------------------------------------------------
+    if file !== nothing
+        close(file)
+    end
+
     return train_config_inds, val_config_inds
 end
+
 
 """
     get_config_index_sample(conf=get_empty_config(); Nconf=get_Nconf(conf), Nconf_min=get_Nconf_min(conf), Nconf_max=get_Nconf_max(conf), val_ratio=get_val_ratio(conf))
