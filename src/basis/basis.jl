@@ -156,6 +156,101 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
     return reshape_geometry_tensor(h, length(basis.parameters), size(strc.Rs, 2), length(basis)[1])
 end
 
+function get_geometry_tensor(strc, basis,subdir :: String, conf=get_empty_config();
+                                comm=nothing,
+                                rank=0,
+                                nranks=1,
+                                npar=Threads.nthreads(),
+                                tmethod=get_tmethod(conf), 
+                                rcut=get_rcut(conf), 
+                                sp_tol=get_sp_tol(conf), 
+                                rcut_tol=get_rcut_tol(conf))
+
+    ij_map = get_ion_orb_to_index_map(length.(basis.orbitals))
+    ion_types = get_ion_types(strc.ions)
+    nn_dict = get_nn_thresholds(strc.ions, frac_to_cart(strc.Rs, strc.lattice), strc.point_grid, conf)
+    hs = [Dict{Tuple{Int64, Int64, Int64, Int64}, Float64}() for _ in 1:npar]
+    oc_dicts, mode_dicts = get_oc_and_mode_dicts(basis.overlaps, strc.ions)
+
+    Ts = frac_to_cart(strc.Rs, strc.lattice)
+    nn_grid_points = iterate_nn_grid_points(strc.point_grid)
+
+    rllm_dict = get_rllm(basis.overlaps, conf, rllm_file = joinpath(subdir, get_rllm_file(conf)), comm=comm, rank=rank, nranks=nranks)
+    Threads.@threads for (chunk_id, indices) in enumerate(chunks(nn_grid_points, n=npar))
+        for (iion1, iion2, R) in indices
+            ion_label = IonLabel(ion_types[iion1], ion_types[iion2], sorted=false)
+            r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
+            r⃗₂ = strc.ions[iion2].pos - strc.ions[iion2].dist - Ts[:, R]
+            
+            r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos .- Ts[:, R])
+            r = normdiff(r⃗₁, r⃗₂)
+            if r_nd ≤ rcut && r-abs(rcut_tol) < rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
+                Û = get_sk_transform_matrix(r⃗₁, r⃗₂, basis.orbitals[iion1][1].axis, tmethod)
+                nnlabel = get_nn_label(r, nn_dict[ion_label], conf)
+                for jorb1 in eachindex(basis.orbitals[iion1]), jorb2 in eachindex(basis.orbitals[iion2])
+                    orb1 = basis.orbitals[iion1][jorb1]
+                    orb2 = basis.orbitals[iion2][jorb2]
+                    i = ij_map[(iion1, jorb1)]
+                    j = ij_map[(iion2, jorb2)]
+                    θ₁, φ₁ = get_rotated_angles(Û, orb1.axis)
+                    θ₂, φ₂ = get_rotated_angles(Û, orb2.axis)
+
+                    for k in eachindex(basis.overlaps)
+                        Cllm = basis.overlaps[k]
+                        Rllm = rllm_dict[string(Cllm, apply_oc=true)]
+                        mode = get_mode(mode_dicts, k, ion_label, jorb1, jorb2)
+                        orbconfig = get_orbconfig(oc_dicts, k, ion_label, jorb1, jorb2)
+                        if overlap_contributes_to_matrix_element(Cllm, orb1, orb2, ion_label)
+                            v = get_param_index(Cllm, nnlabel, basis.parameters, orb1, orb2, i, j)
+
+                            hval = Cllm(orbconfig, mode, θ₁, φ₁, θ₂, φ₂) * Rllm(r) * fcut(r, rcut, rcut_tol)
+
+                            if haskey(hs[chunk_id], (v, i, j, R)) && abs(hval) ≥ sp_tol
+                                hs[chunk_id][(v, i, j, R)] += hval
+                            elseif abs(hval) ≥ sp_tol
+                                hs[chunk_id][(v, i, j, R)] = hval
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    h = merge(hs...)
+    return reshape_geometry_tensor(h, length(basis.parameters), size(strc.Rs, 2), length(basis)[1])
+end
+
+"""function get_geometry_tensor(strc, basis, subdir :: String, conf=get_empty_config();
+                                comm=nothing,
+                                rank=0,
+                                nranks=1,
+                                npar=Threads.nthreads(),
+                                tmethod=get_tmethod(conf), 
+                                rcut=get_rcut(conf), 
+                                sp_tol=get_sp_tol(conf), 
+                                rcut_tol=get_rcut_tol(conf))
+    targetdir = get_target_directory(conf)
+    println("target_dir",targetdir)
+    #cd(subdir)
+    V = Hamster.get_geometry_tensor(strc, basis, conf, comm=comm, rank=rank, nranks=nranks)
+    #cd(targetdir)
+    return V
+end"""
+
+function get_geometry_tensors(strcs, bases, subdirs :: Vector{String}, conf=get_empty_config();
+                                comm=nothing,
+                                rank=0,
+                                nranks=1
+                            )
+
+    hs = Vector{Any}()
+    for (strc, basis, subdir) in zip(strcs, bases, subdirs)
+        println("Rank $rank: Getting geometry tensor for structure in subdir: ", subdir)
+        h = get_geometry_tensor(strc, basis, subdir, conf, comm=comm, rank=rank, nranks=nranks)
+        push!(hs, h)
+    end
+    return hs
+end
 """
     overlap_contributes_to_matrix_element(overlap, orb1, orb2, ion_label)
 

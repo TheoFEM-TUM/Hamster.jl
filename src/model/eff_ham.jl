@@ -74,6 +74,77 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
     return EffectiveHamiltonian(length(strcs), models, systems, sp_mode, sp_diag, sp_tol, sp_iterators, soc, Rs)
 end
 
+function EffectiveHamiltonian(strcs, bases, subdirs :: Vector{String}, comm, conf=get_empty_conf(); 
+                              tb_model=get_tb_model(conf), 
+                              ml_model=get_ml_model(conf), 
+                              sp_mode=get_sp_mode(conf), 
+                              sp_diag=get_sp_diag(conf), 
+                              sp_tol=get_sp_tol(conf), 
+                              soc=get_soc(conf), 
+                              ml_data_points=nothing, 
+                              rank=0, 
+                              nranks=1,
+                              systems=[strc.system for strc in strcs],
+                              verbosity=get_verbosity(conf))
+
+    if isempty(strcs) && isempty(bases)
+        return EffectiveHamiltonian(0, Nothing[], String[], Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)])
+    end
+
+    if rank == 0 && verbosity > 0; println("Building effective Hamiltonian model..."); end
+    eff_ham_begin_time = MPI.Wtime() 
+
+    Rs = [strc.Rs for strc in strcs]
+    if rank == 0 && verbosity > 1; println("   Getting sparse iterators..."); end
+    begin_time = MPI.Wtime()
+    sp_iterators = map(zip(strcs, bases)) do (strc, basis)
+        get_sparse_iterator(strc, basis, conf, soc=soc)
+    end
+    sp_time = MPI.Wtime() - begin_time
+    if rank == 0 && verbosity > 1; println("    Sparse iterator time: $sp_time s"); end
+    #println("Rank: ", rank, "subdirs", subdirs)
+    hs = get_geometry_tensors(strcs, bases, subdirs, conf, comm=comm, rank=rank, nranks=nranks)
+    models = ()
+    
+    if tb_model
+        if rank == 0 && verbosity > 1; println("   Getting TB model..."); end
+        begin_time = MPI.Wtime()
+        tb_models = Vector{TBModel}()
+        for (basis, h, dir) in zip(bases, hs, subdirs)
+            tb_model_obj = TBModel(h, basis, dir, conf)
+            push!(tb_models, tb_model_obj)
+        end
+        models = (models..., TBModel(tb_models, bases, comm, conf, rank=rank, nranks=nranks))
+        tb_time = MPI.Wtime() - begin_time
+        if rank == 0 && verbosity > 1; println("    TB time: $tb_time s"); end
+    end
+    if ml_model && tb_model
+        if rank == 0 && verbosity > 1; println("   Getting ML model..."); end
+        begin_time = MPI.Wtime()
+        if ml_data_points ≠ nothing
+            kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, ml_data_points, rank=rank, nranks=nranks)
+        else
+            kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, rank=rank, nranks=nranks)
+        end
+        models = (models..., kernel)
+        ml_time = MPI.Wtime() - begin_time
+        if rank == 0 && verbosity > 1; println("    ML time: $ml_time s"); end
+    end
+    if soc
+        if rank == 0 && verbosity > 1; println("   Getting SOC model..."); end
+        begin_time = MPI.Wtime()
+        soc_model = SOCModel(strcs, bases, comm, conf, rank=rank)
+        models = (models..., soc_model)
+        soc_time = MPI.Wtime() - begin_time
+        if rank == 0 && verbosity > 1; println("    SOC time: $soc_time s"); end
+    end
+
+    eff_ham_time = MPI.Wtime() - eff_ham_begin_time
+    if rank == 0 && verbosity > 0; println("Effective Hamiltonian model time: $eff_ham_time s"); end
+
+    return EffectiveHamiltonian(length(strcs), models, systems, sp_mode, sp_diag, sp_tol, sp_iterators, soc, Rs)
+end
+
 """
     get_hamiltonian(ham::EffectiveHamiltonian, index, ks)
 

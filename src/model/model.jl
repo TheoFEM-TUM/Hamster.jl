@@ -15,8 +15,13 @@ mutable struct TBModel{G, P}
     param_labels :: Vector{P}
     params_per_strc :: Vector{Vector{Int64}}
     update :: Vector{Bool}
+    subdirs :: Vector{String}
 end
 
+function TBModel(hs, params :: Vector{Float64}, param_labels, params_per_strc :: Vector{Vector{Int64}}, update :: Vector{Bool})
+    subdirs = ["missing" for _ in 1:length(hs)]
+    return TBModel(hs, params, param_labels, params_per_strc, update, subdirs)
+end
 """
     TBModel(strc::Structure, basis::Basis, conf=get_empty_config(); update_tb, initas)
 
@@ -39,6 +44,14 @@ function TBModel(strc::Structure, basis::Basis, conf=get_empty_config(); update_
     init_params!(model, conf, initas=initas)
     return model
 end
+
+function TBModel(h, basis::Basis, dir::String, conf=get_empty_config(); update_tb=get_update_tb(conf, nparams(basis)))
+    Nparams = length(basis.parameters)
+    #init_params!(model, conf, initas=initas)
+    return TBModel(h, ones(Nparams), basis.parameters, [collect(1:Nparams)], update_tb, [dir])
+end
+
+
 
 function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=get_empty_config();
                 rank=0,
@@ -74,6 +87,39 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
     return model
 end
 
+function TBModel(models::Vector{TBModel}, bases::Vector{<:Basis}, comm, conf=get_empty_config();
+                rank=0,
+                nranks=1,
+                update_tb=get_update_tb(conf, nparams(bases[1])), 
+                )
+    hs = map(eachindex(models)) do n
+        models[n].hs
+    end
+    subdirs = map(eachindex(models)) do n
+        models[n].subdirs[1]
+    end
+    param_labels_local = unique(Iterators.flatten([model.param_labels for model in models]))
+    param_labels = MPI.gather(param_labels_local, comm, root=0)
+    if rank == 0
+        param_labels = unique(Iterators.flatten(param_labels))
+        nparams = length(param_labels)
+    else
+        param_labels = Vector{ParameterLabel}()
+        nparams = 0
+    end
+    nparams = MPI.Bcast(nparams, 0, comm)
+    if rank ≠ 0
+        resize!(param_labels, nparams)
+    end
+    MPI.Bcast!(param_labels, comm, root=0)
+    MPI.Barrier(comm)
+    update_tb = all(update_tb) ? fill(true, nparams) : fill(false, nparams)
+    params_per_strc = [[findfirst(p->p==param, param_labels) for param in model.param_labels] for model in models]
+    model = TBModel(hs, ones(nparams), param_labels, params_per_strc, update_tb, subdirs)
+    #init_params!(model, conf, initas=initas)
+    return model
+end
+
 get_params_for_strc(model::TBModel, index) = model.params[model.params_per_strc[index]]
 
 """
@@ -102,8 +148,16 @@ end
 get_hr(model::TBModel, V, mode; apply_soc=false) = get_hr(model.hs, V, mode, apply_soc=apply_soc)
 get_hr(model::TBModel, mode; apply_soc=false) = get_hr(model, model.params, mode, apply_soc=apply_soc)
 function get_hr(model::TBModel, mode, index::Int64; apply_soc=false)
-    params = get_params_for_strc(model, index)
-    return get_hr(model.hs[index], params, mode, apply_soc=apply_soc)
+    if model.subdirs[index] == "missing"
+        params = get_params_for_strc(model, index)
+        return get_hr(model.hs[index], params, mode, apply_soc=apply_soc)
+    else 
+        #Hr, _ = read_hr(model.subdirs[index]; sp_mode=mode, verbose=1)
+        #Hr, _ = read_ham(model.comm, 1; filename=joinpath(model.subdirs[index], "ham.h5"), space="r")
+        #return apply_soc ? apply_spin_basis.(Hr) : Hr
+        parameters, parameter_values, _, _, conf_values = read_params(joinpath(model.subdirs[index], "params.dat"))
+        return get_hr(model.hs[index], parameter_values, mode, apply_soc=apply_soc)
+    end
 end
 
 """

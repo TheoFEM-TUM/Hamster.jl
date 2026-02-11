@@ -260,7 +260,7 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filena
     end
 end
 
-function write_datapoints(data_points::Vector{SVector{8, Float64}}, target_dir::String, conf=get_empty_config(); filename=get_ml_filename(conf))
+function write_datapoints(data_points::Vector{SVector{10, Float64}}, target_dir::String, conf=get_empty_config(); filename=get_ml_filename(conf))
     open(joinpath(target_dir, filename*".dat"), "w") do file
         # Write header to file
         #params = init_ml_params!(data_points, conf)[1]
@@ -315,7 +315,29 @@ function read_ml_params(target_dir::String, conf=get_empty_config(); filename=ge
     end
     return params, data_points
 end
+function read_ml_params( conf=get_empty_config(); filename=get_ml_filename(conf))
+    if !occursin(".dat", filename); filename *= ".dat"; end
+    lines = open_and_read(filename)
+    lines = split_lines(lines)
+    N = length(lines[8]) - 1
 
+    # Check that header params match Config
+    @assert parse(Float64, lines[2][end]) == get_ml_rcut(conf)
+    @assert parse(Float64, lines[3][end]) == get_sim_params(conf)
+    @assert parse(Float64, lines[4][end]) == get_env_scale(conf)
+    @assert parse(Bool, lines[5][end]) == get_apply_distortion(conf)
+
+    data_points = SVector{N, Float64}[]
+    params = Float64[]
+    for line in lines[8:end]
+        if length(line) > 1
+            parsed_line = parse.(Float64, line)
+            push!(params, parsed_line[1])
+            push!(data_points, SVector{N, Float64}(parsed_line[2:end]))
+        end
+    end
+    return params, data_points
+end
 """
     init_ml_params!(data_points, conf=get_empty_config(); initas=get_ml_init_params(conf))
 

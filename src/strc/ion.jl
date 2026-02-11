@@ -99,3 +99,73 @@ Retrieve the positions of all ions in a given vector of `Ion` objects.
 """
 get_ion_positions(ions::Vector{Ion}; apply_distortion=false)::Vector{SVector{3, Float64}} = apply_distortion ? [ion.pos - ion.dist for ion in ions] : [ion.pos for ion in ions]
 get_ion_position(ions::Vector{Ion}, iion; apply_distortion=false)::SVector{3, Float64} = apply_distortion ? ions[iion].pos - ions[iion].dist : ions[iion].pos
+
+function proton_to_position(Z::UInt8)
+    # Periodic table layout basics:
+    # Periods: 1 to 7
+    # Groups: 1 to 18
+
+    if Z < 1 || Z > 118
+        error("Proton number out of known periodic table range (1-118).")
+    end
+
+    # Precompute element counts per period:
+    # Period 1: 2 elements (H, He)
+    # Period 2 and 3: 8 elements each
+    # Period 4 and 5: 18 elements each
+    # Period 6 and 7: 32 elements each (including lanthanides and actinides)
+    period_limits = [2, 10, 18, 36, 54, 86, 118]
+
+    # Find period
+    period = findfirst(x -> Z <= x, period_limits)
+
+    # Calculate position within the period
+    prev_limit = period == 1 ? 0 : period_limits[period - 1]
+    pos_in_period = Z - prev_limit
+
+    # Map proton number to group (column)
+    # Simplified mapping based on known periodic table layout:
+
+    if period == 1
+        # Period 1: H(1) group 1, He(2) group 18
+        group = (Z == 1) ? 1 : 18
+    elseif period == 2 || period == 3
+        # Period 2 and 3: 8 elements
+        # Groups 1-2: alkali and alkaline earth metals
+        # Groups 13-18: p-block
+        if pos_in_period <= 2
+            group = pos_in_period  # 1 or 2
+        else
+            group = pos_in_period + 10  # groups 13 to 18 mapped as 3 -> 13 etc.
+        end
+    elseif period == 4 || period == 5
+        # Period 4 and 5: 18 elements
+        # Groups 1-2, 3-12 (transition metals), 13-18
+        if pos_in_period <= 2
+            group = pos_in_period
+        elseif pos_in_period <= 12
+            group = pos_in_period  # transition metals 3-12
+        else
+            group = pos_in_period + 10  # p-block 13-18
+        end
+    elseif period == 6 || period == 7
+        # Period 6 and 7: 32 elements
+        # Groups 1-2, 3-12 (transition metals), 13-18 (p-block)
+        # Lanthanides/actinides treated as group 3 in main table
+        if pos_in_period <= 2
+            group = pos_in_period
+        elseif pos_in_period <= 12
+            group = pos_in_period
+        elseif pos_in_period >= 13 && pos_in_period <= 30
+            # Lanthanides/actinides not in main group columns,
+            # normally shown separately, but here assign group 3
+            group = 3
+        else
+            group = pos_in_period - 14 + 13
+        end
+    else
+        error("Period not handled.")
+    end
+
+    return (period, group)
+end

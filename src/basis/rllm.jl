@@ -55,11 +55,12 @@ function get_rllm(overlaps, conf=get_empty_config();
                     rllm_file=get_rllm_file(conf), 
                     interpolate_rllm=get_interpolate_rllm(conf), 
                     verbosity=get_verbosity(conf),
+                    #targetdir = get_target_directory(conf),
                     rank = 0,
                     nranks = 1)
-    
+    #file_path = targetdir == "missing" ? rllm_file : joinpath(targetdir, rllm_file)
+    #rllm_file = file_path
     rllm_dict = Dict{String, CubicSpline{Float64}}()
-    
     if verbosity > 0; println("     Getting distance dependence..."); end
     time = @elapsed if load_rllm
         if verbosity > 1; println("     Reading distance dependence from file..."); end

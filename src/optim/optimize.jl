@@ -128,6 +128,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
             println(" Forward time: $(forward_time ./ nranks) s")
             println(" Backward time: $(backward_time ./ nranks) s")
             println(" Update time: $(update_time ./ nranks) s")
+            println(" Learning rate: $(optim.adam.eta)")
         end
     end
 end

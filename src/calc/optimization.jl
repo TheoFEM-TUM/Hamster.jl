@@ -1,3 +1,35 @@
+function get_subdirs(target_dir::String, systems::Vector{String})
+   subdirs = [joinpath(target_dir, "DATA", d, "LOPTICS") for d in readdir(joinpath(target_dir, "DATA")) if isdir(joinpath(target_dir, "DATA", d))]
+   matnames = [d for d in readdir(joinpath(target_dir, "DATA")) if isdir(joinpath(target_dir, "DATA", d))]
+   exceptions =["plots","tmp"]
+   subdirs = [subdirs[i] for i in 1:length(subdirs) if !(matnames[i] in exceptions)]
+   matnames = [matnames[i] for i in 1:length(matnames) if !(matnames[i] in exceptions)]
+   idx = Dict(b => i for (i, b) in enumerate(systems))
+   perm = [idx[a] for a in matnames]
+   subdirs = subdirs[perm]
+   matnames = matnames[perm]
+   return Dict(zip(matnames, subdirs))
+end
+
+function get_local_subdirs(subdirs::Vector{String}, matnames::Vector{String}, local_inds, config_inds) 
+   local_length = length(local_inds)
+   local_subdirs = [ "missing" for i in 1:local_length]
+   if length(subdirs) < local_length
+         error("The number of subdirectories is less than the configuration index. Please check your target directory and systems.")
+   end
+   for (system, ind) in config_inds
+      if system in matnames
+         sys_ind = findfirst(isequal(system), matnames)
+         local_subdirs[ind] = subdirs[sys_ind]
+      else
+         error("System $system not found in the target directory subdirectories.")
+      end
+
+   end
+   #sorted_subset = sort(filter(haskey(d), subdirs), by = d)
+   return local_subdirs
+end
+
 """
    run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1)
 
@@ -27,11 +59,23 @@ Runs the optimization process for an effective Hamiltonian model using the speci
 """
 function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1, write_output=true)
    systems = get_systems(conf)
+   target_dir = get_target_directory(conf)
    
    train_config_inds, val_config_inds = get_config_inds_for_systems(systems, comm, conf, rank=rank, write_output=write_output)
    local_train_inds = split_indices_into_chunks(train_config_inds, nranks, rank=rank)
    local_val_inds = split_indices_into_chunks(val_config_inds, nranks, rank=rank)
-
+   if target_dir != "missing"
+      subdirs_dict = get_subdirs(target_dir, systems)
+      local_subdirs = [subdirs_dict[k] for k in local_train_inds.keys if haskey(subdirs_dict, k)]
+      #local_subdirs = split_indices_into_chunks(subdirs, nranks, rank=rank)
+      #local_subdirs = collect(local_subdirs)
+      #local_subdirs = reverse(local_subdirs) # Reverse the order of local_subdirs to match the order of systems
+      #println("local systems subdirs for rank ", rank, ": ", systems[local_train_inds])
+   else
+      subdirs = ["missing" for i in 1:length(systems)]
+      local_subdirs = split_indices_into_chunks(subdirs, nranks, rank=rank)
+      local_subdirs = collect(local_subdirs)
+   end
    has_data = !isempty(local_train_inds) && (!isempty(local_val_inds) || !get_validate(conf))
    color = has_data ? 1 : nothing
    comm_active = MPI.Comm_split(comm, color, rank)
@@ -59,8 +103,12 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
          return system_strcs
       end
       train_bases = Basis[Basis(strc, conf, comm=comm_active) for strc in train_strcs]
-      ham_train = EffectiveHamiltonian(train_strcs, train_bases, comm_active, conf, rank=active_rank, nranks=active_size)
-      
+
+      if target_dir != "missing"
+         ham_train = EffectiveHamiltonian(train_strcs, train_bases, local_subdirs, comm_active, conf, rank=active_rank, nranks=active_size)
+      else
+         ham_train = EffectiveHamiltonian(train_strcs, train_bases, comm_active, conf, rank=active_rank, nranks=active_size)
+      end
       # EffectiveHamiltonian model for validation set
       val_strcs = mapreduce(vcat, local_val_inds, init=Structure[]) do (system, val_inds)
          system_strcs = get_structures(conf, config_indices=val_inds, Rs=Rs, mode=get_val_mode(conf), system=system)

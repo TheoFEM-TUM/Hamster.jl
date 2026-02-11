@@ -51,3 +51,10 @@ function get_sp_diag(conf::Config)::Union{Sparse, Dense}
         conf("sp_diag") ? Sparse() : Dense()
     end
 end
+
+"""
+
+"""
+get_target_directory(conf::Config)::String = conf("target_directory") == "default" ? "missing" : conf("target_directory")
+
+
