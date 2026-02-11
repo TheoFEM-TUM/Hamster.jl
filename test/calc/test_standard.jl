@@ -46,7 +46,9 @@ end
 
         Cx, Cy, Cz, Rs_c = read_current(comm, ind; filename="ham.h5", space="r")
         @test Rs == Rs_c
-        @test length(Cr) == length(Hr)
+        @test length(Cx) == length(Hr)
+        @test length(Cy) == length(Hr)
+        @test length(Cz) == length(Hr)
         @test all([size(Cx[R]) == size(Hr[R]) for R in eachindex(Hr)])
         @test all([size(Cy[R]) == size(Hr[R]) for R in eachindex(Hr)])
         @test all([size(Cz[R]) == size(Hr[R]) for R in eachindex(Hr)])
