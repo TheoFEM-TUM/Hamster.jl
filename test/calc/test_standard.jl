@@ -44,10 +44,12 @@ end
         @test Es_tb[:, :, i] ≈ Es
         @test Es_tb[:, :, i] ≈ Es_r
 
-        Cr, Rs_c = read_current(comm, ind; filename="ham.h5", space="r")
+        Cx, Cy, Cz, Rs_c = read_current(comm, ind; filename="ham.h5", space="r")
         @test Rs == Rs_c
         @test length(Cr) == length(Hr)
-        @test all([size(Cr[R]) == size(Hr[R]) for R in eachindex(Hr)])
+        @test all([size(Cx[R]) == size(Hr[R]) for R in eachindex(Hr)])
+        @test all([size(Cy[R]) == size(Hr[R]) for R in eachindex(Hr)])
+        @test all([size(Cz[R]) == size(Hr[R]) for R in eachindex(Hr)])
     end
 
     rm("hamster.out"); rm("hamster_out.h5"); rm("Es.dat"); rm("ham.h5")
