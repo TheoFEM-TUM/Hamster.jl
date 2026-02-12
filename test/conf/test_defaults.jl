@@ -51,9 +51,20 @@
 
     # Test 8: test sp_diag
     conf = get_empty_config()
+    @test Hamster.get_sp_mode(conf) isa Hamster.Sparse
     @test Hamster.get_sp_diag(conf) isa Hamster.Dense
     set_value!(conf, "sp_diag", true)
     @test Hamster.get_sp_diag(conf) isa Hamster.Sparse
+    
+    conf = get_empty_config()
+    set_value!(conf, "skip_diag", true)
+    @test Hamster.get_sp_diag(conf) isa Hamster.Sparse
+
+    # Test 9: test write_current
+    conf = get_empty_config()
+    @test Hamster.get_write_hr(conf) == false
+    set_value!(conf, "write_current", true)
+    @test Hamster.get_write_hr(conf) == true
 end
 
 @testset "Optim defaults" begin

@@ -281,3 +281,68 @@ function reshape_geometry_tensor(h_dict, NV, NR, Nε)
     end
     return h_out
 end
+
+"""
+    get_bonds(strc, basis, conf=get_empty_config();
+              rcut=get_rcut(conf),
+              rcut_tol=get_rcut_tol(conf),
+              npar=get_nthreads_bands(conf))
+
+Construct bond vectors between basis orbitals for all lattice translations.
+
+This function computes inter-ionic bond displacement vectors within a cutoff
+radius and assembles them into sparse matrices indexed by basis orbitals.
+For each lattice translation `R`, a sparse matrix of size `Nε × Nε` is returned,
+where `Nε = length(basis)` and each nonzero entry stores the Cartesian bond
+vector connecting a pair of orbitals.
+
+# Arguments
+- `strc`: Structure object containing ion positions, lattice vectors, and
+  lattice translations.
+- `basis`: Orbital basis associated with the ions in `strc`.
+- `conf`: Configuration object.
+
+# Keyword Arguments
+- `rcut`: Real-space cutoff radius for bond construction.
+- `rcut_tol`: Tolerance applied to the cutoff condition.
+- `npar`: Number of parallel chunks used for bond generation.
+
+# Returns
+- `bonds::Vector{SparseMatrixCSC{SVector{3,Float64},Int64}}`:
+  A vector of sparse matrices, one for each lattice translation `R`, whose
+  nonzero entries store Cartesian bond vectors as `SVector{3,Float64}`.
+"""
+function get_bonds(strc, basis, conf=get_empty_config(); rcut=get_rcut(conf), rcut_tol=get_rcut_tol(conf), npar=get_nthreads_bands(conf))
+    nn_grid_points = iterate_nn_grid_points(strc.point_grid)
+    Nε = length(basis)
+    bonds = SparseMatrixCSC{SVector{3, Float64}, Int64}[spzeros(SVector{3, Float64}, Nε, Nε) for R in axes(strc.Rs, 2)]
+    Ts = frac_to_cart(strc.Rs, strc.lattice)
+
+    is = [Int64[] for R in axes(strc.Rs, 2)]
+    js = [Int64[] for R in axes(strc.Rs, 2)]
+    vals = [SVector{3, Float64}[] for R in axes(strc.Rs, 2)]
+    ij_map = get_ion_orb_to_index_map(length.(basis.orbitals))
+    
+    for (chunk_id, indices) in enumerate(chunks(nn_grid_points, n=npar))
+        for (iion1, iion2, R) in indices
+            r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
+            r⃗₂ = strc.ions[iion2].pos - strc.ions[iion2].dist - Ts[:, R]
+            
+            r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos .- Ts[:, R])
+            r = normdiff(r⃗₁, r⃗₂)
+            bond = SVector{3, Float64}(r⃗₂ .- r⃗₁)
+            if r_nd ≤ rcut && r-abs(rcut_tol) < rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
+                for jorb1 in eachindex(basis.orbitals[iion1]), jorb2 in eachindex(basis.orbitals[iion2])
+                    i = ij_map[(iion1, jorb1)]
+                    j = ij_map[(iion2, jorb2)]
+
+                    push!(is[R], i); push!(js[R], j); push!(vals[R], bond)
+                end
+            end
+        end
+    end
+    for R in axes(Ts, 2)
+        bonds[R] = sparse(is[R], js[R], vals[R], Nε, Nε)
+    end
+    return bonds
+end

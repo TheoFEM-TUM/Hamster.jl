@@ -122,7 +122,7 @@ function write_ham(H, vecs, comm, ind=0; filename="ham.h5", space="k", system=""
             h5open(filename, "cw") do file
                 h_group = ind == 0 ? "H$space" : "H$(space)_$(system)_$ind"
                 g = create_group(file, h_group)
-                g["vecs"] = vecs
+                g["vecs"] = space == "r" ? Int.(vecs) : vecs
                 for (i, mat) in enumerate(H)
                     smat = issparse(mat) ? mat : sparse(mat)
                     grp = create_group(g, "$i")
@@ -156,13 +156,15 @@ Read a Hamiltonian and associated vectors from an HDF5 file previously written w
 - `vecs::Array`: The stored array of vectors associated with the Hamiltonian.
 """
 function read_ham(comm, ind=0; filename="ham.h5", space="k", system="")
-    H = SparseMatrixCSC[]
+    H = nothing
     vecs = nothing
     h5open(filename, "r", comm) do file
         h_group = ind == 0 ? "H$space" : "H$(space)_$(system)_$ind"
         g = file[h_group]
         vecs = read(g["vecs"])
-        # Ensure blocks are read in order "1", "2", ...
+        Nε = read(g[keys(g)[1]]["m"])
+        H = get_empty_complex_hamiltonians(Nε, size(vecs, 2), Sparse())
+
         block_names = sort(filter(x -> x != "vecs", keys(g)))
         for name in block_names
             grp = g[name]
@@ -171,10 +173,153 @@ function read_ham(comm, ind=0; filename="ham.h5", space="k", system="")
             rowval = read(grp["rowval"])
             colptr = read(grp["colptr"])
             nzval  = read(grp["nzval"])
-            push!(H, SparseMatrixCSC(m, n, colptr, rowval, nzval))
+            H[parse(Int64, name)] = SparseMatrixCSC(m, n, colptr, rowval, nzval)
         end
     end
     return H, vecs
 end
 
 read_ham(ind::Integer=0; filename="ham.h5", space="k") = read_ham(MPI.COMM_WORLD, ind; filename=filename, space=space)
+
+const ħ_eVfs = 0.6582119569 # ħ in units of eV·fs
+"""
+    write_current(bonds, comm, ind=0;
+                  ham_file="ham.h5",
+                  filename="ham.h5",
+                  system="",
+                  rank=0,
+                  nranks=1)
+
+Compute and write real-space current operators to an HDF5 file.
+
+This function constructs the real-space current matrices from the bond vectors
+`bonds` and the real-space Hamiltonian read from `ham_file`. For each lattice
+translation `R`, the current operator is computed as
+
+    C(R) = -i / ħ · bonds[R] * H(R),
+
+and written in sparse CSC format to the HDF5 file `filename`.
+
+Each MPI rank writes sequentially to the file, synchronized via barriers, to
+avoid concurrent write conflicts. The resulting datasets are stored under a
+group named `Cr` (or `Cr_<system>_<ind>` if `ind ≠ 0`), with one subgroup per
+lattice translation.
+
+Sparse matrices are stored explicitly via their `rowval`, `colptr`, and Cartesian
+components (`xnzval`, `ynzval`, `znzval`) of the nonzero entries.
+
+# Arguments
+- `bonds`: Vector of sparse bond matrices indexed by lattice translation, with
+  `SVector{3,Float64}` entries.
+- `comm`: MPI communicator.
+- `ind`: Index selecting the Hamiltonian block to read (default: `0`).
+
+# Keyword Arguments
+- `ham_file`: HDF5 file containing the real-space Hamiltonian.
+- `filename`: Output HDF5 file to which current operators are written.
+- `system`: Optional system label used in the HDF5 group name.
+- `rank`: MPI rank of the calling process.
+- `nranks`: Total number of MPI ranks participating in the write.
+
+# Notes
+- The reduced Planck constant `ħ` is assumed to be given in units of eV·fs.
+- The current vectors have units of Å/fs and correspond to velocity matrix elements 
+  (current divided by electron charge).
+- The function performs no collective MPI I/O; writes are serialized across
+  ranks using barriers.
+"""
+function write_current(bonds, comm, ind=0; ham_file="ham.h5", filename="ham.h5", system="", rank=0, nranks=1)
+    Hr, hr_vecs = read_ham(comm, ind, filename=ham_file, space="r", system=system)
+    for r in 0:nranks-1
+        if r == rank
+            h5open(filename, "cw") do file
+                h_group = ind == 0 ? "Cr" : "Cr_$(system)_$ind"
+                g = create_group(file, h_group)
+                g["vecs"] = hr_vecs
+                for R in eachindex(bonds)
+                    grp = create_group(g, "$R")
+                    C = @. -1im/ħ_eVfs * bonds[R] * Hr[R]
+                    grp["rowval"] = C.rowval
+                    grp["colptr"] = C.colptr
+                    grp["xnzval"]  = [vec[1] for vec in C.nzval]
+                    grp["ynzval"]  = [vec[2] for vec in C.nzval]
+                    grp["znzval"]  = [vec[3] for vec in C.nzval]
+                    grp["m"]      = size(C, 1)
+                    grp["n"]      = size(C, 2)
+                end
+            end
+        end
+        MPI.Barrier(comm)
+    end
+end
+
+"""
+    read_current(comm, ind=0;
+                 filename="ham.h5",
+                 space="r",
+                 system="")
+
+Read real-space current operators from an HDF5 file.
+
+This function reads sparse current matrices previously written by
+[`write_current`](@ref) from the HDF5 file `filename`. For each lattice
+translation `R`, the current operator is reconstructed as a sparse matrix with
+`SVector{3,ComplexF64}` entries representing the Cartesian components of the
+current.
+
+The current matrices are read from the group `C<space>` (or
+`C<space>_<system>_<ind>` if `ind ≠ 0`), along with the associated lattice
+translation vectors.
+
+# Arguments
+- `comm`: MPI communicator used for collective HDF5 access.
+- `ind`: Index selecting the current block to read (default: `0`).
+
+# Keyword Arguments
+- `filename`: HDF5 file containing the current operators.
+- `space`: Label identifying the representation (e.g. `"r"` for real space).
+- `system`: Optional system label used in the HDF5 group name.
+
+# Returns
+- `C::Vector{SparseMatrixCSC{SVector{3,ComplexF64},Int64}}`:
+  A vector of sparse current matrices, one per lattice translation.
+- `vecs::AbstractMatrix{<:Real}`:
+  Lattice translation vectors corresponding to the current blocks.
+
+# Notes
+- Sparse matrices are reconstructed from their stored CSC components
+  (`rowval`, `colptr`, `xnzval`, `ynzval`, `znzval`).
+- The function assumes the file layout produced by `write_current`.
+"""
+function read_current(comm, ind=0; filename="ham.h5", space="r", system="")
+    Cx = nothing
+    Cy = nothing
+    Cz = nothing
+    vecs = nothing
+    h5open(filename, "r", comm) do file
+        h_group = ind == 0 ? "C$space" : "C$(space)_$(system)_$ind"
+        g = file[h_group]
+        vecs = read(g["vecs"])
+        
+        Nε = read(g[keys(g)[1]]["m"])
+        Cx = SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for R in axes(vecs, 2)]
+        Cy = SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for R in axes(vecs, 2)]
+        Cz = SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for R in axes(vecs, 2)]
+
+        block_names = sort(filter(x -> x != "vecs", keys(g)))
+        for name in block_names
+            grp = g[name]
+            m = read(grp["m"])
+            n = read(grp["n"])
+            rowval = read(grp["rowval"])
+            colptr = read(grp["colptr"])
+            xs = read(grp["xnzval"]); ys = read(grp["ynzval"]); zs = read(grp["znzval"])
+            Cx[parse(Int64, name)] = SparseMatrixCSC(m, n, colptr, rowval, xs)
+            Cy[parse(Int64, name)] = SparseMatrixCSC(m, n, colptr, rowval, ys)
+            Cz[parse(Int64, name)] = SparseMatrixCSC(m, n, colptr, rowval, zs)
+        end
+    end
+    return Cx, Cy, Cz, vecs
+end
+
+read_current(ind::Integer=0; filename="ham.h5", space="r") = read_current(MPI.COMM_WORLD, ind; filename=filename, space=space)

@@ -32,7 +32,7 @@ This will only affect the computation of Hᴿ (not Hᵏ or diagonalization) and 
 """
 function get_sp_mode(conf::Config)::Union{Sparse, Dense}
     if conf("sp_mode") == "default"
-        return Dense()
+        return Sparse()
     else
         conf("sp_mode") ? Sparse() : Dense()
     end
@@ -45,8 +45,10 @@ The `sp_diag::Bool` tag switches between dense and sparse methods for matrix dia
 This can not be combined with optimization.
 """
 function get_sp_diag(conf::Config)::Union{Sparse, Dense}
-    if conf("sp_diag") == "default"
+    if conf("sp_diag") == "default" && !get_skip_diag(conf)
         return Dense()
+    elseif conf("sp_diag") == "default" && get_skip_diag(conf)
+        return get_sp_mode(conf)
     else
         conf("sp_diag") ? Sparse() : Dense()
     end

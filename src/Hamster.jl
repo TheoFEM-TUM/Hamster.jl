@@ -45,7 +45,7 @@ export ParameterLabel, read_params, write_params, Basis, get_geometry_tensor, np
 
 export TBModel, EffectiveHamiltonian, get_params, set_params!, copy_params!
 export get_hamiltonian, diagonalize, get_hr, init_params!
-export write_hr, read_hr, write_ham, read_ham
+export write_hr, read_hr, write_ham, read_ham, write_current, read_current
 
 export SOCModel
 
