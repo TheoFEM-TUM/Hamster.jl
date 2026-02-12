@@ -45,6 +45,7 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
                 nranks=1,
                 update_tb=get_update_tb(conf, nparams(bases[1])), 
                 initas=get_init_params(conf))
+                
     if get_load_rllm(conf) == false
         rllm_file = get_rllm_file(conf)
         if isfile(rllm_file) && rank == 0; rm(rllm_file); end
