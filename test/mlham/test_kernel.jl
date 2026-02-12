@@ -51,6 +51,17 @@ end
     @test params_5 == params
     @test data_points_5 == data_points
 
+    # Test expand mode
+    set_value!(conf, "mode", "ML", "expand")
+    set_value!(conf, "init_params", "ML", "zeros")
+    params_6, data_points_6 = Hamster.init_ml_params!(data_points_dummy, conf)
+    @test length(params_6) == 21
+    @test length(data_points_6) == 21
+    @test params_6[1:10] == params
+    @test params_6[11:21] == zeros(11)
+    @test data_points_6[1:10] == data_points
+    @test data_points_6[11:21] == data_points_dummy
+
     rm("ml_params.dat")
 end
 
