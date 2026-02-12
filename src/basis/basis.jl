@@ -347,4 +347,4 @@ function get_bonds(strc, basis, conf=get_empty_config(); rcut=get_rcut(conf), rc
     return bonds
 end
 
-get_unique_overlaps(bases) = unique(vcat([basis.overlap for basis in bases]...))
+get_unique_overlaps(bases) = unique(vcat([basis.overlaps for basis in bases]...))

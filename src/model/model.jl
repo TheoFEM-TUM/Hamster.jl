@@ -49,7 +49,7 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
     if get_load_rllm(conf) == false
         rllm_file = get_rllm_file(conf)
         if isfile(rllm_file) && rank == 0; rm(rllm_file); end
-        precalc_rllm(bases; comm, rank, nranks, conf)
+        precalc_rllm(bases, conf, rank=rank, nranks=nranks, comm=comm)
     end
     hs = map(eachindex(strcs)) do n
         get_geometry_tensor(strcs[n], bases[n], conf, comm=comm, rank=rank, nranks=nranks)

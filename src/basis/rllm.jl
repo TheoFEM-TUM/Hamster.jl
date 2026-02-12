@@ -71,7 +71,7 @@ function get_rllm(overlaps, conf=get_empty_config();
                     nranks = 1)
 
     rllm_dict = Dict{String, CubicSpline{Float64}}()
-    if verbosity > 0; println("     Getting distance dependence..."); end
+    if verbosity > 0 && rank == 0; println("     Getting distance dependence..."); end
     time = @elapsed if load_rllm
         if verbosity > 1; println("     Reading distance dependence from file..."); end
         read_rllm(overlaps, comm, rllm_dict, filename=rllm_file)
@@ -107,7 +107,7 @@ function get_rllm(overlaps, conf=get_empty_config();
         end
         save_rllm(rllm_dict, comm, filename=rank_rllm_file, rank=rank, nranks=nranks)
     end
-    if verbosity > 0; println("     Finished in $time s."); end
+    if verbosity > 0 && rank == 0; println("     Finished in $time s."); end
     return rllm_dict
 end
 
@@ -292,19 +292,40 @@ function read_rllm(overlaps, comm, rllm_dict=Dict{String, CubicSpline{Float64}}(
     end
 end
 
-function precalc_rllm(bases::Any; comm = nothing, rank = 0, nranks = 1, conf=get_empty_config();
+"""
+    precalc_rllm(bases, conf=get_empty_config(); 
+                 comm=nothing, 
+                 rank=0, 
+                 nranks=1,
+                 rllm_file=get_rllm_file(conf),
+                 verbosity=get_verbosity(conf))
+
+Precomputes overlap distance dependence interpolation tables for a set of basis functions. 
+Distributes the computation across MPI ranks and saves the results to a file.
+
+# Arguments
+- `bases`: Vector of `Basis` objects for which the overlaps are computed.
+- `conf`: Configuration object containing simulation and ML parameters.
+- `comm`: MPI communicator for distributed computation.
+- `rank`: Integer rank of the current MPI process.
+- `nranks`: Total number of MPI ranks participating in the computation.
+- `rllm_file`: Filename to save the RLLM interpolation data.
+- `verbosity`: Integer controlling output logging.
+"""
+function precalc_rllm(bases, conf=get_empty_config();
+        comm=nothing, 
+        rank=0, 
+        nranks=1,
         rllm_file = get_rllm_file(conf),
         verbosity = get_verbosity(conf))
 
     unique_overlaps_local = get_unique_overlaps(bases)
-    overlaps_strings = MPI.gather(unique_overlaps_local, comm, root=0)
+    all_overlaps = MPI.gather(unique_overlaps_local, comm, root=0)
     if rank == 0
-        overlaps_strings = collect(Iterators.flatten(overlaps_strings))
-        overlaps_strings = collect(Iterators.flatten(overlaps_strings))
-        unique_overlaps = unique(overlaps_strings)
+        all_overlaps_flattened = collect(Iterators.flatten(all_overlaps))
+        unique_overlaps = unique(all_overlaps_flattened)
         noverlaps = length(unique_overlaps)
     else
-        overlaps_strings = nothing
         unique_overlaps = nothing
         noverlaps = 0
     end
@@ -332,5 +353,4 @@ function precalc_rllm(bases::Any; comm = nothing, rank = 0, nranks = 1, conf=get
     save_rllm(rllm_dict, comm, filename=rank_rllm_file, rank=rank, nranks=nranks)
     MPI.Barrier(comm)
     combine_local_rllm_files(rllm_file, comm; rank, nranks)
-
 end
