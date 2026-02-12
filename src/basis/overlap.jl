@@ -375,3 +375,24 @@ Base.string(::Vddδ) = "ddδ"
 
 (v::Vddδ)(orbconfig, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 2)*fdxy(v.base[1], θ₁, φ₁)*fdxy(v.base[2], θ₂, φ₂) + NConst(mode, v.base, 2, 2)*fdx2_y2(v.base[1], θ₁, φ₁)*fdx2_y2(v.base[2], θ₂, φ₂)
 (v::Vddδ)(orbconfig, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 2)*fdxy(v.base[2], θ₁, φ₁)*fdxy(v.base[1], θ₂, φ₂) + NConst(mode, v.base, 2, 2)*fdx2_y2(v.base[2], θ₁, φ₁)*fdx2_y2(v.base[1], θ₂, φ₂)
+
+
+function get_overlap_feature_vec(overlap_string :: String)
+    label_to_int = Dict(
+        "ssσ" => 1,
+        "spσ" => 2,
+        "ppσ" => 3,
+        "ppπ" => 4,
+        "sdσ" => 5,
+        "pdσ" => 6,
+        "pdπ" => 7,
+        "ddσ" => 8,
+        "ddπ" => 9,
+        "ddδ" => 10,
+    )
+    N_vec = length(label_to_int)
+    feature_vec = zeros(Int64, N_vec)
+    i = label_to_int[overlap_string]
+    feature_vec[i] = 1
+    return feature_vec
+end

@@ -260,7 +260,7 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filena
     end
 end
 
-function write_datapoints(data_points::Vector{SVector{10, Float64}}, target_dir::String, conf=get_empty_config(); filename=get_ml_filename(conf))
+function write_datapoints(data_points::Vector{SVector{20, Float64}}, target_dir::String, conf=get_empty_config(); filename=get_ml_filename(conf))
     open(joinpath(target_dir, filename*".dat"), "w") do file
         # Write header to file
         #params = init_ml_params!(data_points, conf)[1]

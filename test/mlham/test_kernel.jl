@@ -19,7 +19,7 @@ end
 
     N = 10
     params = rand(10)
-    data_points = [SVector{10, Float64}(rand(8)) for i in 1:N]
+    data_points = [SVector{20, Float64}(rand(8)) for i in 1:N]
 
     kernel = HamiltonianKernel(params, data_points, 0.2, [], false)
     write_params(kernel, conf)
@@ -45,7 +45,7 @@ end
     @test std(params_4) > 0
     @test data_points_4 == data_points
 
-    data_points_dummy = [SVector{10, Float64}(rand(8)) for i in 1:N+1]
+    data_points_dummy = [SVector{20, Float64}(rand(8)) for i in 1:N+1]
     set_value!(conf, "init_params", "ML", "ml_params.dat")
     params_5, data_points_5 = Hamster.init_ml_params!(data_points_dummy, conf)
     @test params_5 == params

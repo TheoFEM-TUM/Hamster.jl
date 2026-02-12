@@ -89,7 +89,7 @@ end
 
     # Test 3: test complete descriptor set
     descriptors = Hamster.get_tb_descriptor(model.hs, model.params, strc, basis, conf)
-    @test descriptors isa Vector{SparseMatrixCSC{SVector{10, Float64}, Int64}}
+    @test descriptors isa Vector{SparseMatrixCSC{SVector{20, Float64}, Int64}}
 
     # Test: test descriptor sampler
     X = rand(3, 1000)
