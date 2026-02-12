@@ -261,34 +261,56 @@ Reads the `rllm.dat` file and returns a dictionary mapping overlap labels to tup
 # Returns
 - A dictionary where each key is an overlap label, and each value a tuple of x/y value vectors.
 """
-function read_rllm(overlaps::Vector{T}, comm, rllm_dict=Dict{String, CubicSpline{Float64}}(); filename="rllm.dat") where {T}
+function read_rllm(
+    overlaps::Vector{T},
+    comm,
+    rllm_dict=Dict{String, CubicSpline{Float64}}();
+    filename="rllm.dat"
+) where {T}
+
     if occursin(".h5", filename)
+
+        file = nothing
+
+        # ------------------------------------------
+        # Open once (parallel or serial)
+        # ------------------------------------------
         if isnothing(comm)
-            h5open(filename, "r") do file
-                for overlap in overlaps
-                    overlap_str = string(overlap, apply_oc=true)
-                    data = file[overlap_str]
-                    rllm_dict[overlap_str] = CubicSpline(data[:, 1], data[:, 2])
-                end
-            end
+            file = h5open(filename, "r")
         else
-            h5open(filename, "r", comm) do file
-                for overlap in overlaps
-                    overlap_str = string(overlap, apply_oc=true)
-                    data = file[overlap_str]
-                    rllm_dict[overlap_str] = CubicSpline(data[:, 1], data[:, 2])
-                end
-            end
+            file = h5open(filename, "r", comm)
         end
+
+        # ------------------------------------------
+        # Read all datasets
+        # ------------------------------------------
+        for overlap in overlaps
+            overlap_str = string(overlap, apply_oc=true)
+
+            data = read(file[overlap_str])  # force full read
+
+            rllm_dict[overlap_str] =
+                CubicSpline(data[:, 1], data[:, 2])
+        end
+
+        # ------------------------------------------
+        # Close once (collective if parallel)
+        # ------------------------------------------
+        close(file)
+
+        return rllm_dict
+
     else
         lines = open_and_read(filename)
         lines = split_lines(lines)
+
         for i in 1:3:length(lines)
             overlap = lines[i][1]
             xs = parse.(Float64, lines[i+1])
             ys = parse.(Float64, lines[i+2])
             rllm_dict[overlap] = CubicSpline(xs, ys)
         end
+
         return rllm_dict
     end
 end
