@@ -23,11 +23,8 @@ jobs:
         julia-version: ${{ matrix.julia-version }}
         arch: x64
 
-    - name: Cache Julia depot
-      uses: julia-actions/cache@v1
-      with:
-        path: ~/.julia
-        key: ${{ runner.os }}-julia-${{ hashFiles('Project.toml','Manifest.toml') }}
+    - name: Use Julia cache
+        uses: julia-actions/cache@v2
 
     - name: Add General registry
       run: julia -e 'using Pkg; Pkg.Registry.add("General")'
