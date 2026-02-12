@@ -346,3 +346,19 @@ function get_bonds(strc, basis, conf=get_empty_config(); rcut=get_rcut(conf), rc
     end
     return bonds
 end
+
+
+function get_unique_overlaps(overlaps_strings::Vector{String})
+
+    unique_overlaps_strings = unique(overlaps_strings)
+    return unique_overlaps_strings
+end
+
+function get_unique_overlaps(bases::Any)
+    overlaps_string_all = []
+    for basis in bases
+        overlaps = basis.overlaps
+        push!(overlaps_string_all, overlaps)
+    end
+    return unique(overlaps_string_all)
+end
