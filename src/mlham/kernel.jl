@@ -265,7 +265,7 @@ function init_ml_params!(data_points, conf=get_empty_config();
                             mode=get_ml_mode(conf),
                             update_ml=get_ml_update(conf))
 
-    Nparams = length(data_points)
+    Nparams = isnothing(data_points) ? 1 : length(data_points)
 
     if initas[1] == 'z'
         params = zeros(Nparams)
