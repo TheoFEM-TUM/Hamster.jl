@@ -166,9 +166,6 @@ function get_config_inds_for_systems(
     train_config_inds = Dict{String, Vector{Int64}}()
     val_config_inds   = Dict{String, Vector{Int64}}()
 
-    # -------------------------------------------------
-    # Open input HDF5 file ONCE (collective if using comm)
-    # -------------------------------------------------
     file = nothing
     if length(systems) > 1
         file = h5open(get_xdatcar(conf), "r", comm)
@@ -180,7 +177,6 @@ function get_config_inds_for_systems(
         Nconf_max = get_Nconf_max(conf)
 
         if file !== nothing
-            # All ranks execute this collectively
             Nconf_total = size(read(file[system]["positions"]), 3)
 
             if Nconf_total < Nconf
@@ -194,9 +190,6 @@ function get_config_inds_for_systems(
         system_train_inds, system_val_inds =
             get_config_index_sample(conf; Nconf=Nconf, Nconf_max=Nconf_max)
 
-        # -------------------------------------------------
-        # Only rank 0 writes output (serial HDF5)
-        # -------------------------------------------------
         if rank == 0 && write_output
             h5open("hamster_out.h5", "cw") do outfile
                 g = system == "" ?
@@ -214,9 +207,6 @@ function get_config_inds_for_systems(
             end
         end
 
-        # -------------------------------------------------
-        # Broadcast to all ranks
-        # -------------------------------------------------
         MPI.Bcast!(system_train_inds, comm, root=0)
         MPI.Bcast!(system_val_inds,   comm, root=0)
         MPI.Barrier(comm)
@@ -225,9 +215,6 @@ function get_config_inds_for_systems(
         val_config_inds[system]   = system_val_inds
     end
 
-    # -------------------------------------------------
-    # Close input file collectively
-    # -------------------------------------------------
     if file !== nothing
         close(file)
     end
