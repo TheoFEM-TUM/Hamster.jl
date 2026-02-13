@@ -17,9 +17,40 @@ mutable struct HamiltonianKernel{T1, T2, T3}
 end
 
 """
-    HamiltonianKernel(strcs, bases, model, conf)
+    HamiltonianKernel(strcs, bases, model, comm, conf; 
+                      verbosity=get_verbosity(conf),
+                      Ncluster=get_ml_ncluster(conf),
+                      Npoints=get_ml_npoints(conf),
+                      sim_params=get_sim_params(conf),
+                      update_ml=get_ml_update(conf),
+                      mode=get_ml_mode(conf),
+                      rank=0,
+                      nranks=1)
 
-Constructor for a HamiltonianKernel model.
+Constructs a `HamiltonianKernel` model for machine learning-based Hamiltonian parameterization.
+
+# Arguments
+- `strcs`: Vector of `Structure` objects.
+- `bases`: Vector of `Basis` objects corresponding to each structure.
+- `model`: The underlying TB Hamiltonian model.
+- `comm`: MPI communicator.
+- `conf`: Configuration object.
+- `verbosity`: Integer controlling logging output.
+- `Ncluster`: Number of clusters for ML sampling.
+- `Npoints`: Number of points to sample.
+- `sim_params`: Kernel similarity measure.
+- `update_ml`: Boolean flag controlling whether ML parameters are updated .
+- `mode`: ML training mode, one of `"eval"`, `"refit"`, `"expand"`.
+- `rank`: MPI rank of the current process (default: 0).
+- `nranks`: Total number of MPI ranks (default: 1).
+
+# Returns
+A `HamiltonianKernel` object.
+
+# Notes
+- MPI is used for distributed sampling of data points; ensure that `comm`, `rank`, and `nranks` are consistent.
+- The function supports evaluation-only mode (`mode="eval"`) where parameters are not updated.
+- New or expanded parameters are initialized according to the `init_ml_params` configuration.
 """
 function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, model, comm, conf=get_empty_config(); 
                             verbosity=get_verbosity(conf),
@@ -27,6 +58,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             Npoints=get_ml_npoints(conf),
                             sim_params=get_sim_params(conf), 
                             update_ml=get_ml_update(conf),
+                            mode=get_ml_mode(conf),
                             rank=0,
                             nranks=1)
     
@@ -56,9 +88,9 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         end
         # COV_EXCL_STOP
     else
-        _, data_points = read_ml_params(conf, filename=get_ml_init_params(conf))
+        data_points = nothing
     end
-    params, data_points = init_ml_params!(data_points, conf)
+    params, data_points = init_ml_params!(data_points, conf, mode=mode, update_ml=update_ml)
     return HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml)
 end
 
@@ -200,30 +232,56 @@ function read_ml_params(conf=get_empty_config(); filename=get_ml_filename(conf))
 end
 
 """
-    init_ml_params!(data_points, conf=get_empty_config(); initas=get_ml_init_params(conf))
+    init_ml_params!(data_points, conf=get_empty_config(); 
+                   initas=get_ml_init_params(conf),
+                   filename=get_ml_filename(conf),
+                   mode=get_ml_mode(conf),
+                   update_ml=get_ml_update(conf))
 
-Initializes machine learning parameters based on a given initialization strategy and updates the `data_points`.
+Initializes ML parameters.
 
 # Arguments
-- `data_points`: The data points associated with the machine learning parameters.
-- `conf`: A configuration object (default: `get_empty_config()`) containing simulation parameters and settings.
-- `initas`: A string (default: `get_ml_init_params(conf)`) that specifies the initialization strategy. Possible values:
-  - `'z'`: Initialize parameters to zeros.
-  - `'o'`: Initialize parameters to ones.
-  - `'r'`: Initialize parameters with random values.
-  - `file`: Initialize parameters from a file `initas`
+- `data_points`: An array of data points associated with the ML parameters.
+- `conf`: A configuration object.
+- `initas`: A string specifying the initialization strategy for **new parameters**:
+  - `"zeros"` or `'z'` : Initialize parameters to zeros.
+  - `"ones"` or `'o'`  : Initialize parameters to ones.
+  - `"rand"` or `'r'`  : Initialize parameters with random values.
+  - `"file"`            : Load parameters from a file (`initas` is interpreted as the filename in eval mode).
+- `filename`: A string specifying the file from which old parameters can be loaded when `mode="expand"`.
+- `mode`: A string (default: `get_ml_mode(conf)`) specifying the ML training mode:
+  - `"refit"`  : Train from scratch.
+  - `"eval"`   : Evaluation mode.
+  - `"expand"` : Load old parameters from `filename` and append new parameters initialized according to `initas`.
+- `update_ml`: Boolean controlling whether ML parameters are updated during training.
+
+# Returns
+- `params`: Array of initialized ML parameters.
+- `data_points`: (Updated) array of data points.
 """
-function init_ml_params!(data_points, conf=get_empty_config(); initas=get_ml_init_params(conf))
-    Nparams = length(data_points)
+function init_ml_params!(data_points, conf=get_empty_config(); 
+                            initas=get_ml_init_params(conf),
+                            filename=get_ml_filename(conf),
+                            mode=get_ml_mode(conf),
+                            update_ml=get_ml_update(conf))
+
+    Nparams = isnothing(data_points) ? 1 : length(data_points)
+
     if initas[1] == 'z'
-        return zeros(Nparams), data_points
+        params = zeros(Nparams)
     elseif initas[1] == 'o'
-        return ones(Nparams), data_points
+        params = ones(Nparams)
     elseif initas[1] == 'r'
-        return rand(Nparams), data_points
+        params = rand(Nparams)
     else
-        return read_ml_params(conf, filename=initas)
+        params, data_points = read_ml_params(conf, filename=initas)
     end
+    if mode == "expand"
+        params_old, data_points_old = read_ml_params(conf, filename=filename)
+        params = vcat(params_old, params)
+        data_points = vcat(data_points_old, data_points)
+    end
+    return params, data_points
 end
 
 """

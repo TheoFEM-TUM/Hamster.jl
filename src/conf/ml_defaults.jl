@@ -1,16 +1,16 @@
 """
-    init_params=zeros
+**init_params**=zeros
 
 The `init_params` tag determines how the parameters of the ML model are initialized.
 """
-get_ml_init_params(conf::Config)::String = conf("init_params", "ML") == "default" ? "zeros" : conf("init_params", "ML")
+get_ml_init_params(conf::Config)::String = get(conf, "init_params", "ML", "zeros")
 
 """
-    filename=ml_params
+**filename**=ml_params
 
 The `filename` tag sets the name for the parameter file of the ML model.
 """
-get_ml_filename(conf::Config)::String = conf("filename", "ML") == "default" ? "ml_params" : conf("filename", "ML")
+get_ml_filename(conf::Config)::String = get(conf, "filename", "ML", "ml_params")
 
 """
     ml_model=false
@@ -24,7 +24,28 @@ get_ml_model(conf::Config)::Bool = haskey(conf, "ML")
 
 The `update` tag switches on/off optimization of ML parameters.
 """
-get_ml_update(conf::Config)::Bool = conf("update", "ML") == "default" ? true : conf("update", "ML")
+function get_ml_update(conf::Config)::Bool
+    if conf("update", "ML") == "default" && haskey(conf, "Optimizer") && haskey(conf, "ML")
+        return true
+    elseif conf("update", "ML") == "default" && (!haskey(conf, "Optimizer") || !haskey(conf, "ML"))
+        return false
+    else 
+        return conf("update", "ML")
+    end
+end
+
+"""
+**mode** = "eval"
+
+Training mode for the ML model.
+
+Possible values:
+- `"eval"`   : Evaluation mode. No training is performed.
+- `"refit"`  : Train (or retrain) the model from scratch.
+- `"expand"` : Load existing parameters from `filename`, append newly
+               initialized parameters (according to `init_params`).
+"""
+get_ml_mode(conf)::String = get_ml_update(conf) ? get(conf, "mode", "ML", "refit") : get(conf, "mode", "ML", "eval")
 
 """
     ml_rcut=rcut
