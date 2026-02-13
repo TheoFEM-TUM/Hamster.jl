@@ -10,19 +10,8 @@ abstract type SparsityMode end
 struct Sparse<:SparsityMode end
 struct Dense<:SparsityMode end
 
-"""
-    tb_model=true
-
-The `tb_model` tag switches on the use of a TB model in the effective Hamiltonian model.
-"""
-get_tb_model(conf::Config)::Bool = conf("tb_model") == "default" ? true : conf("tb_model")
-
-"""
-**sp_tol**=1e-10
-
-The `sp_tol::Float` tag sets a tolerance for values to be considered zero.
-"""
-get_sp_tol(conf::Config)::Float64 = conf("sp_tol") == "default" ? 1e-10 : conf("sp_tol")
+@configtag tb_model Bool true "build TB model."
+@configtag sp_tol Float64 1e-10 "tolerance for value to be considered zero."
 
 """
 **sp_mode**=false
@@ -37,6 +26,7 @@ function get_sp_mode(conf::Config)::Union{Sparse, Dense}
         conf("sp_mode") ? Sparse() : Dense()
     end
 end
+push!(CONFIG_TAGS, ConfigTag{Bool}("sp_mode", conf->get_sp_mode(conf) isa Sparse, "switches to sparse matrix methods (only affects Hᴿ and gradients)."))
 
 """
 **sp_diag**=false
@@ -53,3 +43,4 @@ function get_sp_diag(conf::Config)::Union{Sparse, Dense}
         conf("sp_diag") ? Sparse() : Dense()
     end
 end
+push!(CONFIG_TAGS, ConfigTag{Bool}("sp_diag", conf->get_sp_diag(conf) isa Sparse, "switches to sparse matrix diagonalization (only affects Hᵏ and diagonalization)."))

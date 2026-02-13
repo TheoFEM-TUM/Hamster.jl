@@ -188,7 +188,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
     end
 end
 
-function get_kpoints_from_config(conf::Config; kpoints_file=get_kpoints_file(conf))::Matrix{Float64}
+function get_kpoints_from_config(conf::Config; kpoints_file=get_kpoints(conf))::Matrix{Float64}
     if occursin("EIGENVAL", kpoints_file)
         ks, _, _ = read_eigenval(kpoints_file)
         return ks
