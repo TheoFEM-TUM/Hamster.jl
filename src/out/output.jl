@@ -117,3 +117,81 @@ function append_output_line(line; filename="hamster.out")
         println(f, line)
     end
 end
+
+"""
+    write_config_tags(filename::String, conf::Config; blocks=nothing, show_desc=false)
+
+Pretty print configuration tags to an output file in a nicely formatted style.
+
+# Arguments
+- `filename`: Path to the output file.
+- `conf`: Configuration object to read current values.
+- `blocks`: Optional list of block names to print. If `nothing`, all blocks are printed.
+- `show_desc`: If `true`, adds the description as a comment on each line.
+"""
+function write_config_tags(conf::Config; blocks=nothing, show_desc=false, filename="hamster.out")
+    open(filename, "a") do io
+        println(io)
+        println(io, "The following input parameters are used:")
+        println(io)
+
+        # Organize tags by block
+        tags_by_block = Dict{String, Vector{ConfigTag}}()
+        for tag in CONFIG_TAGS
+            push!(get!(tags_by_block, tag.block, Vector{ConfigTag}()), tag)
+        end
+
+        blocks_to_print = blocks === nothing ? sort(collect(keys(tags_by_block))) : blocks
+
+        # Determine column for # comments (fixed for all tags)
+        tagval_col_width = maximum(length("    $(tag.name) = $(get_tag(conf, tag))") for tag in CONFIG_TAGS)
+        desc_col_start = tagval_col_width + 4  # 4 spaces before #
+
+        for blk in blocks_to_print
+            write_separator(io)
+            println(io, "  $blk")
+            write_separator(io, char='-')
+
+            for tag in tags_by_block[blk]
+                val = get_tag(conf, tag)
+                tagval_str = "    $(tag.name) = $(val)"
+                tagval_padded = rpad(tagval_str, desc_col_start)
+
+                if show_desc && !isempty(tag.description)
+                    wrap_width = 80 - desc_col_start
+                    desc_lines = wrap_text(tag.description, wrap_width)
+                    # First line appended to tag=value
+                    println(io, tagval_padded, "# ", desc_lines[1])
+                    # Remaining lines aligned under the first #
+                    for l in desc_lines[2:end]
+                        println(io, rpad(" ", desc_col_start), "  ", l)
+                    end
+                else
+                    println(io, tagval_str)
+                end
+            end
+
+            write_separator(io)
+            println(io)
+        end
+    end
+end
+
+# Helper to wrap text into multiple lines
+function wrap_text(text::AbstractString, width::Int)
+    words = split(text)
+    lines = String[]
+    line = ""
+    for w in words
+        if length(line) + (isempty(line) ? 0 : 1) + length(w) > width
+            push!(lines, line)
+            line = w
+        else
+            line = isempty(line) ? w : line * " " * w
+        end
+    end
+    if !isempty(line)
+        push!(lines, line)
+    end
+    return lines
+end
