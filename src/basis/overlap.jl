@@ -396,3 +396,21 @@ function get_overlap_feature_vec(overlap_string :: String)
     feature_vec[i] = 1
     return feature_vec
 end
+
+function get_overlap_type_int(overlap_string :: String)
+    label_to_int = Dict(
+        "ssσ" => 1,
+        "spσ" => 2,
+        "ppσ" => 3,
+        "ppπ" => 4,
+        "sdσ" => 5,
+        "pdσ" => 6,
+        "pdπ" => 7,
+        "ddσ" => 8,
+        "ddπ" => 9,
+        "ddδ" => 10,
+    )
+
+    i = label_to_int[overlap_string]
+    return i
+end

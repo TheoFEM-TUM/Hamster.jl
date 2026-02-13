@@ -8,7 +8,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
 
     Nε = length(basis); Norb_per_ion = size(basis); NR = size(strc.Rs, 2)
 
-    h_env = SparseMatrixCSC{SVector{20, Float64}, Int64}[spzeros(SVector{20, Float64}, Nε, Nε) for _ in 1:NR]
+    h_env = SparseMatrixCSC{SVector{11, Float64}, Int64}[spzeros(SVector{11, Float64}, Nε, Nε) for _ in 1:NR]
 
     env = get_environmental_descriptor(h, V, strc, basis, conf)
 
@@ -23,7 +23,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
 
     is = [Int64[] for R in 1:NR]
     js = [Int64[] for R in 1:NR]
-    vals = [SVector{20, Float64}[] for R in 1:NR]
+    vals = [SVector{11, Float64}[] for R in 1:NR]
     for (iion, jion, R) in iterate_nn_grid_points(strc.point_grid)
         ri = rs_ion[iion]
         rj = rs_ion[jion] - Ts[:, R]
@@ -59,10 +59,11 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
             end
             
             overlap_type = string(get_overlaps(ion_map[[i, j]], [orb_map[[i]], orb_map[[j]]])[1].type)
-            overlap_feature_vec = get_overlap_feature_vec(overlap_type)
+            #overlap_feature_vec = get_overlap_feature_vec(overlap_type)
+            overlap_type_int = get_overlap_type_int(overlap_type)
             if Δr ≤ rcut && fcut(Δr_dist, rcut+rcut_tol) > 0
                 ii, jj = orbswap ? (j, i) : (i, j)
-                push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{20, Float64}([Zs[1][1], Zs[2][1],Zs[1][2], Zs[2][2], Δr_in, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale, overlap_feature_vec...]))
+                push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{11, Float64}([Zs[1][1], Zs[2][1],Zs[1][2], Zs[2][2], overlap_type_int, Δr_in, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
             end
         end
     end
