@@ -53,6 +53,65 @@ function (conf::Config)(key::String, typekey="none")
     end
 end
 
+struct ConfigTag{T,F}
+    name::String
+    block::String
+    default::F           # getter conf -> T
+    description::String
+end
+
+ConfigTag{T}(name::String, default::F, desc::String) where {T,F} =
+    ConfigTag{T,F}(name, "Options", default, desc)
+
+ConfigTag{T}(name::String, block::String, default::F, desc::String) where {T,F} =
+    ConfigTag{T,F}(name, block, default, desc)
+
+function get_tag(conf::Config, tag::ConfigTag{T})::T where T
+    if tag.block == "Options"
+        val = get(conf, tag.name, tag.default(conf))
+    else
+        val = get(conf, tag.name, tag.block, tag.default(conf))
+    end
+    if T <: AbstractVector && !(val isa AbstractVector)
+        return [val]
+    else
+        return val
+    end
+end
+
+const CONFIG_TAGS = []
+
+macro configtag(name, T, default, desc, block="Options")
+    fname = block ∈ ["Options", "Supercell"] ? Symbol("get_", name) : Symbol("get_$(lowercase(block))_", name)
+    tagname = string(name)
+
+    docstring = """
+    **$tagname** = $default
+
+    $desc
+    """
+
+    return quote
+        # Create tag
+        local tag = ConfigTag{$T}(
+            $tagname,
+            $block,
+            conf -> $default,
+            $desc
+        )
+
+        push!(CONFIG_TAGS, tag)
+
+        #Attach docstring + getter
+        """
+            $(esc($docstring).args[1])
+        """
+        function $(fname)(conf::Config)::$T
+            get_tag(conf, tag)
+        end
+    end |> esc
+end
+
 """
     Base.get(conf::Config, key, default::T) :: T where {T}
      Base.get(conf::Config, key, typekey, default::T) :: T where {T}
