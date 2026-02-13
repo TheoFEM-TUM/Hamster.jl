@@ -92,7 +92,7 @@ Constructs the geometry tensor based on the structure of the system, the orbital
 # Returns
 - The reshaped geometry tensor, represented as a matrix of sparse matrices, which encodes the overlap contributions for the system's orbital interactions for each parameter.
 """
-function get_geometry_tensor(strc, basis, conf=get_empty_config();
+function get_geometry_tensor(strc, basis, file = nothing, conf=get_empty_config();
                                 comm=nothing,
                                 rank=0,
                                 nranks=1,
@@ -113,7 +113,7 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
 
     #rllm_dict = get_rllm(basis.overlaps, conf, comm=comm, rank=rank, nranks=nranks)
     #println(basis.overlaps)
-    rllm_dict = get_rllm_from_file(basis.overlaps, conf, comm=comm)
+    rllm_dict = get_rllm_from_file(basis.overlaps, file, conf, comm = comm)
     #println(keys(rllm_dict))
     Threads.@threads for (chunk_id, indices) in enumerate(chunks(nn_grid_points, n=npar))
         for (iion1, iion2, R) in indices
