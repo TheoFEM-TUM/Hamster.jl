@@ -68,14 +68,9 @@ ConfigTag{T}(name::String, block::String, default::F, desc::String) where {T,F} 
 
 function get_tag(conf::Config, tag::ConfigTag{T})::T where T
     if tag.block == "Options"
-        val = get(conf, tag.name, tag.default(conf))
+        return get(conf, tag.name, tag.default(conf))
     else
-        val = get(conf, tag.name, tag.block, tag.default(conf))
-    end
-    if T <: AbstractVector && !(val isa AbstractVector)
-        return [val]
-    else
-        return val
+        return get(conf, tag.name, tag.block, tag.default(conf))
     end
 end
 
@@ -129,11 +124,29 @@ returned by `conf(key)` is `"default"`, the fallback value `default` is returned
   `default` is returned.
 """
 function Base.get(conf::Config, key, default::T)::T where {T}
-    return conf(key) == "default" ? default : conf(key)
+    if conf(key) == "default"
+        return default
+    else
+        val = conf(key)
+        if T <: AbstractVector && !(val isa AbstractVector)
+            return [val]
+        else
+            return val
+        end
+    end
 end
 
 function Base.get(conf::Config, key, typekey, default::T)::T where {T}
-    return conf(key, typekey) == "default" ? default : conf(key, typekey)
+    if conf(key, typekey) == "default"
+        return default
+    else
+        val = conf(key, typekey)
+        if T <: AbstractVector && !(val isa AbstractVector)
+            return [val]
+        else
+            return val
+        end
+    end
 end
 
 """
