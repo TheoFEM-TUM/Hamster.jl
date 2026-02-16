@@ -238,19 +238,52 @@ function write_current(bonds, comm, ind=0; ham_file="ham.h5", filename="ham.h5",
                 g["vecs"] = hr_vecs
                 for R in eachindex(bonds)
                     grp = create_group(g, "$R")
-                    C = @. -1im/ħ_eVfs * bonds[R] * Hr[R]
-                    grp["rowval"] = C.rowval
-                    grp["colptr"] = C.colptr
-                    grp["xnzval"]  = [vec[1] for vec in C.nzval]
-                    grp["ynzval"]  = [vec[2] for vec in C.nzval]
-                    grp["znzval"]  = [vec[3] for vec in C.nzval]
-                    grp["m"]      = size(C, 1)
-                    grp["n"]      = size(C, 2)
+                    
+                    Cx, Cy, Cz = map(bonds[R]) do bonds_i
+                        bs = size(Hr[R], 1) == 2*size(bonds_i, 1) ? apply_spin_basis(bonds_i) : bonds_i
+                        elementwise_union_mul(bs, Hr[R], ħ_eVfs)
+                    end
+                    
+                    @assert Cx.rowval == Cy.rowval
+                    @assert Cx.colptr == Cy.colptr                  
+                    @assert Cx.rowval == Cz.rowval
+                    @assert Cx.colptr == Cz.colptr
+
+                    grp["rowval"] = Cx.rowval
+                    grp["colptr"] = Cx.colptr
+                    grp["xnzval"] = Cx.nzval
+                    grp["ynzval"] = Cy.nzval
+                    grp["znzval"] = Cz.nzval
+                    grp["m"]      = size(Cx, 1)
+                    grp["n"]      = size(Cx, 2)
                 end
             end
         end
         MPI.Barrier(comm)
     end
+end
+
+function elementwise_union_mul(bs::SparseMatrixCSC, Hr::SparseMatrixCSC, ħ_eVfs)
+    row_bs, col_bs, _ = findnz(bs)
+    row_Hr, col_Hr, _ = findnz(Hr)
+
+    nz_indices = Set{Tuple{Int,Int}}()
+    foreach(t -> push!(nz_indices, t), zip(row_bs, col_bs))
+    foreach(t -> push!(nz_indices, t), zip(row_Hr, col_Hr))
+
+    i_all = Int[]
+    j_all = Int[]
+    vals = ComplexF64[]
+
+    for (i, j) in nz_indices
+        v_bs = bs[i, j]
+        v_Hr = Hr[i, j]
+        push!(i_all, i)
+        push!(j_all, j)
+        push!(vals, (-1im / ħ_eVfs) * v_bs * v_Hr)
+    end
+
+    return sparse(i_all, j_all, vals, size(bs, 1), size(bs, 2))
 end
 
 """

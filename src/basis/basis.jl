@@ -315,12 +315,14 @@ vector connecting a pair of orbitals.
 function get_bonds(strc, basis, conf=get_empty_config(); rcut=get_rcut(conf), rcut_tol=get_rcut_tol(conf), npar=get_nthreads_bands(conf))
     nn_grid_points = iterate_nn_grid_points(strc.point_grid)
     Nε = length(basis)
-    bonds = SparseMatrixCSC{SVector{3, Float64}, Int64}[spzeros(SVector{3, Float64}, Nε, Nε) for R in axes(strc.Rs, 2)]
     Ts = frac_to_cart(strc.Rs, strc.lattice)
 
-    is = [Int64[] for R in axes(strc.Rs, 2)]
-    js = [Int64[] for R in axes(strc.Rs, 2)]
-    vals = [SVector{3, Float64}[] for R in axes(strc.Rs, 2)]
+    nR = size(strc.Rs, 2)
+    is = [Int64[] for _ in 1:nR]
+    js = [Int64[] for _ in 1:nR]
+    vals_x = [Float64[] for _ in 1:nR]
+    vals_y = [Float64[] for _ in 1:nR]
+    vals_z = [Float64[] for _ in 1:nR]
     ij_map = get_ion_orb_to_index_map(length.(basis.orbitals))
     
     for (chunk_id, indices) in enumerate(chunks(nn_grid_points, n=npar))
@@ -336,13 +338,24 @@ function get_bonds(strc, basis, conf=get_empty_config(); rcut=get_rcut(conf), rc
                     i = ij_map[(iion1, jorb1)]
                     j = ij_map[(iion2, jorb2)]
 
-                    push!(is[R], i); push!(js[R], j); push!(vals[R], bond)
+                    push!(is[R], i); push!(js[R], j)
+                    push!(vals_x[R], bond[1])
+                    push!(vals_y[R], bond[2])
+                    push!(vals_z[R], bond[3])
                 end
             end
         end
     end
-    for R in axes(Ts, 2)
-        bonds[R] = sparse(is[R], js[R], vals[R], Nε, Nε)
+
+    bonds = Vector{NTuple{3,SparseMatrixCSC{Float64, Int64}}}(undef, nR)
+
+    for R in 1:nR
+        bx = sparse(is[R], js[R], vals_x[R], Nε, Nε)
+        by = sparse(is[R], js[R], vals_y[R], Nε, Nε)
+        bz = sparse(is[R], js[R], vals_z[R], Nε, Nε)
+
+        bonds[R] = (bx, by, bz)
     end
+
     return bonds
 end
