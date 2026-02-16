@@ -39,3 +39,27 @@
     @test conf("poscar", "Supercell") == "SC_POSCAR"
     @test conf("POSCAR", "Supercell") == "SC_POSCAR"
 end
+
+import Hamster.@configtag, Hamster.ConfigTag, Hamster.CONFIG_TAGS, Hamster.get_tag
+
+@testset "Config tags" begin
+    conf = get_empty_config()
+    @configtag some_float Float64 1e-5 "This is a tag of type Float64."
+    float_tag = Hamster.ConfigTag{Float64}("some_float", _ -> 1e-5,
+        "This is a tag of type Float64.")
+    @test get_tag(conf, float_tag) == 1e-5
+    set_value!(conf, "some_float", 2.1)
+    @test get_tag(conf, float_tag) == 2.1
+    @test get_some_float(conf) == 2.1
+    test_tag = CONFIG_TAGS[end]
+    @test test_tag.name == float_tag.name
+    @test test_tag.description == float_tag.description
+    @test test_tag.block == float_tag.block
+
+    vector_tag = ConfigTag{Vector{Int64}}("some_vector", conf->[1, 2],
+        "This is a tag of type Vector{Int64}.")
+    @configtag vector_tag Vector{Float64} [1.] "This is a tag of type Vector{Float64}."
+    set_value!(conf, "vector_tag", 1e-5)
+
+    @test get_vector_tag(conf) == [1e-5]
+end
