@@ -215,9 +215,9 @@ function read_ml_params(conf=get_empty_config(); filename=get_ml_filename(conf))
 
     # Check that header params match Config
     @assert parse(Float64, lines[2][end]) == get_ml_rcut(conf)
-    @assert parse(Float64, lines[3][end]) == get_sim_params(conf)
-    @assert parse(Float64, lines[4][end]) == get_env_scale(conf)
-    @assert parse(Bool, lines[5][end]) == get_apply_distortion(conf)
+    @assert parse(Float64, lines[3][end]) == get_ml_sim_params(conf)
+    @assert parse(Float64, lines[4][end]) == get_ml_env_scale(conf)
+    @assert parse(Bool, lines[5][end]) == get_ml_apply_distortion(conf)
 
     data_points = SVector{N, Float64}[]
     params = Float64[]

@@ -210,8 +210,8 @@ function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_conf
     if write_current_file
         for index in eachindex(strcs)
             system, config_index = get_system_and_config_index(index, local_inds)
-            bonds = get_bonds(strcs[index], bases[index], conf)
-            write_current(bonds, comm, config_index; ham_file=ham_file, filename=current_file, system=system, rank=rank, nranks=nranks)
+            @time bonds = get_bonds(strcs[index], bases[index], conf)
+            @time write_current(bonds, comm, config_index; ham_file=ham_file, filename=current_file, system=system, rank=rank, nranks=nranks)
         end
     end
 end
