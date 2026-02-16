@@ -37,6 +37,28 @@
     rm("ham.h5", force=true)
 end
 
+@testset "elementwise_union_mul tests" begin
+    ħ_eVfs = 1.0
+
+    # Sparse matrices with different patterns
+    A = sparse([1,2],[1,2],[1.0,2.0],3,3)
+    B = sparse([2,3],[2,3],[3.0,4.0],3,3)
+
+    C = Hamster.elementwise_union_mul(A, B, ħ_eVfs)
+
+    @test C isa SparseMatrixCSC
+    @test size(C) == (3,3)
+
+    expected_positions = Set([(1,1),(2,2),(3,3)])
+    C_positions = Set(zip(findnz(C)[1], findnz(C)[2]))
+    @test C_positions == expected_positions
+
+    @test C[1,1] == (-1im / ħ_eVfs) * 1.0 * 0.0
+    @test C[2,2] == (-1im / ħ_eVfs) * 2.0 * 3.0
+    @test C[3,3] == (-1im / ħ_eVfs) * 0.0 * 4.0
+    @test C[1,2] == 0.0
+end
+
 @testset "Current I/O" begin
     ħ_eVfs = 0.6582119569
     filepath = joinpath(@__DIR__, "test_files")
