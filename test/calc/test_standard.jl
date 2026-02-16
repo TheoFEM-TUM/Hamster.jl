@@ -13,6 +13,28 @@
     rm("hamster.out"); rm("Es.dat")
 end
 
+@testset "Standard PC calculation (SOC+current)" begin
+    path = joinpath(@__DIR__, "test_files")
+    conf = get_config(filename = joinpath(path, "hconf_std"))
+    set_value!(conf, "poscar", joinpath(path, "POSCAR_gaas"))
+    set_value!(conf, "rllm_file", joinpath(path, "rllm.dat"))
+    set_value!(conf, "kpoints", joinpath(path, "EIGENVAL_gaas"))
+    set_value!(conf, "init_params", joinpath(path, "params.dat"))
+    set_value!(conf, "init_params", "SOC", "zeros")
+    set_value!(conf, "write_current", true)
+
+    prof = Hamster.main(comm, conf, rank=rank)
+    Es_tb = read_from_file("Es.dat")
+    @test size(Es_tb, 1) == 16
+
+    Cx, Cy, Cz, Rs_c = read_current(comm, 1; filename="ham.h5", space="r")
+    @test all([size(Cx[R]) == (16, 16) for R in eachindex(Cx)])
+    @test all([size(Cy[R]) == (16, 16) for R in eachindex(Cy)])
+    @test all([size(Cz[R]) == (16, 16) for R in eachindex(Cz)])
+
+    rm("hamster.out"); rm("Es.dat"); rm("ham.h5")
+end
+
 @testset "Standard MD calculation" begin
     path = joinpath(@__DIR__, "test_files")
     conf = get_config(filename = joinpath(path, "hconf_std_md"))
