@@ -75,7 +75,9 @@ end
     write_ham(Hr, strc.Rs, comm, rank; space="r")
 
     bonds = Hamster.get_bonds(strc, basis, conf)
-    current_true = [-1im/ħ_eVfs .* bonds[R] .* Hr[R] for R in eachindex(Hr)]
+    cx_true = [-1im/ħ_eVfs .* bonds[R][1] .* Hr[R] for R in eachindex(Hr)]
+    cy_true = [-1im/ħ_eVfs .* bonds[R][2] .* Hr[R] for R in eachindex(Hr)]
+    cz_true = [-1im/ħ_eVfs .* bonds[R][3] .* Hr[R] for R in eachindex(Hr)]
 
     Hamster.write_current(bonds, comm, 0; filename="ham.h5", system="", rank=0, nranks=1)
     cx, cy, cz, vecs = Hamster.read_current(rank)
@@ -84,10 +86,10 @@ end
     @test eltype(typeof(vecs)) == Int64
 
     correct_current = Bool[]
-    for R in eachindex(current_true), j in axes(current_true[R], 2), i in axes(current_true[R], 1)
-        push!(correct_current, abs(current_true[R][i, j][1] - cx[R][i, j]) ≈ 0)
-        push!(correct_current, abs(current_true[R][i, j][2] - cy[R][i, j]) ≈ 0)
-        push!(correct_current, abs(current_true[R][i, j][3] - cz[R][i, j]) ≈ 0)
+    for R in eachindex(Hr), j in axes(Hr[R], 2), i in axes(Hr[R], 1)
+        push!(correct_current, abs(cx_true[R][i, j] - cx[R][i, j]) ≈ 0)
+        push!(correct_current, abs(cy_true[R][i, j] - cy[R][i, j]) ≈ 0)
+        push!(correct_current, abs(cz_true[R][i, j] - cz[R][i, j]) ≈ 0)
     end
     @test all(correct_current)
 

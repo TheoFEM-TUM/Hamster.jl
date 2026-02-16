@@ -330,7 +330,6 @@ function read_current(comm, ind=0; filename="ham.h5", space="r", system="")
     Cz = nothing
     vecs = nothing
     h5open(filename, "r", comm) do file
-        @show keys(file)
         h_group = ind == 0 ? "C$space" : "C$(space)_$(system)_$ind"
         g = file[h_group]
         vecs = read(g["vecs"])
