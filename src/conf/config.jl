@@ -77,7 +77,7 @@ end
 const CONFIG_TAGS = []
 
 macro configtag(name, T, default, desc, block="Options")
-    fname = block ∈ ["Options", "Supercell"] ? Symbol("get_", name) : Symbol("get_$(lowercase(block))_", name)
+    fname = block ∈ ["Options", "Supercell", "Optimizer"] ? Symbol("get_", name) : Symbol("get_$(lowercase(block))_", name)
     tagname = string(name)
 
     docstring = """

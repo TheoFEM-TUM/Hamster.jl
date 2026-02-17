@@ -236,9 +236,8 @@ function write_current(bonds, comm, ind=0; ham_file="ham.h5", filename="ham.h5",
                 h_group = ind == 0 ? "Cr" : "Cr_$(system)_$ind"
                 g = create_group(file, h_group)
                 g["vecs"] = hr_vecs
-                for R in eachindex(bonds)
+                @views for R in eachindex(bonds)
                     grp = create_group(g, "$R")
-                    
                     Cx, Cy, Cz = map(bonds[R]) do bonds_i
                         bs = size(Hr[R], 1) == 2*size(bonds_i, 1) ? apply_spin_basis(bonds_i) : bonds_i
                         elementwise_union_mul(bs, Hr[R], ħ_eVfs)
@@ -275,7 +274,7 @@ function elementwise_union_mul(bs::SparseMatrixCSC, Hr::SparseMatrixCSC, ħ_eVfs
     j_all = Int[]
     vals = ComplexF64[]
 
-    for (i, j) in nz_indices
+    @views for (i, j) in nz_indices
         v_bs = bs[i, j]
         v_Hr = Hr[i, j]
         push!(i_all, i)

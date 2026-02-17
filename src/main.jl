@@ -28,7 +28,7 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity
             nthreads_bands=nthreads_bands, nthreads_blas=nthreads_blas)
     end
     
-    write_config_tags(conf; blocks=["Options", "Supercell", "ML", "HyperOpt"], show_desc=true)
+    write_config_tags(conf; blocks=["Options", "Optimizer", "Supercell", "ML", "SOC", "HyperOpt"], show_desc=true)
 
     task = decide_which_task_to_perform(conf)
     out = run_calculation(task, comm, conf, rank=rank, nranks=nranks)

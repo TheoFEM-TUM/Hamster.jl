@@ -326,7 +326,7 @@ function get_bonds(strc, basis, conf=get_empty_config(); rcut=get_rcut(conf), rc
     ij_map = get_ion_orb_to_index_map(length.(basis.orbitals))
     
     for (chunk_id, indices) in enumerate(chunks(nn_grid_points, n=npar))
-        for (iion1, iion2, R) in indices
+        @views for (iion1, iion2, R) in indices
             r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
             r⃗₂ = strc.ions[iion2].pos - strc.ions[iion2].dist - Ts[:, R]
             
