@@ -137,41 +137,48 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
     
     strc_ind = 0
     ks = get_kpoints_from_config(conf)
+    Nstrc_max = MPI.Reduce(ham.Nstrc, MPI.MAX, comm, root=0)
+    Nstrc_max = MPI.bcast(Nstrc_max, 0, comm)
     Nstrc_tot = MPI.Reduce(ham.Nstrc, +, comm, root=0)
 
-    for (batch_id, indices) in enumerate(chunks(1:ham.Nstrc, n=Nbatch))
+    for (batch_id, indices) in enumerate(chunks(1:Nstrc_max, n=Nbatch))
         for index in indices
-            strc_ind += 1
-            system, config_index = get_system_and_config_index(index, local_inds)
-            ham_time_local = @elapsed Hk = get_hamiltonian(ham, index, ks, comm, write_hr=write_hr, config_index=config_index, system=system, rank=rank, nranks=nranks, ham_file=ham_file)
-            Neig = ham.sp_diag isa Sparse ? get_neig(conf) : size(Hk[1], 1)
+            if index ≤ ham.Nstrc
+                strc_ind += 1
+                system, config_index = get_system_and_config_index(index, local_inds)
+                ham_time_local = @elapsed Hk = get_hamiltonian(ham, index, ks, comm, write_hr=write_hr, config_index=config_index, system=system, rank=rank, nranks=nranks)
+                Neig = ham.sp_diag isa Sparse ? get_neig(conf) : size(Hk[1], 1)
 
-            Es = zeros(1, 1); vs = zeros(ComplexF64, 1, 1, 1)
-            diag_time_local = @elapsed begin
-                if !skip_diag
-                    Es, vs = diagonalize(Hk, Neig=Neig, target=get_eig_target(conf), method=get_diag_method(conf))
+                Es = zeros(1, 1); vs = zeros(ComplexF64, 1, 1, 1)
+                diag_time_local = @elapsed begin
+                    if !skip_diag
+                        Es, vs = diagonalize(Hk, Neig=Neig, target=get_eig_target(conf), method=get_diag_method(conf))
+                    end
                 end
+
+                write_time = @elapsed begin
+                    if write_hk
+                        write_ham(Hk, ks, comm, config_index, system=system, rank=rank, nranks=nranks, temp=true)
+                    end
+                    if Nstrc_tot == 1 && rank == 0
+                        if !skip_diag; write_to_file(Es, "Es"); end
+                        if save_vecs && !skip_diag; write_to_file(vs, "vs"); end
+                    else
+                        if !skip_diag; write_to_file(Es, "tmp/Es$config_index"); end
+                        if save_vecs && !skip_diag; write_to_file(vs, "tmp/vs$config_index"); end
+                    end
+                end
+            else
+                ham_time_local = 0
+                diag_time_local = 0
+                write_time = 0
             end
 
             ham_time = MPI.Reduce(ham_time_local, +, comm, root=0)
             diag_time = MPI.Reduce(diag_time_local, +, comm, root=0)
-
-            write_begin = MPI.Wtime()
-            if write_hk
-                write_ham(Hk, ks, comm, config_index, filename=ham_file, system=system, rank=rank, nranks=nranks)
-            end
-            if Nstrc_tot == 1 && rank == 0
-                if !skip_diag; write_to_file(Es, "Es"); end
-                if save_vecs && !skip_diag; write_to_file(vs, "vs"); end
-            else
-                if !("tmp" in readdir(pwd())) && rank == 0; mkdir("tmp"); end
-                MPI.Barrier(comm)
-                if !skip_diag; write_to_file(Es, "tmp/Es$config_index"); end
-                if save_vecs && !skip_diag; write_to_file(vs, "tmp/vs$config_index"); end
-            end
-            write_time = MPI.Wtime() - write_begin
+            
             prof.timings[1, strc_ind, 3] = write_time
-            if rank == 0
+            if rank == 0 && strc_ind ≤ ham.Nstrc
                 prof.timings[1, strc_ind, 1] = ham_time / nranks
                 prof.timings[1, strc_ind, 2] = diag_time / nranks
                 # COV_EXCL_START
@@ -185,6 +192,13 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
 
             print_train_status(prof, strc_ind, batch_id, verbosity=verbosity)
         end
+    end
+    begin_time = MPI.Wtime()
+    if write_hk; combine_hams(comm, what="Hk", filename=ham_file, rank=rank, nranks=nranks); end
+    if write_hr; combine_hams(comm, what="Hr", filename=ham_file, rank=rank, nranks=nranks); end
+    combine_time = MPI.Wtime() - begin_time
+    if verbosity > 1
+        println(" Combine time: $combine_time s")
     end
 end
 
@@ -208,10 +222,17 @@ function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_conf
             write_current_file=get_write_current(conf), current_file=get_current_file(conf), ham_file=get_ham_file(conf))
 
     if write_current_file
-        for index in eachindex(strcs)
-            system, config_index = get_system_and_config_index(index, local_inds)
-            bonds = get_bonds(strcs[index], bases[index], conf)
-            write_current(bonds, comm, config_index; ham_file=ham_file, filename=current_file, system=system, rank=rank, nranks=nranks)
+        Nstrc_max = MPI.Reduce(length(strcs), MPI.MAX, comm, root=0)
+        Nstrc_max = MPI.bcast(Nstrc_max, 0, comm)
+        for index in 1:Nstrc_max
+            skip = index ≥ length(strcs)
+            ind = minimum([index, length(strcs)])
+
+            system, config_index = get_system_and_config_index(ind, local_inds)
+            bonds = get_bonds(strcs[ind], bases[ind], conf)
+            write_current(bonds, comm, config_index; ham_file=ham_file, filename=current_file, system=system, rank=rank, nranks=nranks, temp=true, skip=skip)
         end
+        MPI.Barrier(comm)
+        combine_hams(comm, what="Cr", rank=rank, nranks=nranks, filename=current_file)
     end
 end
