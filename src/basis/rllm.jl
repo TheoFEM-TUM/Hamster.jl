@@ -55,7 +55,7 @@ function get_rllm_from_file(overlaps::Vector{TBOverlap},file = nothing, conf=get
     if verbosity > 0; println("     Getting distance dependence..."); end
     time = @elapsed if yes
         if verbosity > 1; println("     Reading distance dependence from file..."); end
-        read_rllm(overlaps, file, comm, rllm_dict, filename=rllm_file)
+        read_rllm(overlaps, comm, rllm_dict, filename=rllm_file, file)
     end
     if verbosity > 0; println("     Finished in $time s."); end
     return rllm_dict
@@ -258,14 +258,19 @@ Reads the `rllm.dat` file and returns a dictionary mapping overlap labels to tup
 """
 function read_rllm(
     overlaps::Vector{T},
-    file = nothing,
     comm = nothing,
     rllm_dict=Dict{String, CubicSpline{Float64}}();
-    filename="rllm.dat"
+    filename="rllm.dat",
+    file = nothing
 ) where {T}
 
     if occursin(".h5", filename)
-
+        if isnothing(file)
+            file = h5open(filename, "r", comm)
+            close_file = true
+        else
+            close_file = false
+        end
         for overlap in overlaps
             overlap_str = string(overlap, apply_oc=true)
 
@@ -273,6 +278,9 @@ function read_rllm(
 
             rllm_dict[overlap_str] =
                 CubicSpline(data[:, 1], data[:, 2])
+        end
+        if close_file
+            close(file)
         end
 
         return rllm_dict
