@@ -147,9 +147,8 @@ function combine_hams(comm; what="Hk", filename="ham.h5", rank=0, nranks=1)
         return
     end
 
-    h5open(filename, "w") do outfile
+    h5open(filename, "cw") do outfile
         for irank in 0:nranks-1
-
             rankfile = "tmp/ham_$irank.h5"
 
             if !isfile(rankfile)
@@ -277,7 +276,7 @@ function write_current(bonds, comm, ind=0; ham_file="ham.h5", filename="ham.h5",
             for R in eachindex(bonds)
                 grp = create_group(g, "$R")
 
-                cr_time += @elapsed @views Cx, Cy, Cz = map(bonds[R]) do bonds_i
+                @views Cx, Cy, Cz = map(bonds[R]) do bonds_i
                     bs = size(Hr[R], 1) == 2*size(bonds_i, 1) ? apply_spin_basis(bonds_i) : bonds_i
                     elementwise_union_mul(bs, Hr[R], ħ_eVfs)
                 end

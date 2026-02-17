@@ -225,7 +225,7 @@ function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_conf
         Nstrc_max = MPI.Reduce(length(strcs), MPI.MAX, comm, root=0)
         Nstrc_max = MPI.bcast(Nstrc_max, 0, comm)
         for index in 1:Nstrc_max
-            skip = index ≥ length(strcs)
+            skip = index > length(strcs)
             ind = minimum([index, length(strcs)])
 
             system, config_index = get_system_and_config_index(ind, local_inds)
