@@ -55,7 +55,7 @@ function get_rllm_from_file(overlaps::Vector{TBOverlap},file = nothing, conf=get
     if verbosity > 0; println("     Getting distance dependence..."); end
     time = @elapsed if yes
         if verbosity > 1; println("     Reading distance dependence from file..."); end
-        read_rllm(overlaps, comm, rllm_dict, filename=rllm_file, file)
+        read_rllm(overlaps, comm, rllm_dict, filename=rllm_file, file = file)
     end
     if verbosity > 0; println("     Finished in $time s."); end
     return rllm_dict
