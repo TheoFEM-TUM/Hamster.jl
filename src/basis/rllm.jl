@@ -49,13 +49,13 @@ Retrieves or computes the radial orbital integral look-up table (RLLM) for a giv
 # Returns
 - `rllm_dict::Dict{String, CubicSpline}`: A dictionary mapping overlap string representations to cubic spline interpolations of the radial integrals. If `load_rllm` is `true`, the data is read from the file. If `interpolate_rllm` is `true`, it is interpolated and saved.
 """
-function get_rllm_from_file(overlaps::Vector{TBOverlap},conf=get_empty_config(); comm = nothing, load_rllm=get_load_rllm(conf), rllm_file=get_rllm_file(conf),verbosity = get_verbosity(conf))
+function get_rllm_from_file(overlaps::Vector{TBOverlap},file = nothing, conf=get_empty_config(); comm = nothing, load_rllm=get_load_rllm(conf), rllm_file=get_rllm_file(conf),verbosity = get_verbosity(conf))
     rllm_dict = Dict{String, CubicSpline{Float64}}()
     yes = true
     if verbosity > 0; println("     Getting distance dependence..."); end
     time = @elapsed if yes
         if verbosity > 1; println("     Reading distance dependence from file..."); end
-        read_rllm(overlaps, comm, rllm_dict, filename=rllm_file)
+        read_rllm(overlaps, file, comm, rllm_dict, filename=rllm_file)
     end
     if verbosity > 0; println("     Finished in $time s."); end
     return rllm_dict
@@ -256,25 +256,24 @@ Reads the `rllm.dat` file and returns a dictionary mapping overlap labels to tup
 # Returns
 - A dictionary where each key is an overlap label, and each value a tuple of x/y value vectors.
 """
-function read_rllm(overlaps, comm, rllm_dict=Dict{String, CubicSpline{Float64}}(); filename="rllm.dat")
+function read_rllm(
+    overlaps::Vector{T},
+    file = nothing,
+    comm = nothing,
+    rllm_dict=Dict{String, CubicSpline{Float64}}();
+    filename="rllm.dat"
+) where {T}
 
     if occursin(".h5", filename)
-
-        file = nothing
-        if isnothing(comm)
-            file = h5open(filename, "r")
-        else
-            file = h5open(filename, "r", comm)
-        end
 
         for overlap in overlaps
             overlap_str = string(overlap, apply_oc=true)
 
             data = read(file[overlap_str])  # force full read
 
-            rllm_dict[overlap_str] = CubicSpline(data[:, 1], data[:, 2])
+            rllm_dict[overlap_str] =
+                CubicSpline(data[:, 1], data[:, 2])
         end
-        close(file)
 
         return rllm_dict
     else
