@@ -116,25 +116,61 @@ Inside this group:
   - `"rowval"`, `"colptr"`, `"nzval"`: the CSC representation of the sparse matrix.
   - `"m"`, `"n"`: matrix dimensions.
 """
-function write_ham(H, vecs, comm, ind=0; filename="ham.h5", space="k", system="", rank=0, nranks=1)
-    for r in 0:nranks-1
-        if r == rank
-            h5open(filename, "cw") do file
-                h_group = ind == 0 ? "H$space" : "H$(space)_$(system)_$ind"
-                g = create_group(file, h_group)
-                g["vecs"] = space == "r" ? Int.(vecs) : vecs
-                for (i, mat) in enumerate(H)
-                    smat = issparse(mat) ? mat : sparse(mat)
-                    grp = create_group(g, "$i")
-                    grp["rowval"] = smat.rowval
-                    grp["colptr"] = smat.colptr
-                    grp["nzval"]  = smat.nzval
-                    grp["m"]      = size(smat, 1)
-                    grp["n"]      = size(smat, 2)
+function write_ham(H, vecs, comm, ind=0;
+            temp=false,
+            filename="ham.h5", 
+            space="k", 
+            system="", 
+            rank=0, 
+            nranks=1)
+
+    filename = temp ? joinpath("tmp", replace(filename, ".h5" => "_$(rank).h5")) : filename
+    h5open(filename, "cw") do file
+        h_group = ind == 0 ? "H$space" : "H$(space)_$(system)_$ind"
+        g = create_group(file, h_group)
+        g["vecs"] = space == "r" ? Int.(vecs) : vecs
+        for (i, mat) in enumerate(H)
+            smat = issparse(mat) ? mat : sparse(mat)
+            grp = create_group(g, "$i")
+            grp["rowval"] = smat.rowval
+            grp["colptr"] = smat.colptr
+            grp["nzval"]  = smat.nzval
+            grp["m"]      = size(smat, 1)
+            grp["n"]      = size(smat, 2)
+        end
+    end
+end
+
+function combine_hams(comm; what="Hk", filename="ham.h5", rank=0, nranks=1)
+
+    if rank != 0
+        return
+    end
+
+    h5open(filename, "cw") do outfile
+        for irank in 0:nranks-1
+            rankfile = "tmp/ham_$irank.h5"
+
+            if !isfile(rankfile)
+                @warn "Rank file $rankfile not found, skipping."
+                continue
+            end
+
+            h5open(rankfile, "r") do infile
+                for gname in keys(infile)
+                    if !startswith(gname, what)
+                        continue
+                    end
+
+                    if haskey(outfile, gname)
+                        @warn "Group $gname already exists in output, skipping."
+                        continue
+                    end
+
+                    HDF5.copy_object(infile[gname], outfile, gname)
                 end
             end
         end
-        MPI.Barrier(comm)
     end
 end
 
@@ -228,29 +264,95 @@ components (`xnzval`, `ynzval`, `znzval`) of the nonzero entries.
 - The function performs no collective MPI I/O; writes are serialized across
   ranks using barriers.
 """
-function write_current(bonds, comm, ind=0; ham_file="ham.h5", filename="ham.h5", system="", rank=0, nranks=1)
+function write_current(bonds, comm, ind=0; ham_file="ham.h5", filename="ham.h5", system="", rank=0, nranks=1, temp=false, skip=false)
     Hr, hr_vecs = read_ham(comm, ind, filename=ham_file, space="r", system=system)
-    for r in 0:nranks-1
-        if r == rank
-            h5open(filename, "cw") do file
-                h_group = ind == 0 ? "Cr" : "Cr_$(system)_$ind"
-                g = create_group(file, h_group)
-                g["vecs"] = hr_vecs
-                for R in eachindex(bonds)
-                    grp = create_group(g, "$R")
-                    C = @. -1im/ħ_eVfs * bonds[R] * Hr[R]
-                    grp["rowval"] = C.rowval
-                    grp["colptr"] = C.colptr
-                    grp["xnzval"]  = [vec[1] for vec in C.nzval]
-                    grp["ynzval"]  = [vec[2] for vec in C.nzval]
-                    grp["znzval"]  = [vec[3] for vec in C.nzval]
-                    grp["m"]      = size(C, 1)
-                    grp["n"]      = size(C, 2)
+
+    filename = temp ? joinpath("tmp", replace(filename, ".h5" => "_$(rank).h5")) : filename
+    if !skip
+        h5open(filename, "cw") do file
+            h_group = ind == 0 ? "Cr" : "Cr_$(system)_$ind"
+            g = create_group(file, h_group)
+            g["vecs"] = hr_vecs
+            for R in eachindex(bonds)
+                grp = create_group(g, "$R")
+
+                @views Cx, Cy, Cz = map(bonds[R]) do bonds_i
+                    bs = size(Hr[R], 1) == 2*size(bonds_i, 1) ? apply_spin_basis(bonds_i) : bonds_i
+                    elementwise_union_mul(bs, Hr[R], ħ_eVfs)
                 end
+
+                @assert Cx.rowval == Cy.rowval
+                @assert Cx.colptr == Cy.colptr                  
+                @assert Cx.rowval == Cz.rowval
+                @assert Cx.colptr == Cz.colptr
+
+                grp["rowval"] = Cx.rowval
+                grp["colptr"] = Cx.colptr
+                grp["xnzval"] = Cx.nzval
+                grp["ynzval"] = Cy.nzval
+                grp["znzval"] = Cz.nzval
+                grp["m"]      = size(Cx, 1)
+                grp["n"]      = size(Cx, 2)
+
             end
         end
-        MPI.Barrier(comm)
     end
+end
+
+# Column-wise CSC merge
+function elementwise_union_mul(bs::SparseMatrixCSC,
+                                            Hr::SparseMatrixCSC,
+                                            ħ_eVfs)
+    m, n = size(bs)
+    @assert size(Hr) == (m,n)
+    scale = -1im / ħ_eVfs
+
+    # Per-column storage
+    col_rows = Vector{Vector{Int}}(undef, n)
+    col_vals = Vector{Vector{ComplexF64}}(undef, n)
+
+    Threads.@threads for j in 1:n
+        rows = Int[]
+        vals = ComplexF64[]
+
+        p1 = bs.colptr[j]; p1_end = bs.colptr[j+1]-1
+        p2 = Hr.colptr[j]; p2_end = Hr.colptr[j+1]-1
+
+        while p1 <= p1_end || p2 <= p2_end
+            if p2 > p2_end || (p1 <= p1_end && bs.rowval[p1] < Hr.rowval[p2])
+                push!(rows, bs.rowval[p1]); push!(vals, 0.0); p1 += 1
+            elseif p1 > p1_end || Hr.rowval[p2] < bs.rowval[p1]
+                push!(rows, Hr.rowval[p2]); push!(vals, 0.0); p2 += 1
+            else
+                push!(rows, bs.rowval[p1])
+                push!(vals, scale * bs.nzval[p1] * Hr.nzval[p2])
+                p1 += 1; p2 += 1
+            end
+        end
+
+        col_rows[j] = rows
+        col_vals[j] = vals
+    end
+
+    # BUILD CSC STRUCTURE
+    colptr = Vector{Int}(undef, n+1)
+    colptr[1] = 1
+    for j in 1:n
+        colptr[j+1] = colptr[j] + length(col_rows[j])
+    end
+
+    nnz_total = colptr[end]-1
+    rowval = Vector{Int}(undef, nnz_total)
+    nzval  = Vector{ComplexF64}(undef, nnz_total)
+
+    for j in 1:n
+        start = colptr[j]
+        len = length(col_rows[j])
+        rowval[start:start+len-1] .= col_rows[j]
+        nzval[start:start+len-1]  .= col_vals[j]
+    end
+
+    return SparseMatrixCSC(m, n, colptr, rowval, nzval)
 end
 
 """
