@@ -49,6 +49,18 @@ Retrieves or computes the radial orbital integral look-up table (RLLM) for a giv
 # Returns
 - `rllm_dict::Dict{String, CubicSpline}`: A dictionary mapping overlap string representations to cubic spline interpolations of the radial integrals. If `load_rllm` is `true`, the data is read from the file. If `interpolate_rllm` is `true`, it is interpolated and saved.
 """
+function get_rllm_from_file(overlaps::Vector{TBOverlap}, conf=get_empty_config(); comm = nothing, file = nothing, load_rllm=get_load_rllm(conf), rllm_file=get_rllm_file(conf),verbosity = get_verbosity(conf))
+    rllm_dict = Dict{String, CubicSpline{Float64}}()
+    yes = true
+    if verbosity > 0; println("     Getting distance dependence..."); end
+    time = @elapsed if yes
+        if verbosity > 1; println("     Reading distance dependence from file..."); end
+        read_rllm(overlaps, comm, rllm_dict, filename=rllm_file, file = file)
+    end
+    if verbosity > 0; println("     Finished in $time s."); end
+    return rllm_dict
+end
+
 function get_rllm(overlaps, conf=get_empty_config();
                     comm=nothing,
                     load_rllm=get_load_rllm(conf), 
@@ -57,17 +69,14 @@ function get_rllm(overlaps, conf=get_empty_config();
                     verbosity=get_verbosity(conf),
                     rank = 0,
                     nranks = 1)
-    
+
     rllm_dict = Dict{String, CubicSpline{Float64}}()
-    
-    if verbosity > 0; println("     Getting distance dependence..."); end
+    if verbosity > 0 && rank == 0; println("     Getting distance dependence..."); end
     time = @elapsed if load_rllm
         if verbosity > 1; println("     Reading distance dependence from file..."); end
         read_rllm(overlaps, comm, rllm_dict, filename=rllm_file)
     else
         i = 0
-        if isfile(rllm_file) && rank == 0 && interpolate_rllm; rm(rllm_file); end
-        
         rank_rllm_file = nranks > 1 ? get_rank_filename(rllm_file, rank) : rllm_file
         overlaps_str = [string(overlap, apply_oc=true) for overlap in overlaps]
 
@@ -98,7 +107,7 @@ function get_rllm(overlaps, conf=get_empty_config();
         end
         save_rllm(rllm_dict, comm, filename=rank_rllm_file, rank=rank, nranks=nranks)
     end
-    if verbosity > 0; println("     Finished in $time s."); end
+    if verbosity > 0 && rank == 0; println("     Finished in $time s."); end
     return rllm_dict
 end
 
@@ -247,34 +256,108 @@ Reads the `rllm.dat` file and returns a dictionary mapping overlap labels to tup
 # Returns
 - A dictionary where each key is an overlap label, and each value a tuple of x/y value vectors.
 """
-function read_rllm(overlaps::Vector{T}, comm, rllm_dict=Dict{String, CubicSpline{Float64}}(); filename="rllm.dat") where {T}
+function read_rllm(
+    overlaps::Vector{T},
+    comm = nothing,
+    rllm_dict=Dict{String, CubicSpline{Float64}}();
+    filename="rllm.dat",
+    file = nothing
+) where {T}
+
     if occursin(".h5", filename)
-        if isnothing(comm)
-            h5open(filename, "r") do file
-                for overlap in overlaps
-                    overlap_str = string(overlap, apply_oc=true)
-                    data = file[overlap_str]
-                    rllm_dict[overlap_str] = CubicSpline(data[:, 1], data[:, 2])
-                end
-            end
+        if isnothing(file)
+            file = h5open(filename, "r", comm)
+            close_file = true
         else
-            h5open(filename, "r", comm) do file
-                for overlap in overlaps
-                    overlap_str = string(overlap, apply_oc=true)
-                    data = file[overlap_str]
-                    rllm_dict[overlap_str] = CubicSpline(data[:, 1], data[:, 2])
-                end
-            end
+            close_file = false
         end
+        for overlap in overlaps
+            overlap_str = string(overlap, apply_oc=true)
+
+            data = read(file[overlap_str])  # force full read
+
+            rllm_dict[overlap_str] =
+                CubicSpline(data[:, 1], data[:, 2])
+        end
+        if close_file
+            close(file)
+        end
+
+        return rllm_dict
     else
         lines = open_and_read(filename)
         lines = split_lines(lines)
+
         for i in 1:3:length(lines)
             overlap = lines[i][1]
             xs = parse.(Float64, lines[i+1])
             ys = parse.(Float64, lines[i+2])
             rllm_dict[overlap] = CubicSpline(xs, ys)
         end
+
         return rllm_dict
     end
+end
+
+"""
+    precalc_rllm(bases, conf=get_empty_config(); 
+                 comm=nothing, 
+                 rank=0, 
+                 nranks=1,
+                 rllm_file=get_rllm_file(conf),
+                 verbosity=get_verbosity(conf))
+
+Precomputes overlap distance dependence interpolation tables for a set of basis functions. 
+Distributes the computation across MPI ranks and saves the results to a file.
+
+# Arguments
+- `bases`: Vector of `Basis` objects for which the overlaps are computed.
+- `conf`: Configuration object containing simulation and ML parameters.
+- `comm`: MPI communicator for distributed computation.
+- `rank`: Integer rank of the current MPI process.
+- `nranks`: Total number of MPI ranks participating in the computation.
+- `rllm_file`: Filename to save the RLLM interpolation data.
+- `verbosity`: Integer controlling output logging.
+"""
+function precalc_rllm(bases, conf=get_empty_config();
+        comm=nothing, 
+        rank=0, 
+        nranks=1,
+        rllm_file = get_rllm_file(conf),
+        verbosity = get_verbosity(conf))
+
+    unique_overlaps_local = get_unique_overlaps(bases)
+    all_overlaps = MPI.gather(unique_overlaps_local, comm, root=0)
+    if rank == 0
+        all_overlaps_flattened = collect(Iterators.flatten(all_overlaps))
+        unique_overlaps = unique(all_overlaps_flattened)
+        noverlaps = length(unique_overlaps)
+    else
+        unique_overlaps = nothing
+        noverlaps = 0
+    end
+
+    noverlaps = MPI.Bcast(noverlaps, 0, comm)
+    unique_overlaps = MPI.bcast(unique_overlaps, 0, comm)
+    MPI.Barrier(comm)
+
+    # Split interpolation workload among ranks
+    chunk = div(noverlaps + nranks - 1, nranks)   # ceiling division
+    start = rank * chunk + 1; stop  = min((rank + 1) * chunk, noverlaps)
+    local_unique_overlaps = unique_overlaps[start:stop]
+
+    rank_rllm_file = nranks > 1 ? get_rank_filename(rllm_file, rank) : rllm_file
+    rllm_dict = Dict{String, CubicSpline{Float64}}()
+    i = 0
+    tforeach(local_unique_overlaps) do overlap
+        overlap_str = string(overlap, apply_oc=true)
+        if !haskey(rllm_dict, overlap_str)
+            rllm_dict[overlap_str] = interpolate_overlap(overlap, conf)
+            i += 1
+            if verbosity > 1 && rank == 0; println("       ($i / $(length(local_unique_overlaps))) $overlap_str"); end
+        end
+    end
+    save_rllm(rllm_dict, comm, filename=rank_rllm_file, rank=rank, nranks=nranks)
+    MPI.Barrier(comm)
+    combine_local_rllm_files(rllm_file, comm; rank, nranks)
 end
