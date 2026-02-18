@@ -1,0 +1,91 @@
+name: Auto Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # manual trigger if needed
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    steps:
+      # 1️⃣ Checkout the repository
+      - uses: actions/checkout@v6
+
+      # 2️⃣ Set up Julia
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: 1  # latest stable
+
+      # 3️⃣ Determine the PR that triggered this merge
+      - name: Get merged PR number
+        id: pr
+        run: |
+          PR_NUMBER=$(gh pr list --state merged --base main --json number,title,labels -L 1 | jq -r '.[0].number')
+          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
+
+      # 4️⃣ Read PR labels
+      - name: Get PR label
+        id: label
+        run: |
+          LABEL=$(gh pr view $PR_NUMBER --json labels -q '.labels[].name' | grep -E 'patch|minor|major' | head -n1)
+          echo "LABEL=$LABEL"
+          echo "LABEL=$LABEL" >> $GITHUB_ENV
+
+      # 5️⃣ Read current version
+      - name: Read current version
+        id: version
+        run: |
+          julia -e '
+          using TOML
+          project = TOML.parsefile("Project.toml")
+          println("::set-output name=current::" * project["version"])
+          '
+
+      # 6️⃣ Calculate next version
+      - name: Bump version
+        id: next_version
+        run: |
+          CURRENT_VERSION=${{ steps.version.outputs.current }}
+          LABEL=${{ env.LABEL }}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+          case $LABEL in
+            patch) PATCH=$((PATCH + 1)) ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            *) echo "No recognized label found. Exiting."; exit 1 ;;
+          esac
+
+          NEXT_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "Next version: $NEXT_VERSION"
+          echo "NEXT_VERSION=$NEXT_VERSION" >> $GITHUB_ENV
+
+      # 7️⃣ Update Project.toml
+      - name: Update Project.toml
+        run: |
+          julia -e '
+          using TOML
+          project = TOML.parsefile("Project.toml")
+          project["version"] = ENV["NEXT_VERSION"]
+          TOML.printfile("Project.toml", project)
+          '
+
+      # 8️⃣ Commit and tag
+      - name: Commit version bump and tag
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add Project.toml
+          git commit -m "Bump version to $NEXT_VERSION [skip ci]" || echo "No changes"
+          git tag "v$NEXT_VERSION"
+          git push origin HEAD:main --tags
+
+      # 9️⃣ Optional: create a GitHub release
+      - name: Create GitHub release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: "v${{ env.NEXT_VERSION }}"
+          name: "v${{ env.NEXT_VERSION }}"
+          body: "Automated release from GitHub Actions"
