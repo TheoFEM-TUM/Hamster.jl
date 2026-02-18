@@ -1,11 +1,11 @@
 ## Pull Request Checklist
 
 **Labels:**  
-Please add one of these labels to your PR (if not added automatically):
+Please add one of these labels to your PR (if not added automatically), you can remove this block afterwards:
 
-- `patch` – small bug fix
-- `minor` – adds a non-breaking feature
-- `major` – introduces a breaking change
+- `patch`: small bug fix
+- `minor`: adds a non-breaking feature
+- `major`: introduces a breaking change
 
 ---
 

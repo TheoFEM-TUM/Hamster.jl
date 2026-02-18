@@ -1,30 +1,45 @@
-- name: Add label based on title
-  uses: actions/github-script@v7
-  with:
-    github-token: ${{ secrets.GITHUB_TOKEN }}
-    script: |
-      // Make title lowercase for case-insensitive matching
-      const title = github.context.payload.pull_request.title.toLowerCase()
-      const pr_number = github.context.payload.pull_request.number
-      let label = null
+name: Auto Label PR
 
-      // Define rules (case-insensitive because title is lowercased)
-      if (title.includes('fix')) {
-        label = 'patch'
-      } else if (title.includes('add')) {
-        label = 'minor'
-      } else if (title.includes('breaking')) {
-        label = 'major'
-      }
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
 
-      if (label) {
-        await github.rest.issues.addLabels({
-          owner: github.context.repo.owner,
-          repo: github.context.repo.repo,
-          issue_number: pr_number,
-          labels: [label]
-        })
-        console.log(`Added label: ${label}`)
-      } else {
-        console.log('No label added')
-      }
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  auto-label:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Add label based on PR title
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request
+            const title = pr.title.toLowerCase()
+            const pr_number = pr.number
+
+            let label = null
+
+            // Case-insensitive because we lowercased the title
+            if (title.includes('breaking')) {
+              label = 'major'
+            } else if (title.includes('add')) {
+              label = 'minor'
+            } else if (title.includes('fix')) {
+              label = 'patch'
+            }
+
+            if (label) {
+              console.log(`Adding label: ${label}`)
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr_number,
+                labels: [label]
+              })
+            } else {
+              console.log('No matching keyword found in title.')
+            }

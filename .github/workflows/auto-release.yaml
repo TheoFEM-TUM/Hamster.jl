@@ -1,91 +1,167 @@
-name: Auto Release
+name: Conditional Release
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:  # manual trigger if needed
+
+permissions:
+  contents: write
+  pull-requests: read
 
 jobs:
-  bump-version:
+  release:
     runs-on: ubuntu-latest
+
     steps:
-      # 1️⃣ Checkout the repository
-      - uses: actions/checkout@v6
-
-      # 2️⃣ Set up Julia
-      - uses: julia-actions/setup-julia@v2
+      # 1 Checkout full history (needed for tags)
+      - name: Checkout
+        uses: actions/checkout@v6
         with:
-          version: 1  # latest stable
+          fetch-depth: 0
 
-      # 3️⃣ Determine the PR that triggered this merge
-      - name: Get merged PR number
-        id: pr
+      # 2 Install tools
+      - name: Install GitHub CLI and jq
         run: |
-          PR_NUMBER=$(gh pr list --state merged --base main --json number,title,labels -L 1 | jq -r '.[0].number')
-          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
+          sudo apt update
+          sudo apt install -y gh jq
 
-      # 4️⃣ Read PR labels
-      - name: Get PR label
-        id: label
+      # 3 Get latest tag (or fallback)
+      - name: Get latest tag
+        id: last_tag
         run: |
-          LABEL=$(gh pr view $PR_NUMBER --json labels -q '.labels[].name' | grep -E 'patch|minor|major' | head -n1)
-          echo "LABEL=$LABEL"
-          echo "LABEL=$LABEL" >> $GITHUB_ENV
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "LAST_TAG=$LAST_TAG" >> $GITHUB_ENV
+          echo "Last tag: $LAST_TAG"
 
-      # 5️⃣ Read current version
+      # 4 Get date of latest tag
+      - name: Get tag date
+        run: |
+          if git rev-parse "$LAST_TAG" >/dev/null 2>&1; then
+            TAG_DATE=$(git log -1 --format=%cI $LAST_TAG)
+          else
+            TAG_DATE="1970-01-01T00:00:00Z"
+          fi
+          echo "TAG_DATE=$TAG_DATE" >> $GITHUB_ENV
+          echo "Tag date: $TAG_DATE"
+
+      # 5 Get merged PRs since last tag
+      - name: Get merged PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PRS=$(gh pr list \
+            --state merged \
+            --base main \
+            --json number,title,labels,mergedAt \
+            | jq -c --arg date "$TAG_DATE" '[.[] | select(.mergedAt > $date)]')
+
+          echo "PRS=$PRS" >> $GITHUB_ENV
+          echo "Merged PRs since last tag:"
+          echo "$PRS"
+
+
+      # 6 Count labels
+      - name: Count PR labels
+        run: |
+          PRS='${{ env.PRS }}'
+
+          PATCH_COUNT=$(echo "$PRS" | jq '[.[] | select(.labels[].name=="patch")] | length')
+          MINOR_COUNT=$(echo "$PRS" | jq '[.[] | select(.labels[].name=="minor")] | length')
+          MAJOR_COUNT=$(echo "$PRS" | jq '[.[] | select(.labels[].name=="major")] | length')
+
+          echo "PATCH_COUNT=$PATCH_COUNT" >> $GITHUB_ENV
+          echo "MINOR_COUNT=$MINOR_COUNT" >> $GITHUB_ENV
+          echo "MAJOR_COUNT=$MAJOR_COUNT" >> $GITHUB_ENV
+
+          echo "Patch PRs: $PATCH_COUNT"
+          echo "Minor PRs: $MINOR_COUNT"
+          echo "Major PRs: $MAJOR_COUNT"
+
+      # 7 Decide if release is needed
+      - name: Determine release type
+        run: |
+          TYPE=""
+
+          if [ "${{ env.MAJOR_COUNT }}" -ge 1 ]; then
+            TYPE="major"
+          elif [ "${{ env.MINOR_COUNT }}" -ge 3 ]; then
+            TYPE="minor"
+          elif [ "${{ env.PATCH_COUNT }}" -ge 3 ]; then
+            TYPE="patch"
+          fi
+
+          if [ -z "$TYPE" ]; then
+            echo "SHOULD_RELEASE=false" >> $GITHUB_ENV
+            echo "No release required."
+          else
+            echo "SHOULD_RELEASE=true" >> $GITHUB_ENV
+            echo "RELEASE_TYPE=$TYPE" >> $GITHUB_ENV
+            echo "Release type: $TYPE"
+          fi
+
+      # 8 Stop early if no release required
+      - name: Stop if no release
+        if: env.SHOULD_RELEASE != 'true'
+        run: echo "Skipping version bump."
+
+      # 9 Read current version
       - name: Read current version
-        id: version
+        if: env.SHOULD_RELEASE == 'true'
         run: |
-          julia -e '
-          using TOML
-          project = TOML.parsefile("Project.toml")
-          println("::set-output name=current::" * project["version"])
-          '
+          CURRENT_VERSION=$(grep '^version' Project.toml | head -n1 | sed 's/version = "//' | sed 's/"//')
+          echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
+          echo "Current version: $CURRENT_VERSION"
 
-      # 6️⃣ Calculate next version
-      - name: Bump version
-        id: next_version
+      # 10 Compute next version
+      - name: Compute next version
+        if: env.SHOULD_RELEASE == 'true'
         run: |
-          CURRENT_VERSION=${{ steps.version.outputs.current }}
-          LABEL=${{ env.LABEL }}
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
 
-          case $LABEL in
-            patch) PATCH=$((PATCH + 1)) ;;
-            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-            *) echo "No recognized label found. Exiting."; exit 1 ;;
+          case "${{ env.RELEASE_TYPE }}" in
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
           esac
 
           NEXT_VERSION="$MAJOR.$MINOR.$PATCH"
-          echo "Next version: $NEXT_VERSION"
           echo "NEXT_VERSION=$NEXT_VERSION" >> $GITHUB_ENV
+          echo "Next version: $NEXT_VERSION"
 
-      # 7️⃣ Update Project.toml
+      # 11 Update Project.toml
       - name: Update Project.toml
+        if: env.SHOULD_RELEASE == 'true'
         run: |
-          julia -e '
-          using TOML
-          project = TOML.parsefile("Project.toml")
-          project["version"] = ENV["NEXT_VERSION"]
-          TOML.printfile("Project.toml", project)
-          '
+          sed -i "s/^version = .*/version = \"$NEXT_VERSION\"/" Project.toml
 
-      # 8️⃣ Commit and tag
-      - name: Commit version bump and tag
+      # 12 Commit + Tag
+      - name: Commit and tag
+        if: env.SHOULD_RELEASE == 'true'
         run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "actions@github.com"
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
           git add Project.toml
           git commit -m "Bump version to $NEXT_VERSION [skip ci]" || echo "No changes"
-          git tag "v$NEXT_VERSION"
-          git push origin HEAD:main --tags
 
-      # 9️⃣ Optional: create a GitHub release
-      - name: Create GitHub release
+          git tag "v$NEXT_VERSION"
+          git push origin main --tags
+
+      # 13 Create GitHub Release
+      - name: Create release
+        if: env.SHOULD_RELEASE == 'true'
         uses: ncipollo/release-action@v1
         with:
-          tag: "v${{ env.NEXT_VERSION }}"
-          name: "v${{ env.NEXT_VERSION }}"
-          body: "Automated release from GitHub Actions"
+          tag: v${{ env.NEXT_VERSION }}
+          name: v${{ env.NEXT_VERSION }}
+          generateReleaseNotes: true
