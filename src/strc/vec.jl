@@ -36,7 +36,7 @@ This function takes a 3D vector `r⃗` in Cartesian coordinates (x, y, z) and tr
 - `Tuple{Float64, Float64, Float64}`: A tuple containing the spherical coordinates `(r, θ, φ)`.
 
 """
-function transform_to_spherical(r⃗::AbstractArray{Float64, 1})
+function transform_to_spherical(r⃗)
     x, y, z = r⃗
     r = √(x^2 + y^2 + z^2)
     φ = atan(y, x)

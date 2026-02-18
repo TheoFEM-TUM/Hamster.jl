@@ -117,17 +117,21 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
             ion_label = IonLabel(ion_types[iion1], ion_types[iion2], sorted=false)
             r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
             r⃗₂ = strc.ions[iion2].pos - strc.ions[iion2].dist - Ts[:, R]
-            
+
             r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos .- Ts[:, R])
             r = normdiff(r⃗₁, r⃗₂)
             if r_nd ≤ rcut && r-abs(rcut_tol) < rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
-                Û = get_sk_transform_matrix(r⃗₁, r⃗₂, basis.orbitals[iion1][1].axis, tmethod)
                 nnlabel = get_nn_label(r, nn_dict[ion_label], conf)
                 for jorb1 in eachindex(basis.orbitals[iion1]), jorb2 in eachindex(basis.orbitals[iion2])
-                    orb1 = basis.orbitals[iion1][jorb1]
-                    orb2 = basis.orbitals[iion2][jorb2]
                     i = ij_map[(iion1, jorb1)]
                     j = ij_map[(iion2, jorb2)]
+                    orb1 = basis.orbitals[iion1][jorb1]
+                    orb2 = basis.orbitals[iion2][jorb2]
+
+                    bondswap = determine_bondswap(strc.ions[iion1].type, strc.ions[iion2].type, orb1.type, orb2.type, i, j)
+                    Û = bondswap ? get_sk_transform_matrix(r⃗₂, r⃗₁, basis.orbitals[iion1][1].axis, tmethod) : get_sk_transform_matrix(r⃗₁, r⃗₂, basis.orbitals[iion1][1].axis, tmethod)
+
+                    base = get_base_orb(orb1.type, orb2.type, bondswap=bondswap)
                     θ₁, φ₁ = get_rotated_angles(Û, orb1.axis)
                     θ₂, φ₂ = get_rotated_angles(Û, orb2.axis)
 
@@ -136,10 +140,11 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
                         Rllm = rllm_dict[string(Cllm, apply_oc=true)]
                         mode = get_mode(mode_dicts, k, ion_label, jorb1, jorb2)
                         orbconfig = get_orbconfig(oc_dicts, k, ion_label, jorb1, jorb2)
+                        base = Cllm.type.base_ls == (base[1].l, base[2].l) ? base : reverse(base) # check that base has same ordering as parameter definition
                         if overlap_contributes_to_matrix_element(Cllm, orb1, orb2, ion_label)
                             v = get_param_index(Cllm, nnlabel, basis.parameters, orb1, orb2, i, j)
 
-                            hval = Cllm(orbconfig, mode, θ₁, φ₁, θ₂, φ₂) * Rllm(r) * fcut(r, rcut, rcut_tol)
+                            hval = Cllm(base, orbconfig, mode, θ₁, φ₁, θ₂, φ₂) * Rllm(r) * fcut(r, rcut, rcut_tol)
 
                             if haskey(hs[chunk_id], (v, i, j, R)) && abs(hval) ≥ sp_tol
                                 hs[chunk_id][(v, i, j, R)] += hval
@@ -154,6 +159,28 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
     end
     h = merge(hs...)
     return reshape_geometry_tensor(h, length(basis.parameters), size(strc.Rs, 2), length(basis)[1])
+end
+
+"""
+    determine_bondswap(ion_type1, ion_type2, orb1, orb2, i, j)
+
+Determine whether a bond-direction flip is required for a TB matrix element
+given the definition of that interaction.
+
+This accounts for the fact that some hopping parameters (e.g. s-p couplings)
+change sign when the bonding axis is defined in the opposite direction.
+
+Returns `true` if a bond swap is needed, which occurs when:
+  - The two ions appear in reversed order (`areswapped(ion_type1, ion_type2)`), or
+  - The ions are of the same type, but different orbital types (`orb1`, `orb2`)
+    are used with reversed orbital indices (`i > j`).
+
+Otherwise, returns `false`.
+"""
+function determine_bondswap(ion_type1, ion_type2, orb1, orb2, i, j)
+    ionswap = areswapped(ion_type1, ion_type2)
+    sameion_bondflip = ion_type1 == ion_type2 && i > j && typeof(orb1) ≠ typeof(orb2)
+    return ionswap || sameion_bondflip
 end
 
 """
@@ -172,7 +199,7 @@ Return true if `overlap` contributes to the matrix element between the orbitals 
 """
 function overlap_contributes_to_matrix_element(overlap, orb1, orb2, ion_label)::Bool
     l₁, l₂ = orb1.type.l, orb2.type.l
-    l₁_ov, l₂_ov = overlap.type.base[1].l, overlap.type.base[2].l
+    l₁_ov, l₂_ov = overlap.type.base_ls[1], overlap.type.base_ls[2]
     return same_ion_label(overlap, ion_label) && ( (l₁ == l₁_ov && l₂ == l₂_ov) || (l₁ == l₂_ov && l₂ == l₁_ov))
 end
 

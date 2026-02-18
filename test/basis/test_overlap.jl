@@ -31,10 +31,25 @@ end
 end
 
 @testset "Matrix element" begin
-    @test Hamster.me_to_overlap_label(Hamster.Vssσ((Hamster.s(), Hamster.s()))) == [0, 0, 0]
-    @test Hamster.me_to_overlap_label(Hamster.Vspσ((Hamster.s(), Hamster.pz()))) == [0, 1, 0]
-    @test Hamster.me_to_overlap_label(Hamster.Vppσ((Hamster.pz(), Hamster.pz()))) == [1, 1, 0]
-    @test Hamster.me_to_overlap_label(Hamster.Vppπ((Hamster.px(), Hamster.px()))) == [1, 1, 1]
-    @test Hamster.me_to_overlap_label(Hamster.Vppπ((Hamster.py(), Hamster.py()))) == [1, 1, 1]
-    @test Hamster.me_to_overlap_label(Hamster.Vsdσ((Hamster.s(), Hamster.dz2()))) == [0, 2, 0]
+    @test Hamster.me_to_overlap_label(Hamster.Vssσ((0, 0))) == [0, 0, 0]
+    @test Hamster.me_to_overlap_label(Hamster.Vspσ((0, 1))) == [0, 1, 0]
+    @test Hamster.me_to_overlap_label(Hamster.Vppσ((1, 1))) == [1, 1, 0]
+    @test Hamster.me_to_overlap_label(Hamster.Vppπ((1, 1))) == [1, 1, 1]
+    @test Hamster.me_to_overlap_label(Hamster.Vppπ((1, 1))) == [1, 1, 1]
+    @test Hamster.me_to_overlap_label(Hamster.Vsdσ((0, 2))) == [0, 2, 0]
+end
+
+@testset "Overlap strings" begin
+    @test string(Hamster.Vssσ((0, 0))) == "ssσ"
+    
+    @test string(Hamster.Vspσ((0, 1))) == "spσ"
+    @test string(Hamster.Vppσ((1, 1))) == "ppσ"
+    @test string(Hamster.Vppπ((1, 1))) == "ppπ"
+
+    @test string(Hamster.Vsdσ((0, 2))) == "sdσ"
+    @test string(Hamster.Vpdσ((1, 2))) == "pdσ"
+    @test string(Hamster.Vpdπ((1, 2))) == "pdπ"
+    @test string(Hamster.Vddσ((2, 2))) == "ddσ"
+    @test string(Hamster.Vddπ((2, 2))) == "ddπ"
+    @test string(Hamster.Vddδ((2, 2))) == "ddδ"
 end
