@@ -308,3 +308,106 @@ function reshape_geometry_tensor(h_dict, NV, NR, Nε)
     end
     return h_out
 end
+
+"""
+    get_bonds(strc, basis, conf=get_empty_config();
+              rcut=get_rcut(conf),
+              rcut_tol=get_rcut_tol(conf),
+              npar=get_nthreads_bands(conf))
+
+Construct bond vectors between basis orbitals for all lattice translations.
+
+This function computes inter-ionic bond displacement vectors within a cutoff
+radius and assembles them into sparse matrices indexed by basis orbitals.
+For each lattice translation `R`, a sparse matrix of size `Nε × Nε` is returned,
+where `Nε = length(basis)` and each nonzero entry stores the Cartesian bond
+vector connecting a pair of orbitals.
+
+# Arguments
+- `strc`: Structure object containing ion positions, lattice vectors, and
+  lattice translations.
+- `basis`: Orbital basis associated with the ions in `strc`.
+- `conf`: Configuration object.
+
+# Keyword Arguments
+- `rcut`: Real-space cutoff radius for bond construction.
+- `rcut_tol`: Tolerance applied to the cutoff condition.
+- `npar`: Number of parallel chunks used for bond generation.
+
+# Returns
+- `bonds::Vector{SparseMatrixCSC{SVector{3,Float64},Int64}}`:
+  A vector of sparse matrices, one for each lattice translation `R`, whose
+  nonzero entries store Cartesian bond vectors as `SVector{3,Float64}`.
+"""
+function get_bonds(strc, basis, conf=get_empty_config(); 
+                            rcut=get_rcut(conf), 
+                            rcut_tol=get_rcut_tol(conf),
+                            npar=get_nthreads_bands(conf))
+
+    nn_grid_points = iterate_nn_grid_points(strc.point_grid)
+    Nε = length(basis)
+    Ts = frac_to_cart(strc.Rs, strc.lattice)
+    nR = size(strc.Rs, 2)
+    ij_map = get_ion_orb_to_index_map(length.(basis.orbitals))
+
+    # Allocate thread-local storage
+    is_thread = [ [Int[] for _ in 1:nR] for _ in 1:npar ]
+    js_thread = [ [Int[] for _ in 1:nR] for _ in 1:npar ]
+    vals_x_thread = [ [Float64[] for _ in 1:nR] for _ in 1:npar ]
+    vals_y_thread = [ [Float64[] for _ in 1:nR] for _ in 1:npar ]
+    vals_z_thread = [ [Float64[] for _ in 1:nR] for _ in 1:npar ]
+
+    Threads.@threads for (chunk_id, indices) in enumerate(chunks(nn_grid_points, n=npar))
+        @views for (iion1, iion2, R) in indices
+            r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
+            r⃗₂ = strc.ions[iion2].pos - strc.ions[iion2].dist - Ts[:, R]
+
+            r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos .- Ts[:, R])
+            r = normdiff(r⃗₁, r⃗₂)
+            bond = SVector{3, Float64}(r⃗₂ .- r⃗₁)
+
+            if r_nd ≤ rcut && r - abs(rcut_tol) < rcut &&
+            !isempty(basis.orbitals[iion1]) && !isempty(basis.orbitals[iion2])
+
+                for jorb1 in eachindex(basis.orbitals[iion1]), jorb2 in eachindex(basis.orbitals[iion2])
+                    i = ij_map[(iion1, jorb1)]
+                    j = ij_map[(iion2, jorb2)]
+
+                    push!(is_thread[chunk_id][R], i)
+                    push!(js_thread[chunk_id][R], j)
+                    push!(vals_x_thread[chunk_id][R], bond[1])
+                    push!(vals_y_thread[chunk_id][R], bond[2])
+                    push!(vals_z_thread[chunk_id][R], bond[3])
+                end
+            end
+        end
+    end
+
+    # Merge thread-local buffers
+    is = [Int[] for _ in 1:nR]
+    js = [Int[] for _ in 1:nR]
+    vals_x = [Float64[] for _ in 1:nR]
+    vals_y = [Float64[] for _ in 1:nR]
+    vals_z = [Float64[] for _ in 1:nR]
+
+    for R in 1:nR
+        for t in 1:npar
+            append!(is[R], is_thread[t][R])
+            append!(js[R], js_thread[t][R])
+            append!(vals_x[R], vals_x_thread[t][R])
+            append!(vals_y[R], vals_y_thread[t][R])
+            append!(vals_z[R], vals_z_thread[t][R])
+        end
+    end
+
+    # Build sparse matrices
+    bonds = Vector{NTuple{3,SparseMatrixCSC{Float64,Int64}}}(undef, nR)
+    for R in 1:nR
+        bx = sparse(is[R], js[R], vals_x[R], Nε, Nε)
+        by = sparse(is[R], js[R], vals_y[R], Nε, Nε)
+        bz = sparse(is[R], js[R], vals_z[R], Nε, Nε)
+        bonds[R] = (bx, by, bz)
+    end
+
+    return bonds
+end

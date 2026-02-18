@@ -1,12 +1,13 @@
 @testset "Hamiltonian I/O" begin
     H_original = [rand(5,5), sprand(5,5,0.3)]  # mix of dense and sparse
-    vecs_original = rand(3, 5)
+    vecs_original = rand(3, 2)
     
     write_ham(H_original, vecs_original, comm, rank; space="k")
     H_loaded, vecs_loaded = read_ham(comm, rank; space="k")
 
     H_loaded_2, vecs_loaded_2 = read_ham(rank; space="k")
     
+    @test eltype(typeof(vecs_loaded)) == Float64
     @test vecs_loaded ≈ vecs_original
     @test H_loaded == H_loaded_2
     @test vecs_loaded == vecs_loaded_2
@@ -20,8 +21,77 @@
         h_sparse = issparse(h_orig) ? h_orig : sparse(h_orig)
         @test h_sparse ≈ h_loaded
     end
+
+    rm("ham.h5", force=true)
+
+    # Test for more R - vectors
+    NR = 12
+    Hrs = [rand(5, 5) for R in 1:NR]
+    Rs = rand(-1:1, 3, NR)
+    write_ham(Hrs, Rs, comm, rank; space="r")
+    Hrs_loaded, Rs_loaded = read_ham(comm, rank; space="r")
+    @test Hrs == Hrs_loaded
+    @test Rs == Rs_loaded
+    @test eltype(typeof(Rs_loaded)) == Int64
+
+    rm("ham.h5", force=true)
 end
 
-if rank == 0
+@testset "elementwise_union_mul tests" begin
+    ħ_eVfs = 1.0
+
+    # Sparse matrices with different patterns
+    A = sparse([1,2],[1,2],[1.0,2.0],3,3)
+    B = sparse([2,3],[2,3],[3.0,4.0],3,3)
+
+    C = Hamster.elementwise_union_mul(A, B, ħ_eVfs)
+
+    @test C isa SparseMatrixCSC
+    @test size(C) == (3,3)
+
+    expected_positions = Set([(1,1),(2,2),(3,3)])
+    C_positions = Set(zip(findnz(C)[1], findnz(C)[2]))
+    @test C_positions == expected_positions
+
+    @test C[1,1] == (-1im / ħ_eVfs) * 1.0 * 0.0
+    @test C[2,2] == (-1im / ħ_eVfs) * 2.0 * 3.0
+    @test C[3,3] == (-1im / ħ_eVfs) * 0.0 * 4.0
+    @test C[1,2] == 0.0
+end
+
+@testset "Current I/O" begin
+    ħ_eVfs = 0.6582119569
+    filepath = joinpath(@__DIR__, "test_files")
+    conf = get_config(filename=joinpath(filepath, "hconf_gaas"))
+    set_value!(conf, "poscar", joinpath(filepath, "POSCAR_gaas"))
+    set_value!(conf, "rllm_file", joinpath(filepath, "rllm_true.dat"))
+    set_value!(conf, "verbosity", 0)
+    
+    strc = Structure(conf)
+    basis = Basis(strc, conf)
+    model = TBModel(strc, basis, conf)
+
+    Hr = get_hr(model, Hamster.Dense())
+    write_ham(Hr, strc.Rs, comm, rank; space="r")
+
+    bonds = Hamster.get_bonds(strc, basis, conf)
+    cx_true = [-1im/ħ_eVfs .* bonds[R][1] .* Hr[R] for R in eachindex(Hr)]
+    cy_true = [-1im/ħ_eVfs .* bonds[R][2] .* Hr[R] for R in eachindex(Hr)]
+    cz_true = [-1im/ħ_eVfs .* bonds[R][3] .* Hr[R] for R in eachindex(Hr)]
+
+    Hamster.write_current(bonds, comm, 0; filename="ham.h5", system="", rank=0, nranks=1)
+    cx, cy, cz, vecs = Hamster.read_current(rank)
+
+    @test vecs == strc.Rs
+    @test eltype(typeof(vecs)) == Int64
+
+    correct_current = Bool[]
+    for R in eachindex(Hr), j in axes(Hr[R], 2), i in axes(Hr[R], 1)
+        push!(correct_current, abs(cx_true[R][i, j] - cx[R][i, j]) ≈ 0)
+        push!(correct_current, abs(cy_true[R][i, j] - cy[R][i, j]) ≈ 0)
+        push!(correct_current, abs(cz_true[R][i, j] - cz[R][i, j]) ≈ 0)
+    end
+    @test all(correct_current)
+
     rm("ham.h5", force=true)
 end

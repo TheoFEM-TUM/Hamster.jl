@@ -13,6 +13,28 @@
     rm("hamster.out"); rm("Es.dat")
 end
 
+@testset "Standard PC calculation (SOC+current)" begin
+    path = joinpath(@__DIR__, "test_files")
+    conf = get_config(filename = joinpath(path, "hconf_std"))
+    set_value!(conf, "poscar", joinpath(path, "POSCAR_gaas"))
+    set_value!(conf, "rllm_file", joinpath(path, "rllm.dat"))
+    set_value!(conf, "kpoints", joinpath(path, "EIGENVAL_gaas"))
+    set_value!(conf, "init_params", joinpath(path, "params.dat"))
+    set_value!(conf, "init_params", "SOC", "zeros")
+    set_value!(conf, "write_current", true)
+
+    prof = Hamster.main(comm, conf, rank=rank)
+    Es_tb = read_from_file("Es.dat")
+    @test size(Es_tb, 1) == 16
+
+    Cx, Cy, Cz, Rs_c = read_current(comm, 1; filename="ham.h5", space="r")
+    @test all([size(Cx[R]) == (16, 16) for R in eachindex(Cx)])
+    @test all([size(Cy[R]) == (16, 16) for R in eachindex(Cy)])
+    @test all([size(Cz[R]) == (16, 16) for R in eachindex(Cz)])
+
+    rm("hamster.out"); rm("Es.dat"); rm("ham.h5")
+end
+
 @testset "Standard MD calculation" begin
     path = joinpath(@__DIR__, "test_files")
     conf = get_config(filename = joinpath(path, "hconf_std_md"))
@@ -22,6 +44,10 @@ end
     set_value!(conf, "rllm_file", joinpath(path, "rllm.dat"))
     set_value!(conf, "kpoints", joinpath(path, "eigenval.h5"))
     set_value!(conf, "init_params", joinpath(path, "params.dat"))
+    set_value!(conf, "write_hk", true)
+    set_value!(conf, "write_hr", true)
+    set_value!(conf, "write_current", true)
+
 
     prof = Hamster.main(comm, conf, rank=rank)
     Es_dft = h5read(joinpath(path, "eigenval.h5"), "eigenvalues")
@@ -29,7 +55,26 @@ end
     inds = h5read("hamster_out.h5", "config_inds")
     for (i, ind) in enumerate(inds)
         @test mean(abs.(Es_dft[:, :, ind] .- Es_tb[:, :, i])) < 0.3
+
+        Hr, Rs = read_ham(comm, ind, space="r")
+        Hk, ks = read_ham(comm, ind, space="k")
+        Hk_r = get_hamiltonian(Hr, Rs, ks)
+
+        Es, _ = diagonalize(Matrix.(Hk))
+        Es_r, _ = diagonalize(Matrix.(Hk_r))
+        
+        @test Es_tb[:, :, i] ≈ Es
+        @test Es_tb[:, :, i] ≈ Es_r
+
+        Cx, Cy, Cz, Rs_c = read_current(comm, ind; filename="ham.h5", space="r")
+        @test Rs == Rs_c
+        @test length(Cx) == length(Hr)
+        @test length(Cy) == length(Hr)
+        @test length(Cz) == length(Hr)
+        @test all([size(Cx[R]) == size(Hr[R]) for R in eachindex(Hr)])
+        @test all([size(Cy[R]) == size(Hr[R]) for R in eachindex(Hr)])
+        @test all([size(Cz[R]) == size(Hr[R]) for R in eachindex(Hr)])
     end
 
-    rm("hamster.out"); rm("Es.dat")
+    rm("hamster.out"); rm("hamster_out.h5"); rm("Es.dat"); rm("ham.h5")
 end

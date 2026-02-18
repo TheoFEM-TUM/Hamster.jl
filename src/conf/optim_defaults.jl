@@ -82,16 +82,46 @@ The `barrier` parameter determines at which magnitude the regularization kicks i
 get_barrier(conf::Config)::Float64 = conf("barrier", "Optimizer") == "default" ? 0. : conf("barrier", "Optimizer")
 
 """
-    train_data=EIGENVAL
+*train_data* = EIGENVAL
 
-The `train_data` tag sets the path (filename) that contains the training data.
+Specify the path to the training data file.
+
+This tag tells Hamster where to load the training dataset used during model evaluation and optimization.
+
+# Accepted Formats
+
+- **VASP `EIGENVAL` file**  
+  Supported only in *pc* training mode. The file is read directly and converted into the internal eigenvalue representation.
+
+- **HDF5 (`.h5`) file**  
+  Must contain the datasets:
+  - `eigenvalues` with shape **[Nbands × Nkpoints × Nstructures]**
+  - `kpoints` with shape **[3 × Nkpoints × Nstructures]**
+
+The datasets must correspond structure-by-structure to the training set.  
+The number of bands in the data does *not* need to match the Hamster basis size; only the subset starting at `bandmin` is used.
 """
 get_train_data(conf::Config)::String = conf("train_data", "Optimizer") == "default" ? "EIGENVAL" : conf("train_data", "Optimizer")
 
 """
-    val_data=EIGENVAL
+*val_data*=EIGENVAL
 
-The `val_data` tag sets the path (filename) that contains the validation data.
+Specify the path to the validation data file.
+
+This tag tells Hamster where to load the validation dataset used during model evaluation and optimization.
+
+# Accepted Formats
+
+- **VASP `EIGENVAL` file**  
+  Supported only in *pc* validation mode. The file is read directly and converted into the internal eigenvalue representation.
+
+- **HDF5 (`.h5`) file**  
+  Must contain the datasets:
+  - `eigenvalues` with shape **[Nbands × Nkpoints × Nstructures]**
+  - `kpoints` with shape **[3 × Nkpoints × Nstructures]**
+
+The datasets must correspond structure-by-structure to the validation set.  
+The number of bands in the data does *not* need to match the Hamster basis size; only the subset starting at `val_bandmin` is used.
 """
 get_val_data(conf::Config)::String = conf("val_data", "Optimizer") == "default" ? "EIGENVAL" : conf("val_data", "Optimizer")
 

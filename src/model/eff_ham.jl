@@ -93,9 +93,9 @@ function get_hamiltonian(ham::EffectiveHamiltonian, index, ks; write_hr=false, c
     return Hk
 end
 
-function get_hamiltonian(ham::EffectiveHamiltonian, index, ks, comm; write_hr=false, config_index=index, system="", rank=rank, nranks=nranks)
+function get_hamiltonian(ham::EffectiveHamiltonian, index, ks, comm; write_hr=false, config_index=index, system="", rank=rank, nranks=nranks, ham_file="ham.h5")
     Hr = get_hr(ham, index)
-    if write_hr; write_ham(Hr, ham.Rs[index], comm, config_index, space="r", system=system, rank=rank, nranks=nranks); end
+    if write_hr; write_ham(Hr, ham.Rs[index], comm, config_index, space="r", system=system, rank=rank, nranks=nranks, filename=ham_file, temp=true); end
     Hk = get_hamiltonian(Hr, ham.Rs[index], ks, ham.sp_diag)
     return Hk
 end

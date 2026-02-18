@@ -51,9 +51,20 @@
 
     # Test 8: test sp_diag
     conf = get_empty_config()
+    @test Hamster.get_sp_mode(conf) isa Hamster.Sparse
     @test Hamster.get_sp_diag(conf) isa Hamster.Dense
     set_value!(conf, "sp_diag", true)
     @test Hamster.get_sp_diag(conf) isa Hamster.Sparse
+    
+    conf = get_empty_config()
+    set_value!(conf, "skip_diag", true)
+    @test Hamster.get_sp_diag(conf) isa Hamster.Sparse
+
+    # Test 9: test write_current
+    conf = get_empty_config()
+    @test Hamster.get_write_hr(conf) == false
+    set_value!(conf, "write_current", true)
+    @test Hamster.get_write_hr(conf) == true
 end
 
 @testset "Optim defaults" begin
@@ -72,6 +83,52 @@ end
     @test Hamster.get_update_tb(conf, 3) == [true, true, true]
     set_value!(conf, "update_tb", "Optimizer", "1 3")
     @test Hamster.get_update_tb(conf, 3) == [true, false, true]
+end
+
+@testset "ML defaults" begin
+    # Test 1: init_params
+    conf = get_empty_config()
+    @test Hamster.get_ml_init_params(conf) == "zeros"
+    set_value!(conf, "init_params", "ML", "ones")
+    @test Hamster.get_ml_init_params(conf) == "ones"
+    set_value!(conf, "init_params", "ML", "rand")
+    @test Hamster.get_ml_init_params(conf) == "rand"
+
+    # Test 2: filename
+    conf = get_empty_config()
+    @test Hamster.get_ml_filename(conf) == "ml_params"
+    set_value!(conf, "filename", "ML", "my_params.h5")
+    @test Hamster.get_ml_filename(conf) == "my_params.h5"
+
+    # Test 3: ml_model switch
+    conf = get_empty_config()
+    @test Hamster.get_ml_model(conf) == false
+    set_value!(conf, "init_params", "ML", "my_params.h5")
+    @test Hamster.get_ml_model(conf) == true
+
+    # Test 4: update flag
+    conf = get_empty_config()
+    @test Hamster.get_ml_update(conf) == false  # no Optimizer, no ML
+    set_value!(conf, "lr", "Optimizer", 0.1)
+    @test Hamster.get_ml_update(conf) == false   # has Optimizer, no ML
+    set_value!(conf, "rcut", "ML", 5)
+    @test Hamster.get_ml_update(conf) == true   # has Optimizer, ML
+    set_value!(conf, "update", "ML", true)
+    @test Hamster.get_ml_update(conf) == true
+    set_value!(conf, "update", "ML", false)
+    @test Hamster.get_ml_update(conf) == false
+
+    # Test 5: mode logic
+    conf = get_empty_config()
+    @test Hamster.get_ml_mode(conf) == "eval" # default no Optimizer
+    set_value!(conf, "lr", "Optimizer", 0.1)
+    set_value!(conf, "npoints", "ML", 10)
+    @test Hamster.get_ml_mode(conf) == "refit" # default has Optimizer
+    set_value!(conf, "mode", "ML", "expand")
+    @test Hamster.get_ml_mode(conf) == "expand"
+    set_value!(conf, "mode", "ML", "eval")
+    @test Hamster.get_ml_mode(conf) == "eval"
+
 end
 
 @testset "SOC defaults" begin

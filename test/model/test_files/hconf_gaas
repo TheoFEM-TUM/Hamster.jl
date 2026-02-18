@@ -1,8 +1,5 @@
 begin Options
-    rcut = 7
-    poscar = POSCAR_gaas
-    kpoints = EIGENVAL_bands
-    init_params = params.dat
+    rcut = 5
     load_rllm = true
 end
 

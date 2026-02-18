@@ -1,4 +1,4 @@
-# Config Blocks
+# [Config Blocks](@id block-labels)
 
 Each block in the config file is structured as:
 
@@ -38,7 +38,7 @@ Modules = [Hamster]
 Pages = ["soc_defaults.jl"]
 ```
 
-## [Optim](@id optim-tags)
+## [Optimizer](@id optim-tags)
 
 ```@autodocs
 Modules = [Hamster]

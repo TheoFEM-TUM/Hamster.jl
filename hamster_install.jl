@@ -69,8 +69,44 @@ exec_file = joinpath(hamster_path, exec_name)
 if !isfile(exec_file)
     println("Generating Hamster.jl executable...")
     open(exec_file, "w+") do file
-        println(file, "#!/bin/bash")
-        println(file, "julia --project=$hamster_path $hamster_path/hamster_main.jl \"\$@\"")
+        println(file, """
+        #!/bin/bash
+
+        # Default: use JULIA_NUM_THREADS (or SLURM_CPUS_PER_TASK) if set, else leave unspecified
+        THREADS=\${SLURM_CPUS_PER_TASK:-\$JULIA_NUM_THREADS}
+
+        # Parse command-line arguments for -t THREADS
+        ARGS=()
+        while [[ \$# -gt 0 ]]; do
+            key="\$1"
+            case \$key in
+                -t|--threads)
+                THREADS="\$2"
+                shift # past argument
+                shift # past value
+                ;;
+                *) # preserve other arguments
+                ARGS+=("\$1")
+                shift
+                ;;
+            esac
+        done
+
+        # Build julia command
+        JULIA_CMD=(julia)
+
+        # Only add -t if THREADS is set
+        if [[ -n "\$THREADS" ]]; then
+            JULIA_CMD+=(-t "\$THREADS")
+        fi
+
+        JULIA_CMD+=(--project=$hamster_path)
+        JULIA_CMD+=($(joinpath(hamster_path, "hamster_main.jl")))
+        JULIA_CMD+=("\${ARGS[@]}")
+
+        # Execute
+        "\${JULIA_CMD[@]}"
+        """)
     end
     println("")
     run(`chmod +x $exec_file`)

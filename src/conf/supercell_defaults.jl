@@ -67,15 +67,27 @@ The `nbatch` tag detemines into how many batches the training structures are spl
 get_nbatch(conf::Config)::Int64 = conf("nbatch", "Supercell") == "default" ? 1 : conf("nbatch", "Supercell")
 
 """
-    sc_poscar=SC_POSCAR
+*sc_poscar*=SC_POSCAR
 
-The `sc_poscar` tag sets the path to the POSCAR file used for the supercell.
+The `sc_poscar` tag sets the path to the POSCAR file used for the supercell. Only accepts VASP POSCAR format
 """
 get_sc_poscar(conf::Config)::String = conf("POSCAR", "Supercell") == "default" ? "SC_POSCAR" : conf("POSCAR", "Supercell")
 
 """
-    xdatcar=XDATCAR
+*xdatcar* = XDATCAR
 
-The `xdatcar` tag sets the path to the XDATCAR file.
+Specify the path to the structural trajectory used in the calculation.
+
+The `xdatcar` tag points to a file containing atomic positions and lattice information for a sequence of structures.
+
+# Accepted Formats
+
+- **VASP `XDATCAR` file**  
+  Parsed directly to obtain atomic positions and lattice vectors for each structure.
+
+- **HDF5 (`.h5`) file**  
+  Must contain the datasets:
+  - `positions` — atomic positions with shape **[3 × N_atoms × N_structures]**  
+  - `lattice` — lattice vectors with shape **[3 × 3 × N_structures]** (optional for each structure)
 """
 get_xdatcar(conf::Config)::String = conf("XDATCAR", "Supercell") == "default" ? "XDATCAR" : conf("XDATCAR", "Supercell")
