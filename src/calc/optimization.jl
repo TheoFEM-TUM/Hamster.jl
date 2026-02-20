@@ -59,9 +59,16 @@ Runs the optimization process for an effective Hamiltonian model using the speci
 """
 function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1, write_output=true)
    systems = get_systems(conf)
+   xdatcar_val = get_xdatcar_val(conf)
+   println("xdatcar_val: ", xdatcar_val)
+
    target_dir = get_target_directory(conf)
    
    train_config_inds, val_config_inds = get_config_inds_for_systems(systems, comm, conf, rank=rank, write_output=write_output)
+   if xdatcar_val != "none"
+      systems_val = get_systems(conf, is_val=true)
+      val_config_inds,_  = get_config_inds_for_systems(systems_val, comm, conf, rank=rank, write_output=write_output, is_val=true)
+   end
    local_train_inds = split_indices_into_chunks(train_config_inds, nranks, rank=rank)
    local_val_inds = split_indices_into_chunks(val_config_inds, nranks, rank=rank)
    if target_dir != "missing"
@@ -111,7 +118,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       end
       # EffectiveHamiltonian model for validation set
       val_strcs = mapreduce(vcat, local_val_inds, init=Structure[]) do (system, val_inds)
-         system_strcs = get_structures(conf, config_indices=val_inds, Rs=Rs, mode=get_val_mode(conf), system=system)
+         system_strcs = get_structures(conf, config_indices=val_inds, Rs=Rs, mode=get_val_mode(conf), system=system, is_val=true)
          if length(system_strcs) < length(val_inds)
             local_val_inds[system] = collect(1:length(system_strcs))
          end
@@ -119,7 +126,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       end
 
       val_bases = Basis[Basis(strc, conf, comm=comm_active) for strc in val_strcs]
-      ham_val = EffectiveHamiltonian(val_strcs, val_bases, comm_active, conf, rank=active_rank, nranks=active_size, ml_data_points=get_ml_data_points(ham_train, conf))
+      ham_val = EffectiveHamiltonian(val_strcs, val_bases, comm_active, conf, rank=active_rank, nranks=active_size, ml_data_points=get_ml_data_points(ham_train, conf), rllm_type="val")
       Nε_train = get_number_of_bands_per_structure(train_bases, local_train_inds, soc=get_soc(conf))
       Nε_val = get_number_of_bands_per_structure(val_bases, local_val_inds, soc=get_soc(conf))
 

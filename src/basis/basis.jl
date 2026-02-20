@@ -100,7 +100,7 @@ function get_geometry_tensor(strc, basis, file = nothing, conf=get_empty_config(
                                 tmethod=get_tmethod(conf), 
                                 rcut=get_rcut(conf), 
                                 sp_tol=get_sp_tol(conf), 
-                                rcut_tol=get_rcut_tol(conf))
+                                rcut_tol=get_rcut_tol(conf), rllm_type = "train")
 
     ij_map = get_ion_orb_to_index_map(length.(basis.orbitals))
     ion_types = get_ion_types(strc.ions)
@@ -113,7 +113,7 @@ function get_geometry_tensor(strc, basis, file = nothing, conf=get_empty_config(
 
     #rllm_dict = get_rllm(basis.overlaps, conf, comm=comm, rank=rank, nranks=nranks)
     #println(basis.overlaps)
-    rllm_dict = get_rllm_from_file(basis.overlaps, file, conf, comm = comm)
+    rllm_dict = get_rllm_from_file(basis.overlaps, file, conf, comm = comm, rllm_type = rllm_type)
     #println(keys(rllm_dict))
     Threads.@threads for (chunk_id, indices) in enumerate(chunks(nn_grid_points, n=npar))
         for (iion1, iion2, R) in indices
@@ -167,7 +167,9 @@ function get_geometry_tensor(strc, basis,subdir :: String, conf=get_empty_config
                                 tmethod=get_tmethod(conf), 
                                 rcut=get_rcut(conf), 
                                 sp_tol=get_sp_tol(conf), 
-                                rcut_tol=get_rcut_tol(conf))
+                                rcut_tol=get_rcut_tol(conf),
+                                rllm_type = "train"
+                                )
 
     ij_map = get_ion_orb_to_index_map(length.(basis.orbitals))
     ion_types = get_ion_types(strc.ions)

@@ -57,26 +57,29 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
                 rank=0,
                 nranks=1,
                 update_tb=get_update_tb(conf, nparams(bases[1])), 
-                filename = get_rllm_file(conf),
-                initas=get_init_params(conf))
+                initas=get_init_params(conf),
+                load_rllm=get_load_rllm(conf),
+                rllm_file=get_rllm_file(conf),
+                rllm_type = "train"
+                )
     #if isfile(get_rllm_file(conf)) && rank == 0 && get_interpolate_rllm(conf); rm(get_rllm_file(conf)); end
-    if get_load_rllm(conf) == false
-        rllm_file = get_rllm_file(conf)
+    rllm_file = rllm_type == "train" ? rllm_file : "val_$rllm_file"
+    if load_rllm == false
         if isfile(rllm_file) && rank == 0; rm(rllm_file); end
-        precalc_rllm(bases; comm, rank, nranks, conf)
+        precalc_rllm(bases; comm, rank, nranks, conf, rllm_file = rllm_file)
     end
     file = nothing
-    if occursin(".h5", filename)
+    if occursin(".h5", rllm_file)
         if isnothing(comm)
-            file = h5open(filename, "r")
+            file = h5open(rllm_file, "r")
         else
-            file = h5open(filename, "r", comm)
+            file = h5open(rllm_file, "r", comm)
         end
     end
     hs = map(eachindex(strcs)) do n
-        get_geometry_tensor(strcs[n], bases[n], file, conf, comm=comm, rank=rank, nranks=nranks)
+        get_geometry_tensor(strcs[n], bases[n], file, conf, comm=comm, rank=rank, nranks=nranks, rllm_type = rllm_type)
     end
-    if occursin(".h5", filename)
+    if occursin(".h5", rllm_file)
         close(file)
     end
     
@@ -296,6 +299,7 @@ Retrieve the parameters associated with a `TBModel`.
 - The parameters stored in the `params` field of the given `TBModel` instance.
 """
 get_params(model::TBModel) = model.params
+get_params_labels(model::TBModel) = model.param_labels
 
 """
     write_params(model::TBModel, conf=get_empty_config())
@@ -330,4 +334,16 @@ function set_params!(model::TBModel, params)
     else
         model.params = params
     end
+end
+
+function set_params!(model::TBModel, other_params, other_param_labels)
+    #parameters = model.param_labels
+    #parameter_values = model.params
+
+    for (v1, model_param) in enumerate(model.param_labels), (v2, other_param) in enumerate(other_param_labels)
+        if model_param == other_param
+            model.params[v1] = other_params[v2]
+        end
+    end
+
 end

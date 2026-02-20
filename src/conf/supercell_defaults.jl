@@ -79,3 +79,10 @@ get_sc_poscar(conf::Config)::String = conf("POSCAR", "Supercell") == "default" ?
 The `xdatcar` tag sets the path to the XDATCAR file.
 """
 get_xdatcar(conf::Config)::String = conf("XDATCAR", "Supercell") == "default" ? "XDATCAR" : conf("XDATCAR", "Supercell")
+
+"""
+    xdatcar_val=XDATCAR_val
+
+The `xdatcar_val` tag sets the path to the validation XDATCAR file.
+"""
+get_xdatcar_val(conf::Config)::String = conf("XDATCAR_val", "Supercell") == "default" ? "XDATCAR_val" : conf("XDATCAR_val", "Supercell")

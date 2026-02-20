@@ -49,9 +49,10 @@ Retrieves or computes the radial orbital integral look-up table (RLLM) for a giv
 # Returns
 - `rllm_dict::Dict{String, CubicSpline}`: A dictionary mapping overlap string representations to cubic spline interpolations of the radial integrals. If `load_rllm` is `true`, the data is read from the file. If `interpolate_rllm` is `true`, it is interpolated and saved.
 """
-function get_rllm_from_file(overlaps::Vector{TBOverlap},file = nothing, conf=get_empty_config(); comm = nothing, load_rllm=get_load_rllm(conf), rllm_file=get_rllm_file(conf),verbosity = get_verbosity(conf))
+function get_rllm_from_file(overlaps::Vector{TBOverlap},file = nothing, conf=get_empty_config(); comm = nothing, load_rllm=get_load_rllm(conf), rllm_file=get_rllm_file(conf),verbosity = get_verbosity(conf),rllm_type = "train")
     rllm_dict = Dict{String, CubicSpline{Float64}}()
     yes = true
+    rllm_file = rllm_type == "train" ? rllm_file : "val_$rllm_file"
     if verbosity > 0; println("     Getting distance dependence..."); end
     time = @elapsed if yes
         if verbosity > 1; println("     Reading distance dependence from file..."); end
@@ -298,9 +299,10 @@ function read_rllm(
     end
 end
 
-function precalc_rllm(bases::Any; comm = nothing, rank = 0, nranks = 1, conf)
-    rllm_file = get_rllm_file(conf)
-    verbosity = get_verbosity(conf)
+function precalc_rllm(bases::Any; comm = nothing, rank = 0, nranks = 1, conf,    
+    rllm_file = get_rllm_file(conf),
+    verbosity = get_verbosity(conf))
+    
     unique_overlaps_strings_local = get_unique_overlaps(bases)
     overlaps_strings = MPI.gather(unique_overlaps_strings_local, comm, root=0)
     if rank == 0

@@ -21,6 +21,7 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
                               rank=0, 
                               nranks=1,
                               systems=[strc.system for strc in strcs],
+                              rllm_type = "train",
                               verbosity=get_verbosity(conf))
 
     if isempty(strcs) && isempty(bases)
@@ -43,7 +44,7 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
     if tb_model
         if rank == 0 && verbosity > 1; println("   Getting TB model..."); end
         begin_time = MPI.Wtime()
-        models = (models..., TBModel(strcs, bases, comm, conf, rank=rank, nranks=nranks))
+        models = (models..., TBModel(strcs, bases, comm, conf, rank=rank, nranks=nranks, rllm_type = rllm_type))
         tb_time = MPI.Wtime() - begin_time
         if rank == 0 && verbosity > 1; println("    TB time: $tb_time s"); end
     end
@@ -221,7 +222,12 @@ Copy parameters from one EffectiveHamiltonian (`sending_ham`) to another (`recei
 """
 function copy_params!(receiving_ham::H1, sending_ham::H2) where {H1,H2<:EffectiveHamiltonian}
     for (receiving_model, sending_model) in zip(receiving_ham.models, sending_ham.models) 
-        set_params!(receiving_model, get_params(sending_model))
+        if typeof(sending_model) <: TBModel && typeof(receiving_model) <: TBModel
+             set_params!(receiving_model, get_params(sending_model), get_params_labels(sending_model))
+        else
+            set_params!(receiving_model, get_params(sending_model)) 
+        end
+        #todo SOC
     end
 end
 

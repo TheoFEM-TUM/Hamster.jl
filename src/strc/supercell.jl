@@ -9,8 +9,8 @@ Return the list of system names available for a given configuration `conf`.
 # Returns
 - `Vector{String}`: A list of system names (HDF5 group names or a single system).
 """
-function get_systems(conf)
-    strc_file = get_xdatcar(conf)
+function get_systems(conf; is_val = false)
+    strc_file = is_val ? get_xdatcar_val(conf) : get_xdatcar(conf)
     if isfile(strc_file) && get_train_mode(conf) == "universal"
         h5open(strc_file, "r") do file
             systems = keys(file)
@@ -40,11 +40,11 @@ function get_structures(conf=get_empty_config();
                         mode="pc",
                         system="",
                         config_indices=[1], 
-                        poscar=get_poscar(conf))
+                        poscar=get_poscar(conf), is_val = false)
     
 
     if lowercase(mode) == "md" || lowercase(mode) == "mixed" || lowercase(mode) == "universal"
-        rs_0, atom_types, lattice, rs_all = read_structure_file(system, conf, mode=mode)
+        rs_0, atom_types, lattice, rs_all = read_structure_file(system, conf, mode=mode, is_val = is_val)
         lattice_0 = lattice isa AbstractMatrix ? lattice : lattice[:, :, 1]
         Rs = Rs == zeros(3, 1) ? get_translation_vectors(rs_0, lattice_0, rcut=get_rcut(conf)) : Rs
         
@@ -104,7 +104,8 @@ A tuple containing:
 4. `configs::Array{Float64,3}` — Atomic positions for all configurations  
    (shape: `3 × N_atoms × N_configs`).
 """
-function read_structure_file(system, conf=get_empty_config(); mode="md", sc_poscar=get_sc_poscar(conf), xdatcar=get_xdatcar(conf))
+function read_structure_file(system, conf=get_empty_config(); mode="md", sc_poscar=get_sc_poscar(conf), xdatcar=get_xdatcar(conf), is_val = false)
+    xdatcar = get_xdatcar_val(conf) != "none" && is_val == true ?   get_xdatcar_val(conf) : xdatcar
     if mode == "md"
         sc_poscar = read_poscar(sc_poscar)
         @unpack rs_atom, atom_types, lattice = sc_poscar
@@ -161,6 +162,7 @@ function get_config_inds_for_systems(
     rank=0,
     write_output=false,
     optimize=true,
+    is_val = false
 )
 
     train_config_inds = Dict{String, Vector{Int64}}()
@@ -171,7 +173,11 @@ function get_config_inds_for_systems(
     # -------------------------------------------------
     file = nothing
     if length(systems) > 1
-        file = h5open(get_xdatcar(conf), "r", comm)
+        if is_val
+            file = h5open(get_xdatcar_val(conf), "r", comm)
+        else
+            file = h5open(get_xdatcar(conf), "r", comm)
+        end
     end
 
     for system in systems
@@ -206,8 +212,12 @@ function get_config_inds_for_systems(
                         create_group(outfile, system))
 
                 if optimize
-                    write(g, "train_config_inds", system_train_inds)
-                    write(g, "val_config_inds", system_val_inds)
+                    if is_val
+                        write(g, "val_config_inds", system_train_inds)
+                    else
+                        write(g, "train_config_inds", system_train_inds)
+                        write(g, "val_config_inds", system_val_inds)
+                    end
                 else
                     write(g, "config_inds", system_train_inds)
                 end
