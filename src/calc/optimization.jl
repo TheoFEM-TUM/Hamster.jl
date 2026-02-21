@@ -60,7 +60,7 @@ Runs the optimization process for an effective Hamiltonian model using the speci
 function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1, write_output=true)
    systems = get_systems(conf)
    xdatcar_val = get_xdatcar_val(conf)
-   println("xdatcar_val: ", xdatcar_val)
+   #println("xdatcar_val: ", xdatcar_val)
 
    target_dir = get_target_directory(conf)
    
