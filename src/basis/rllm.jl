@@ -49,16 +49,16 @@ Retrieves or computes the radial orbital integral look-up table (RLLM) for a giv
 # Returns
 - `rllm_dict::Dict{String, CubicSpline}`: A dictionary mapping overlap string representations to cubic spline interpolations of the radial integrals. If `load_rllm` is `true`, the data is read from the file. If `interpolate_rllm` is `true`, it is interpolated and saved.
 """
-function get_rllm_from_file(overlaps::Vector{TBOverlap},file = nothing, conf=get_empty_config(); comm = nothing, load_rllm=get_load_rllm(conf), rllm_file=get_rllm_file(conf),verbosity = get_verbosity(conf),rllm_type = "train")
+function get_rllm_from_file(overlaps::Vector{TBOverlap},file = nothing, conf=get_empty_config(); comm = nothing, load_rllm=get_load_rllm(conf), rllm_file=get_rllm_file(conf),verbosity = get_verbosity(conf),rllm_type = "train", rank = 0)
     rllm_dict = Dict{String, CubicSpline{Float64}}()
     yes = true
     rllm_file = rllm_type == "train" ? rllm_file : "val_$rllm_file"
-    if verbosity > 0; println("     Getting distance dependence..."); end
+    if verbosity > 0 && rank == 0; println("     Getting distance dependence..."); end
     time = @elapsed if yes
-        if verbosity > 1; println("     Reading distance dependence from file..."); end
+        if verbosity > 1 && rank == 0; println("     Reading distance dependence from file..."); end
         read_rllm(overlaps,file, comm, rllm_dict, filename=rllm_file)
     end
-    if verbosity > 0; println("     Finished in $time s."); end
+    if verbosity > 0 && rank == 0; println("     Finished in $time s."); end
     return rllm_dict
 end
 
@@ -74,9 +74,9 @@ function get_rllm(overlaps, conf=get_empty_config();
     #file_path = targetdir == "missing" ? rllm_file : joinpath(targetdir, rllm_file)
     #rllm_file = file_path
     rllm_dict = Dict{String, CubicSpline{Float64}}()
-    if verbosity > 0; println("     Getting distance dependence..."); end
+    if verbosity > 0 && rank == 0; println("     Getting distance dependence..."); end
     time = @elapsed if load_rllm
-        if verbosity > 1; println("     Reading distance dependence from file..."); end
+        if verbosity > 1 && rank == 0; println("     Reading distance dependence from file..."); end
         read_rllm(overlaps, comm, rllm_dict, filename=rllm_file)
     else
         i = 0
@@ -143,6 +143,48 @@ function check_for_previous_interpolations!(rllm_dict, i, overlaps, comm=nothing
             end
         end
     end
+end
+
+function add_to_previous_interpolations!(bases::Any, conf = get_empty_config(); comm=nothing, rllm_file=get_rllm_file(conf), verbosity=get_verbosity(conf), nranks=1, rank = 0)
+    unique_overlaps_local = get_unique_overlaps(bases)
+    overlaps= MPI.gather(unique_overlaps_local, comm, root=0)
+    if rank == 0
+        overlaps = collect(Iterators.flatten(overlaps))
+        overlaps = collect(Iterators.flatten(overlaps))
+        unique_overlaps = unique(overlaps)
+        noverlaps = length(unique_overlaps)
+    else
+        overlaps = nothing
+        unique_overlaps = nothing
+        noverlaps = 0
+    end
+    if verbosity > 1; println("     Checking previous interpolations..."); end
+    
+    if rank == 0 && isfile(rllm_file)
+        rllm_dict = Dict{String, CubicSpline{Float64}}()
+        i = 0
+        h5open(rllm_file, "r") do file     
+            tforeach(unique_overlaps)do overlap
+                overlap_str = string(overlap, apply_oc=true)
+
+                if !haskey(file, overlap_str)
+
+                    rllm_dict[overlap_str] = interpolate_overlap(overlap, conf)
+                end
+                i += 1
+                if verbosity > 1
+                    println("       ($i / $(length(unique_overlaps))) $overlap_str")
+                end
+            end
+
+        end
+    end
+    if rank == 0
+        save_rllm(rllm_dict, comm, filename=rllm_file, rank=rank, nranks=nranks)
+        
+    end
+    MPI.Barrier(comm)
+
 end
 
 """

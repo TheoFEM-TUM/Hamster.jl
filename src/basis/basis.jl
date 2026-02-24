@@ -113,7 +113,7 @@ function get_geometry_tensor(strc, basis, file = nothing, conf=get_empty_config(
 
     #rllm_dict = get_rllm(basis.overlaps, conf, comm=comm, rank=rank, nranks=nranks)
     #println(basis.overlaps)
-    rllm_dict = get_rllm_from_file(basis.overlaps, file, conf, comm = comm, rllm_type = rllm_type)
+    rllm_dict = get_rllm_from_file(basis.overlaps, file, conf, comm = comm, rllm_type = rllm_type, rank = rank)
     #println(keys(rllm_dict))
     Threads.@threads for (chunk_id, indices) in enumerate(chunks(nn_grid_points, n=npar))
         for (iion1, iion2, R) in indices
