@@ -230,7 +230,7 @@ function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_conf
 
             system, config_index = get_system_and_config_index(ind, local_inds)
             bonds = get_bonds(strcs[ind], bases[ind], conf)
-            write_current(bonds, comm, config_index; ham_file=ham_file, filename=current_file, system=system, rank=rank, nranks=nranks, temp=true, skip=skip)
+            write_current(bonds, comm, config_index; ham_file=ham_file, system=system, rank=rank, nranks=nranks, temp=true, skip=skip)
         end
         MPI.Barrier(comm)
         combine_hams(comm, what="Cr", rank=rank, nranks=nranks, filename=current_file)
