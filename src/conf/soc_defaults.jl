@@ -4,13 +4,9 @@
 A model to account for spin-orbit coupling (SOC) is constructed if a block `SOC` is present in the config file.
 """
 get_soc(conf::Config)::Bool = haskey(conf.blocks, "SOC") || (conf("soc") ≠ "default" ? conf("soc") : false)
+push!(CONFIG_TAGS, ConfigTag{Bool}("soc", conf->get_soc(conf), "activates soc model."))
 
-"""
-    update_soc=true
-
-The `update_soc` tag determines whether the SOC parameters are udpated.
-"""
-get_update_soc(conf::Config)::Bool = conf("update", "SOC") == "default" ? true : conf("update", "SOC")
+@configtag update Bool haskey(conf, "Optimizer") && haskey(conf, "SOC") "soc parameters are updated." "SOC"
 
 """
     init_params=zeros
@@ -28,3 +24,4 @@ function get_soc_init_params(conf::Config)::String
         return soc_init
     end
 end
+push!(CONFIG_TAGS, ConfigTag{String}("init_params", "SOC", conf->get_soc_init_params(conf), "soc parameter initialization."))

@@ -3,8 +3,8 @@
 
 Calculate the TB descriptor for a given a TB `model`, a structure `strc` and a TBConfig file `conf`.
 """
-function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_ml_rcut(conf), rcut_tol=get_rcut_tol(conf), apply_distortion=get_apply_distortion(conf), 
-    env_scale=get_env_scale(conf), apply_distance_distortion=get_apply_distance_distortion(conf), strc_scale=get_strc_scale(conf))
+function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_ml_rcut(conf), rcut_tol=get_rcut_tol(conf), apply_distortion=get_ml_apply_distortion(conf), 
+    env_scale=get_ml_env_scale(conf), apply_distance_distortion=get_ml_apply_distance_distortion(conf), strc_scale=get_ml_strc_scale(conf))
 
     Nε = length(basis); Norb_per_ion = size(basis); NR = size(strc.Rs, 2)
 

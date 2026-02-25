@@ -1,23 +1,39 @@
-"""
-    Nconf=10
+# ====================
+# Supercell defaults
+# ====================
+@configtag Nconf Int64 1 "number of sample configuration." "Supercell"
+@configtag Nconf_min Int64 1 "minimum configuration index for sample." "Supercell"
+@configtag Nconf_max Int64 1 "minimum configuration index for sample." "Supercell"
+@configtag nbatch Int64 1 "number of batches to split the data set." "Supercell"
 
-The `Nconf` tag sets the number of samples that are sampled from the total number of configuration.
-"""
-get_Nconf(conf::Config)::Int64 = get(conf, "Nconf", "Supercell", 1)
-
-"""
-    Nconf_min=10
-
-The `Nconf_min` tag sets the minimum index that can be sampled from the total number of configurations.
-"""
-get_Nconf_min(conf::Config)::Int64 = get(conf, "Nconf_min", "Supercell", 1)
 
 """
-    Nconf_max=1
+*sc_poscar*=SC_POSCAR
 
-The `Nconf_max` tag sets the maximum index that can be sampled from the total number of configurations.
+The `sc_poscar` tag sets the path to the POSCAR file used for the supercell. Only accepts VASP POSCAR format
 """
-get_Nconf_max(conf::Config)::Int64 = get(conf, "Nconf_max", "Supercell", 1)
+get_sc_poscar(conf::Config)::String = conf("POSCAR", "Supercell") == "default" ? "SC_POSCAR" : conf("POSCAR", "Supercell")
+push!(CONFIG_TAGS, ConfigTag{String}("poscar", "Supercell", conf->get_sc_poscar(conf), "path to supercell structure file."))
+
+"""
+*xdatcar* = XDATCAR
+
+Specify the path to the structural trajectory used in the calculation.
+
+The `xdatcar` tag points to a file containing atomic positions and lattice information for a sequence of structures.
+
+# Accepted Formats
+
+- **VASP `XDATCAR` file**  
+  Parsed directly to obtain atomic positions and lattice vectors for each structure.
+
+- **HDF5 (`.h5`) file**  
+  Must contain the datasets:
+  - `positions` — atomic positions with shape **[3 × N_atoms × N_structures]**  
+  - `lattice` — lattice vectors with shape **[3 × 3 × N_structures]** (optional for each structure)
+"""
+get_xdatcar(conf::Config)::String = conf("XDATCAR", "Supercell") == "default" ? "XDATCAR" : conf("XDATCAR", "Supercell")
+push!(CONFIG_TAGS, ConfigTag{String}("xdatcar", conf->get_xdatcar(conf), "path to supercell trajectory file."))
 
 """
     config_inds=none
@@ -39,10 +55,11 @@ function get_config_inds(conf::Config)::Union{String, Vector{Int64}}
         end
     end
 end
-"""
-    config_inds=none
 
-The `config_inds` tag sets a file from which configuration indices are read. By default, indices are not read from file.
+"""
+    val_config_inds=none
+
+The `val_config_inds` tag sets a file from which configuration indices are read. By default, indices are not read from file.
 It is also possible to provide a list of integers directly.
 """
 function get_val_config_inds(conf::Config)::Union{String, Vector{Int64}}
@@ -59,35 +76,3 @@ function get_val_config_inds(conf::Config)::Union{String, Vector{Int64}}
         end
     end
 end
-"""
-    nbatch=1
-
-The `nbatch` tag detemines into how many batches the training structures are split for stochastic gradient optimization.
-"""
-get_nbatch(conf::Config)::Int64 = conf("nbatch", "Supercell") == "default" ? 1 : conf("nbatch", "Supercell")
-
-"""
-*sc_poscar*=SC_POSCAR
-
-The `sc_poscar` tag sets the path to the POSCAR file used for the supercell. Only accepts VASP POSCAR format
-"""
-get_sc_poscar(conf::Config)::String = conf("POSCAR", "Supercell") == "default" ? "SC_POSCAR" : conf("POSCAR", "Supercell")
-
-"""
-*xdatcar* = XDATCAR
-
-Specify the path to the structural trajectory used in the calculation.
-
-The `xdatcar` tag points to a file containing atomic positions and lattice information for a sequence of structures.
-
-# Accepted Formats
-
-- **VASP `XDATCAR` file**  
-  Parsed directly to obtain atomic positions and lattice vectors for each structure.
-
-- **HDF5 (`.h5`) file**  
-  Must contain the datasets:
-  - `positions` — atomic positions with shape **[3 × N_atoms × N_structures]**  
-  - `lattice` — lattice vectors with shape **[3 × 3 × N_structures]** (optional for each structure)
-"""
-get_xdatcar(conf::Config)::String = conf("XDATCAR", "Supercell") == "default" ? "XDATCAR" : conf("XDATCAR", "Supercell")

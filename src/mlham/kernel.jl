@@ -21,7 +21,7 @@ end
                       verbosity=get_verbosity(conf),
                       Ncluster=get_ml_ncluster(conf),
                       Npoints=get_ml_npoints(conf),
-                      sim_params=get_sim_params(conf),
+                      sim_params=get_ml_sim_params(conf),
                       update_ml=get_ml_update(conf),
                       mode=get_ml_mode(conf),
                       rank=0,
@@ -56,7 +56,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             verbosity=get_verbosity(conf),
                             Ncluster=get_ml_ncluster(conf),
                             Npoints=get_ml_npoints(conf),
-                            sim_params=get_sim_params(conf), 
+                            sim_params=get_ml_sim_params(conf), 
                             update_ml=get_ml_update(conf),
                             mode=get_ml_mode(conf),
                             rank=0,
@@ -183,9 +183,9 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filena
         # Write header to file
         println(file, "begin ", get_system(conf))
         println(file, "  rcut = ", get_ml_rcut(conf))
-        println(file, "  sim_params = ", get_sim_params(conf))
-        println(file, "  env_scale = ", get_env_scale(conf))
-        println(file, "  apply_distortion = ", get_apply_distortion(conf))
+        println(file, "  sim_params = ", get_ml_sim_params(conf))
+        println(file, "  env_scale = ", get_ml_env_scale(conf))
+        println(file, "  apply_distortion = ", get_ml_apply_distortion(conf))
         println(file, "end")
         println(file, "")
         for n in eachindex(kernel.params)
@@ -215,9 +215,9 @@ function read_ml_params(conf=get_empty_config(); filename=get_ml_filename(conf))
 
     # Check that header params match Config
     @assert parse(Float64, lines[2][end]) == get_ml_rcut(conf)
-    @assert parse(Float64, lines[3][end]) == get_sim_params(conf)
-    @assert parse(Float64, lines[4][end]) == get_env_scale(conf)
-    @assert parse(Bool, lines[5][end]) == get_apply_distortion(conf)
+    @assert parse(Float64, lines[3][end]) == get_ml_sim_params(conf)
+    @assert parse(Float64, lines[4][end]) == get_ml_env_scale(conf)
+    @assert parse(Bool, lines[5][end]) == get_ml_apply_distortion(conf)
 
     data_points = SVector{N, Float64}[]
     params = Float64[]

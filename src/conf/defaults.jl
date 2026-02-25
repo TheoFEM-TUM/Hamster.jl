@@ -1,132 +1,31 @@
-"""
-**verbosity**=1
+# ====================
+# Input/Output
+# ====================
+@configtag verbosity Int64 1 "Controls output verbosity (0=minimal, 1=normal, 2=verbose, 3=debug)."
+@configtag write_current Bool false "Whether to write current operator."
+@configtag current_file  String "ham.h5" "File where current operator is stored."
+@configtag write_hk      Bool false "Whether to write k-space Hamiltonians."
+@configtag ham_file      String "ham.h5" "File where Hamiltonians are stored."
+@configtag write_hr      Bool get_write_current(conf) "Whether to write real-space Hamiltonians. Defaults to true if write_current=true."
+@configtag kpoints String "gamma" "file/method for defining k-points (gamma, EIGENVAL, filename.h5)."
+@configtag save_vecs Bool false "Whether eigenvectors are stored."
 
-The `verbosity` parameter controls the amount of output printed to the console or written to output files.  
-A value of `0` disables most print statements.
 
-Possible options:
-- `0`: minimal output; most print statements are suppressed.
-- `1`: normal output volume (default).
-- `2`: increased output; additional information is printed.
-- `3`: maximum output; includes detailed debug information.
-"""
-get_verbosity(conf::Config)::Int64 = conf("verbosity") == "default" ? 1 : conf("verbosity")
+# ====================
+# Model setup
+# ====================
+@configtag system String "unknown" "name of the system"
+@configtag init_params String "ones" "TB parameter initialization (file, ones, zeros, rand)."
 
-"""
-**system**=unknown
 
-The `system` tag gives a name to the system under study.
-"""
-get_system(conf::Config)::String = conf("system") == "default" ? "unknown" : conf("system")
+# ====================
+# Diagonalization
+# ====================
+@configtag skip_diag Bool false "if true, no eigenvalues are computed."
+@configtag diag_method String "shift-invert" "sparse eigensolver when `sp_diag=true` (shift-invert, krylov-schur)."
+@configtag neig Int64 6 "number of eigenvalues when using sparse eigensolver."
+@configtag eig_target Float64 0 "target energy when using sparse eigensolver."
 
-"""
-**init_params** = ones
-
-The `init_params` tag determines how the tight-binding parameters are initialized.  
-
-Possible options:
-- `filename.dat`: initialize from a file named `filename.dat`.
-- `ones`: initialize all parameters to 1 (default).
-- `zeros`: initialize all parameters to 0.
-- `rand`: initialize parameters randomly between 0 and 1.
-"""
-get_init_params(conf::Config)::String = conf("init_params") == "default" ? "ones" : conf("init_params")
-
-"""
-**kpoints**=gamma
-
-The `kpoints::String` tag specifies the file or method used to define the set of k-points.
-
-Possible options:
-- `gamma`: use only the Gamma point (default).
-- `EIGENVAL`: read k-points from a VASP `EIGENVAL` file.
-- `filename.h5`: read k-points from the `"k-points"` field of an HDF5 file.
-"""
-get_kpoints_file(conf::Config)::String = conf("kpoints") == "default" ? "gamma" : conf("kpoints")
-
-"""
-**neig**=6 (only if sp_diag=true)
-
-The `neig::Int` tag sets the number of eigenvalues that are calculated when using a sparse eigensolver.
-"""
-get_neig(conf::Config)::Int64 = conf("Neig") == "default" ? 6 : conf("Neig")
-
-"""
-**save_vecs**=false
-
-The `save_vecs::Bool` tag determines whether the eigenvectors are written to a file.
-"""
-get_save_vecs(conf::Config)::Bool = conf("save_vecs") == "default" ? false : conf("save_vecs")
-
-"""
-**write_current=false**
-
-The `write_current::Bool` tag determines whether the current vectors are written to a file ().
-"""
-get_write_current(conf::Config)::Bool = conf("write_current") == "default" ? false : conf("write_current")
-
-"""
-**current_file**=ham.h5
-
-The `current_file::String` sets the file where current vectors are stored.
-"""
-get_current_file(conf::Config)::String = conf("current_file") == "default" ? get_ham_file(conf) : conf("current_file")
-
-"""
-**write_hk**=false
-
-The `write_hk::Bool` tag determines whether the Hamiltonians in k-space are written to a file.
-"""
-get_write_hk(conf::Config)::Bool = conf("write_hk") == "default" ? false : conf("write_hk")
-
-"""
-**write_hr**=false
-
-The `write_hr::Bool` tag determines whether the Hamiltonians in real-space are written to a file.
-Defaults to `false`. However, if `write_current=true` is automatically set to `true` as Hamiltonian is needed
-current vectors.
-"""
-function get_write_hr(conf::Config)::Bool
-    if conf("write_hr") == "default" && get_write_current(conf)
-        return true
-    elseif conf("write_hr") == "default" && !get_write_current(conf)
-        return false
-    else
-        conf("write_hr")
-    end
-end
-
-"""
-**ham_file**=ham.h5
-
-The `ham_file::String` sets the file where Hamiltonians are stored.
-"""
-get_ham_file(conf::Config)::String = conf("ham_file") == "default" ? "ham.h5" : conf("ham_file")
-
-"""
-**eig_target**=0.
-
-The `eig_target::Float` tag sets the target energy when using a sparse eigensolver.
-"""
-get_eig_target(conf::Config)::Float64 = conf("eig_target") == "default" ? 0. : conf("eig_target")
-
-"""
-**diag_method**=shift-invert
-
-The `diag_method` tag sets the method to be used for calculating eigenvalues when `sp_diag=true`, ignored otherwise.
-
-Possible options:
-- `shift-invert` (default): call `eigs` function from `Arpack`.
-- `krylov-schur`: call `eigsolve` function from `KrylovKit`.
-"""
-get_diag_method(conf::Config)::String = conf("diag_method") == "default" ? "shift-invert" : conf("diag_method")
-
-"""
-**skip_diag**=false
-
-If `skip_diag` is set to true, no eigenvalues are computed for the Hamiltonian.
-"""
-get_skip_diag(conf::Config)::Bool = conf("skip_diag") == "default" ? false : conf("skip_diag")
 
 """
 **nthreads_kpoints**=JULIA_NUM_THREADS

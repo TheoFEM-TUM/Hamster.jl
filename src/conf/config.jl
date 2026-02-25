@@ -53,6 +53,60 @@ function (conf::Config)(key::String, typekey="none")
     end
 end
 
+struct ConfigTag{T,F}
+    name::String
+    block::String
+    default::F           # getter conf -> T
+    description::String
+end
+
+ConfigTag{T}(name::String, default::F, desc::String) where {T,F} =
+    ConfigTag{T,F}(name, "Options", default, desc)
+
+ConfigTag{T}(name::String, block::String, default::F, desc::String) where {T,F} =
+    ConfigTag{T,F}(name, block, default, desc)
+
+function get_tag(conf::Config, tag::ConfigTag{T})::T where T
+    if tag.block == "Options"
+        return get(conf, tag.name, tag.default(conf))
+    else
+        return get(conf, tag.name, tag.block, tag.default(conf))
+    end
+end
+
+const CONFIG_TAGS = []
+
+macro configtag(name, T, default, desc, block="Options")
+    fname = block ∈ ["Options", "Supercell", "Optimizer"] ? Symbol("get_", name) : Symbol("get_$(lowercase(block))_", name)
+    tagname = string(name)
+
+    docstring = """
+    **$tagname** = $default
+
+    $desc
+    """
+
+    return quote
+        # Create tag
+        local tag = ConfigTag{$T}(
+            $tagname,
+            $block,
+            conf -> $default,
+            $desc
+        )
+
+        push!(CONFIG_TAGS, tag)
+
+        #Attach docstring + getter
+        """
+            $(esc($docstring).args[1])
+        """
+        function $(fname)(conf::Config)::$T
+            get_tag(conf, tag)
+        end
+    end |> esc
+end
+
 """
     Base.get(conf::Config, key, default::T) :: T where {T}
      Base.get(conf::Config, key, typekey, default::T) :: T where {T}
@@ -70,11 +124,29 @@ returned by `conf(key)` is `"default"`, the fallback value `default` is returned
   `default` is returned.
 """
 function Base.get(conf::Config, key, default::T)::T where {T}
-    return conf(key) == "default" ? default : conf(key)
+    if conf(key) == "default"
+        return default
+    else
+        val = conf(key)
+        if T <: AbstractVector && !(val isa AbstractVector)
+            return [val]
+        else
+            return val
+        end
+    end
 end
 
 function Base.get(conf::Config, key, typekey, default::T)::T where {T}
-    return conf(key, typekey) == "default" ? default : conf(key, typekey)
+    if conf(key, typekey) == "default"
+        return default
+    else
+        val = conf(key, typekey)
+        if T <: AbstractVector && !(val isa AbstractVector)
+            return [val]
+        else
+            return val
+        end
+    end
 end
 
 """

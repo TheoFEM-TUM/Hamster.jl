@@ -24,7 +24,10 @@ mutable struct SOCModel{V, M}
     update :: Bool
 end
 
-function SOCModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=get_empty_config(); rank=0)
+function SOCModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=get_empty_config(); 
+        rank=0,
+        update_soc=get_soc_update(conf))
+    
     soc_matrices_per_type = OrderedDict{UInt8, Matrix{ComplexF64}}()
     types_per_strc = Vector{UInt8}[]
     Rs_info = zeros(Int64, 2, length(strcs))
@@ -58,7 +61,7 @@ function SOCModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=g
     MPI.Barrier(comm)
 
     params = init_soc_params(param_labels, conf)
-    return SOCModel(params, param_labels, types_per_strc, soc_matrices_per_type, Rs_info, get_update_soc(conf))
+    return SOCModel(params, param_labels, types_per_strc, soc_matrices_per_type, Rs_info, update_soc)
 end
 
 get_param(soc_model::SOCModel, type) = soc_model.params[findfirst(t->t==type, soc_model.param_labels)]
