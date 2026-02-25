@@ -183,9 +183,9 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filena
         # Write header to file
         println(file, "begin ", get_system(conf))
         println(file, "  rcut = ", get_ml_rcut(conf))
-        println(file, "  sim_params = ", get_sim_params(conf))
-        println(file, "  env_scale = ", get_env_scale(conf))
-        println(file, "  apply_distortion = ", get_apply_distortion(conf))
+        println(file, "  sim_params = ", get_ml_sim_params(conf))
+        println(file, "  env_scale = ", get_ml_env_scale(conf))
+        println(file, "  apply_distortion = ", get_ml_apply_distortion(conf))
         println(file, "end")
         println(file, "")
         for n in eachindex(kernel.params)
