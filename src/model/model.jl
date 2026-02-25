@@ -44,10 +44,27 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
                 rank=0,
                 nranks=1,
                 update_tb=get_update_tb(conf, nparams(bases[1])), 
+                filename = get_rllm_file(conf),
                 initas=get_init_params(conf))
-    
+                
+    if get_load_rllm(conf) == false
+        rllm_file = get_rllm_file(conf)
+        if isfile(rllm_file) && rank == 0; rm(rllm_file); end
+        precalc_rllm(bases, conf, rank=rank, nranks=nranks, comm=comm)
+    end
+    file = nothing
+    if occursin(".h5", filename)
+        if isnothing(comm)
+            file = h5open(filename, "r")
+        else
+            file = h5open(filename, "r", comm)
+        end
+    end
     hs = map(eachindex(strcs)) do n
-        get_geometry_tensor(strcs[n], bases[n], conf, comm=comm, rank=rank, nranks=nranks)
+        get_geometry_tensor(strcs[n], bases[n], conf, file=file, comm=comm, rank=rank, nranks=nranks)
+    end
+    if occursin(".h5", filename)
+        close(file)
     end
 
     param_labels_local = unique(Iterators.flatten([basis.parameters for basis in bases]))
