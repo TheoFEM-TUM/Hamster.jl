@@ -184,7 +184,8 @@ The `val_ratio` tag sets the ratio between the training set size and the validat
 """
 function get_val_ratio(conf::Config)::Float64
     if conf("val_ratio", "Optimizer") == "default"
-        return get_validate(conf) ? 0.2 : 0.
+        return 0
+        #return get_validate(conf) ? 0.2 : 0.
     else
         return conf("val_ratio", "Optimizer")
     end

@@ -61,11 +61,13 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    systems = get_systems(conf)
    xdatcar_val = get_xdatcar_val(conf)
    #println("xdatcar_val: ", xdatcar_val)
+   println("systems: ", systems)
 
    target_dir = get_target_directory(conf)
    
    train_config_inds, val_config_inds = get_config_inds_for_systems(systems, comm, conf, rank=rank, write_output=write_output)
-   if xdatcar_val != "none"
+   println("val_ratio: ", get_val_ratio(conf))
+   if get_validate(conf) && get_val_ratio(conf) == 0
       systems_val = get_systems(conf, is_val=true)
       val_config_inds,_  = get_config_inds_for_systems(systems_val, comm, conf, rank=rank, write_output=write_output, is_val=true)
    end
@@ -84,6 +86,10 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       local_subdirs = collect(local_subdirs)
    end
    has_data = !isempty(local_train_inds) && (!isempty(local_val_inds) || !get_validate(conf))
+   if rank == 0
+      println(!isempty(local_train_inds), " ", !isempty(local_val_inds), " ", get_validate(conf))
+   end
+   
    color = has_data ? 1 : nothing
    comm_active = MPI.Comm_split(comm, color, rank)
 

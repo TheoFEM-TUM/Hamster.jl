@@ -10,7 +10,7 @@ Return the list of system names available for a given configuration `conf`.
 - `Vector{String}`: A list of system names (HDF5 group names or a single system).
 """
 function get_systems(conf; is_val = false)
-    strc_file = is_val ? get_xdatcar_val(conf) : get_xdatcar(conf)
+    strc_file = is_val && get_xdatcar_val(conf) != "none" ? get_xdatcar_val(conf) : get_xdatcar(conf)
     if isfile(strc_file) && get_train_mode(conf) == "universal"
         h5open(strc_file, "r") do file
             systems = keys(file)
@@ -173,7 +173,7 @@ function get_config_inds_for_systems(
     # -------------------------------------------------
     file = nothing
     if length(systems) > 1
-        if is_val
+        if is_val && get_xdatcar_val(conf) != "none"
             file = h5open(get_xdatcar_val(conf), "r", comm)
         else
             file = h5open(get_xdatcar(conf), "r", comm)
@@ -213,10 +213,13 @@ function get_config_inds_for_systems(
 
                 if optimize
                     if is_val
+                        #delete!(g, "val_config_inds")
                         write(g, "val_config_inds", system_train_inds)
                     else
                         write(g, "train_config_inds", system_train_inds)
-                        write(g, "val_config_inds", system_val_inds)
+                        if get_val_ratio(conf) > 0
+                            write(g, "val_config_inds", system_val_inds)
+                        end
                     end
                 else
                     write(g, "config_inds", system_train_inds)

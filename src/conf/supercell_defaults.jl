@@ -85,4 +85,4 @@ get_xdatcar(conf::Config)::String = conf("XDATCAR", "Supercell") == "default" ? 
 
 The `xdatcar_val` tag sets the path to the validation XDATCAR file.
 """
-get_xdatcar_val(conf::Config)::String = conf("XDATCAR_val", "Supercell") == "default" ? "XDATCAR_val" : conf("XDATCAR_val", "Supercell")
+get_xdatcar_val(conf::Config)::String = conf("XDATCAR_val", "Supercell") == "default" ? "none" : conf("XDATCAR_val", "Supercell")
