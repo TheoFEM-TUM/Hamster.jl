@@ -29,7 +29,7 @@ Generates kernel feature vectors based on structure descriptors and data points.
 
 function get_kernel_features(structure_descriptors, data_points, sim_params, tol = 1e-8)
     #println(tol)
-    println("NTHREADS",Threads.nthreads())
+    #println("NTHREADS",Threads.nthreads())
     N_mats = size(structure_descriptors)[1]
     N_dp = size(data_points)[1]
     descr_sizes = [(size(structure_descriptors[i])[1], size(structure_descriptors[i][1])[1]) for i in 1:N_mats]
