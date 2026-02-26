@@ -1,0 +1,2 @@
+var DOCUMENTER_CURRENT_VERSION = "v0.2.1-zenodo";
+var DOCUMENTER_IS_DEV_VERSION = false;
