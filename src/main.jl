@@ -28,9 +28,11 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity
             nthreads_bands=nthreads_bands, nthreads_blas=nthreads_blas)
     end
     
-    blocks_to_write = string.(vcat(["Options"], keys(conf.blocks)...))
-    filter!(block -> block ∈ unique([tag.block for tag in CONFIG_TAGS]), blocks_to_write)
-    write_config_tags(conf; blocks=blocks_to_write, show_desc=true)
+    if rank == 0
+        blocks_to_write = string.(vcat(["Options"], keys(conf.blocks)...))
+        filter!(block -> block ∈ unique([tag.block for tag in CONFIG_TAGS]), blocks_to_write)
+        write_config_tags(conf; blocks=blocks_to_write, show_desc=true)
+    end
 
     task = decide_which_task_to_perform(conf)
     out = run_calculation(task, comm, conf, rank=rank, nranks=nranks)
