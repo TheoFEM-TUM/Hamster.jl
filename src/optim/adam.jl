@@ -1,3 +1,5 @@
+# Implementation adapted from https://github.com/FluxML/Flux.jl
+
 const EPS = 1e-8
 
 """
