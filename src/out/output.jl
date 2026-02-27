@@ -153,7 +153,8 @@ function write_config_tags(conf::Config; blocks=nothing, show_desc=false, filena
             write_separator(io, char='-')
 
             for tag in tags_by_block[blk]
-                val = join(get_tag(conf, tag), " ")
+                tag_val = get_tag(conf, tag)
+                val = isa(tag_val, AbstractString) ? tag_val : join(tag_val, " ")
                 tagval_str = "    $(tag.name) = $(val)"
                 tagval_padded = rpad(tagval_str, desc_col_start)
 
