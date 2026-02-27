@@ -52,7 +52,19 @@ get_strc_scale(conf::Config)::Float64 = conf("strc_scale", "ML") == "default" ? 
 
 Sets the parameter for the similarity function of the kernel model.
 """
-get_sim_params(conf::Config)::Float64 = conf("sim_params", "ML") == "default" ? 0.1 : conf("sim_params", "ML")
+get_sim_params(conf::Config)::Float64 = conf("sim_params", "ML") == "default" ? 1 : conf("sim_params", "ML")
+
+
+"""
+    *_sim_params=1
+
+Sets the parameter for the similarity function of the kernel model.
+"""
+get_Z_sim_params(conf::Config)::Float64 = conf("Z_sim_params", "ML") == "default" ? 1 : conf("Z_sim_params", "ML")
+get_r_sim_params(conf::Config)::Float64 = conf("r_sim_params", "ML") == "default" ? 1 : conf("r_sim_params", "ML")
+get_phi_sim_params(conf::Config)::Float64 = conf("phi_sim_params", "ML") == "default" ? 1 : conf("phi_sim_params", "ML")
+get_theta_sim_params(conf::Config)::Float64 = conf("theta_sim_params", "ML") == "default" ? 1 : conf("theta_sim_params", "ML")
+get_env_sim_params(conf::Config)::Float64 = conf("env_sim_params", "ML") == "default" ? 1 : conf("env_sim_params", "ML")
 
 """
     sampling=random

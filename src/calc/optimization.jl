@@ -87,7 +87,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    end
    has_data = !isempty(local_train_inds) && (!isempty(local_val_inds) || !get_validate(conf))
    if rank == 0
-      println(!isempty(local_train_inds), " ", !isempty(local_val_inds), " ", get_validate(conf))
+      #println(!isempty(local_train_inds), " ", !isempty(local_val_inds), " ", get_validate(conf))
    end
    
    color = has_data ? 1 : nothing
