@@ -96,14 +96,6 @@ function normdiff(v⃗::V, w⃗::W) where {V,W<:AbstractVector}
     return √out
 end
 
-function normdiff(v⃗::V, w⃗::W, σ⃗::Vector{Float64}, gauss_width_flag::Bool) where {V,W <:AbstractVector}
-    out = zero(promote_type(eltype(v⃗), eltype(w⃗), eltype(σ⃗))) 
-    @inbounds for i in eachindex(v⃗)
-        @views out += ((v⃗[i] - w⃗[i])/σ⃗[i])^2 /2
-    end
-    return √out
-end
-
 function normdiff(v⃗::V, w⃗::W, t⃗::T) where {V,W,T<:AbstractVector}
     out = zero(promote_type(eltype(v⃗), eltype(w⃗), eltype(t⃗)))
     @inbounds for (vi, wi, ti) in zip(v⃗, w⃗, t⃗)

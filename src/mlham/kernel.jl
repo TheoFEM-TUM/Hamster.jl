@@ -11,7 +11,7 @@ A kernel structure used for computing weighted similarity functions.
 mutable struct HamiltonianKernel{T1, T2, T3}
     params :: Vector{Float64}
     data_points :: Vector{T1}
-    sim_params :: Vector{Float64}
+    sim_params :: Float64
     update :: Bool
     feature_vec :: Vector{T3}
     feature_shape :: Tuple{Vector{T2}, Int64}
@@ -46,7 +46,7 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
                 js = Vector{Int32}() 
                 vals = Vector{Float64}() 
                 for (i_mat, j_mat, hin) in zip(findnz(h_env[R])...)
-                    val = exp_sim(data_point, hin, sim_params)
+                    val = exp_sim(data_point, hin, σ=sim_params)
                     if abs(val) > tol
                         push!(is, i_mat)
                         push!(js, j_mat)
@@ -77,7 +77,6 @@ function HamiltonianKernel(params :: Vector{Float64},
     tol :: Float64
     )
     feature_vec, feature_shape = get_kernel_features(structure_descriptors, data_points, sim_params, tol)
-    #sim_params = 1
     return HamiltonianKernel(params,data_points, sim_params, update, feature_vec, feature_shape)
 end
 
@@ -113,11 +112,6 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             sim_params=get_sim_params(conf), 
                             sp_tol=get_sp_tol(conf),
                             update_ml=get_ml_update(conf),
-                            Z_sim_params=get_Z_sim_params(conf),
-                            r_sim_params=get_r_sim_params(conf),
-                            phi_sim_params=get_phi_sim_params(conf),
-                            theta_sim_params=get_theta_sim_params(conf),
-                            env_sim_params=get_env_sim_params(conf),
                             rank=0,
                             nranks=1)
     structure_descriptors = Vector{Any}(undef, length(strcs))
@@ -143,8 +137,8 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         data_points_buf = nothing
         if rank == 0
             data_points_buf = MPI.VBuffer(similar(data_points_local, sum(counts)), counts)
-            #println("Npoints_local sampled: ", Npoints_local)
-            #println("nranks: ", nranks)
+            println("Npoints_local sampled: ", Npoints_local)
+            println("nranks: ", nranks)
         end
 
         MPI.Gatherv!(view(data_points_local, 1:counts[rank + 1]), data_points_buf, 0, comm)
@@ -163,16 +157,14 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         
     end
     params, data_points = init_ml_params!(data_points, conf)
-    sim_params = [Z_sim_params,Z_sim_params, r_sim_params, phi_sim_params, theta_sim_params, theta_sim_params, env_sim_params, env_sim_params]
-    #sim_params = sim_params_vec == [1,1,1,1,1,1,1,1] ? sim_params : sim_params_vec
+
     return HamiltonianKernel(params, data_points, sim_params,structure_descriptors, update_ml, sp_tol)
 end
 
 
 
 
-#exp_sim(x₁, x₂; σ::Float64)::Float64 = exp(-normdiff(x₁, x₂)^2 / (2σ^2))
-exp_sim(x₁, x₂, σ::Vector{Float64})::Float64 = exp(-normdiff(x₁, x₂, σ, true)^2)
+exp_sim(x₁, x₂; σ=√0.05)::Float64 = exp(-normdiff(x₁, x₂)^2 / (2σ^2))
 
 
 

@@ -32,7 +32,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
         Δr_dist = normdiff(ri, rj)
         Δr_in = (apply_distance_distortion || apply_distortion) ? Δr_dist : Δr
         if apply_distortion || apply_distance_distortion
-            Δr_in = Δr_in / rcut
+            Δr_in = Δr_in / rcut * strc_scale
         end
         for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
             i = ij_map[(iion, iorb)]
@@ -52,13 +52,13 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
             θs = angleswap ? reverse(θs) : θs
 
             if apply_distortion || apply_distance_distortion
-                φ = φ / 2π
-                θs = @. θs / 2π
+                φ = φ / 2π * strc_scale
+                θs = @. θs / 2π * strc_scale
             end
 
             if Δr ≤ rcut && fcut(Δr_dist, rcut+rcut_tol) > 0
                 ii, jj = orbswap ? (j, i) : (i, j)
-                push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii], env[jj]]))
+                push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
             end
         end
     end
