@@ -163,7 +163,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         
     end
     params, data_points = init_ml_params!(data_points, conf)
-    sim_params = sim_params .* [Z_sim_params,Z_sim_params, r_sim_params, phi_sim_params, theta_sim_params, theta_sim_params, env_sim_params, env_sim_params]
+    sim_params = [Z_sim_params,Z_sim_params, r_sim_params, phi_sim_params, theta_sim_params, theta_sim_params, env_sim_params, env_sim_params]
     #sim_params = sim_params_vec == [1,1,1,1,1,1,1,1] ? sim_params : sim_params_vec
     return HamiltonianKernel(params, data_points, sim_params,structure_descriptors, update_ml, sp_tol)
 end
