@@ -6,7 +6,7 @@ Calculate the TB descriptor for a given a TB `model`, a structure `strc` and a T
 function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_ml_rcut(conf), rcut_tol=get_rcut_tol(conf), apply_distortion=get_apply_distortion(conf), 
     env_scale=get_env_scale(conf), apply_distance_distortion=get_apply_distance_distortion(conf), strc_scale=get_strc_scale(conf))
     sim_params = get_sim_params(conf)
-    env_scale = env_scale/sim_params
+    #env_scale = env_scale/sim_params
     Nε = length(basis); Norb_per_ion = size(basis); NR = size(strc.Rs, 2)
 
     h_env = SparseMatrixCSC{SVector{8, Float64}, Int64}[spzeros(SVector{8, Float64}, Nε, Nε) for _ in 1:NR]

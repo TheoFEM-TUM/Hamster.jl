@@ -122,7 +122,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             sim_params=get_sim_params(conf), 
                             sp_tol=get_sp_tol(conf),
                             update_ml=get_ml_update(conf),
-                            smaple_strat = get_sample_strat(conf),
+                            sample_strat = get_sample_strat(conf),
                             rank=0,
                             nranks=1)
     structure_descriptors = Vector{Any}(undef, length(strcs))
