@@ -247,6 +247,22 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
     return SVector{size(descriptors, 1), Float64}[SVector{size(descriptors, 1)}(descriptors[:, index]) for index in selected_indices]
 end
 
+function sample_structure_descriptors_random(descriptors; Npoints=1)
+    Random.seed!(1234)
+
+    total_points = size(descriptors, 2)
+    Npoints = min(Npoints, total_points)
+
+    selected_indices = sample(1:total_points, Npoints; replace=false)
+
+    Random.seed!()
+
+    return SVector{size(descriptors, 1), Float64}[
+        SVector{size(descriptors, 1)}(descriptors[:, i]) 
+        for i in selected_indices
+    ]
+end
+
 """
     farthest_point_sampling(descriptors, cluster_indices, num_to_take)
 

@@ -88,3 +88,5 @@ get_ml_ncluster(conf::Config)::Int64 = conf("Ncluster", "ML") == "default" ? 1 :
 Sets the number of data points that are sampled in total.
 """
 get_ml_npoints(conf::Config)::Int64 = conf("Npoints", "ML") == "default" ? 1 : conf("Npoints", "ML")
+
+get_sample_strat(conf::Config)::String = conf("sample_strat", "ML") == "default" ? "cluster" : conf("sample_strat", "ML")
