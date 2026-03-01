@@ -59,6 +59,9 @@ Runs the optimization process for an effective Hamiltonian model using the speci
 """
 function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1, write_output=true)
    systems = get_systems(conf)
+   if rank == 0
+      println("Rank 0 Number of Systems: ", length(systems))
+   end
    xdatcar_val = get_xdatcar_val(conf)
    #println("xdatcar_val: ", xdatcar_val)
    #println("systems: ", systems)
@@ -69,6 +72,9 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    #println("val_ratio: ", get_val_ratio(conf))
    if get_validate(conf) && get_val_ratio(conf) == 0
       systems_val = get_systems(conf, is_val=true)
+      if rank == 0
+         println("Rank 0 Number of Validation Systems: ", length(systems_val))
+      end
       val_config_inds,_  = get_config_inds_for_systems(systems_val, comm, conf, rank=rank, write_output=write_output, is_val=true)
    end
    local_train_inds = split_indices_into_chunks(train_config_inds, nranks, rank=rank)
@@ -106,7 +112,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       active_rank = MPI.Comm_rank(comm_active)
       active_size = MPI.Comm_size(comm_active)
       Rs = get_translation_vectors_for_hr_fit(conf)
-      
+      #start_time = MPI.Wtime()
       # EffectiveHamiltonian model for training set
       train_strcs = mapreduce(vcat, local_train_inds, init=Structure[]) do (system, train_inds)
          system_strcs = get_structures(conf, config_indices=train_inds, Rs=Rs, mode=get_train_mode(conf), system=system)
@@ -116,13 +122,16 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
          return system_strcs
       end
       train_bases = Basis[Basis(strc, conf, comm=comm_active) for strc in train_strcs]
-
       if target_dir != "missing"
          ham_train = EffectiveHamiltonian(train_strcs, train_bases, local_subdirs, comm_active, conf, rank=active_rank, nranks=active_size)
       else
          ham_train = EffectiveHamiltonian(train_strcs, train_bases, comm_active, conf, rank=active_rank, nranks=active_size)
       end
+      #time = MPI.Wtime() - start_time
+      #MPI.Barrier(comm)
+      #if get_verbosity(conf) > 1 && active_rank == 0; println("Rank $active_rank :    Training Effective Hamiltonian initialization time: $time s"); end
       # EffectiveHamiltonian model for validation set
+      #start_time = MPI.Wtime()
       val_strcs = mapreduce(vcat, local_val_inds, init=Structure[]) do (system, val_inds)
          system_strcs = get_structures(conf, config_indices=val_inds, Rs=Rs, mode=get_val_mode(conf), system=system, is_val=true)
          if length(system_strcs) < length(val_inds)
@@ -133,6 +142,9 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
 
       val_bases = Basis[Basis(strc, conf, comm=comm_active) for strc in val_strcs]
       ham_val = EffectiveHamiltonian(val_strcs, val_bases, comm_active, conf, rank=active_rank, nranks=active_size, ml_data_points=get_ml_data_points(ham_train, conf), rllm_type="val")
+      #time = MPI.Wtime() - start_time
+      #MPI.Barrier(comm)
+      #if get_verbosity(conf) > 1 && active_rank == 0; println("Rank $active_rank :    Validation Effective Hamiltonian initialization time: $time s"); end
       Nε_train = get_number_of_bands_per_structure(train_bases, local_train_inds, soc=get_soc(conf))
       Nε_val = get_number_of_bands_per_structure(val_bases, local_val_inds, soc=get_soc(conf))
 

@@ -62,13 +62,14 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
                 rllm_file=get_rllm_file(conf),
                 rllm_type = "train"
                 )
+    #verbosity = get_verbosity(conf)
     #if isfile(get_rllm_file(conf)) && rank == 0 && get_interpolate_rllm(conf); rm(get_rllm_file(conf)); end
     #rllm_file = rllm_type == "train" ? rllm_file : "val_$rllm_file"
     if load_rllm == false && rllm_type == "train"
         if isfile(rllm_file) && rank == 0; rm(rllm_file); end
         precalc_rllm(bases; comm, rank, nranks, conf, rllm_file = rllm_file)
     end
-    if rllm_type != "train" && isfile(rllm_file)
+    if rllm_type != "train" && isfile(rllm_file) && load_rllm == false
         add_to_previous_interpolations!(bases, conf; comm=comm, rank = rank, nranks = nranks)
     end
     file = nothing
@@ -85,7 +86,6 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
     if occursin(".h5", rllm_file)
         close(file)
     end
-    
     param_labels_local = unique(Iterators.flatten([basis.parameters for basis in bases]))
     param_labels = MPI.gather(param_labels_local, comm, root=0)
     if rank == 0

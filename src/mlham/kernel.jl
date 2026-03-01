@@ -27,7 +27,8 @@ Generates kernel feature vectors based on structure descriptors and data points.
 - `tol`: Tolerance for filtering small values (default = 1e-8).
 """
 
-function get_kernel_features(structure_descriptors, data_points, sim_params, tol = 1e-8)
+function get_kernel_features(structure_descriptors, data_points, sim_params, tol = 1e-8; conf = get_empty_config(), rank = 0)
+    verbosity = get_verbosity(conf)
     #println(tol)
     #println("NTHREADS",Threads.nthreads())
     N_mats = size(structure_descriptors)[1]
@@ -59,6 +60,9 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
                 end
             end
         end
+        if verbosity > 1 && rank == 0
+            println("Rank 0: Finished kernel features for mat Nr. ($i / $N_mats)")
+        end
     end
     structure_descriptors = nothing
     GC.gc()
@@ -74,9 +78,11 @@ function HamiltonianKernel(params :: Vector{Float64},
     sim_params,
     structure_descriptors,
     update :: Bool,
-    tol :: Float64
+    tol :: Float64;
+    conf = get_empty_config(),
+    rank = 0
     )
-    feature_vec, feature_shape = get_kernel_features(structure_descriptors, data_points, sim_params, tol)
+    feature_vec, feature_shape = get_kernel_features(structure_descriptors, data_points, sim_params, tol, conf = conf, rank = rank)
     return HamiltonianKernel(params,data_points, sim_params, update, feature_vec, feature_shape)
 end
 
@@ -87,7 +93,9 @@ function HamiltonianKernel(params :: Vector{Float64},
     data_points,
     sim_params,
     structure_descriptors,
-    update :: Bool,
+    update :: Bool;
+    conf = get_empty_config(),
+    rank = 0
     )
 
     return HamiltonianKernel(params,
@@ -95,7 +103,9 @@ function HamiltonianKernel(params :: Vector{Float64},
     sim_params,
     structure_descriptors,
     update,
-    1e-8)
+    1e-8;
+    conf = conf,
+    rank = rank)
 end
 
 #ham_val = EffectiveHamiltonian(val_strcs, val_bases, comm_active, conf, rank=active_rank, nranks=active_size, ml_data_points=get_ml_data_points(ham_train, conf))
@@ -158,7 +168,9 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
     end
     params, data_points = init_ml_params!(data_points, conf)
 
-    return HamiltonianKernel(params, data_points, sim_params,structure_descriptors, update_ml, sp_tol)
+    return HamiltonianKernel(params, data_points, sim_params,structure_descriptors, update_ml, sp_tol;
+    conf =conf,
+    rank = rank)
 end
 
 

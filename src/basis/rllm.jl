@@ -52,7 +52,7 @@ Retrieves or computes the radial orbital integral look-up table (RLLM) for a giv
 function get_rllm_from_file(overlaps::Vector{TBOverlap},file = nothing, conf=get_empty_config(); comm = nothing, load_rllm=get_load_rllm(conf), rllm_file=get_rllm_file(conf),verbosity = get_verbosity(conf),rllm_type = "train", rank = 0)
     rllm_dict = Dict{String, CubicSpline{Float64}}()
     yes = true
-    rllm_file = rllm_type == "train" ? rllm_file : "val_$rllm_file"
+    #rllm_file = rllm_type == "train" ? rllm_file : "val_$rllm_file"
     if verbosity > 0 && rank == 0; println("     Getting distance dependence..."); end
     time = @elapsed if yes
         if verbosity > 1 && rank == 0; println("     Reading distance dependence from file..."); end
