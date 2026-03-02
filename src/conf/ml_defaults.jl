@@ -90,3 +90,7 @@ Sets the number of data points that are sampled in total.
 get_ml_npoints(conf::Config)::Int64 = conf("Npoints", "ML") == "default" ? 1 : conf("Npoints", "ML")
 
 get_sample_strat(conf::Config)::String = conf("sample_strat", "ML") == "default" ? "cluster" : conf("sample_strat", "ML")
+
+get_get_desc_mode(conf::Config)::String = conf("desc_mode", "ML") == "default" ? "calc" : conf("desc_mode", "ML")
+
+#get_ml_kernel_features_file(conf::Config)::String = conf("kernel_features_file", "ML") == "default" ? "ml_kernel_features.h5" : conf("kernel_features_file", "ML")
