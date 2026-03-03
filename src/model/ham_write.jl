@@ -191,31 +191,29 @@ Read a Hamiltonian and associated vectors from an HDF5 file previously written w
 - `H::Vector{SparseMatrixCSC}`: Vector of Hamiltonian blocks reconstructed as sparse matrices.
 - `vecs::Array`: The stored array of vectors associated with the Hamiltonian.
 """
-function read_ham(comm, ind=0; filename="ham.h5", space="k", system="")
-    H = nothing
-    vecs = nothing
-    h5open(filename, "r", comm) do file
-        h_group = ind == 0 ? "H$space" : "H$(space)_$(system)_$ind"
-        g = file[h_group]
-        vecs = read(g["vecs"])
-        Nε = read(g[keys(g)[1]]["m"])
-        H = get_empty_complex_hamiltonians(Nε, size(vecs, 2), Sparse())
+function read_ham(comm, ind=0; filename="ham.h5", space="k", system="") :: Tuple{Vector{SparseMatrixCSC{ComplexF64, Int64}}, Matrix{<:Real}}
+    file = isnothing(comm) ? h5open(filename, "r") : h5open(filename, "r", comm)
 
-        block_names = sort(filter(x -> x != "vecs", keys(g)))
-        for name in block_names
-            grp = g[name]
-            m = read(grp["m"])
-            n = read(grp["n"])
-            rowval = read(grp["rowval"])
-            colptr = read(grp["colptr"])
-            nzval  = read(grp["nzval"])
-            H[parse(Int64, name)] = SparseMatrixCSC(m, n, colptr, rowval, nzval)
-        end
+    h_group = ind == 0 ? "H$space" : "H$(space)_$(system)_$ind"
+    g = file[h_group]
+    vecs = read(g["vecs"])
+    Nε = read(g[keys(g)[1]]["m"])
+    H = get_empty_complex_hamiltonians(Nε, size(vecs, 2), Sparse())
+
+    block_names = sort(filter(x -> x != "vecs", keys(g)))
+    for name in block_names
+        grp = g[name]
+        m = read(grp["m"])
+        n = read(grp["n"])
+        rowval = read(grp["rowval"])
+        colptr = read(grp["colptr"])
+        nzval  = read(grp["nzval"])
+        H[parse(Int64, name)] = SparseMatrixCSC(m, n, colptr, rowval, nzval)
     end
     return H, vecs
 end
 
-read_ham(ind::Integer=0; filename="ham.h5", space="k") = read_ham(MPI.COMM_WORLD, ind; filename=filename, space=space)
+read_ham(ind::Integer=0; filename="ham.h5", space="k") = read_ham(nothing, ind; filename=filename, space=space)
 
 const ħ_eVfs = 0.6582119569 # ħ in units of eV·fs
 """
