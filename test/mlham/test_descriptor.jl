@@ -91,12 +91,35 @@ end
     descriptors = Hamster.get_tb_descriptor(model.hs, model.params, strc, basis, conf)
     @test descriptors isa Vector{SparseMatrixCSC{SVector{8, Float64}, Int64}}
 
-    # Test: test descriptor sampler
+    # Test 4: test descriptor sampler
     X = rand(3, 1000)
     num_cluster = 10; num_points = 100
     Xout = Hamster.sample_structure_descriptors(X, Ncluster=num_cluster, Npoints=num_points)
     @test length(Xout) == num_points
     @test length(Xout[1]) == 3
+
+    # Test 5: test orthogonality
+    # Different atoms → always false
+    @test !Hamster.decide_orthogonal(1.0, 1, 2, 0, 0, apply_orthogonality=true)
+    @test !Hamster.decide_orthogonal(5.0, 1, 1, 0, 0, apply_orthogonality=true)
+
+    # Same atom, same orbital → false
+    @test !Hamster.decide_orthogonal(0.0, 1, 1, 0, 0, apply_orthogonality=true)
+    @test !Hamster.decide_orthogonal(0.0, 3, 3, 1, 1, apply_orthogonality=true)
+
+    # Same atom, different orbitals, pure orbitals → true
+    @test Hamster.decide_orthogonal(0.0, 1, 2, 0, 0, apply_orthogonality=true)
+    @test Hamster.decide_orthogonal(0.0, 5, 6, 1, 2, apply_orthogonality=true)
+
+    # Same atom, hybrid orbital involved → false
+    @test !Hamster.decide_orthogonal(0.0, 1, 2, -1, 0, apply_orthogonality=true)
+    @test !Hamster.decide_orthogonal(0.0, 1, 2, 0, -1, apply_orthogonality=true)
+    @test !Hamster.decide_orthogonal(0.0, 1, 2, -1, -1, apply_orthogonality=true)
+
+    # Orthogonality not enforced → false in all cases
+    @test !Hamster.decide_orthogonal(0.0, 1, 2, 0, 0, apply_orthogonality=false)
+    @test !Hamster.decide_orthogonal(0.0, 1, 1, 0, 0, apply_orthogonality=false)
+    @test !Hamster.decide_orthogonal(1.0, 1, 2, 0, 0, apply_orthogonality=false)
 end
 
 @testset "CsPbBr3 descriptors (Orbital ordering)" begin

@@ -3,8 +3,14 @@
 
 Calculate the TB descriptor for a given a TB `model`, a structure `strc` and a TBConfig file `conf`.
 """
-function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_ml_rcut(conf), rcut_tol=get_rcut_tol(conf), apply_distortion=get_ml_apply_distortion(conf), 
-    env_scale=get_ml_env_scale(conf), apply_distance_distortion=get_ml_apply_distance_distortion(conf), strc_scale=get_ml_strc_scale(conf))
+function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; 
+                            rcut=get_ml_rcut(conf), 
+                            rcut_tol=get_rcut_tol(conf), 
+                            apply_distortion=get_ml_apply_distortion(conf),
+                            apply_orthogonality = get_ml_apply_orthogonality(conf),
+                            env_scale=get_ml_env_scale(conf), 
+                            apply_distance_distortion=get_ml_apply_distance_distortion(conf), 
+                            strc_scale=get_ml_strc_scale(conf))
 
     Nε = length(basis); Norb_per_ion = size(basis); NR = size(strc.Rs, 2)
 
@@ -56,7 +62,9 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
                 θs = @. θs / 2π * strc_scale
             end
 
-            if Δr ≤ rcut && fcut(Δr_dist, rcut+rcut_tol) > 0
+            isorthogonal = decide_orthogonal(Δr, i, j, l_i, l_j; apply_orthogonality=apply_orthogonality)
+
+            if Δr ≤ rcut && fcut(Δr_dist, rcut+rcut_tol) > 0 && !isorthogonal
                 ii, jj = orbswap ? (j, i) : (i, j)
                 push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
             end
@@ -108,6 +116,29 @@ This helps maintain consistent descriptor or feature vector construction in syst
 - `true` if the orbitals should be swapped to maintain ordering; `false` otherwise.
 """
 decide_orbswap(itype, jtype, l_i, env_i, l_j, env_j) = (itype == jtype && l_i > l_j) || (itype == jtype && l_i == l_j && env_i > env_j) || (itype > jtype)
+
+"""
+    decide_orthogonal(Δr, i, j, l_i, l_j; apply_orthogonality=false) -> Bool
+
+Determine whether two atomic orbitals should be treated as orthogonal.
+
+# Arguments
+- `Δr::Real` : Distance between the centers of the two orbitals.  
+- `i::Int` : Index of the first orbital.  
+- `j::Int` : Index of the second orbital.  
+- `l_i::Int` : Angular momentum quantum number (or orbital type) of the first orbital.  
+- `l_j::Int` : Angular momentum quantum number (or orbital type) of the second orbital.  
+- `apply_orthogonality::Bool` (keyword, default=false) : Whether to enforce atomic orthogonality rules.
+
+# Returns
+- `Bool` : `true` if the orbitals are considered orthogonal, `false` otherwise.
+"""
+function decide_orthogonal(Δr, i, j, l_i, l_j; apply_orthogonality=false)
+    !apply_orthogonality && return false
+    Δr != 0 && return false
+    (l_i < 0 || l_j < 0) && return false
+    return i != j
+end
 
 """
     get_angular_descriptors(itype, jtype, ri, rj, iaxis, jaxis, orbswap)

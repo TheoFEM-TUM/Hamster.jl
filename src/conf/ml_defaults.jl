@@ -15,6 +15,7 @@
 @configtag sampling String "random" "sampling method for each cluster of descriptors (random, farthest)." "ML"
 @configtag apply_distortion Bool false "whether distortions are considered in descriptor." "ML"
 @configtag apply_distance_distortion Bool false "whether distortions (distance only) are considered in descriptor." "ML"
+@configtag apply_orthogonality Bool false "enforce orthogonality of atomic orbitals of different l, m (r=0)" "ML"
 
 function decide_ml_update(conf::Config)::Bool
     if haskey(conf, "Optimizer") && haskey(conf, "ML")
