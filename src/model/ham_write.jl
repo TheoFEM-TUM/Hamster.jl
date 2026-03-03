@@ -191,7 +191,7 @@ Read a Hamiltonian and associated vectors from an HDF5 file previously written w
 - `H::Vector{SparseMatrixCSC}`: Vector of Hamiltonian blocks reconstructed as sparse matrices.
 - `vecs::Array`: The stored array of vectors associated with the Hamiltonian.
 """
-function read_ham(comm, ind=0; filename="ham.h5", space="k", system="") :: Tuple{Vector{SparseMatrixCSC{ComplexF64, Int64}}, Matrix{Int64}}
+function read_ham(comm, ind=0; filename="ham.h5", space="k", system="") :: Tuple{Vector{SparseMatrixCSC{ComplexF64, Int64}}, Matrix{<:Real}}
     file = isnothing(comm) ? h5open(filename, "r") : h5open(filename, "r", comm)
 
     h_group = ind == 0 ? "H$space" : "H$(space)_$(system)_$ind"
