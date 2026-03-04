@@ -186,6 +186,7 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filena
         println(file, "  sim_params = ", get_ml_sim_params(conf))
         println(file, "  env_scale = ", get_ml_env_scale(conf))
         println(file, "  apply_distortion = ", get_ml_apply_distortion(conf))
+        println(file, "  apply_orthogonality = ", get_ml_apply_orthogonality(conf))
         println(file, "end")
         println(file, "")
         for n in eachindex(kernel.params)
@@ -208,20 +209,37 @@ Reads the parameters for a HamiltonianKernel model from a file and returns the p
 - `filename`: The name of the `.dat` file to read from (default: `get_ml_filename(conf)`).
 """
 function read_ml_params(conf=get_empty_config(); filename=get_ml_filename(conf))
-    if !occursin(".dat", filename); filename *= ".dat"; end
+    endswith(filename, ".dat") || (filename *= ".dat")
     lines = open_and_read(filename)
     lines = split_lines(lines)
-    N = length(lines[8]) - 1
 
     # Check that header params match Config
-    @assert parse(Float64, lines[2][end]) == get_ml_rcut(conf)
-    @assert parse(Float64, lines[3][end]) == get_ml_sim_params(conf)
-    @assert parse(Float64, lines[4][end]) == get_ml_env_scale(conf)
-    @assert parse(Bool, lines[5][end]) == get_ml_apply_distortion(conf)
+    in_header = false
+    data_start = 1
 
+    for (i, line) in enumerate(lines)
+        if line[1] == "begin"
+            in_header = true
+            continue
+        elseif line[1] == "end"
+            in_header = false
+            data_start = i + 2
+            break
+        elseif in_header && "=" ∈ line
+            key, val = line[1], line[end]
+            key = strip(key)
+            val = strip(val)
+            fn_name = Symbol("get_ml_", key)
+            fn = getfield(@__MODULE__, fn_name)
+            conf_val = fn(conf)
+            @assert tryparse(typeof(conf_val), val) == conf_val
+        end
+    end
+
+    N = length(lines[data_start]) - 1
     data_points = SVector{N, Float64}[]
     params = Float64[]
-    for line in lines[8:end]
+    for line in lines[data_start:end]
         if length(line) > 1
             parsed_line = parse.(Float64, line)
             push!(params, parsed_line[1])
