@@ -24,7 +24,7 @@
 @configtag skip_diag Bool false "if true, no eigenvalues are computed."
 @configtag diag_method String "shift-invert" "sparse eigensolver when `sp_diag=true` (shift-invert, krylov-schur)."
 @configtag neig Int64 6 "number of eigenvalues when using sparse eigensolver."
-@configtag eig_target Float64 0 "target energy when using sparse eigensolver."
+@configtag eig_target Float64 0.0 "target energy when using sparse eigensolver."
 
 
 """

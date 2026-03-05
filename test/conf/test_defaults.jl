@@ -128,7 +128,6 @@ end
     @test Hamster.get_ml_mode(conf) == "expand"
     set_value!(conf, "mode", "ML", "eval")
     @test Hamster.get_ml_mode(conf) == "eval"
-
 end
 
 @testset "SOC defaults" begin
