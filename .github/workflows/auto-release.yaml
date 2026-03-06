@@ -85,7 +85,7 @@ jobs:
 
           if [ "${{ env.MAJOR_COUNT }}" -ge 1 ]; then
             TYPE="major"
-          elif [ "${{ env.MINOR_COUNT }}" -ge 3 ]; then
+          elif [ "${{ env.MINOR_COUNT }}" -ge 2 ]; then
             TYPE="minor"
           elif [ "${{ env.PATCH_COUNT }}" -ge 3 ]; then
             TYPE="patch"
