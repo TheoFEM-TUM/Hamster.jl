@@ -41,7 +41,7 @@ Create a `Loss` object with band weights, k-point weights, and loss norm based o
 # Returns
 - A `Loss` object initialized with the appropriate band weights (`wE`), k-point weights (`wk`), normalization factor, and loss norm (`n`).
 """
-function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk))
+function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk), w_Eig = 1)
     n = loss_to_n[loss]
 
     for key in keys(conf.blocks["Optimizer"])
@@ -53,7 +53,7 @@ function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band
             wE[index_range] .= conf(key, "Optimizer")
         end
     end
-    return Loss(wE, wk, n)
+    return Loss(wE, wk, n, w_Eig)
 end
 
 Loss(conf=get_empty_config()) = Loss(loss_to_n[get_loss(conf)])
@@ -94,11 +94,16 @@ Compute the forward pass of the loss function given the true values `y` and the 
 # Returns
 -`L::Float64`: The loss between `y` and `ŷ`.
 """
-function forward(l::Loss, y, ŷ)
+function forward(l::Loss, y, ŷ; offset = true)
+    Δy = y - ŷ
+    if offset
+        Δy = Δy .- mean(Δy)
+    end
+
     if isempty(l.wE) && isempty(l.wk)
-        return mean(@. abs(y - ŷ)^l.n)
+        return mean(@. abs(Δy)^l.n)
     else
-        L = @. abs(y - ŷ)^l.n
+        L = @. abs(Δy)^l.n
         return 1/l.N * (l.wE' * L * l.wk)
     end
 end
@@ -121,12 +126,16 @@ Compute the gradient of the loss function with respect to the predicted values `
 # Returns
 - `dL::AbstractArray`: The gradient of the loss with respect to the predicted values `y`.
 """
-function backward(l::Loss, y, ŷ)
+function backward(l::Loss, y, ŷ, offset = true)
+    Δy = y - ŷ
+    if offset
+        Δy = Δy .- mean(Δy)
+    end
     if isempty(l.wE) && isempty(l.wk)
         N = length(y)
-        return @. 1/N * sign(y - ŷ) * l.n * abs(y - ŷ)^(l.n - 1)
+        return @. 1/N * sign(Δy) * l.n * abs(Δy)^(l.n - 1)
     else
-        return @. 1/l.N * sign(y - ŷ) * l.wk' * l.wE * l.n * abs(y - ŷ)^(l.n - 1)
+        return @. 1/l.N * sign(Δy) * l.wk' * l.wE * l.n * abs(Δy)^(l.n - 1)
     end
 end
 
@@ -200,3 +209,27 @@ Compute the gradient of the regularization penalty with respect to the input (pa
   with respect to the corresponding element in `x`.
 """
 backward(R::Regularization, x) = R.λ .* map(y -> abs(y) > R.b ? R.n * (y-R.b)^(R.n-1) : 0., x)
+
+
+function Losses(Nε_all, Nk_all, N_eig_avg, conf=get_empty_config();weights = true, loss=get_loss(conf))
+    N_strc = length(Nk_all)
+    n = loss_to_n[loss]
+    #Loss_vec = Vector{Loss}(undef, N_stc)
+    Loss_vec = [Loss(n) for i in 1:N_strc]
+    
+    #N_eig_avg = sum(Nε_all .* Nk_all)/N_strc
+    for i in 1:N_strc
+        Nε = Nε_all[i]
+        Nk = Nk_all[i]
+        w_Eig = Nε * Nk / N_eig_avg
+        #w_Eig = 1
+        wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
+        wk = weights ? get_kpoint_weights(conf, Nk) : ones(Nk)
+        #Loss_vec[i] = Loss(Nε, Nk, conf, loss=loss, wE=wE, wk=wk, w_Eig=w_Eig)
+        #Loss_vec[i] = Loss(1)
+        #Loss_vec[i] = Loss(wE, wk, n, w_Eig)
+        Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk)/w_Eig, n)
+    end
+    
+    return Loss_vec
+end

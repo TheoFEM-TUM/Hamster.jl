@@ -87,11 +87,8 @@ Get the number of eigenvalues and the number of k-points from a collection of da
 """
 function get_neig_and_nk(data::Vector{EigData})
     Nε_all = map(d->size(d.Es, 1), data)
-    if length(unique(Nε_all)) == 1
-        return (size(data[1].Es, 1), size(data[1].kp, 2))
-    else
-        return (0, 0)
-    end
+    Nk_all = map(d->size(d.kp, 2), data)
+    return Nε_all, Nk_all
 end
 get_neig_and_nk(data::Vector{<:HrData}) = (0, 0)
 

@@ -14,8 +14,8 @@ A gradient descent optimizer for training Hamiltonian models, incorporating loss
 This structure encapsulates all components required for optimizing a Hamiltonian model. It is typically passed to training functions, such as `train_step!` or `optimize_model!`, to guide the optimization process.
 """
 struct GDOptimizer
-    loss :: Loss
-    val_loss :: Loss
+    losses :: Vector{Loss} 
+    val_losses :: Vector{Loss} 
     reg :: Regularization
     adam :: Adam
     Niter :: Int64
@@ -34,16 +34,13 @@ Creates a gradient descent optimizer for a given loss function, regularization t
 - `Niter::Int` (optional): Number of iterations for the optimization process. Defaults to the value returned by `get_niter(conf)`.
 - `val_weights::Bool` (optional): If true, same weights are used for validation as for training.
 """
-function GDOptimizer(Nε, Nk, conf=get_empty_config(); lr=get_lr(conf), Niter=get_niter(conf), val_weights=get_val_weights(conf))
-    loss = Nε == 0 && Nk == 0 ? Loss(conf) : Loss(Nε, Nk, conf)
-    if val_weights
-        val_loss = Nε == 0 && Nk == 0 ? Loss(conf) : Loss(Nε, Nk, conf)
-    else
-        val_loss = Loss(conf)
-    end
+function GDOptimizer(Nε, Nk, N_eig_avg, conf=get_empty_config(); lr=get_lr(conf), Niter=get_niter(conf), val_weights=get_val_weights(conf))
+    losses = Losses(Nε, Nk, N_eig_avg, conf, weights = false)
+
+    val_losses = Losses(Nε, Nk, N_eig_avg, conf, weights = val_weights)
     reg = Regularization(conf)
     adam = Adam(lr)
-    return GDOptimizer(loss, val_loss, reg, adam, Niter)
+    return GDOptimizer(losses, val_losses, reg, adam, Niter)
 end
 
 GDOptimizer(conf=get_empty_config()) = GDOptimizer(0, 0, conf)

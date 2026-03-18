@@ -151,8 +151,19 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       combine_local_rllm_files(get_rllm_file(conf), comm_active; rank=active_rank, nranks=active_size)
 
       dl = DataLoader(local_train_inds, local_val_inds, Nε_train, Nε_val, conf)
-      Nε, Nk = get_neig_and_nk(dl.train_data)
-      optim = GDOptimizer(Nε, Nk, conf)
+      Nε_all, Nk_all = get_neig_and_nk(dl.train_data)
+      N_strc = length(Nk_all)
+      N_eig_avg_local = sum(Nε_all .* Nk_all)/N_strc
+      N_eig_avg = 1
+      MPI.Barrier(comm)
+      N_eig_avg_all= MPI.gather(N_eig_avg_local, comm, root=0)
+      if rank == 0
+         N_eig_avg = sum(N_eig_avg_all) / length(N_eig_avg_all)
+      end
+      N_eig_avg = MPI.Bcast(N_eig_avg, 0, comm)
+      MPI.Barrier(comm)
+
+      optim = GDOptimizer(Nε_all, Nk_all,N_eig_avg, conf)
       prof = HamsterProfiler(3, conf)
       
       optimize_model!(ham_train, ham_val, optim, dl, prof, comm_active, conf, rank=active_rank, nranks=active_size)
