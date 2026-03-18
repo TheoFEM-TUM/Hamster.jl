@@ -15,11 +15,12 @@ struct Loss
     wE :: Vector{Float64}
     wk :: Vector{Float64}
     N :: Float64
+    wStr :: Float64
     n :: Int64
 end
 
-Loss(wE::Vector{Float64}, wk::Vector{Float64}, n::Int64) = Loss(wE, wk, sum(wE)*sum(wk), n)
-Loss(n::Int64) = Loss(Float64[], Float64[], 0, n)
+Loss(wE::Vector{Float64}, wk::Vector{Float64}, n::Int64) = Loss(wE, wk, sum(wE)*sum(wk), 1., n)
+Loss(n::Int64) = Loss(Float64[], Float64[], 0, 1., n)
 
 """
     Loss(Nε, Nk; conf=get_empty_config(), loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk))
@@ -41,7 +42,7 @@ Create a `Loss` object with band weights, k-point weights, and loss norm based o
 # Returns
 - A `Loss` object initialized with the appropriate band weights (`wE`), k-point weights (`wk`), normalization factor, and loss norm (`n`).
 """
-function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk), w_Eig = 1)
+function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk))
     n = loss_to_n[loss]
 
     for key in keys(conf.blocks["Optimizer"])
@@ -53,7 +54,7 @@ function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band
             wE[index_range] .= conf(key, "Optimizer")
         end
     end
-    return Loss(wE, wk, n, w_Eig)
+    return Loss(wE, wk, n)
 end
 
 Loss(conf=get_empty_config()) = Loss(loss_to_n[get_loss(conf)])
@@ -103,8 +104,9 @@ function forward(l::Loss, y, ŷ; offset = true)
     if isempty(l.wE) && isempty(l.wk)
         return mean(@. abs(Δy)^l.n)
     else
-        L = @. abs(Δy)^l.n
-        return 1/l.N * (l.wE' * L * l.wk)
+        #L = @. abs(Δy)^l.n
+        #return 1/l.N * (l.wE' * L * l.wk)
+        return mean(@. abs(Δy)^l.n)
     end
 end
 
@@ -135,7 +137,7 @@ function backward(l::Loss, y, ŷ, offset = true)
         N = length(y)
         return @. 1/N * sign(Δy) * l.n * abs(Δy)^(l.n - 1)
     else
-        return @. 1/l.N * sign(Δy) * l.wk' * l.wE * l.n * abs(Δy)^(l.n - 1)
+        return @. 1/l.N * 1/l.wStr * sign(Δy) * l.wk' * l.wE * l.n * abs(Δy)^(l.n - 1)
     end
 end
 
@@ -221,14 +223,11 @@ function Losses(Nε_all, Nk_all, N_eig_avg, conf=get_empty_config();weights = tr
     for i in 1:N_strc
         Nε = Nε_all[i]
         Nk = Nk_all[i]
-        w_Eig = Nε * Nk / N_eig_avg
-        #w_Eig = 1
+        wStr = Nε * Nk / N_eig_avg
+
         wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
         wk = weights ? get_kpoint_weights(conf, Nk) : ones(Nk)
-        #Loss_vec[i] = Loss(Nε, Nk, conf, loss=loss, wE=wE, wk=wk, w_Eig=w_Eig)
-        #Loss_vec[i] = Loss(1)
-        #Loss_vec[i] = Loss(wE, wk, n, w_Eig)
-        Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk)/w_Eig, n)
+        Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n)
     end
     
     return Loss_vec

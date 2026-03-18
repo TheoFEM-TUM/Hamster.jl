@@ -153,6 +153,21 @@ function read_hr_data_from_path(path, inds)
     end
 end
 
+function get_n_all(data, comm)
+    Nε_all, Nk_all = get_neig_and_nk(data)
+    N_strc = length(Nk_all)
+    N_eig_avg_local = sum(Nε_all .* Nk_all)/N_strc
+    N_eig_avg = 1
+    MPI.Barrier(comm)
+    N_eig_avg_all= MPI.gather(N_eig_avg_local, comm, root=0)
+    if rank == 0
+        N_eig_avg = sum(N_eig_avg_all) / length(N_eig_avg_all)
+    end
+    N_eig_avg = MPI.Bcast(N_eig_avg, 0, comm)
+    MPI.Barrier(comm)
+    return Nε_all, Nk_all, N_eig_avg
+end
+
 """
     get_translation_vectors_for_hr_fit(conf=get_empty_config(); hr_fit=get_hr_fit(conf), train_data=get_train_data(conf))::Matrix{Float64}
 

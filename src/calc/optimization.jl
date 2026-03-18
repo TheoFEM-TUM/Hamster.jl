@@ -151,19 +151,40 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       combine_local_rllm_files(get_rllm_file(conf), comm_active; rank=active_rank, nranks=active_size)
 
       dl = DataLoader(local_train_inds, local_val_inds, Nε_train, Nε_val, conf)
-      Nε_all, Nk_all = get_neig_and_nk(dl.train_data)
-      N_strc = length(Nk_all)
-      N_eig_avg_local = sum(Nε_all .* Nk_all)/N_strc
-      N_eig_avg = 1
-      MPI.Barrier(comm)
-      N_eig_avg_all= MPI.gather(N_eig_avg_local, comm, root=0)
+
+      #Nε_all_train, Nk_all_train, N_eig_avg_train = get_n_all(dl.train_data, comm)
+      #Nε_all_val, Nk_all_val, N_eig_avg_val = get_n_all(dl.val_data, comm)
+
+
+      Nε_all_train, Nk_all_train = get_neig_and_nk(dl.train_data)
+      
+      N_eig_avg_local_train = mean(Nε_all_train .* Nk_all_train)
+      N_eig_avg_train = Ref(1.0)
+      N_eig_avg_all_train= MPI.gather(N_eig_avg_local_train, comm, root=0)
       if rank == 0
-         N_eig_avg = sum(N_eig_avg_all) / length(N_eig_avg_all)
+         N_eig_avg_train[] = mean(N_eig_avg_all_train)
       end
-      N_eig_avg = MPI.Bcast(N_eig_avg, 0, comm)
+      N_eig_avg_train = MPI.Bcast!(N_eig_avg_train, 0, comm)
+      N_eig_avg_train = N_eig_avg_train[]
       MPI.Barrier(comm)
 
-      optim = GDOptimizer(Nε_all, Nk_all,N_eig_avg, conf)
+
+      Nε_all_val, Nk_all_val = get_neig_and_nk(dl.val_data)
+      N_eig_avg_local_val = mean(Nε_all_val .* Nk_all_val)
+      N_eig_avg_val = Ref(1.0)
+      N_eig_avg_all_val= MPI.gather(N_eig_avg_local_val, comm, root=0)
+      if rank == 0
+         N_eig_avg_val[] = mean(N_eig_avg_all_val)
+      end
+      N_eig_avg_val = MPI.Bcast!(N_eig_avg_val, 0, comm)
+      N_eig_avg_val = N_eig_avg_val[]
+      MPI.Barrier(comm)
+
+
+      
+
+      optim = GDOptimizer(Nε_all_train, Nk_all_train, N_eig_avg_train, Nε_all_val, Nk_all_val, N_eig_avg_val, conf)
+
       prof = HamsterProfiler(3, conf)
       
       optimize_model!(ham_train, ham_val, optim, dl, prof, comm_active, conf, rank=active_rank, nranks=active_size)

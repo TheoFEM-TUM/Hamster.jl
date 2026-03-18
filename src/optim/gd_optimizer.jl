@@ -34,10 +34,10 @@ Creates a gradient descent optimizer for a given loss function, regularization t
 - `Niter::Int` (optional): Number of iterations for the optimization process. Defaults to the value returned by `get_niter(conf)`.
 - `val_weights::Bool` (optional): If true, same weights are used for validation as for training.
 """
-function GDOptimizer(Nε, Nk, N_eig_avg, conf=get_empty_config(); lr=get_lr(conf), Niter=get_niter(conf), val_weights=get_val_weights(conf))
+function GDOptimizer(Nε, Nk, N_eig_avg, Nε_val, Nk_val, N_eig_avg_val, conf=get_empty_config(); lr=get_lr(conf), Niter=get_niter(conf), val_weights=get_val_weights(conf))
     losses = Losses(Nε, Nk, N_eig_avg, conf, weights = false)
 
-    val_losses = Losses(Nε, Nk, N_eig_avg, conf, weights = val_weights)
+    val_losses = Losses(Nε_val, Nk_val, N_eig_avg_val, conf, weights = val_weights)
     reg = Regularization(conf)
     adam = Adam(lr)
     return GDOptimizer(losses, val_losses, reg, adam, Niter)
