@@ -248,7 +248,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();w
         wE[N_VBM + gap_width + 1 : min(N_VBM + 2 * gap_width + 1, Nε)] .= 1
         wE[N_VBM - gap_width + 1 : min(N_VBM + gap_width, Nε)] .= 3
 
-        println("gapwidth $gap_width       wE    (   $wE  )")
+        #println("gapwidth $gap_width       wE    (   $wE  )")
 
         wE = weights ? get_band_weights(conf, Nε) : wE
         wk = weights ? get_kpoint_weights(conf, Nk) : ones(Nk)
