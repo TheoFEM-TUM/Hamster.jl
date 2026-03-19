@@ -26,6 +26,10 @@ struct HamsterProfiler
     L_train_system :: Dict{String, Matrix{Float64}}
     L_val :: Vector{Float64}
     L_val_system :: Dict{String, Vector{Float64}}
+    L_train_MAE :: Matrix{Float64}
+    L_train_system_MAE :: Dict{String, Matrix{Float64}}
+    L_val_MAE :: Vector{Float64}
+    L_val_system_MAE :: Dict{String, Vector{Float64}}
     printeachbatch :: Bool
     printeachiter :: Int64
     timings :: Array{Float64, 3}
@@ -54,6 +58,10 @@ function HamsterProfiler(Ntimes, conf=get_empty_config(); Nbatch=get_nbatch(conf
     printeachbatch=get_printeachbatch(conf), printeachiter=get_printeachiter(conf), Nparams=1)
     
     return HamsterProfiler( zeros(Nbatch, Niter),
+                            Dict{String, Matrix{Float64}}(),
+                            zeros(Niter),
+                            Dict{String, Vector{Float64}}(),
+                            zeros(Nbatch, Niter),
                             Dict{String, Matrix{Float64}}(),
                             zeros(Niter),
                             Dict{String, Vector{Float64}}(),
@@ -95,9 +103,9 @@ function print_train_status(prof, iter, batch_id; verbosity=1)
     end
 
     if printit && prof.printeachbatch
-        print_iteration_status(iter, Niter, batch_id, Nbatch, prof.L_train[batch_id, iter], time_iter, time_left)
+        print_iteration_status(iter, Niter, batch_id, Nbatch, prof.L_train[batch_id, iter], prof.L_train_MAE[batch_id, iter], time_iter, time_left)
     elseif printit && !prof.printeachbatch
-        print_iteration_status(iter, Niter, 0, 0, mean(prof.L_train[:, iter]), time_iter, time_left)
+        print_iteration_status(iter, Niter, 0, 0, mean(prof.L_train[:, iter]), mean(prof.L_train_MAE[:, iter]), time_iter, time_left)
     end
 end
 
@@ -128,7 +136,7 @@ function print_val_status(prof, iter; verbosity=1)
     _, Niter = size(prof.L_train)
     printit = decide_printit(1, 1, iter, prof.printeachbatch, prof.printeachiter; verbosity=verbosity)
     if printit
-        println(@sprintf("   Iteration: %d / %d | Val Loss: %.4f | Time: %.5f s", iter, Niter, prof.L_val[iter], prof.val_times[iter]))
+        println(@sprintf("   Iteration: %d / %d | Val Loss: %.4f | Val MAE: %.4f | Time: %.5f s", iter, Niter, prof.L_val[iter], prof.L_val_MAE[iter], prof.val_times[iter]))
     end
 end
 
@@ -157,13 +165,13 @@ The function adapts its printed output based on the values of `batch_id` and `L_
 4. **With batches, no loss reported**:
    - Prints batch number, total batches, iteration number, total iterations, iteration time, and estimated time left.
 """
-function print_iteration_status(iter, Niter, batch_id, Nbatch, L_train, time_iter, time_left)
+function print_iteration_status(iter, Niter, batch_id, Nbatch, L_train, L_train_MAE, time_iter, time_left)
     if L_train ≠ 0 && batch_id == 0
-        println(@sprintf("Iteration: %d / %d | Loss: %.4f | Time: %.5f s | ETA: %.2f s", iter, Niter, L_train, time_iter, time_left))
+        println(@sprintf("Iteration: %d / %d | Loss: %.4f | MAE: %.4f | Time: %.5f s | ETA: %.2f s", iter, Niter, L_train, L_train_MAE, time_iter, time_left))
     elseif batch_id == 0 && L_train == 0
         println(@sprintf("Iteration: %d / %d | Time: %.5f s | ETA: %.2f s", iter, Niter, time_iter, time_left))
     elseif L_train ≠ 0 && batch_id ≠ 0
-        println(@sprintf("Batch %d / %d | Iteration: %d / %d | Loss: %.4f | Time: %.5f s | ETA: %.2f s", batch_id, Nbatch, iter, Niter, L_train, time_iter, time_left))
+        println(@sprintf("Batch %d / %d | Iteration: %d / %d | Loss: %.4f | MAE: %.4f | Time: %.5f s | ETA: %.2f s", batch_id, Nbatch, iter, Niter, L_train, L_train_MAE, time_iter, time_left))
     elseif L_train == 0 && batch_id ≠ 0
         println(@sprintf("Batch %d / %d | Iteration: %d / %d | Time: %.5f s | ETA: %.2f s", batch_id, Nbatch, iter, Niter, time_iter, time_left))
     end
@@ -206,12 +214,16 @@ function print_final_status(prof; verbosity=1)
 
     final_train_loss = mean(prof.L_train[:, end])
     final_val_loss = prof.L_val[end]
+    final_train_loss_MAE = mean(prof.L_train_MAE[:, end])
+    final_val_loss_MAE = prof.L_val_MAE[end]
     if verbosity > 0
         println("")
         println("========================================")
         println("Run Finished!")
         println(@sprintf("Final Train Loss: %.6f", final_train_loss))
+        println(@sprintf("Final Train MAE: %.6f", final_train_loss_MAE))
         if final_val_loss ≠ 0; println(@sprintf("Final Val Loss: %.6f", final_val_loss)); end
+        if final_val_loss ≠ 0; println(@sprintf("Final Val MAE: %.6f", final_val_loss_MAE)); end
         println(@sprintf("Total Time: %.2f seconds", total_time))
         if verbosity > 1
             println(@sprintf("Forward Time: %.2f seconds", forward_time))
@@ -272,6 +284,8 @@ function save(prof::HamsterProfiler, rank=0; filename="hamster_out.h5")
         h5open(filename, "cw") do file
             file["L_train"]      = prof.L_train
             file["L_val"]        = prof.L_val
+            file["L_train_MAE"]  = prof.L_train_MAE
+            file["L_val_MAE"]    = prof.L_val_MAE
             file["timings"]      = prof.timings
             file["val_times"]    = prof.val_times
             file["param_values"] = prof.param_values
@@ -287,6 +301,18 @@ function save(prof::HamsterProfiler, rank=0; filename="hamster_out.h5")
                     g = haskey(file, system) ? file[system] : create_group(file, system)
                     if haskey(file, system)
                         g["L_val"] = L_val_system
+                    end
+                end
+                for (system, L_train_system_MAE) in prof.L_train_system_MAE
+                    g = haskey(file, system) ? file[system] : create_group(file, system)
+                    if haskey(file, system)
+                        g["L_train_MAE"] = L_train_system_MAE
+                    end
+                end
+                for (system, L_val_system_MAE) in prof.L_val_system_MAE
+                    g = haskey(file, system) ? file[system] : create_group(file, system)
+                    if haskey(file, system)
+                        g["L_val_MAE"] = L_val_system_MAE
                     end
                 end
             end

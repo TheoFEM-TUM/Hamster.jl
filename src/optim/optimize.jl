@@ -89,19 +89,22 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     
     all_systems = MPI.gather(ham_train.systems[indices], comm, root=0)
     all_losses = MPI.gather(Ls_train, comm, root=0)
-    #all_losses_MAE = MPI.gather(Ls_train_MAE, comm, root=0)
+    all_losses_MAE = MPI.gather(Ls_train_MAE, comm, root=0)
     if rank == 0
         all_systems = vcat(all_systems...)
         all_losses = vcat(all_losses...)
-        #all_losses_MAE = vcat(all_losses_MAE...)
+        all_losses_MAE = vcat(all_losses_MAE...)
 
         for system in unique(all_systems)
             if !haskey(prof.L_train_system, system)
                 prof.L_train_system[system] = zeros(size(prof.L_train))
+                prof.L_train_system_MAE[system] = zeros(size(prof.L_train_MAE))
             end
             idxs = findall(s -> s == system, all_systems)
             loss_system = all_losses[idxs]
+            loss_system_MAE = all_losses_MAE[idxs]
             prof.L_train_system[system][batch_id, iter] = mean(loss_system)
+            prof.L_train_system_MAE[system][batch_id, iter] = mean(loss_system_MAE)
         end
     end
 
@@ -124,8 +127,9 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     update_time = MPI.Reduce(update_time_local, +, comm, root=0)
 
     if rank == 0
-        L_train_MAE = L_train_MAE ./ Nstrc_tot
+        #L_train_MAE = L_train_MAE ./ Nstrc_tot
         prof.L_train[batch_id, iter] = L_train ./ Nstrc_tot
+        prof.L_train_MAE[batch_id, iter] = L_train_MAE ./ Nstrc_tot
         prof.timings[batch_id, iter, 1] = forward_time ./ nranks
         prof.timings[batch_id, iter, 2] = backward_time ./ nranks
         prof.timings[batch_id, iter, 3] = update_time ./ nranks
@@ -134,7 +138,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
             println(" Backward time: $(backward_time ./ nranks) s")
             println(" Update time: $(update_time ./ nranks) s")
             println(" Learning rate: $(optim.adam.eta)")
-            println(" MAE: $L_train_MAE eV")
+            #println(" MAE: $L_train_MAE eV")
         end
     end
 end
@@ -160,20 +164,28 @@ function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1
     Ls_val = map(1:ham_val.Nstrc) do index
         forward(ham_val, index, losses[index], val_data[index])[1] / ham_val.Nstrc
     end
+    Ls_val_MAE = map(1:ham_val.Nstrc) do index
+        forward(ham_val, index, losses[index], val_data[index])[3] / ham_val.Nstrc
+    end
 
     all_systems = MPI.gather(ham_val.systems, comm, root=0)
     all_losses = MPI.gather(Ls_val, comm, root=0)
+    all_losses_MAE = MPI.gather(Ls_val_MAE, comm, root=0)
     if rank == 0
         all_systems = vcat(all_systems...)
         all_losses = vcat(all_losses...)
+        all_losses_MAE = vcat(all_losses_MAE...)
 
         for system in unique(all_systems)
             if !haskey(prof.L_val_system, system)
                 prof.L_val_system[system] = zeros(size(prof.L_val))
+                prof.L_val_system_MAE[system] = zeros(size(prof.L_val_MAE))
             end
             idxs = findall(s -> s == system, all_systems)
             loss_system = all_losses[idxs]
             prof.L_val_system[system][iter] = mean(loss_system)
+            loss_system_MAE = all_losses_MAE[idxs]
+            prof.L_val_system_MAE[system][iter] = mean(loss_system_MAE)
         end
     end
 
@@ -183,6 +195,7 @@ function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1
     if rank == 0
         prof.val_times[iter] = val_time ./ nranks
         prof.L_val[iter-valeachiter+1:iter] .= L_val ./ nranks
+        prof.L_val_MAE[iter-valeachiter+1:iter] .= L_val_MAE ./ nranks
     end
 end
 

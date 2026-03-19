@@ -95,7 +95,8 @@ Compute the forward pass of the loss function given the true values `y` and the 
 # Returns
 -`L::Float64`: The loss between `y` and `ŷ`.
 """
-function forward(l::Loss, y, ŷ; offset = true)
+off = true
+function forward(l::Loss, y, ŷ; offset = off)
     Δy = y - ŷ
     if offset
         Δy = Δy .- mean(Δy)
@@ -110,16 +111,16 @@ function forward(l::Loss, y, ŷ; offset = true)
     end
 end
 
-function forward_MAE(l::Loss, y, ŷ; offset = true)
+function forward_MAE(l::Loss, y, ŷ; offset = off)
     Δy = y - ŷ
     if offset
         Δy = Δy .- mean(Δy)
     end
 
     if isempty(l.wE) && isempty(l.wk)
-        return mean(@. abs(Δy)^l.n)
+        return mean(@. abs(Δy))
     else
-        return mean(@. abs(Δy)^l.n)
+        return mean(@. abs(Δy))
     end
 end
 
@@ -141,7 +142,7 @@ Compute the gradient of the loss function with respect to the predicted values `
 # Returns
 - `dL::AbstractArray`: The gradient of the loss with respect to the predicted values `y`.
 """
-function backward(l::Loss, y, ŷ, offset = true)
+function backward(l::Loss, y, ŷ, offset = off)
     Δy = y - ŷ
     if offset
         Δy = Δy .- mean(Δy)
@@ -229,6 +230,7 @@ backward(R::Regularization, x) = R.λ .* map(y -> abs(y) > R.b ? R.n * (y-R.b)^(
 function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();weights = false, loss=get_loss(conf))
     N_strc = length(Nk_all)
     n = loss_to_n[loss]
+    n = 2
     #Loss_vec = Vector{Loss}(undef, N_stc)
     Loss_vec = [Loss(n) for i in 1:N_strc]
     #println("N_VBM_all $N_VBM_all")
@@ -243,10 +245,10 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();w
         #wStr = 1
 
         wE = ones(Nε) * 0.1
-        wE[1:N_VBM - gap_width ] .= 0.5
+        wE[1:N_VBM - gap_width ] .= 1
         wE[N_VBM - 2 * gap_width : N_VBM - gap_width ] .= 1
         wE[N_VBM + gap_width + 1 : min(N_VBM + 2 * gap_width + 1, Nε)] .= 1
-        wE[N_VBM - gap_width + 1 : min(N_VBM + gap_width, Nε)] .= 3
+        wE[N_VBM - gap_width + 1 : min(N_VBM + gap_width, Nε)] .= 5
 
         #println("gapwidth $gap_width       wE    (   $wE  )")
 
