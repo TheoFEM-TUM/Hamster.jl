@@ -104,8 +104,21 @@ function forward(l::Loss, y, ŷ; offset = true)
     if isempty(l.wE) && isempty(l.wk)
         return mean(@. abs(Δy)^l.n)
     else
-        #L = @. abs(Δy)^l.n
-        #return 1/l.N * (l.wE' * L * l.wk)
+        L = @. abs(Δy)^l.n
+        return 1/l.N * 1/l.wStr * (l.wE' * L * l.wk)
+        #return mean(@. abs(Δy)^l.n)
+    end
+end
+
+function forward_MAE(l::Loss, y, ŷ; offset = true)
+    Δy = y - ŷ
+    if offset
+        Δy = Δy .- mean(Δy)
+    end
+
+    if isempty(l.wE) && isempty(l.wk)
+        return mean(@. abs(Δy)^l.n)
+    else
         return mean(@. abs(Δy)^l.n)
     end
 end
@@ -213,21 +226,35 @@ Compute the gradient of the regularization penalty with respect to the input (pa
 backward(R::Regularization, x) = R.λ .* map(y -> abs(y) > R.b ? R.n * (y-R.b)^(R.n-1) : 0., x)
 
 
-function Losses(Nε_all, Nk_all, N_eig_avg, conf=get_empty_config();weights = true, loss=get_loss(conf))
+function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();weights = false, loss=get_loss(conf))
     N_strc = length(Nk_all)
     n = loss_to_n[loss]
     #Loss_vec = Vector{Loss}(undef, N_stc)
     Loss_vec = [Loss(n) for i in 1:N_strc]
-    
+    #println("N_VBM_all $N_VBM_all")
     #N_eig_avg = sum(Nε_all .* Nk_all)/N_strc
     for i in 1:N_strc
         Nε = Nε_all[i]
         Nk = Nk_all[i]
+        N_VBM = N_VBM_all[i]
+        #gap_width = ceil(Int, 0.05 * Nε)
+        gap_width = ceil(Int, N_VBM/9)
         wStr = Nk / N_eig_avg
-        wStr = 1
+        #wStr = 1
 
-        wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
+        wE = ones(Nε) * 0.1
+        wE[1:N_VBM - gap_width + 1] .= 1
+        wE[N_VBM - gap_width + 1 : N_VBM + gap_width + 1] .= 5
+        wE[N_VBM + gap_width + 1 : N_VBM + 2 * gap_width + 1] .= 1
+
+        #println("gapwidth $gap_width       wE    (   $wE  )")
+
+        wE = weights ? get_band_weights(conf, Nε) : wE
         wk = weights ? get_kpoint_weights(conf, Nk) : ones(Nk)
+
+        #wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
+
+
         Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n)
     end
     

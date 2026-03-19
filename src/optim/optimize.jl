@@ -78,19 +78,22 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     forward_times = Float64[]
     backward_times = Float64[]
     Ls_train = Float64[]
+    Ls_train_MAE = Float64[]
 
     dL_dHr = map(indices) do index
-        f_time = @elapsed L_train, cache = forward(ham_train, index, optim.losses[index], train_data[index])
+        f_time = @elapsed L_train, cache, L_train_MAE = forward(ham_train, index, optim.losses[index], train_data[index])
         b_time = @elapsed dL_dHr_index = backward(ham_train, index, optim.losses[index], train_data[index], cache, conf)
-        push!(forward_times, f_time); push!(backward_times, b_time); push!(Ls_train, L_train)
+        push!(forward_times, f_time); push!(backward_times, b_time); push!(Ls_train, L_train); push!(Ls_train_MAE, L_train_MAE)
         return dL_dHr_index
     end
     
     all_systems = MPI.gather(ham_train.systems[indices], comm, root=0)
     all_losses = MPI.gather(Ls_train, comm, root=0)
+    #all_losses_MAE = MPI.gather(Ls_train_MAE, comm, root=0)
     if rank == 0
         all_systems = vcat(all_systems...)
         all_losses = vcat(all_losses...)
+        #all_losses_MAE = vcat(all_losses_MAE...)
 
         for system in unique(all_systems)
             if !haskey(prof.L_train_system, system)
@@ -115,11 +118,13 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     update_time_local = MPI.Wtime() - update_begin
 
     L_train = MPI.Reduce(sum(Ls_train), +, comm, root=0)
+    L_train_MAE = MPI.Reduce(sum(Ls_train_MAE), +, comm, root=0)
     forward_time = MPI.Reduce(sum(forward_times), +, comm, root=0)
     backward_time = MPI.Reduce(sum(backward_times), +, comm, root=0) 
     update_time = MPI.Reduce(update_time_local, +, comm, root=0)
 
     if rank == 0
+        L_train_MAE = L_train_MAE ./ Nstrc_tot
         prof.L_train[batch_id, iter] = L_train ./ Nstrc_tot
         prof.timings[batch_id, iter, 1] = forward_time ./ nranks
         prof.timings[batch_id, iter, 2] = backward_time ./ nranks
@@ -129,6 +134,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
             println(" Backward time: $(backward_time ./ nranks) s")
             println(" Update time: $(update_time ./ nranks) s")
             println(" Learning rate: $(optim.adam.eta)")
+            println(" MAE: $L_train_MAE eV")
         end
     end
 end
@@ -200,7 +206,8 @@ function forward(ham::EffectiveHamiltonian, index, loss, data::EigData)
     Hk = get_hamiltonian(ham, index, data.kp)
     Es, vs = diagonalize(Hk)
     L_train = loss(Es, data.Es)
-    return L_train, (Es, vs)
+    L_train_MAE = forward_MAE(loss, Es, data.Es)
+    return L_train, (Es, vs), L_train_MAE
 end
 
 function forward(ham::EffectiveHamiltonian, index, loss, data::HrData)
