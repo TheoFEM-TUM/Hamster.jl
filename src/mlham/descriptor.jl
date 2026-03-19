@@ -61,9 +61,10 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
                     θs = @. θs / 2π * strc_scale
                 end
 
-            if Δr ≤ rcut && fcut(Δr_dist, rcut+rcut_tol) > 0
-                ii, jj = orbswap ? (j, i) : (i, j)
-                push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
+                if Δr ≤ rcut && fcut(Δr_dist, rcut+rcut_tol) > 0
+                    ii, jj = orbswap ? (j, i) : (i, j)
+                    push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
+                end
             end
         end
     end
