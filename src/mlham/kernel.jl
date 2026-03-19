@@ -29,6 +29,7 @@ Generates kernel feature vectors based on structure descriptors and data points.
 
 function get_kernel_features(structure_descriptors, data_points, sim_params, tol = 1e-8; conf = get_empty_config(), rank = 0)
     verbosity = get_verbosity(conf)
+    #tol = 0.01
     #println(tol)
     #println("NTHREADS",Threads.nthreads())
     N_mats = size(structure_descriptors)[1]
@@ -38,8 +39,10 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
       for i in 1:N_mats ]
     #N_test = 0
     tforeach(1:N_mats) do i
+    #for i in 1:N_mats
         @views h_env = structure_descriptors[i]
-        for d in 1:N_dp
+        #for d in 1:N_dp
+        tforeach(1:N_dp) do d
             @views data_point = data_points[d]
             N_R, Ne = descr_sizes[i]
             for R in 1:N_R
@@ -103,7 +106,7 @@ function write_kernel_features_rankfile(
         tforeach(1:N_mats) do i
             grp_i = create_group(data_grp, "mat_$i")
 
-            for d in 1:N_dp
+            tforeach(1:N_dp) do d
                 grp_d = create_group(grp_i, "dp_$d")
                 local_R = Desc_Vec[i][d]
 
@@ -158,7 +161,7 @@ function read_kernel_features_rankfile(
 
             grp_i = data_grp["mat_$i"]
 
-            for d in 1:N_dp
+            tforeach(1:N_dp) do d
                 Desc_Vec[i][d] = [spzeros(Float64, Ne, Ne) for _ in 1:N_R]
                 grp_d = grp_i["dp_$d"]
 

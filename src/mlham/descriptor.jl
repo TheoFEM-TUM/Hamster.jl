@@ -28,48 +28,54 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
     is = [Int64[] for R in 1:NR]
     js = [Int64[] for R in 1:NR]
     vals = [SVector{8, Float64}[] for R in 1:NR]
-    for (iion, jion, R) in iterate_nn_grid_points(strc.point_grid)
-        ri = rs_ion[iion]
-        rj = rs_ion[jion] - Ts[:, R]
-        Δr = normdiff(ri, rj)
-        if apply_distortion
-            ri -= strc.ions[iion].dist
-            rj -= strc.ions[jion].dist
-        end
-        Δr_dist = normdiff(ri, rj)
-        Δr_in = (apply_distance_distortion || apply_distortion) ? Δr_dist : Δr
-        if apply_distortion || apply_distance_distortion
-            Δr_in = Δr_in / rcut * strc_scale
-        end
-        for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
-            i = ij_map[(iion, iorb)]
-            j = ij_map[(jion, jorb)]
-            itype = strc.ions[iion].type; l_i = l_map[i]
-            jtype = strc.ions[jion].type; l_j = l_map[j]
-            #Zs = [proton_to_position(strc.ions[iion].type), proton_to_position(strc.ions[jion].type)]
-            Zs = [strc.ions[iion].type, strc.ions[jion].type]
-            iaxis = basis.orbitals[iion][iorb].axis
-            jaxis = basis.orbitals[jion][jorb].axis
-            φ, θs = get_angular_descriptors(ri, rj, iaxis, jaxis)
-
-            orbswap = decide_orbswap(itype, jtype, l_i, env[i], l_j, env[j])
-            angleswap = (θs[1] > θs[2] && itype == jtype) || (orbswap && itype ≠ jtype)
-
-            Zs = orbswap ? reverse(Zs) : Zs
-            θs = angleswap ? reverse(θs) : θs
-
-            if apply_distortion || apply_distance_distortion
-                φ = φ / 2π * strc_scale
-                θs = @. θs / 2π * strc_scale
+    points = iterate_nn_grid_points(strc.point_grid)
+    grouped = group_by_R(points, NR)
+    tforeach( eachindex(grouped)) do R
+        @views grouped_R = grouped[R]
+        for (iion, jion) in grouped_R
+            ri = rs_ion[iion]
+            rj = rs_ion[jion] - Ts[:, R]
+            Δr = normdiff(ri, rj)
+            if apply_distortion
+                ri -= strc.ions[iion].dist
+                rj -= strc.ions[jion].dist
             end
+            Δr_dist = normdiff(ri, rj)
+            Δr_in = (apply_distance_distortion || apply_distortion) ? Δr_dist : Δr
+            if apply_distortion || apply_distance_distortion
+                Δr_in = Δr_in / rcut * strc_scale
+            end
+            for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
+                i = ij_map[(iion, iorb)]
+                j = ij_map[(jion, jorb)]
+                itype = strc.ions[iion].type; l_i = l_map[i]
+                jtype = strc.ions[jion].type; l_j = l_map[j]
+                #Zs = [proton_to_position(strc.ions[iion].type), proton_to_position(strc.ions[jion].type)]
+                Zs = [strc.ions[iion].type, strc.ions[jion].type]
+                iaxis = basis.orbitals[iion][iorb].axis
+                jaxis = basis.orbitals[jion][jorb].axis
+                φ, θs = get_angular_descriptors(ri, rj, iaxis, jaxis)
 
-            if Δr ≤ rcut && fcut(Δr_dist, rcut+rcut_tol) > 0
-                ii, jj = orbswap ? (j, i) : (i, j)
-                push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1]/Z_sim_params, Zs[2]/Z_sim_params, Δr_in/r_sim_params, φ/phi_sim_params, θs[1]/theta_sim_params, θs[2]/theta_sim_params, env[ii] /env_sim_params, env[jj] / env_sim_params]))
+                orbswap = decide_orbswap(itype, jtype, l_i, env[i], l_j, env[j])
+                angleswap = (θs[1] > θs[2] && itype == jtype) || (orbswap && itype ≠ jtype)
+
+                Zs = orbswap ? reverse(Zs) : Zs
+                θs = angleswap ? reverse(θs) : θs
+
+                if apply_distortion || apply_distance_distortion
+                    φ = φ / 2π * strc_scale
+                    θs = @. θs / 2π * strc_scale
+                end
+
+                if Δr ≤ rcut && fcut(Δr_dist, rcut+rcut_tol) > 0
+                    ii, jj = orbswap ? (j, i) : (i, j)
+                    push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1]/Z_sim_params, Zs[2]/Z_sim_params, Δr_in/r_sim_params, φ/phi_sim_params, θs[1]/theta_sim_params, θs[2]/theta_sim_params, env[ii] /env_sim_params, env[jj] / env_sim_params]))
+                end
             end
         end
     end
-    @views for R in 1:NR
+    tforeach( eachindex(collect(1:NR))) do R
+    #@views for R in 1:NR
         h_env[R] = sparse(is[R], js[R], copy(vals[R]), Nε, Nε)
     end
     return h_env

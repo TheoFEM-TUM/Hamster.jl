@@ -113,6 +113,15 @@ function iterate_nn_grid_points(point_grid::PointGrid)
     return unique(all_inds)
 end
 
+function group_by_R(points, NR)
+    grouped = [Tuple{Int,Int}[] for _ in 1:NR]
+
+    for (i, j, R) in points
+        push!(grouped[R], (i, j))
+    end
+
+    return grouped
+end
 """
     iterate_nn_grid_points(grid_point, point_grid::PointGrid)
 
