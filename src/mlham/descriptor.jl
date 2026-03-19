@@ -4,14 +4,8 @@
 Calculate the TB descriptor for a given a TB `model`, a structure `strc` and a TBConfig file `conf`.
 """
 function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_ml_rcut(conf), rcut_tol=get_rcut_tol(conf), apply_distortion=get_apply_distortion(conf), 
-    env_scale=get_env_scale(conf), apply_distance_distortion=get_apply_distance_distortion(conf), strc_scale=get_strc_scale(conf),
-     Z_sim_params = get_Z_sim_params(conf),
-     r_sim_params = get_r_sim_params(conf),
-     phi_sim_params = get_phi_sim_params(conf),
-     theta_sim_params = get_theta_sim_params(conf),
-     env_sim_params = get_env_sim_params(conf)
-     )
-    
+    env_scale=get_env_scale(conf), apply_distance_distortion=get_apply_distance_distortion(conf), strc_scale=get_strc_scale(conf))
+    sim_params = get_sim_params(conf)
     #env_scale = env_scale/sim_params
     Nε = length(basis); Norb_per_ion = size(basis); NR = size(strc.Rs, 2)
 
@@ -67,10 +61,9 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
                     θs = @. θs / 2π * strc_scale
                 end
 
-                if Δr ≤ rcut && fcut(Δr_dist, rcut+rcut_tol) > 0
-                    ii, jj = orbswap ? (j, i) : (i, j)
-                    push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1]/Z_sim_params, Zs[2]/Z_sim_params, Δr_in/r_sim_params, φ/phi_sim_params, θs[1]/theta_sim_params, θs[2]/theta_sim_params, env[ii] /env_sim_params * env_scale, env[jj] / env_sim_params * env_scale]))
-                end
+            if Δr ≤ rcut && fcut(Δr_dist, rcut+rcut_tol) > 0
+                ii, jj = orbswap ? (j, i) : (i, j)
+                push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
             end
         end
     end
