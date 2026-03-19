@@ -158,7 +158,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
 
       Nε_all_train, Nk_all_train = get_neig_and_nk(dl.train_data)
       
-      N_eig_avg_local_train = mean(Nε_all_train .* Nk_all_train)
+      N_eig_avg_local_train = mean(Nk_all_train)
       N_eig_avg_train = Ref(1.0)
       N_eig_avg_all_train= MPI.gather(N_eig_avg_local_train, comm, root=0)
       if rank == 0
@@ -170,7 +170,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
 
 
       Nε_all_val, Nk_all_val = get_neig_and_nk(dl.val_data)
-      N_eig_avg_local_val = mean(Nε_all_val .* Nk_all_val)
+      N_eig_avg_local_val = mean(Nk_all_val)
       N_eig_avg_val = Ref(1.0)
       N_eig_avg_all_val= MPI.gather(N_eig_avg_local_val, comm, root=0)
       if rank == 0

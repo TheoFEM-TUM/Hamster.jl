@@ -223,7 +223,8 @@ function Losses(Nε_all, Nk_all, N_eig_avg, conf=get_empty_config();weights = tr
     for i in 1:N_strc
         Nε = Nε_all[i]
         Nk = Nk_all[i]
-        wStr = Nε * Nk / N_eig_avg
+        wStr = Nk / N_eig_avg
+        wStr = 1
 
         wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
         wk = weights ? get_kpoint_weights(conf, Nk) : ones(Nk)
