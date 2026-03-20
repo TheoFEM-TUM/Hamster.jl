@@ -120,6 +120,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     optim.adam.eta = lr_min + 0.5 * (lr - lr_min) * (1 + cos(π * iter / optim.Niter))
     update_time_local = MPI.Wtime() - update_begin
 
+    #L_train = MPI.Reduce(sum(Ls_train.^2), +, comm, root=0)
     L_train = MPI.Reduce(sum(Ls_train), +, comm, root=0)
     L_train_MAE = MPI.Reduce(sum(Ls_train_MAE), +, comm, root=0)
     forward_time = MPI.Reduce(sum(forward_times), +, comm, root=0)
@@ -192,6 +193,7 @@ function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1
     val_time_local = MPI.Wtime() - val_begin
     val_time = MPI.Reduce(val_time_local, +, comm, root=0)
     L_val = MPI.Reduce(sum(Ls_val), +, comm, root=0)
+    L_val_MAE = MPI.Reduce(sum(Ls_val_MAE), +, comm, root=0)
     if rank == 0
         prof.val_times[iter] = val_time ./ nranks
         prof.L_val[iter-valeachiter+1:iter] .= L_val ./ nranks

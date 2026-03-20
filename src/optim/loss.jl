@@ -106,7 +106,8 @@ function forward(l::Loss, y, ŷ; offset = off)
         return mean(@. abs(Δy)^l.n)
     else
         L = @. abs(Δy)^l.n
-        return 1/l.N * 1/l.wStr * (l.wE' * L * l.wk)
+        L_n = 1/l.N * 1/l.wStr * (l.wE' * L * l.wk)
+        return L_n
         #return mean(@. abs(Δy)^l.n)
     end
 end
@@ -151,6 +152,9 @@ function backward(l::Loss, y, ŷ, offset = off)
         N = length(y)
         return @. 1/N * sign(Δy) * l.n * abs(Δy)^(l.n - 1)
     else
+        #L = @. abs(Δy)^l.n
+        #L_n = 1/l.N * 1/l.wStr * (l.wE' * L * l.wk)
+        #return @. 1/l.N * 1/l.wStr * sign(Δy) * l.wk' * l.wE * l.n * abs(Δy)^(l.n - 1) * 2 * sum(L_n)
         return @. 1/l.N * 1/l.wStr * sign(Δy) * l.wk' * l.wE * l.n * abs(Δy)^(l.n - 1)
     end
 end
@@ -230,7 +234,7 @@ backward(R::Regularization, x) = R.λ .* map(y -> abs(y) > R.b ? R.n * (y-R.b)^(
 function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();weights = false, loss=get_loss(conf))
     N_strc = length(Nk_all)
     n = loss_to_n[loss]
-    n = 2
+    #n = 2
     #Loss_vec = Vector{Loss}(undef, N_stc)
     Loss_vec = [Loss(n) for i in 1:N_strc]
     #println("N_VBM_all $N_VBM_all")
@@ -242,7 +246,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();w
         #gap_width = ceil(Int, 0.05 * Nε)
         gap_width = ceil(Int, N_VBM/9)
         wStr = Nk / N_eig_avg
-        #wStr = 1
+        wStr = 1
 
         wE = ones(Nε) * 0.1
         wE[1:N_VBM - gap_width ] .= 1
@@ -255,7 +259,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();w
         wE = weights ? get_band_weights(conf, Nε) : wE
         wk = weights ? get_kpoint_weights(conf, Nk) : ones(Nk)
 
-        #wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
+        wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
 
 
         Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n)
