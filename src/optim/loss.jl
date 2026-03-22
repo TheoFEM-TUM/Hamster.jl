@@ -252,14 +252,14 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();w
         wE[1:N_VBM - gap_width ] .= 1
         wE[N_VBM - 2 * gap_width : N_VBM - gap_width ] .= 1
         wE[N_VBM + gap_width + 1 : min(N_VBM + 2 * gap_width + 1, Nε)] .= 1
-        wE[N_VBM - gap_width + 1 : min(N_VBM + gap_width, Nε)] .= 5
+        wE[N_VBM - gap_width + 1 : min(N_VBM + gap_width, Nε)] .= 3
 
         #println("gapwidth $gap_width       wE    (   $wE  )")
 
         wE = weights ? get_band_weights(conf, Nε) : wE
         wk = weights ? get_kpoint_weights(conf, Nk) : ones(Nk)
 
-        wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
+        #wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
 
 
         Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n)
