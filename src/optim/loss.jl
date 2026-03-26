@@ -21,7 +21,6 @@ end
 
 Loss(wE::Vector{Float64}, wk::Vector{Float64}, n::Int64) = Loss(wE, wk, sum(wE)*sum(wk), 1., n)
 Loss(n::Int64) = Loss(Float64[], Float64[], 0, 1., n)
-
 """
     Loss(Nε, Nk; conf=get_empty_config(), loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk))
 
@@ -96,18 +95,25 @@ Compute the forward pass of the loss function given the true values `y` and the 
 -`L::Float64`: The loss between `y` and `ŷ`.
 """
 off = true
+min_delta = 0.5
 function forward(l::Loss, y, ŷ; offset = off)
     Δy = y - ŷ
     if offset
         Δy = Δy .- mean(Δy)
     end
-
+    #k_min = argmin(abs.( ŷ[9,:] - ŷ[10, :]))
+    #l.wk[k_min] = 5
+    y_mod = abs.(Δy) .+ min_delta
+    L_E_avg = vec(mean(y_mod, dims = 2))
+    w =  y_mod ./L_E_avg
+    #println(maximum(w))
     if isempty(l.wE) && isempty(l.wk)
         return mean(@. abs(Δy)^l.n)
     else
         L = @. abs(Δy)^l.n
-        L_n = 1/l.N * 1/l.wStr * (l.wE' * L * l.wk)
-        return L_n
+        L_n = 1/l.N * 1/l.wStr * (l.wE' * (L .* w) * l.wk)
+        #println(w)
+        return L_n 
         #return mean(@. abs(Δy)^l.n)
     end
 end
@@ -148,6 +154,11 @@ function backward(l::Loss, y, ŷ, offset = off)
     if offset
         Δy = Δy .- mean(Δy)
     end
+    #k_min = argmin(abs.( ŷ[9,:] - ŷ[10, :]))
+    #l.wk[k_min] = 5
+    y_mod = abs.(Δy) .+ min_delta
+    L_E_avg = vec(mean(y_mod, dims = 2))
+    w =  y_mod ./L_E_avg
     if isempty(l.wE) && isempty(l.wk)
         N = length(y)
         return @. 1/N * sign(Δy) * l.n * abs(Δy)^(l.n - 1)
@@ -155,7 +166,7 @@ function backward(l::Loss, y, ŷ, offset = off)
         #L = @. abs(Δy)^l.n
         #L_n = 1/l.N * 1/l.wStr * (l.wE' * L * l.wk)
         #return @. 1/l.N * 1/l.wStr * sign(Δy) * l.wk' * l.wE * l.n * abs(Δy)^(l.n - 1) * 2 * sum(L_n)
-        return @. 1/l.N * 1/l.wStr * sign(Δy) * l.wk' * l.wE * l.n * abs(Δy)^(l.n - 1)
+        return @. 1/l.N * 1/l.wStr * sign(Δy) * l.wk' * l.wE * l.n * abs(Δy)^(l.n - 1) * w
     end
 end
 
