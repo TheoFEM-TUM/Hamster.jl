@@ -251,8 +251,9 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             sample_strat = get_sample_strat(conf),
                             rank=0,
                             nranks=1)
-    structure_descriptors = Vector{Any}(undef, length(strcs))
-    tmap!(structure_descriptors, eachindex(strcs)) do n
+    Nstrc = length(strcs)
+    structure_descriptors = Vector{Any}(undef, Nstrc)
+    tmap!(structure_descriptors, 1:Nstrc) do n
         get_tb_descriptor(
             model.hs[n],
             model.params,
@@ -271,6 +272,21 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         if sample_strat == "cluster"
             @info "Sampling data points using clustering strategy with Ncluster = $Ncluster_local"
             data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster_local, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
+        elseif sample_strat == "cluster_single"
+            
+            data_points_local = Vector{Any}(undef, Nstrc)
+            N_points_vec = [1 for i in 1:Nstrc]
+            tforeach(1:Nstrc) do i
+                strc_descriptors = reshape_structure_descriptor_single_system(structure_descriptors[i])
+                N_descr = size(strc_descriptors)[2]
+                #N_points_single = ceil(Int, N_descr/4)
+                N_points_single = Npoints
+                N_points_vec[i] = N_points_single
+                data_points_local[i] = sample_structure_descriptors(strc_descriptors, Ncluster=Ncluster, Npoints=Npoints, ml_sampling=get_ml_sampling(conf))
+            end
+            data_points_local = reduce(vcat, data_points_local)
+            Npoints_local_all = sum(N_points_vec)
+            @info "Sampling data points using clustering single strategy with Ncluster = $Ncluster and Npoints_local_total = $Npoints_local_all"
         else
             data_points_local = sample_structure_descriptors_random(reshape_structure_descriptors(structure_descriptors), Npoints=Npoints_local)
             @info "Sampling data points using random strategy with Npoints_local = $Npoints_local"

@@ -91,6 +91,11 @@ function reshape_structure_descriptors(descriptors)
     return out
 end
 
+function reshape_structure_descriptor_single_system(descriptors)
+    out = hcat([Vector(descriptor)  for R in eachindex(descriptors) for (i, j, descriptor) in zip(findnz(descriptors[R])...)]...)
+    return out
+end
+
 """
     decide_orbswap(itype, jtype, l_i, m_i, l_j, m_j) -> Bool
 
@@ -225,7 +230,6 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
 
     points_per_cluster = round.(Int, final_weights .* Npoints)
     points_per_cluster .= max.(1, points_per_cluster)
-
     # Adjust to ensure the exact number of `Npoints` is selected
     diff = Npoints - sum(points_per_cluster)
     if diff != 0
@@ -234,7 +238,6 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
             points_per_cluster[sorted_clusters[i]] += sign(diff)
         end
     end
-
     selected_indices = Int64[]
     for c in eachindex(cluster_sizes)
         cluster_indices = findall(x -> x == c, indices)
