@@ -234,6 +234,7 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
 
     # Adjust to ensure the exact number of `Npoints` is selected
     diff = Npoints - sum(points_per_cluster)
+    diff = min(length(points_per_cluster), diff)
     if diff != 0
         sorted_clusters = sortperm(final_weights, rev=true)
         for i in 1:abs(diff)
@@ -253,6 +254,8 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
         end
         append!(selected_indices, selected)
     end
+    Np = size(descriptors)[2]
+    selected_indices = Npoints >= Np ? [i for i in 1:Np] : selected_indices
     summary = (nz_clusters = length(cluster_sizes), cluster_sizes = cluster_sizes, points_per_cluster = points_per_cluster, cluster_variances = cluster_variances)
     Random.seed!()
     return SVector{size(descriptors, 1), Float64}[SVector{size(descriptors, 1)}(descriptors[:, index]) for index in selected_indices]

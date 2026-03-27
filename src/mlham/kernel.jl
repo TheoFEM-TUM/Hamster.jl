@@ -283,6 +283,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                 N_points_single = Npoints
                 N_points_vec[i] = N_points_single
                 data_points_local[i] = sample_structure_descriptors(strc_descriptors, Ncluster=Ncluster, Npoints=Npoints, ml_sampling=get_ml_sampling(conf))
+                #println(size(data_points_local[i]))
             end
             data_points_local = reduce(vcat, data_points_local)
             Npoints_local_all = size(data_points_local)[1]
@@ -310,7 +311,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         N_real = sum(counts)
         # COV_EXCL_START
         if N_real ≠ Npoints && rank == 0 && verbosity > 0
-            @info "Number of samples changed from $Npoints to $N_real"
+            @info "Number of samples changed from $(Npoints * Nstrc) to $N_real"
         end
         # COV_EXCL_STOP
     elseif data_points === nothing
