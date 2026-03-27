@@ -285,7 +285,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                 data_points_local[i] = sample_structure_descriptors(strc_descriptors, Ncluster=Ncluster, Npoints=Npoints, ml_sampling=get_ml_sampling(conf))
             end
             data_points_local = reduce(vcat, data_points_local)
-            Npoints_local_all = sum(N_points_vec)
+            Npoints_local_all = size(data_points_local)[1]
             @info "Sampling data points using clustering single strategy with Ncluster = $Ncluster and Npoints_local_total = $Npoints_local_all"
         else
             data_points_local = sample_structure_descriptors_random(reshape_structure_descriptors(structure_descriptors), Npoints=Npoints_local)

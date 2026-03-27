@@ -230,6 +230,8 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
 
     points_per_cluster = round.(Int, final_weights .* Npoints)
     points_per_cluster .= max.(1, points_per_cluster)
+    points_per_cluster .= min.(cluster_sizes, points_per_cluster)
+
     # Adjust to ensure the exact number of `Npoints` is selected
     diff = Npoints - sum(points_per_cluster)
     if diff != 0
