@@ -15,6 +15,7 @@ mutable struct HamiltonianKernel{T1, T2, T3}
     update :: Bool
     feature_vec :: Vector{T3}
     feature_shape :: Tuple{Vector{T2}, Int64}
+    weights :: Vector{Int64}
 end
 
 """
@@ -28,8 +29,8 @@ Generates kernel feature vectors based on structure descriptors and data points.
 """
 
 function get_kernel_features(structure_descriptors, data_points, sim_params, tol = 1e-8; conf = get_empty_config(), rank = 0)
-    verbosity = get_verbosity(conf)
-    #tol = 0.01
+    #verbosity = get_verbosity(conf)
+    tol = 0.1
     #println(tol)
     #println("NTHREADS",Threads.nthreads())
     N_mats = size(structure_descriptors)[1]
@@ -63,9 +64,7 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
                 end
             end
         end
-        if verbosity > 1 && rank == 0
-            println("Rank 0: Finished kernel features for mat Nr. ($i / $N_mats)")
-        end
+        #@info "Rank $rank: Finished kernel features for mat Nr. ($i / $N_mats) with Npoints = $N_test"
     end
     structure_descriptors = nothing
     GC.gc()
@@ -194,7 +193,8 @@ function HamiltonianKernel(params :: Vector{Float64},
     sim_params,
     structure_descriptors,
     update :: Bool,
-    tol :: Float64;
+    tol :: Float64,
+    weights;
     conf = get_empty_config(),
     rank = 0
     )
@@ -209,7 +209,7 @@ function HamiltonianKernel(params :: Vector{Float64},
         @info "Writing kernel features to file: $rank"
         write_kernel_features_rankfile(feature_vec, feature_shape,"descr",  rank, "descr")
     end
-    return HamiltonianKernel(params,data_points, sim_params, update, feature_vec, feature_shape)
+    return HamiltonianKernel(params,data_points, sim_params, update, feature_vec, feature_shape, weights)
 end
 
 """
@@ -219,7 +219,8 @@ function HamiltonianKernel(params :: Vector{Float64},
     data_points,
     sim_params,
     structure_descriptors,
-    update :: Bool;
+    update :: Bool,
+    weights;
     conf = get_empty_config(),
     rank = 0
     )
@@ -229,7 +230,8 @@ function HamiltonianKernel(params :: Vector{Float64},
     sim_params,
     structure_descriptors,
     update,
-    1e-8;
+    1e-8,
+    weights;
     conf = conf,
     rank = rank)
 end
@@ -262,6 +264,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
             conf
         )
     end
+    systems = [strc.system for strc in strcs]
     strcs = nothing
     bases = nothing
     GC.gc()
@@ -279,15 +282,17 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
             tforeach(1:Nstrc) do i
                 strc_descriptors = reshape_structure_descriptor_single_system(structure_descriptors[i])
                 N_descr = size(strc_descriptors)[2]
-                #N_points_single = ceil(Int, N_descr/4)
-                N_points_single = Npoints
+                N_points_single = ceil(Int, N_descr/4)
+                Ncluster_single = ceil(Int, N_points_single/4)
+                #N_points_single = Npoints
+                #Ncluster_single = Ncluster
                 N_points_vec[i] = N_points_single
-                data_points_local[i] = sample_structure_descriptors(strc_descriptors, Ncluster=Ncluster, Npoints=Npoints, ml_sampling=get_ml_sampling(conf))
+                data_points_local[i] = sample_structure_descriptors(strc_descriptors, Ncluster=Ncluster_single, Npoints=N_points_single, ml_sampling=get_ml_sampling(conf))
                 #println(size(data_points_local[i]))
+                system = systems[i]
+                @info "$system Sampling data points using clustering single strategy with Ncluster = $Ncluster_single and Npoints_local_total = $N_points_single"
             end
             data_points_local = reduce(vcat, data_points_local)
-            Npoints_local_all = size(data_points_local)[1]
-            @info "Sampling data points using clustering single strategy with Ncluster = $Ncluster and Npoints_local_total = $Npoints_local_all"
         else
             data_points_local = sample_structure_descriptors_random(reshape_structure_descriptors(structure_descriptors), Npoints=Npoints_local)
             @info "Sampling data points using random strategy with Npoints_local = $Npoints_local"
@@ -306,22 +311,34 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
 
         MPI.Gatherv!(view(data_points_local, 1:counts[rank + 1]), data_points_buf, 0, comm)
         data_points = rank == 0 ? data_points_buf.data : nothing
+        weights = nothing
+        if rank == 0
+            d_counts = Hamster.countmap(data_points)
+            data_points = collect(keys(d_counts))
+            weights = collect(values(d_counts))
+        end
         data_points = MPI.bcast(data_points, comm)
+        weights = MPI.bcast(weights, comm)
 
-        N_real = sum(counts)
+        N_real = length(weights)
+        N_theo = sum(weights)
         # COV_EXCL_START
         if N_real ≠ Npoints && rank == 0 && verbosity > 0
-            @info "Number of samples changed from $(Npoints * Nstrc) to $N_real"
+            #@info "Number of samples changed from $Npoints to $N_theo"
+        end
+        if rank == 0 && verbosity > 0
+            @info "Number of datapoints changed from $N_theo to $N_real"
         end
         # COV_EXCL_STOP
     elseif data_points === nothing
         _, data_points = read_ml_params(conf, filename=get_ml_init_params(conf))
+        weights = ones(Int, length(data_points))
     else
         
     end
     params, data_points = init_ml_params!(data_points, conf)
 
-    return HamiltonianKernel(params, data_points, sim_params,structure_descriptors, update_ml, sp_tol;
+    return HamiltonianKernel(params, data_points, sim_params,structure_descriptors, update_ml, sp_tol, weights;
     conf =conf,
     rank = rank)
 end
@@ -571,6 +588,7 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
     dparams = zeros(length(kernel.params))
+    weights = kernel.weights
     if kernel.update
         tforeach( eachindex(dparams)) do n
             for (bi, index) in enumerate(indices)
@@ -578,11 +596,11 @@ function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc
                 for R in eachindex(dL_dHr[bi])
                     for (i, j, exp_val) in zip(findnz(desc_vec[R])...)
                         if !soc
-                            dparams[n] += exp_val .* real(dL_dHr[bi][R][i, j])
+                            dparams[n] += weights[n] .* exp_val .* real(dL_dHr[bi][R][i, j])
                         else
                             i1 = 2*i-1; j1 = 2*j-1
                             i2 = 2*i; j2 = 2*j
-                            dparams[n] += exp_val .* real(dL_dHr[bi][R][i1, j1] + dL_dHr[bi][R][i2, j2])
+                            dparams[n] += weights[n] .* exp_val .* real(dL_dHr[bi][R][i1, j1] + dL_dHr[bi][R][i2, j2])
                         end
                     end
                 end
