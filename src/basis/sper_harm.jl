@@ -1,48 +1,3 @@
-"""
-    str_to_orb(str::String)
-
-Convert an orbital name given as a string to its corresponding orbital object.
-
-# Arguments
-- `str::String`: The name of the orbital as a string. Valid strings include `"s"`, `"px"`, `"py"`, `"pz"`, `"dz2"`, `"dxy"`, `"dxz"`, `"dyz"`, `"dx2_y2"`, `"sp3"`, `"sp3dr2"`, `"pxdx2"`, `"pydy2"`, and `"pzdz2"`.
-
-# Returns
-- `Orbital`: The corresponding orbital object based on the input string.
-"""
-function str_to_orb(str)::Angular
-    orbdict = Dict("s"=>s(), "px"=>px(), "py"=>py(), "pz"=>pz(),
-        "dz2"=>dz2(), "dxy"=>dxy(), "dxz"=>dxz(), "dyz"=>dyz(), 
-        "dx2_y2"=>dx2_y2(), "sp3"=>sp3(), "sp3dr2"=>sp3dr2(), "pxdx2"=>pxdx2(), "pydy2"=>pydy2(), "pzdz2"=>pzdz2())
-    return orbdict[str]
-end
-
-# Dictionary mapping (l,mₗ) to their conventional names
-const lm_to_orbital_map = Dict(
-    (0, 0) => "s",
-    (1, 0) => "pz",
-    (1, 1) => "px",
-    (1, -1) => "py",
-    (2, 0) => "dz2",
-    (2, 1) => "dxz",
-    (2, -1) => "dyz",
-    (2, 2) => "dx2-y2",
-    (2, -2) => "dxy"
-    )
-
-"""
-    get_spherical(l, m)
-
-Returns the spherical harmonic function for a given orbital angular momentum quantum number `l` and magnetic quantum number `m`.
-
-# Arguments
-- `l::Int`: The orbital angular momentum quantum number (`l = 0` for `s`, `l = 1` for `p`, `l = 2` for `d`, etc.).
-- `m::Int`: The magnetic quantum number, which ranges from `-l` to `l`.
-
-# Returns
-- The corresponding spherical harmonic function as a vector, based on the values of `l` and `m`.
-"""
-get_spherical(l, m)::Angular = [[s()], [pz(), px()], [dz2(), dxz(), dx2_y2()]][l+1][m+1]
-
 # Angular parts produce 0/0 for r = [0, 0, 0]
 nan_to_zero(x) = isnan(x) ? zero(x) : x
 
@@ -309,18 +264,6 @@ function Overlap(ϕ₁::A1, R₁::R1, r⃗₁::V1, ϕ₂::A2, R₂::R2, r⃗₂:
     return f(r⃗) = ϕ₁(r⃗, r⃗₁)*R₁(r⃗, r⃗₁) * ϕ₂(r⃗, r⃗₂) * R₂(r⃗, r⃗₂)
 end
 
-struct porb <: Angular
-    l :: Int64
-    m :: Int64
-end
-porb() = porb(1, 0)
-
-struct dorb <: Angular
-    l :: Int64
-    m :: Int64
-end
-dorb() = dorb(2, 0)
-
 struct sp3 <: Angular
     l :: Int64
     m :: Int64
@@ -333,24 +276,47 @@ struct sp3dr2 <: Angular
 end
 sp3dr2() = sp3dr2(-2, 0)
 
-struct prdr2 <: Angular
-    l :: Int64
-    m :: Int64
-end
-prdr2() = prdr2(-3, 0)
+"""
+    str_to_orb(str::String)
 
-struct pxdx2 <: Angular
-    l :: Int64
-    m :: Int64
+Convert an orbital name given as a string to its corresponding orbital object.
+
+# Arguments
+- `str::String`: The name of the orbital as a string. Valid strings include `"s"`, `"px"`, `"py"`, `"pz"`, `"dz2"`, `"dxy"`, `"dxz"`, `"dyz"`, `"dx2_y2"`, `"sp3"`, `"sp3dr2"`, `"pxdx2"`, `"pydy2"`, and `"pzdz2"`.
+
+# Returns
+- `Orbital`: The corresponding orbital object based on the input string.
+"""
+const orbdict = Dict("s"=>s(), "px"=>px(), "py"=>py(), "pz"=>pz(),
+        "dz2"=>dz2(), "dxy"=>dxy(), "dxz"=>dxz(), "dyz"=>dyz(), 
+        "dx2_y2"=>dx2_y2(), "sp3"=>sp3(), "sp3dr2"=>sp3dr2())
+function str_to_orb(str)::Angular
+    return orbdict[str]
 end
-pxdx2() = pxdx2(-3, 0)
-struct pydy2 <: Angular
-    l :: Int64
-    m :: Int64
-end
-pydy2() = pydy2(-3, 0)
-struct pzdz2 <: Angular
-    l :: Int64
-    m :: Int64
-end
-pzdz2() = pzdz2(-3, 0)
+
+# Dictionary mapping (l,mₗ) to their conventional names
+const lm_to_orbital_map = Dict(
+    (0, 0) => "s",
+    (1, 0) => "pz",
+    (1, 1) => "px",
+    (1, -1) => "py",
+    (2, 0) => "dz2",
+    (2, 1) => "dxz",
+    (2, -1) => "dyz",
+    (2, 2) => "dx2-y2",
+    (2, -2) => "dxy"
+    )
+
+"""
+    get_spherical(l, m)
+
+Returns the spherical harmonic function for a given orbital angular momentum quantum number `l` and magnetic quantum number `m`.
+
+# Arguments
+- `l::Int`: The orbital angular momentum quantum number (`l = 0` for `s`, `l = 1` for `p`, `l = 2` for `d`, etc.).
+- `m::Int`: The magnetic quantum number, which ranges from `-l` to `l`.
+
+# Returns
+- The corresponding spherical harmonic function as a vector, based on the values of `l` and `m`.
+"""
+get_spherical(l, m)::Angular = [[s()], [pz(), px()], [dz2(), dxz(), dx2_y2()]][l+1][m+1]
