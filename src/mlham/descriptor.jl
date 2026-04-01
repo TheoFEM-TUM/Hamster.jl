@@ -9,7 +9,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
     #env_scale = env_scale/sim_params
     Nε = length(basis); Norb_per_ion = size(basis); NR = size(strc.Rs, 2)
 
-    h_env = SparseMatrixCSC{SVector{8, Float64}, Int64}[spzeros(SVector{8, Float64}, Nε, Nε) for _ in 1:NR]
+    h_env = SparseMatrixCSC{SVector{9, Float64}, Int64}[spzeros(SVector{9, Float64}, Nε, Nε) for _ in 1:NR]
 
     env = get_environmental_descriptor(h, V, strc, basis, conf)
 
@@ -21,7 +21,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
 
     is = [Int64[] for R in 1:NR]
     js = [Int64[] for R in 1:NR]
-    vals = [SVector{8, Float64}[] for R in 1:NR]
+    vals = [SVector{9, Float64}[] for R in 1:NR]
     points = iterate_nn_grid_points(strc.point_grid)
     grouped = group_by_R(points, NR)
     tforeach( eachindex(grouped)) do R
@@ -56,6 +56,14 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
                 Zs = orbswap ? reverse(Zs) : Zs
                 θs = angleswap ? reverse(θs) : θs
 
+                orb_i_type = basis.orbitals[iion][iorb].type
+                orb_j_type = basis.orbitals[jion][jorb].type
+                baseorb = orbswap ? Tuple([orb_j_type, orb_i_type]) : Tuple([orb_i_type, orb_j_type])
+                me = get_me_label(orb_i_type, orb_j_type, baseorb)
+                Overlap_ID = get_overlap_label_id(me)
+                Overlap_ID *= 100
+                Zs = Zs .* 100.0
+
                 if apply_distortion || apply_distance_distortion
                     φ = φ / 2π * strc_scale
                     θs = @. θs / 2π * strc_scale
@@ -63,7 +71,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
 
                 if Δr ≤ rcut && fcut(Δr_dist, rcut+rcut_tol) > 0
                     ii, jj = orbswap ? (j, i) : (i, j)
-                    push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
+                    push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{9, Float64}([Overlap_ID, Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
                 end
             end
         end

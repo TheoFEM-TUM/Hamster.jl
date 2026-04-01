@@ -375,3 +375,15 @@ Base.string(::Vddδ) = "ddδ"
 
 (v::Vddδ)(orbconfig, mode::NormalMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 2)*fdxy(v.base[1], θ₁, φ₁)*fdxy(v.base[2], θ₂, φ₂) + NConst(mode, v.base, 2, 2)*fdx2_y2(v.base[1], θ₁, φ₁)*fdx2_y2(v.base[2], θ₂, φ₂)
 (v::Vddδ)(orbconfig, mode::ConjugateMode, θ₁, φ₁, θ₂, φ₂)::Float64 = NConst(mode, v.base, 2, 2)*fdxy(v.base[2], θ₁, φ₁)*fdxy(v.base[1], θ₂, φ₂) + NConst(mode, v.base, 2, 2)*fdx2_y2(v.base[2], θ₁, φ₁)*fdx2_y2(v.base[1], θ₂, φ₂)
+
+get_overlap_label_id(v::ZeroOverlap) = 0
+get_overlap_label_id(v::Vssσ) = 1
+get_overlap_label_id(v::Vspσ) = 2
+get_overlap_label_id(v::Vppσ) = 3
+get_overlap_label_id(v::Vppπ) = 4
+get_overlap_label_id(v::Vsdσ) = 5
+get_overlap_label_id(v::Vpdσ) = 6
+get_overlap_label_id(v::Vpdπ) = 7
+get_overlap_label_id(v::Vddσ) = 8
+get_overlap_label_id(v::Vddπ) = 9
+get_overlap_label_id(v::Vddδ) = 10

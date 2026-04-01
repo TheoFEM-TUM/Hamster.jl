@@ -442,7 +442,7 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filena
     end
 end
 
-function write_datapoints(data_points::Vector{SVector{8, Float64}}, target_dir::String, conf=get_empty_config(); filename=get_ml_filename(conf))
+function write_datapoints(data_points::Vector{SVector{9, Float64}}, target_dir::String, conf=get_empty_config(); filename=get_ml_filename(conf))
     open(joinpath(target_dir, filename*".dat"), "w") do file
         # Write header to file
         #params = init_ml_params!(data_points, conf)[1]
@@ -589,6 +589,8 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
     dparams = zeros(length(kernel.params))
     weights = kernel.weights
+    #weights = ones(length(weights)) # for unweighted gradients
+    #weights = (weights .-1) .*2 .+1
     if kernel.update
         tforeach( eachindex(dparams)) do n
             for (bi, index) in enumerate(indices)
