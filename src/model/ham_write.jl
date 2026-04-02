@@ -210,6 +210,7 @@ function read_ham(comm, ind=0; filename="ham.h5", space="k", system="") :: Tuple
         nzval  = read(grp["nzval"])
         H[parse(Int64, name)] = SparseMatrixCSC(m, n, colptr, rowval, nzval)
     end
+    close(file)
     return H, vecs
 end
 
@@ -291,7 +292,6 @@ function write_current(bonds, comm, ind=0; ham_file="ham.h5", filename="ham.h5",
                 grp["znzval"] = Cz.nzval
                 grp["m"]      = size(Cx, 1)
                 grp["n"]      = size(Cx, 2)
-
             end
         end
     end
