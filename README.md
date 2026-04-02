@@ -61,7 +61,7 @@ More details on hyperparameter optimization can be found [here](https://theofem-
   <img width="300" height="250" src="docs/src/assets/code_functionality.png">
 </p>
 
-For the results shown in Ref. 2, Hamster configuration (`hconf`) files are provided [here](https://github.com/TheoFEM-TUM/Hamster.jl/tree/devel/examples/hamster_paper_input).
+For the results shown in Ref. 2, please see the full dataset in Ref. 3 or [here](https://zenodo.org/records/18485403).
 
 ## License
 This project is licensed under the MIT License.
@@ -74,4 +74,8 @@ A list of relevant publications is provided below.
 
 [1] [M. Schwade, M. J. Schilcher, C. Reverón Baecker, M. Grumet, and D. A. Egger, J. Chem. Phys. 160, 134102 (2024)](https://pubs.aip.org/aip/jcp/article/160/13/134102/3280389/Temperature-transferable-tight-binding-model-using)
 
-[2] [M. Schwade, S. Zhang, F. Vonhoff, F. P. Delgado, D. A. Egger, arXiv:2508.20536 [cond-mat.mtrl-sci] (2025)](https://arxiv.org/abs/2508.20536)
+[2] [M. Schwade, S. Zhang, F. Vonhoff, F. P. Delgado, D. A. Egger, Nat Commun 17, 2652 (2026)](https://doi.org/10.1038/s41467-026-70865-7)
+
+## Dataset for Ref. 2
+
+[3] [M. Schwade, S. Zhang, F. Vonhoff, F. P. Delgado, D. A. Egger, Data for physics-informed Hamiltonian learning for large-scale optoelectronic property prediction (2026)](https://doi.org/10.5281/zenodo.18485403)
