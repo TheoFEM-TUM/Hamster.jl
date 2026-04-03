@@ -271,10 +271,13 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
     if get_ml_init_params(conf)[1] ∈ ['r', 'z', 'o'] && data_points === nothing
         Npoints_local = floor(Int64, Npoints / nranks)
         Ncluster_local = floor(Int64, Ncluster / nranks)
-        Ncluster_local = Ncluster
+        #Ncluster_local = Ncluster
         if sample_strat == "cluster"
             @info "Sampling data points using clustering strategy with Ncluster = $Ncluster_local"
-            data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster_local, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
+            Np_per_strc = zeros(Int, length(structure_descriptors))
+            reshaped_descr = reshape_structure_descriptors(structure_descriptors, Np_per_strc)
+            data_points_local = sample_structure_descriptors(reshaped_descr, Np_per_strc, Ncluster=Ncluster_local, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
+            println("Np_per_strc: ", Np_per_strc)
         elseif sample_strat == "cluster_single"
             
             data_points_local = Vector{Any}(undef, Nstrc)

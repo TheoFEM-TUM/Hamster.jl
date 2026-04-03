@@ -94,8 +94,15 @@ Reshapes a nested structure of sparse descriptors into a dense matrix (to be use
 # Returns
 - A matrix (`Matrix{Float64}`) where each column corresponds to a flattened descriptor.
 """
-function reshape_structure_descriptors(descriptors)
-    out = hcat([Vector(descriptor) for n in eachindex(descriptors) for R in eachindex(descriptors[n]) for (i, j, descriptor) in zip(findnz(descriptors[n][R])...)]...)
+function reshape_structure_descriptors(descriptors, counts)
+    out = hcat([begin 
+                    counts[n] += 1
+                    Vector(descriptor) 
+                end 
+                for n in eachindex(descriptors) 
+                for R in eachindex(descriptors[n]) 
+                for (i, j, descriptor) 
+                in zip(findnz(descriptors[n][R])...)]...)
     return out
 end
 
@@ -216,13 +223,20 @@ Selects a subset of descriptor vectors using K-Means clustering, weighted by clu
 # Returns
 - A matrix of selected descriptor vectors with `Npoints` columns.
 """
-function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random")
+function sample_structure_descriptors(descriptors, Np_per_strc; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random")
     Random.seed!(1234)
-    result = kmeans(descriptors, Ncluster)
+    Np_avg = mean(Np_per_strc)
+    w_strc = Np_avg ./ reduce(vcat, (fill(x, Int(x)) for x in Np_per_strc)) 
+    result = kmeans(descriptors, Ncluster, weights = w_strc)
     indices = result.assignments
     centroids = result.centers
         
-    cluster_sizes = [count(x -> x == c, indices) for c in 1:Ncluster]
+    #cluster_sizes = [count(x -> x == c, indices) for c in 1:Ncluster]
+    cluster_sizes = zeros(Float64, Ncluster)
+    for i in eachindex(indices)
+        cluster_sizes[indices[i]] += w_strc[i]
+    end
+    cluster_sizes = ceil.(cluster_sizes)
     cluster_variances = [mean([normdiff(descriptors[:, i], centroids[:, c]) for i in findall(x -> x == c, indices)]) for c in 1:Ncluster]
 
     # Filter empty clusters
