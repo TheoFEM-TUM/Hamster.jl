@@ -272,9 +272,10 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         Npoints_local = floor(Int64, Npoints / nranks)
         Ncluster_local = floor(Int64, Ncluster / nranks)
         #Ncluster_local = Ncluster
+        Np_per_strc = zeros(Int, length(structure_descriptors))
         if sample_strat == "cluster"
             @info "Sampling data points using clustering strategy with Ncluster = $Ncluster_local"
-            Np_per_strc = zeros(Int, length(structure_descriptors))
+            
             reshaped_descr = reshape_structure_descriptors(structure_descriptors, Np_per_strc)
             data_points_local = sample_structure_descriptors(reshaped_descr, Np_per_strc, Ncluster=Ncluster_local, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
             println("Np_per_strc: ", Np_per_strc)
@@ -290,14 +291,14 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                 #N_points_single = Npoints
                 #Ncluster_single = Ncluster
                 N_points_vec[i] = N_points_single
-                data_points_local[i] = sample_structure_descriptors(strc_descriptors, Ncluster=Ncluster_single, Npoints=N_points_single, ml_sampling=get_ml_sampling(conf))
+                data_points_local[i] = sample_structure_descriptors(strc_descriptors, Np_per_strc, Ncluster=Ncluster_single, Npoints=N_points_single, ml_sampling=get_ml_sampling(conf))
                 #println(size(data_points_local[i]))
                 system = systems[i]
                 @info "$system Sampling data points using clustering single strategy with Ncluster = $Ncluster_single and Npoints_local_total = $N_points_single"
             end
             data_points_local = reduce(vcat, data_points_local)
         else
-            data_points_local = sample_structure_descriptors_random(reshape_structure_descriptors(structure_descriptors), Npoints=Npoints_local)
+            data_points_local = sample_structure_descriptors_random(reshape_structure_descriptors(structure_descriptors, Np_per_strc), Npoints=Npoints_local)
             @info "Sampling data points using random strategy with Npoints_local = $Npoints_local"
         end
 
