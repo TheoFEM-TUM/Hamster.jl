@@ -279,6 +279,73 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
             reshaped_descr = reshape_structure_descriptors(structure_descriptors, Np_per_strc)
             data_points_local = sample_structure_descriptors(reshaped_descr, Np_per_strc, Ncluster=Ncluster_local, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
             println("Np_per_strc: ", Np_per_strc)
+        elseif sample_strat == "single_rank"
+            @info "Sampling data points using single_rank strategy with Ncluster = $Ncluster"
+
+            # build local descriptor matrix
+            data_points_local = reshape_structure_descriptors(structure_descriptors, Np_per_strc)
+
+            println("local size: ", size(data_points_local))
+
+            dim = size(data_points_local, 1)
+            local_cols::Int32 = size(data_points_local, 2)
+
+            # gather number of columns from all ranks
+            counts_1 = MPI.Gather(local_cols, 0, comm)
+            counts_1 = MPI.bcast(counts_1, 0, comm)
+
+            data_points_buf = nothing
+            recv_mat = nothing
+
+            if rank == 0
+                total_cols = sum(counts_1)
+
+                println("total columns: ", total_cols)
+
+                recv_mat = Matrix{Float64}(undef, dim, total_cols)
+
+                # MPI expects number of elements
+                counts_elements = counts_1 .* dim
+
+                data_points_buf = MPI.VBuffer(vec(recv_mat), counts_elements)
+            end
+
+            # gather all matrices as flat vectors
+            MPI.Gatherv!(
+                vec(data_points_local),
+                data_points_buf,
+                0,
+                comm
+            )
+
+            # gather structure counts
+            Np_per_strc_per_rank = MPI.Gather(Np_per_strc, 0, comm)
+
+            if rank == 0
+                total_cols = sum(counts_1)
+
+                reshaped_descr = reshape(data_points_buf.data, dim, total_cols)
+
+                println("size reshaped_descr: ", size(reshaped_descr))
+
+                # combine structure counts
+                Np_per_strc = vcat(Np_per_strc_per_rank...)
+
+                println("Np_per_strc: ", Np_per_strc)
+
+                # sampling
+                data_points_local = sample_structure_descriptors(
+                    reshaped_descr,
+                    Np_per_strc,
+                    Ncluster = Ncluster,
+                    Npoints = Npoints,
+                    ml_sampling = get_ml_sampling(conf)
+                )
+
+            else
+                data_points_local = Matrix{Float64}(undef, dim, 0)
+            end
+
         elseif sample_strat == "cluster_single"
             
             data_points_local = Vector{Any}(undef, Nstrc)
