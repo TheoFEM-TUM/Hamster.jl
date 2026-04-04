@@ -47,6 +47,10 @@ Sets the scaling factor that is multiplied with the structural descriptor entrie
 """
 get_strc_scale(conf::Config)::Float64 = conf("strc_scale", "ML") == "default" ? 1.0 : conf("strc_scale", "ML")
 
+get_Z_scale(conf::Config)::Float64 = conf("Z_scale", "ML") == "default" ? 1.0 : conf("Z_scale", "ML")
+get_R_scale(conf::Config)::Float64 = conf("R_scale", "ML") == "default" ? 1.0 : conf("R_scale", "ML")
+get_overlap_scale(conf::Config)::Float64 = conf("overlap_scale", "ML") == "default" ? 1.0 : conf("overlap_scale", "ML")
+
 """
     sim_params=0.1
 

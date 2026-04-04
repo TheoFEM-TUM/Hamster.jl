@@ -4,14 +4,15 @@
 Calculate the TB descriptor for a given a TB `model`, a structure `strc` and a TBConfig file `conf`.
 """
 function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_ml_rcut(conf), rcut_tol=get_rcut_tol(conf), apply_distortion=get_apply_distortion(conf), 
-    env_scale=get_env_scale(conf), apply_distance_distortion=get_apply_distance_distortion(conf), strc_scale=get_strc_scale(conf))
+    env_scale=get_env_scale(conf), apply_distance_distortion=get_apply_distance_distortion(conf), strc_scale=get_strc_scale(conf),
+    Z_scale=get_Z_scale(conf), R_scale=get_R_scale(conf), overlap_scale=get_overlap_scale(conf))
     sim_params = get_sim_params(conf)
     #env_scale = env_scale/sim_params
     Nε = length(basis); Norb_per_ion = size(basis); NR = size(strc.Rs, 2)
 
     h_env = SparseMatrixCSC{SVector{9, Float64}, Int64}[spzeros(SVector{9, Float64}, Nε, Nε) for _ in 1:NR]
 
-    env = get_environmental_descriptor(h, V, strc, basis, conf)
+    env = get_environmental_descriptor(h, V, strc, basis, conf) .* env_scale
 
     rs_ion = get_ion_positions(strc.ions)
     Ts = frac_to_cart(strc.Rs, strc.lattice)
@@ -61,8 +62,11 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
                 baseorb = orbswap ? Tuple([orb_j_type, orb_i_type]) : Tuple([orb_i_type, orb_j_type])
                 me = get_me_label(orb_i_type, orb_j_type, baseorb)
                 Overlap_ID = get_overlap_label_id(me)
-                Overlap_ID *= 100
-                Zs = Zs .* 100.0
+                Overlap_ID *= overlap_scale
+                Zs = Zs .* Z_scale
+                Δr_in *= R_scale
+                #Overlap_ID *= 100
+                #Zs = Zs .* 100.0
 
                 if apply_distortion || apply_distance_distortion
                     φ = φ / 2π * strc_scale
@@ -71,7 +75,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
 
                 if Δr ≤ rcut && fcut(Δr_dist, rcut+rcut_tol) > 0
                     ii, jj = orbswap ? (j, i) : (i, j)
-                    push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{9, Float64}([Overlap_ID, Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
+                    push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{9, Float64}([Overlap_ID, Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii], env[jj]]))
                 end
             end
         end
