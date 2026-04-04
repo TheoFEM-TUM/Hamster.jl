@@ -229,8 +229,9 @@ Selects a subset of descriptor vectors using K-Means clustering, weighted by clu
 """
 function sample_structure_descriptors(descriptors, Np_per_strc; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random")
     Random.seed!(1234)
-    Np_avg = mean(Np_per_strc)
+    Np_avg = sum(Np_per_strc)
     w_strc = Np_avg ./ reduce(vcat, (fill(x, Int(x)) for x in Np_per_strc)) 
+    w_strc ./= mean(w_strc)
     result = kmeans(descriptors, Ncluster, weights = w_strc)
     indices = result.assignments
     centroids = result.centers
