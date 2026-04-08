@@ -101,8 +101,10 @@ function forward(l::Loss, y, ŷ; offset = off)
     if offset
         Δy = Δy .- mean(Δy)
     end
-    #k_min = argmin(abs.( ŷ[9,:] - ŷ[10, :]))
-    #l.wk[k_min] = 5
+    k_min = argmin(abs.( ŷ[9,:] - ŷ[10, :]))
+    l.wk[k_min] = 1
+    l.wk[k_min] = 0.1 * sum(l.wk)
+    #println("wk after $k_min  $(l.wk[k_min])")
     y_mod = abs.(Δy) .+ min_delta
     L_E_avg = vec(mean(y_mod, dims = 2))
     w =  y_mod ./L_E_avg
@@ -154,8 +156,9 @@ function backward(l::Loss, y, ŷ, offset = off)
     if offset
         Δy = Δy .- mean(Δy)
     end
-    #k_min = argmin(abs.( ŷ[9,:] - ŷ[10, :]))
-    #l.wk[k_min] = 5
+    k_min = argmin(abs.( ŷ[9,:] - ŷ[10, :]))
+    l.wk[k_min] = 1
+    l.wk[k_min] = 0.1 * sum(l.wk)
     y_mod = abs.(Δy) .+ min_delta
     L_E_avg = vec(mean(y_mod, dims = 2))
     w =  y_mod ./L_E_avg
