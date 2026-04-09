@@ -32,6 +32,11 @@ end
     @test all([size(Cy[R]) == (16, 16) for R in eachindex(Cy)])
     @test all([size(Cz[R]) == (16, 16) for R in eachindex(Cz)])
 
+    orbitals = h5read("ham.h5", "basis")
+    ga = repeat(["Ga-sp3dr2↑", "Ga-sp3dr2↓"], 4)
+    as = repeat(["As-sp3dr2↑", "As-sp3dr2↓"], 4)
+    @test orbitals == vcat(ga, as)
+
     rm("hamster.out"); rm("Es.dat"); rm("ham.h5")
 end
 

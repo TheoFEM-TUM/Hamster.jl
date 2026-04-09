@@ -235,4 +235,10 @@ function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_conf
         MPI.Barrier(comm)
         combine_hams(comm, what="Cr", rank=rank, nranks=nranks, filename=current_file)
     end
+    if get_write_hk(conf) || get_write_hr(conf) && rank == 0
+        for index in eachindex(strcs)
+            system, config_index = get_system_and_config_index(index, local_inds)
+            write_orbital_basis(strcs[index], bases[index], conf, system=system, ham_file=ham_file)
+        end
+    end
 end

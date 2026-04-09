@@ -210,6 +210,7 @@ function read_ham(comm, ind=0; filename="ham.h5", space="k", system="") :: Tuple
         nzval  = read(grp["nzval"])
         H[parse(Int64, name)] = SparseMatrixCSC(m, n, colptr, rowval, nzval)
     end
+    close(file)
     return H, vecs
 end
 
@@ -291,7 +292,6 @@ function write_current(bonds, comm, ind=0; ham_file="ham.h5", filename="ham.h5",
                 grp["znzval"] = Cz.nzval
                 grp["m"]      = size(Cx, 1)
                 grp["n"]      = size(Cx, 2)
-
             end
         end
     end
@@ -423,3 +423,57 @@ function read_current(comm, ind=0; filename="ham.h5", space="r", system="")
 end
 
 read_current(ind::Integer=0; filename="ham.h5", space="r") = read_current(MPI.COMM_WORLD, ind; filename=filename, space=space)
+
+"""
+    write_orbital_basis(strc, basis, conf=get_empty_config(); system=get_system(conf), ham_file=get_ham_file(conf))
+
+Construct and write the orbital basis labels to an HDF5 Hamiltonian file.
+
+This function iterates over all ions in `strc` and their corresponding orbitals in
+`basis`, generating a list of string labels of the form:
+
+    "<Element>-<orbital>"
+
+If spin–orbit coupling (SOC) is enabled in `conf`, each orbital is duplicated with
+spin projections:
+
+    "<Element>-<orbital>↑", "<Element>-<orbital>↓"
+
+The resulting list is written to the dataset `"basis"` in the HDF5 file specified
+by `ham_file`. If a `system` name is provided, the dataset key becomes:
+
+    "basis_<system>"
+
+The dataset is only created if it does not already exist.
+
+# Arguments
+- `strc`: Structure containing ion information.
+- `basis`: Orbital basis data, including angular momentum (`l`, `m`) per ion.
+- `conf`: Configuration object.
+
+# Keyword Arguments
+- `system`: Optional system identifier.
+- `ham_file`: Path to the HDF5 Hamiltonian file where the basis is stored.
+"""
+function write_orbital_basis(strc, basis, conf=get_empty_config(); system=get_system(conf), ham_file=get_ham_file(conf))
+    Norbs = size(basis)
+    soc = get_soc(conf)
+    orbitals = String[]
+    for iion in eachindex(Norbs), jorb in 1:Norbs[iion]
+        ion_type = number_to_element(strc.ions[iion].type)
+        orb_type = lm_to_orbital_map[(basis.orbitals[iion][jorb].type.l, basis.orbitals[iion][jorb].type.m)]
+        if !soc
+            push!(orbitals, "$ion_type-$orb_type")
+        else
+            push!(orbitals, "$ion_type-$orb_type↑")
+            push!(orbitals, "$ion_type-$orb_type↓")
+        end
+    end
+    h5open(ham_file, "cw") do file
+        key = system == "" ? "basis" : "basis_$system"
+        if !haskey(file, key)
+            file[key] = orbitals
+        end
+    end
+end
+

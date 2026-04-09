@@ -18,6 +18,8 @@ end
 
 # Dictionary mapping (l,mₗ) to their conventional names
 const lm_to_orbital_map = Dict(
+    (-1, 0) => "sp3",
+    (-2, 0) => "sp3dr2",
     (0, 0) => "s",
     (1, 0) => "pz",
     (1, 1) => "px",
