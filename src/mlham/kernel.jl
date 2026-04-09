@@ -38,7 +38,7 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
     descr_sizes = [(size(structure_descriptors[i])[1], size(structure_descriptors[i][1])[1]) for i in 1:N_mats]
     Desc_Vec = [ [[ spzeros(Float64, descr_sizes[i][2], descr_sizes[i][2]) for _ in 1:descr_sizes[i][1] ] for d in 1:N_dp]
       for i in 1:N_mats ]
-    #N_test = 0
+    N_test = 0
     tforeach(1:N_mats) do i
     #for i in 1:N_mats
         @views h_env = structure_descriptors[i]
@@ -56,7 +56,7 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
                         push!(is, i_mat)
                         push!(js, j_mat)
                         push!(vals, val)
-                        #N_test+= 1
+                        N_test+= 1
                     end
                 end
                 if size(is)[1] > 0
@@ -64,7 +64,7 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
                 end
             end
         end
-        #@info "Rank $rank: Finished kernel features for mat Nr. ($i / $N_mats) with Npoints = $N_test"
+        @info "Rank $rank: Finished kernel features for mat Nr. ($i / $N_mats) with Npoints = $N_test"
     end
     structure_descriptors = nothing
     GC.gc()
@@ -387,6 +387,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
             d_counts = Hamster.countmap(data_points)
             data_points = collect(keys(d_counts))
             weights = collect(values(d_counts))
+            #data_points = data_points_buf.data
         end
         data_points = MPI.bcast(data_points, comm)
         weights = MPI.bcast(weights, comm)
@@ -660,7 +661,7 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
     dparams = zeros(length(kernel.params))
     weights = kernel.weights
-    #weights = ones(length(weights)) # for unweighted gradients
+    weights = ones(length(dparams)) # for unweighted gradients
     #weights = (weights .-1) .*2 .+1
     if kernel.update
         tforeach( eachindex(dparams)) do n

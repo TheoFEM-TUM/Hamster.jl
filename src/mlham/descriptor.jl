@@ -227,65 +227,84 @@ Selects a subset of descriptor vectors using K-Means clustering, weighted by clu
 # Returns
 - A matrix of selected descriptor vectors with `Npoints` columns.
 """
+
+function unique_descriptors_with_weights(descriptors, weights)
+    pairs = collect(zip(eachcol(descriptors), weights))
+    unique_pairs = unique(pairs)
+
+    unique_descriptors = hcat(first.(unique_pairs)...)
+    unique_weights = last.(unique_pairs)
+
+    return unique_descriptors, unique_weights
+end
+
 function sample_structure_descriptors(descriptors, Np_per_strc; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random")
     Random.seed!(1234)
     Np_avg = sum(Np_per_strc)
-    w_strc = Np_avg ./ reduce(vcat, (fill(x, Int(x)) for x in Np_per_strc)) 
+    w_strc = Np_avg ./ reduce(vcat, (fill(x, Int(x)) for x in Np_per_strc))
     w_strc ./= mean(w_strc)
-    result = kmeans(descriptors, Ncluster, weights = w_strc)
+    w_strc = ones(length(w_strc)) # for unweighted sampling
+    #unique_descriptors, w_strc = unique_descriptors_with_weights(descriptors, w_strc)
+    unique_descriptors = descriptors
+
+    result = kmeans(unique_descriptors, Ncluster, weights=w_strc)
     indices = result.assignments
     centroids = result.centers
-        
-    #cluster_sizes = [count(x -> x == c, indices) for c in 1:Ncluster]
+
     cluster_sizes = zeros(Float64, Ncluster)
     for i in eachindex(indices)
         cluster_sizes[indices[i]] += w_strc[i]
     end
     cluster_sizes = ceil.(cluster_sizes)
-    cluster_variances = [mean([normdiff(descriptors[:, i], centroids[:, c]) for i in findall(x -> x == c, indices)]) for c in 1:Ncluster]
 
-    # Filter empty clusters
-    nonzero_clusters = findall(s -> s ≠ 0, cluster_sizes)
-    cluster_sizes = cluster_sizes[nonzero_clusters]
-    cluster_variances = cluster_variances[nonzero_clusters]
+    cluster_variances = [mean([normdiff(unique_descriptors[:, i], centroids[:, c]) for i in findall(x -> x == c, indices)]) for c in 1:Ncluster]
 
-    # Compute weights
+    nonzero_clusters = findall(s -> s != 0, cluster_sizes)
+    cluster_ids = nonzero_clusters
+    cluster_sizes = cluster_sizes[cluster_ids]
+    cluster_variances = cluster_variances[cluster_ids]
+
     size_weights = cluster_sizes ./ sum(cluster_sizes)
     spread_weights = cluster_variances ./ sum(cluster_variances)
     final_weights = alpha .* size_weights + (1 - alpha) .* spread_weights
-    final_weights ./= sum(final_weights)  # Normalize
+    final_weights ./= sum(final_weights)
 
     points_per_cluster = round.(Int, final_weights .* Npoints)
     points_per_cluster .= max.(1, points_per_cluster)
     points_per_cluster .= min.(cluster_sizes, points_per_cluster)
 
-    # Adjust to ensure the exact number of `Npoints` is selected
     diff = Npoints - sum(points_per_cluster)
-    diff = min(length(points_per_cluster), diff)
     if diff != 0
         sorted_clusters = sortperm(final_weights, rev=true)
         for i in 1:abs(diff)
-            points_per_cluster[sorted_clusters[i]] += sign(diff)
+            idx = sorted_clusters[mod1(i, length(sorted_clusters))]
+            points_per_cluster[idx] += sign(diff)
         end
     end
+
     selected_indices = Int64[]
-    for c in eachindex(cluster_sizes)
-        cluster_indices = findall(x -> x == c, indices)
-        num_to_take = min(points_per_cluster[c], length(cluster_indices))
-        
+    for (i, cid) in enumerate(cluster_ids)
+        cluster_indices = findall(x -> x == cid, indices)
+        num_to_take = min(points_per_cluster[i], length(cluster_indices))
+
         selected = Int64[]
         if ml_sampling[1] == 'r'
             selected = sample(cluster_indices, num_to_take, replace=false)
         elseif ml_sampling[1] == 'f'
-            selected = farthest_point_sampling(descriptors, cluster_indices, num_to_take)
+            selected = farthest_point_sampling(unique_descriptors, cluster_indices, num_to_take)
         end
+
         append!(selected_indices, selected)
     end
-    Np = size(descriptors)[2]
-    selected_indices = Npoints >= Np ? [i for i in 1:Np] : selected_indices
-    summary = (nz_clusters = length(cluster_sizes), cluster_sizes = cluster_sizes, points_per_cluster = points_per_cluster, cluster_variances = cluster_variances)
+
+    selected_indices = unique(selected_indices)
+
+    Np = size(unique_descriptors, 2)
+    selected_indices = Npoints >= Np ? collect(1:Np) : selected_indices
+
     Random.seed!()
-    return SVector{size(descriptors, 1), Float64}[SVector{size(descriptors, 1)}(descriptors[:, index]) for index in selected_indices]
+
+    return SVector{size(unique_descriptors, 1), Float64}[SVector{size(unique_descriptors, 1)}(unique_descriptors[:, index]) for index in selected_indices]
 end
 
 function sample_structure_descriptors_random(descriptors; Npoints=1)
