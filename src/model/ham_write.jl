@@ -424,6 +424,37 @@ end
 
 read_current(ind::Integer=0; filename="ham.h5", space="r") = read_current(MPI.COMM_WORLD, ind; filename=filename, space=space)
 
+"""
+    write_orbital_basis(strc, basis, conf=get_empty_config(); system=get_system(conf), ham_file=get_ham_file(conf))
+
+Construct and write the orbital basis labels to an HDF5 Hamiltonian file.
+
+This function iterates over all ions in `strc` and their corresponding orbitals in
+`basis`, generating a list of string labels of the form:
+
+    "<Element>-<orbital>"
+
+If spin–orbit coupling (SOC) is enabled in `conf`, each orbital is duplicated with
+spin projections:
+
+    "<Element>-<orbital>↑", "<Element>-<orbital>↓"
+
+The resulting list is written to the dataset `"basis"` in the HDF5 file specified
+by `ham_file`. If a `system` name is provided, the dataset key becomes:
+
+    "basis_<system>"
+
+The dataset is only created if it does not already exist.
+
+# Arguments
+- `strc`: Structure containing ion information.
+- `basis`: Orbital basis data, including angular momentum (`l`, `m`) per ion.
+- `conf`: Configuration object.
+
+# Keyword Arguments
+- `system`: Optional system identifier.
+- `ham_file`: Path to the HDF5 Hamiltonian file where the basis is stored.
+"""
 function write_orbital_basis(strc, basis, conf=get_empty_config(); system=get_system(conf), ham_file=get_ham_file(conf))
     Norbs = size(basis)
     soc = get_soc(conf)
