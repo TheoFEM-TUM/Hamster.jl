@@ -277,3 +277,22 @@ function set_params!(model::TBModel, params)
         model.params = params
     end
 end
+
+"""
+    copy_params!(receiving_model::TBModel, sending_model::TBModel) -> Nothing
+
+Copy matching parameters from one TB model to another.
+
+# Arguments
+- `receiving_model::TBModel`: The model whose parameters will be updated.
+- `sending_model::TBModel`: The model providing parameter values.
+"""
+function copy_params!(receiving_model::TBModel, sending_model::TBModel)
+    for (i, sending_label) in enumerate(sending_model.param_labels)
+        for (j, receiving_label) in enumerate(receiving_model.param_labels)
+            if sending_label == receiving_label
+                receiving_model.params[j] = sending_model.params[i]
+            end
+        end
+    end
+end

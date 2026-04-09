@@ -199,6 +199,25 @@ function set_params!(soc_model::SOCModel, params)
 end
 
 """
+    copy_params!(receiving_model::SOCModel, sending_model::SOCModel) -> Nothing
+
+Copy matching parameters from one SOC model to another.
+
+# Arguments
+- `receiving_model::SOCModel`: The model whose parameters will be updated.
+- `sending_model::SOCModel`: The model providing parameter values.
+"""
+function copy_params!(receiving_model::SOCModel, sending_model::SOCModel)
+    for (i, sending_label) in enumerate(sending_model.param_labels)
+        for (j, receiving_label) in enumerate(receiving_model.param_labels)
+            if sending_label == receiving_label
+                receiving_model.params[j] = sending_model.params[i]
+            end
+        end
+    end
+end
+
+"""
     write_params(soc_model::SOCModel, conf=get_empty_config()) -> Nothing
 
 Writes the parameters of a spin-orbit coupling (SOC) model to a file.

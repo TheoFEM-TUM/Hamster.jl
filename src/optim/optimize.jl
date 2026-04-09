@@ -169,7 +169,7 @@ function val_step!(ham_val, loss, val_data, prof, iter, comm; rank=0, nranks=1, 
             prof.L_val_system[system][iter] = mean(loss_system)
         end
     end
-
+    
     val_time_local = MPI.Wtime() - val_begin
     val_time = MPI.Reduce(val_time_local, +, comm, root=0)
     L_val = MPI.Reduce(sum(Ls_val), +, comm, root=0)

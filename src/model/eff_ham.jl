@@ -149,7 +149,7 @@ Copy parameters from one EffectiveHamiltonian (`sending_ham`) to another (`recei
 """
 function copy_params!(receiving_ham::H1, sending_ham::H2) where {H1,H2<:EffectiveHamiltonian}
     for (receiving_model, sending_model) in zip(receiving_ham.models, sending_ham.models) 
-        set_params!(receiving_model, get_params(sending_model))
+        copy_params!(receiving_model, sending_model)
     end
 end
 

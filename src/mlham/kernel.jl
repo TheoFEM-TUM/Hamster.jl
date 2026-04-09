@@ -169,6 +169,19 @@ Retrieve the parameters associated with a `HamiltonianKernel`.
 get_params(kernel::HamiltonianKernel) = kernel.params
 
 """
+    copy_params!(receiving_model::HamiltonianKernel, sending_model::HamiltonianKernel) -> Nothing
+
+Copy parameters from one Hamiltonian kernel to another.
+
+# Arguments
+- `receiving_model::HamiltonianKernel`: The kernel that will receive the parameters.
+- `sending_model::HamiltonianKernel`: The kernel providing the parameters.
+"""
+function copy_params!(receiving_model::HamiltonianKernel, sending_model::HamiltonianKernel)
+    set_params!(receiving_model, get_params(sending_model))
+end
+
+"""
     write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filename=get_ml_filename(conf))
 
 Writes the parameters and configuration settings of a HamiltonianKernel object to a file.
