@@ -423,3 +423,26 @@ function read_current(comm, ind=0; filename="ham.h5", space="r", system="")
 end
 
 read_current(ind::Integer=0; filename="ham.h5", space="r") = read_current(MPI.COMM_WORLD, ind; filename=filename, space=space)
+
+function write_orbital_basis(strc, basis, conf=get_empty_config(); system=get_system(conf), ham_file=get_ham_file(conf))
+    Norbs = size(basis)
+    soc = get_soc(conf)
+    orbitals = String[]
+    for iion in eachindex(Norbs), jorb in 1:Norbs[iion]
+        ion_type = number_to_element(strc.ions[iion].type)
+        orb_type = lm_to_orbital_map[(basis.orbitals[iion][jorb].type.l, basis.orbitals[iion][jorb].type.m)]
+        if !soc
+            push!(orbitals, "$ion_type-$orb_type")
+        else
+            push!(orbitals, "$ion_type-$orb_type↑")
+            push!(orbitals, "$ion_type-$orb_type↓")
+        end
+    end
+    h5open(ham_file, "cw") do file
+        key = system == "" ? "basis" : "basis_$system"
+        if !haskey(file, key)
+            file[key] = orbitals
+        end
+    end
+end
+
