@@ -238,10 +238,10 @@ function unique_descriptors_with_weights(descriptors, weights)
     return unique_descriptors, unique_weights
 end
 
-function sample_structure_descriptors(descriptors, Np_per_strc; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random")
+function sample_structure_descriptors(descriptors, Np_per_strc; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random", weight_factor = -1.0)
     Random.seed!(1234)
-    Np_avg = sum(Np_per_strc)
-    w_strc = Np_avg ./ reduce(vcat, (fill(x, Int(x)) for x in Np_per_strc))
+    f = weight_factor
+    w_strc = reduce(vcat, (fill(x^f, Int(x)) for x in Np_per_strc))
     #w_strc = w_strc .* [descriptors[4, i] != 0. ? 10.0 : 1.0 for i in 1:length(w_strc)]
     w_strc ./= mean(w_strc)
     #w_strc = ones(length(w_strc)) # for unweighted sampling

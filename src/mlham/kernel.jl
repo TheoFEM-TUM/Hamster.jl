@@ -39,7 +39,8 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
     descr_sizes = [(size(structure_descriptors[i])[1], size(structure_descriptors[i][1])[1]) for i in 1:N_mats]
     Desc_Vec = [ [[ spzeros(Float64, descr_sizes[i][2], descr_sizes[i][2]) for _ in 1:descr_sizes[i][1] ] for d in 1:N_dp]
       for i in 1:N_mats ]
-    N_test = 0
+    N_test = zeros(Int, N_mats)
+    N_max = 0
     tforeach(1:N_mats) do i
     #for i in 1:N_mats
         @views h_env = structure_descriptors[i]
@@ -53,11 +54,12 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
                 vals = Vector{Float64}() 
                 for (i_mat, j_mat, hin) in zip(findnz(h_env[R])...)
                     val = exp_sim(data_point, hin, σ=sim_params)
+                    #N_max += 1
                     if abs(val) > tol
                         push!(is, i_mat)
                         push!(js, j_mat)
                         push!(vals, val)
-                        N_test+= 1
+                        N_test[i]+= 1
                     end
                 end
                 if size(is)[1] > 0
@@ -65,7 +67,7 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
                 end
             end
         end
-        @info "Rank $rank: Finished kernel features for mat $systems[i] Nr. ($i / $N_mats) with Npoints = $N_test"
+        @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Npoints = $(N_test[i])"
     end
     structure_descriptors = nothing
     GC.gc()
@@ -279,7 +281,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
             @info "Sampling data points using clustering strategy with Ncluster = $Ncluster_local"
             
             reshaped_descr = reshape_structure_descriptors(structure_descriptors, Np_per_strc)
-            data_points_local = sample_structure_descriptors(reshaped_descr, Np_per_strc, Ncluster=Ncluster_local, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
+            data_points_local = sample_structure_descriptors(reshaped_descr, Np_per_strc, Ncluster=Ncluster_local, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf), weight_factor = get_weight_factor(conf))
             println("Np_per_strc: ", Np_per_strc)
         elseif sample_strat == "single_rank"
             @info "Sampling data points using single_rank strategy with Ncluster = $Ncluster"
@@ -341,7 +343,8 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                     Np_per_strc,
                     Ncluster = Ncluster,
                     Npoints = Npoints,
-                    ml_sampling = get_ml_sampling(conf)
+                    ml_sampling = get_ml_sampling(conf),
+                    weight_factor = get_weight_factor(conf)
                 )
 
             else
@@ -360,7 +363,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                 #N_points_single = Npoints
                 #Ncluster_single = Ncluster
                 N_points_vec[i] = N_points_single
-                data_points_local[i] = sample_structure_descriptors(strc_descriptors, Np_per_strc, Ncluster=Ncluster_single, Npoints=N_points_single, ml_sampling=get_ml_sampling(conf))
+                data_points_local[i] = sample_structure_descriptors(strc_descriptors, [N_descr], Ncluster=Ncluster_single, Npoints=N_points_single, ml_sampling=get_ml_sampling(conf), weight_factor = get_weight_factor(conf))
                 #println(size(data_points_local[i]))
                 system = systems[i]
                 @info "$system Sampling data points using clustering single strategy with Ncluster = $Ncluster_single and Npoints_local_total = $N_points_single"
@@ -386,7 +389,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         data_points = rank == 0 ? data_points_buf.data : nothing
         weights = nothing
         if rank == 0
-            d_counts = Hamster.countmap(data_points)
+            d_counts = Hamster.countmap(map(x -> round.(x; digits=6), data_points))
             data_points = collect(keys(d_counts))
             weights = collect(values(d_counts))
             #data_points = data_points_buf.data

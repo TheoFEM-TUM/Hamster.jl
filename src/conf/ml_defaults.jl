@@ -97,4 +97,6 @@ get_sample_strat(conf::Config)::String = conf("sample_strat", "ML") == "default"
 
 get_get_desc_mode(conf::Config)::String = conf("desc_mode", "ML") == "default" ? "calc" : conf("desc_mode", "ML")
 
+get_weight_factor(conf::Config)::Float64 = conf("weight_factor", "ML") == "default" ? -1.0 : conf("weight_factor", "ML")
+
 #get_ml_kernel_features_file(conf::Config)::String = conf("kernel_features_file", "ML") == "default" ? "ml_kernel_features.h5" : conf("kernel_features_file", "ML")
