@@ -28,12 +28,13 @@ Generates kernel feature vectors based on structure descriptors and data points.
 - `tol`: Tolerance for filtering small values (default = 1e-8).
 """
 
-function get_kernel_features(structure_descriptors, data_points, sim_params, tol = 1e-8; conf = get_empty_config(), rank = 0)
+function get_kernel_features(structure_descriptors, data_points, sim_params, tol = 1e-8; conf = get_empty_config(), rank = 0, systems = nothing)
     #verbosity = get_verbosity(conf)
     tol = 0.5
     #println(tol)
     #println("NTHREADS",Threads.nthreads())
     N_mats = size(structure_descriptors)[1]
+    systems = systems === nothing ? [string("system_", i) for i in 1:N_mats] : systems
     N_dp = size(data_points)[1]
     descr_sizes = [(size(structure_descriptors[i])[1], size(structure_descriptors[i][1])[1]) for i in 1:N_mats]
     Desc_Vec = [ [[ spzeros(Float64, descr_sizes[i][2], descr_sizes[i][2]) for _ in 1:descr_sizes[i][1] ] for d in 1:N_dp]
@@ -64,7 +65,7 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
                 end
             end
         end
-        @info "Rank $rank: Finished kernel features for mat Nr. ($i / $N_mats) with Npoints = $N_test"
+        @info "Rank $rank: Finished kernel features for mat $systems[i] Nr. ($i / $N_mats) with Npoints = $N_test"
     end
     structure_descriptors = nothing
     GC.gc()
@@ -196,14 +197,15 @@ function HamiltonianKernel(params :: Vector{Float64},
     tol :: Float64,
     weights;
     conf = get_empty_config(),
-    rank = 0
+    rank = 0,
+    systems = nothing
     )
     calc_desc_mode = get_get_desc_mode(conf)
     if calc_desc_mode == "read"
         @info "Reading kernel features from file: $rank"
         feature_vec, feature_shape = read_kernel_features_rankfile("descr", rank,"descr")
     else
-        feature_vec, feature_shape = get_kernel_features(structure_descriptors, data_points, sim_params, tol, conf = conf, rank = rank)
+        feature_vec, feature_shape = get_kernel_features(structure_descriptors, data_points, sim_params, tol, conf = conf, rank = rank, systems = systems)
     end
     if calc_desc_mode == "write"
         @info "Writing kernel features to file: $rank"
@@ -412,7 +414,8 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
 
     return HamiltonianKernel(params, data_points, sim_params,structure_descriptors, update_ml, sp_tol, weights;
     conf =conf,
-    rank = rank)
+    rank = rank,
+    systems = systems)
 end
 
 
@@ -661,7 +664,7 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
     dparams = zeros(length(kernel.params))
     weights = kernel.weights
-    weights = ones(length(dparams)) # for unweighted gradients
+    #weights = ones(length(dparams)) # for unweighted gradients
     #weights = (weights .-1) .*2 .+1
     if kernel.update
         tforeach( eachindex(dparams)) do n
