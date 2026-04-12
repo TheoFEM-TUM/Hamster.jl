@@ -95,7 +95,7 @@ Compute the forward pass of the loss function given the true values `y` and the 
 -`L::Float64`: The loss between `y` and `ŷ`.
 """
 off = true
-min_delta = 0.5
+min_delta = 100000000
 function forward(l::Loss, y, ŷ; offset = off)
     Δy = y - ŷ
     if offset
