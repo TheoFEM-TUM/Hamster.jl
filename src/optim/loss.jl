@@ -101,7 +101,7 @@ function forward(l::Loss, y, ŷ; offset = off)
     if offset
         Δy = Δy .- mean(Δy)
     end
-    k_min = argmin(abs.( ŷ[9,:] - ŷ[10, :]))
+    k_min = argmin(abs.( ŷ[10,:] - ŷ[11, :]))
     l.wk[k_min] = 1
     l.wk[k_min] = 0.1 * sum(l.wk)
     #println("wk after $k_min  $(l.wk[k_min])")
@@ -156,7 +156,7 @@ function backward(l::Loss, y, ŷ, offset = off)
     if offset
         Δy = Δy .- mean(Δy)
     end
-    k_min = argmin(abs.( ŷ[9,:] - ŷ[10, :]))
+    k_min = argmin(abs.( ŷ[10,:] - ŷ[11, :]))
     l.wk[k_min] = 1
     l.wk[k_min] = 0.1 * sum(l.wk)
     y_mod = abs.(Δy) .+ min_delta
@@ -256,7 +256,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();w
     for i in 1:N_strc
         Nε = Nε_all[i]
         Nk = Nk_all[i]
-        N_VBM = N_VBM_all[i]
+        N_VBM = N_VBM_all[i] + 1
         #gap_width = ceil(Int, 0.05 * Nε)
         gap_width = ceil(Int, N_VBM/9)
         wStr = Nk / N_eig_avg
@@ -270,7 +270,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();w
 
         #println("gapwidth $gap_width       wE    (   $wE  )")
 
-        wE = weights ? get_band_weights(conf, Nε) : wE
+        wE = get_auto_band_weights(conf) ? wE : ones(Nε) 
         wk = weights ? get_kpoint_weights(conf, Nk) : ones(Nk)
 
         #wE = weights ? get_band_weights(conf, Nε) : ones(Nε)

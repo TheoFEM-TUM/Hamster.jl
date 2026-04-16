@@ -53,6 +53,7 @@ The `wE` tag sets the weight of each energy band for the calculation of the loss
 """
 get_band_weights(conf::Config, Nε)::Vector{Float64} = conf("wE", "Optimizer") == "default" ? ones(Nε) : conf("wE", "Optimizer")
 
+get_auto_band_weights(conf::Config)::Bool = conf("auto_band_weights", "Optimizer") == "default" ? true : conf("auto_band_weights", "Optimizer")
 """
     wk=ones
 
