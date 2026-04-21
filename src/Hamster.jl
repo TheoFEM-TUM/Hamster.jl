@@ -11,7 +11,9 @@ include("conf/defaults.jl"); include("conf/strc_defaults.jl"); include("conf/ato
 include("conf/model_defaults.jl"); include("conf/optim_defaults.jl"); include("conf/supercell_defaults.jl") 
 include("conf/ml_defaults.jl"); include("conf/soc_defaults.jl"); include("conf/hyperopt_defaults.jl")
 
-include("out/output.jl")
+include("out/output.jl"); include("out/helper.jl"); include("out/kpm.jl")
+include("out/exact_diag_cohp.jl"); include("out/exact_diag_pdos.jl")
+include("out/kpm_cohp.jl"); include("out/kpm_pdos.jl")
 
 include("strc/vec.jl"); include("strc/grid.jl"); include("strc/lattice.jl"); include("strc/ion.jl"); include("strc/sk_transform.jl")
 include("strc/structure.jl"); include("strc/methods.jl"); include("strc/supercell.jl")
