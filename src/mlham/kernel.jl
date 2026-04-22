@@ -411,7 +411,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         _, data_points = read_ml_params(conf, filename=get_ml_init_params(conf))
         weights = ones(Int, length(data_points))
     else
-        
+        weights = ones(Int, length(data_points))
     end
     params, data_points = init_ml_params!(data_points, conf)
 
