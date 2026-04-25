@@ -146,13 +146,14 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       #MPI.Barrier(comm)
       #if get_verbosity(conf) > 1 && active_rank == 0; println("Rank $active_rank :    Validation Effective Hamiltonian initialization time: $time s"); end
       Nε_train = get_number_of_bands_per_structure(train_bases, local_train_inds, soc=get_soc(conf))
-      N_VBM_train = get_VBM_per_structure(train_strcs, local_train_inds, soc=get_soc(conf))
+      N_VBM_train = get_VBM_per_structure(train_strcs, local_train_inds, path = get_train_data(conf), soc=get_soc(conf))
       N_VBM_train_vec = mapreduce(vcat, local_train_inds, init=[]) do (system, train_inds)
             N_VBM_train[system]
       end
       #println("rank $rank : (    $N_VBM_train   )")
       Nε_val = get_number_of_bands_per_structure(val_bases, local_val_inds, soc=get_soc(conf))
-      N_VBM_val = get_VBM_per_structure(val_strcs, local_val_inds, soc=get_soc(conf))
+      #assuming same structure
+      N_VBM_val = get_VBM_per_structure(val_strcs, local_val_inds, path = get_train_data(conf), soc=get_soc(conf))
       N_VBM_val_vec = mapreduce(vcat, local_val_inds, init=[]) do (system, val_inds)
          N_VBM_val[system]
       end

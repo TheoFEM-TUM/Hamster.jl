@@ -392,16 +392,17 @@ function get_number_of_bands_per_structure(bases, indices; soc=false)
     return Nε_all
 end
 
-function get_VBM_per_structure(structures, indices; soc=false)
+function get_VBM_per_structure(structures, indices; path = "eigenval.h5", soc=false)
     N_VBM_all = Dict{String, Int64}()
     i = 0
     for (system, index_list) in indices
         N_VBM_system = Int64[]
+        N_VBM = h5read(path, "$system/N_VBM")
         for index in index_list
             i += 1
-            N_VBM = count(x -> x.type ∈ element_to_number.(["Br", "I", "Cl", "F"]), structures[i].ions) * 3
-            N_VBM = soc ? 2*N_VBM : N_VBM
-            push!(N_VBM_system, N_VBM)
+            #N_VBM = count(x -> x.type ∈ element_to_number.(["Br", "I", "Cl", "F"]), structures[i].ions) * 3
+            N_VBM_final = soc ? 2*N_VBM : N_VBM
+            push!(N_VBM_system, N_VBM_final)
         end
         @assert length(unique(N_VBM_system)) == 1
         N_VBM_all[system] = N_VBM_system[1]
