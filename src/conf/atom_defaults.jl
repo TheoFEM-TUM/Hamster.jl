@@ -13,6 +13,13 @@ The `n::Int` value determines the order of the polynomial that is used to model 
 get_n(conf::Config, type)::Int64 = conf("n", type) == "default" ? elements[Symbol(type)].period : conf("n", type)
 
 """
+**qeff**=0
+
+The `qeff::Float` determines the effective charge of the ion for Ewald summation.
+"""
+get_qeff(conf::Config, type)::Int64 = conf("qeff", type) == "default" ? 0. : conf("qeff", type)
+
+"""
 **nnaxes**=false
 
 If `nnaxes::Bool=true`, the orbital axes are rotated along the connecting vectors with the nearest neighbors of the respective orbitals. The number of nearest neighbors depends on the number of orbitals.
