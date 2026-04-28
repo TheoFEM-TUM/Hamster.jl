@@ -1,4 +1,4 @@
-using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Statistics, 
+using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Statistics, Ewalder,
 FiniteDiff, HDF5, TensorOperations, Suppressor, MPI, Logging, BlockDiagonals, DataStructures
 
 MPI.Init()
