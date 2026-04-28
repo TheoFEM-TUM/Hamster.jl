@@ -11,7 +11,7 @@ end
 function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=get_empty_config(); 
         rank=0,
         ewald_method=get_ewald_method(conf),
-        rcut = get_rcut(conf),
+        rcut = get_ewald_rcut(conf),
         update=get_ewald_update(conf))
 
     types_per_strc = Vector{UInt8}[]
@@ -19,21 +19,23 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     potentials = Vector{Float64}[]
     Rs_info = zeros(Int64, 2, length(strcs))
 
-    for n in eachindex(strcs)
-        pos = get_ion_positions(strcs[n].ions, apply_distortion=true)
-        box = strcs[n].lattice
+    for (n, strc) in enumerate(strcs)
+        pos = get_ion_positions(strc.ions, apply_distortion=true)
 
-        ion_types = get_ion_types(strcs[n].ions)
+        ion_types = get_ion_types(strc.ions)
         charges = [get_qeff(conf, type) for type in number_to_element.(ion_types)]
-        if ewald_method == "pme"
-            ewald = pme_bspline(pos, charges, box, rcut=rcut)
-        end
+
+        Rs = rcut == get_rcut(conf) == rcut ? strc.Rs : get_translation_vectors(hcat(pos...), strc.lattice, conf; Rmax=get_Rmax(lattice, conf, rcut=rcut), rcut=rcut)
+        point_grid == get_rcut(conf) == rcut ? strc.point_grid : PointGrid(hcat(pos...), strc.lattice, conf, grid_size=rcut)
+
+        include_long = ewald_method == "zahn" || "wolf" ? false : true
+        ewald = ewald_sum(pos, charges, strc.lattice, strc.Rs, strc.point_grid, rcut=rcut, include_long=include_long)
 
         push!(types_per_strc, ion_types)
         push!(norb_per_strc, size(bases[n]))
         push!(potentials, ewald.potentials)
-        Rs_info[1, n] = size(strcs[n].Rs, 2)
-        Rs_info[2, n] = findR0(strcs[n].Rs)
+        Rs_info[1, n] = size(strc.Rs, 2)
+        Rs_info[2, n] = findR0(strc.Rs)
     end
 
     param_labels_local = Iterators.flatten(types_per_strc)

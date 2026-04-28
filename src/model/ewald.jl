@@ -4,38 +4,46 @@
 function _ewald_real!(
     phi,
     pos,
-    q,
-    box,
-    box_inv,
+    qs,
+    Rs,
+    lattice,
+    point_grid,
     alpha,
-    rcut
+    rcut;
+    method="ewald"
 )
-    N = length(pos)
+    kernel = get_realspace_kernel(method)
     fill!(phi, 0.0)
-    E = 0.0
 
-    @views for i in 1:N-1
-        ri = pos[i]
-        qi = q[i]
+    Ts = frac_to_cart(Rs, lattice)
 
-        for j in i+1:N
-            rj = pos[j]
-            qj = q[j]
+    @views for (i, j, R) in iterate_nn_grid_points(point_grid)
+        r = normdiff(pos[i], pos[j], Ts[:, R])
 
-            dr = _disp_pbc_general(ri, rj, box, box_inv)
-            r = norm(dr)
-
-            if r < rcut && r > 1e-14
-                v = erfc(alpha * r) / r
-                phi[i] += qj * v
-                phi[j] += qi * v
-                E += qi * qj * v
-            end
+        if r < rcut && r > 1e-14
+            phi[i] += qs[j] * kernel(r, alpha, rcut)
         end
     end
 
+    E = 0.5 * (qs ⋅ phi)
+
     return E
 end
+
+function get_realspace_kernel(method)
+    if method == "ewald"
+        return ewald_kernel
+    elseif method == "wolf"
+        return wolf_kernel
+    elseif method == "zahn"
+        return zahn_kernel
+    else
+        error("Unknown real-space method: $method. Use \"ewald\", \"wolf\", or \"zahn\".")
+    end
+end
+ewald_kernel(r, α, rcut) = erfc(α * r) / r
+wolf_kernel(r, α, rcut) = ewald_kernel(r, α, rcut) - erfc(α * rcut) / rcut
+zahn_kernel(r, α, rcut) = ewald_kernel(r, α, rcut) - (erfc(α*rcut)/(rcut^2) + 2α/(√π)*exp(-(α*rcut)^2)/rcut)*(r - rcut)
 
 # --------------------------------
 # Reciprocal-space SPME-like part
@@ -89,8 +97,7 @@ function _recip!(
             continue
         end
 
-        # simple spline deconvolution factor
-        # for a general cell this is approximate but usually good enough for a research implementation
+        # spline deconvolution factor
         bx = _sinc(0.5 * (2π * ni / Nx))^p
         by = _sinc(0.5 * (2π * nj / Ny))^p
         bz = _sinc(0.5 * (2π * nk / Nz))^p
@@ -117,7 +124,7 @@ end
 # --------------------------------
 # Main function
 # --------------------------------
-function pme_bspline(pos, q, box;
+function ewald_sum(pos, q, box, Rs, point_grid;
     rcut::Float64,
     alpha=nothing,
     alpha_factor=4.0,
@@ -125,6 +132,7 @@ function pme_bspline(pos, q, box;
     include_short::Bool=true,
     include_long::Bool=true,
     subtract_self::Bool=true,
+    method="ewald"
 )
 
     @assert length(q) == length(pos) "length(q) must equal number of atoms"
@@ -136,8 +144,8 @@ function pme_bspline(pos, q, box;
     phi_s = zeros(Float64, length(pos))
     phi_l = zeros(Float64, length(pos))
 
-    Es = include_short ? ke * _ewald_real!(phi_s, pos, q, box, box_inv, α, rcut)    : 0.0
-    El = include_long  ? ke * _recip!(phi_l, pos, q, box, box_inv, α, mesh_spacing) : 0.0
+    Es = include_short ? ke * _ewald_real!(phi_s, pos, q, Rs, box, point_grid, α, rcut, method=method)  : 0.0
+    El = include_long  ? ke * _recip!(phi_l, pos, q, box, box_inv, α, mesh_spacing)                     : 0.0
 
     phi = ke .* (phi_s .+ phi_l)
 
