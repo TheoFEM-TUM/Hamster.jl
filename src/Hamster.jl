@@ -52,7 +52,7 @@ export SOCModel
 
 export Loss, Regularization, update!, DataLoader, GDOptimizer, optimize_model!, HamsterProfiler
 
-export HamiltonianKernel
+export HamiltonianKernel, EwaldOnsites
 
 export run_calculation
 

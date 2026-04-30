@@ -13,3 +13,5 @@ push!(CONFIG_TAGS, ConfigTag{Bool}("ewald", conf->get_ewald(conf), "activates ew
 @configtag method String "ewald" "method to compute the Ewald sum" "Ewald"
 @configtag rcut Float64 get_rcut(conf) "cut-off radius for real-space ewald" "Ewald"
 @configtag charge_scale Float64 1.0 "scaling factor for charge values" "Ewald"
+@configtag alpha Float64 0. "Ewald dampening parameter." "Ewald"
+@configtag mesh_spacing Float64 0.5 "Grid spacing for reciprocal-space PME." "Ewald"
