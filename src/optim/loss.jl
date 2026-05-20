@@ -95,15 +95,15 @@ Compute the forward pass of the loss function given the true values `y` and the 
 -`L::Float64`: The loss between `y` and `ŷ`.
 """
 off = true
-min_delta = 0.5
+min_delta = 0.0
 function forward(l::Loss, y, ŷ; offset = off)
     Δy = y - ŷ
     if offset
         Δy = Δy .- mean(Δy)
     end
-    k_min = argmin(abs.( ŷ[10,:] - ŷ[11, :]))
-    l.wk[k_min] = 1
-    l.wk[k_min] = 0.1 * sum(l.wk)
+    #k_min = argmin(abs.( ŷ[10,:] - ŷ[11, :]))
+    #l.wk[k_min] = 1
+    #l.wk[k_min] = 0.1 * sum(l.wk)
     #println("wk after $k_min  $(l.wk[k_min])")
     y_mod = abs.(Δy) .+ min_delta
     L_E_avg = vec(mean(y_mod, dims = 2))
@@ -156,9 +156,9 @@ function backward(l::Loss, y, ŷ, offset = off)
     if offset
         Δy = Δy .- mean(Δy)
     end
-    k_min = argmin(abs.( ŷ[10,:] - ŷ[11, :]))
-    l.wk[k_min] = 1
-    l.wk[k_min] = 0.1 * sum(l.wk)
+    #k_min = argmin(abs.( ŷ[10,:] - ŷ[11, :]))
+    #l.wk[k_min] = 1
+    #l.wk[k_min] = 0.1 * sum(l.wk)
     y_mod = abs.(Δy) .+ min_delta
     L_E_avg = vec(mean(y_mod, dims = 2))
     w =  y_mod ./L_E_avg
@@ -263,6 +263,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();w
         wStr = 1
 
         wE = ones(Nε) * 0.1
+        wE[1] = 0.5
         wE[2:N_VBM - gap_width ] .= 1
         #wE[1] = N_VBM_all[i] == 10 ? 1 : 0.1
         wE[N_VBM - 2 * gap_width : N_VBM - gap_width ] .= 1
