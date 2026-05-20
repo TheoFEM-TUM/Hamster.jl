@@ -418,6 +418,8 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
 
     if only_sample
         write_params((params, data_points), conf, filename=get_ml_filename(conf)*"_sample")
+        sleep(10)
+        throw(ErrorException("Forcefully stopping programm because of only_sample=true"))
     end
 
     return HamiltonianKernel(params, data_points, sim_params,structure_descriptors, update_ml, sp_tol, weights;
