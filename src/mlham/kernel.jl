@@ -418,7 +418,6 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
 
     if only_sample
         write_params((params, data_points), conf, filename=get_ml_filename(conf)*"_sample")
-        println(params)
     end
 
     return HamiltonianKernel(params, data_points, sim_params,structure_descriptors, update_ml, sp_tol, weights;
