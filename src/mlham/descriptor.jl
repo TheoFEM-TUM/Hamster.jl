@@ -242,44 +242,38 @@ function sample_structure_descriptors(descriptors, Np_per_strc; Ncluster=1, Npoi
     Random.seed!(1234)
     f = weight_factor
     w_strc = reduce(vcat, (fill(x^f, Int(x)) for x in Np_per_strc))
+    #w_strc = w_strc .* [descriptors[4, i] != 0. ? 10.0 : 1.0 for i in 1:length(w_strc)]
     w_strc ./= mean(w_strc)
+    #w_strc = ones(length(w_strc)) # for unweighted sampling
+    #unique_descriptors, w_strc = unique_descriptors_with_weights(descriptors, w_strc)
     unique_descriptors = descriptors
+
     result = kmeans(unique_descriptors, Ncluster, weights=w_strc)
     indices = result.assignments
     centroids = result.centers
 
-    # Multithreaded cluster size accumulation
-    nthreads = Threads.nthreads()
-    local_cluster_sizes = [zeros(Float64, Ncluster) for _ in 1:nthreads]
-    Threads.@threads for i in eachindex(indices)
-        tid = Threads.threadid()
-        local_cluster_sizes[tid][indices[i]] += w_strc[i]
+    cluster_sizes = zeros(Float64, Ncluster)
+    for i in eachindex(indices)
+        cluster_sizes[indices[i]] += w_strc[i]
     end
-    cluster_sizes = reduce(+, local_cluster_sizes)
     cluster_sizes = ceil.(cluster_sizes)
 
-    # Multithreaded cluster variance computation
-    cluster_variances = Vector{Float64}(undef, Ncluster)
-    Threads.@threads for c in 1:Ncluster
-        members = findall(x -> x == c, indices)
-        if isempty(members)
-            cluster_variances[c] = 0.0
-        else
-            cluster_variances[c] = mean(normdiff(unique_descriptors[:, i], centroids[:, c]) for i in members)
-        end
-    end
+    cluster_variances = [mean([normdiff(unique_descriptors[:, i], centroids[:, c]) for i in findall(x -> x == c, indices)]) for c in 1:Ncluster]
 
     nonzero_clusters = findall(s -> s != 0, cluster_sizes)
     cluster_ids = nonzero_clusters
     cluster_sizes = cluster_sizes[cluster_ids]
     cluster_variances = cluster_variances[cluster_ids]
+
     size_weights = cluster_sizes ./ sum(cluster_sizes)
     spread_weights = cluster_variances ./ sum(cluster_variances)
     final_weights = alpha .* size_weights + (1 - alpha) .* spread_weights
     final_weights ./= sum(final_weights)
+
     points_per_cluster = round.(Int, final_weights .* Npoints)
     points_per_cluster .= max.(1, points_per_cluster)
     points_per_cluster .= min.(cluster_sizes, points_per_cluster)
+
     diff = Npoints - sum(points_per_cluster)
     if diff != 0
         sorted_clusters = sortperm(final_weights, rev=true)
@@ -289,29 +283,29 @@ function sample_structure_descriptors(descriptors, Np_per_strc; Ncluster=1, Npoi
         end
     end
 
-    # Multithreaded per-cluster sampling with thread-local RNGs
-    rngs = [MersenneTwister(1234 + t) for t in 1:nthreads]
-    selected_per_cluster = Vector{Vector{Int64}}(undef, length(cluster_ids))
-    Threads.@threads for i in eachindex(cluster_ids)
-        tid = Threads.threadid()
-        cid = cluster_ids[i]
+    selected_indices = Int64[]
+    for (i, cid) in enumerate(cluster_ids)
         cluster_indices = findall(x -> x == cid, indices)
         num_to_take = min(points_per_cluster[i], length(cluster_indices))
+
+        selected = Int64[]
         if ml_sampling[1] == 'r'
-            selected_per_cluster[i] = sample(rngs[tid], cluster_indices, num_to_take, replace=false)
+            selected = sample(cluster_indices, num_to_take, replace=false)
         elseif ml_sampling[1] == 'f'
-            selected_per_cluster[i] = farthest_point_sampling(unique_descriptors, cluster_indices, num_to_take)
-        else
-            selected_per_cluster[i] = Int64[]
+            selected = farthest_point_sampling(unique_descriptors, cluster_indices, num_to_take)
         end
+
+        append!(selected_indices, selected)
     end
 
-    selected_indices = unique(reduce(vcat, selected_per_cluster))
+    selected_indices = unique(selected_indices)
+
     Np = size(unique_descriptors, 2)
     selected_indices = Npoints >= Np ? collect(1:Np) : selected_indices
+
     Random.seed!()
-    D = size(unique_descriptors, 1)
-    return SVector{D, Float64}[SVector{D}(unique_descriptors[:, idx]) for idx in selected_indices]
+
+    return SVector{size(unique_descriptors, 1), Float64}[SVector{size(unique_descriptors, 1)}(unique_descriptors[:, index]) for index in selected_indices]
 end
 
 function sample_structure_descriptors_random(descriptors; Npoints=1)
@@ -348,46 +342,21 @@ function farthest_point_sampling(descriptors, cluster_indices, num_to_take)
     cluster_size = length(cluster_indices)
     selected = Int[]
 
-    if cluster_size <= 0 || num_to_take <= 0
-        return selected
-    end
+    if cluster_size > 0 && num_to_take > 0
+        dists = fill(Inf, cluster_size)
 
-    num_to_take = min(num_to_take, cluster_size)
-    dists = fill(Inf, cluster_size)
-    in_selected = falses(cluster_size)  # O(1) membership tracking
-
-    # Pick a random starting point
-    start_local = rand(1:cluster_size)
-    push!(selected, cluster_indices[start_local])
-    in_selected[start_local] = true
-
-    while length(selected) < num_to_take
-        last = selected[end]
-        last_col = descriptors[:, last]  # pull column once, avoids repeated indexing
-
-        # Parallelized distance update
-        Threads.@threads for i in eachindex(cluster_indices)
-            if !in_selected[i]
-                d = normdiff(descriptors[:, cluster_indices[i]], last_col)
+        push!(selected, rand(cluster_indices))
+        while length(selected) < num_to_take
+            last = selected[end]
+            for (i, point_index) in enumerate(cluster_indices)
+                d = normdiff(descriptors[:, point_index], descriptors[:, last])
                 dists[i] = min(dists[i], d)
             end
+
+            sorted_inds = sortperm(dists, rev=true)
+            next = findfirst(i->i∉selected, cluster_indices[sorted_inds])
+            push!(selected, cluster_indices[sorted_inds][next])
         end
-
-        # Find the farthest unselected point — argmax with mask
-        best_i = 0
-        best_d = -Inf
-        for i in eachindex(cluster_indices)
-            if !in_selected[i] && dists[i] > best_d
-                best_d = dists[i]
-                best_i = i
-            end
-        end
-
-        # Guard: no valid point found (shouldn't happen but be safe)
-        best_i == 0 && break
-
-        push!(selected, cluster_indices[best_i])
-        in_selected[best_i] = true
     end
 
     return selected
