@@ -41,7 +41,7 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
       for i in 1:N_mats ]
     N_test = zeros(Int, N_mats)
     N_max = 0
-    tforeach(1:N_mats) do i
+    for i in 1:N_mats
     #for i in 1:N_mats
         @views h_env = structure_descriptors[i]
         #for d in 1:N_dp
@@ -255,6 +255,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             sp_tol=get_sp_tol(conf),
                             update_ml=get_ml_update(conf),
                             sample_strat = get_sample_strat(conf),
+                            only_sample = get_only_sample(conf),
                             rank=0,
                             nranks=1)
     Nstrc = length(strcs)
@@ -415,10 +416,18 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
     end
     params, data_points = init_ml_params!(data_points, conf)
 
+    if only_sample
+        write_params((params, data_points), conf, filename=get_ml_filename(conf)*"_sample")
+        println(params)
+    end
+
     return HamiltonianKernel(params, data_points, sim_params,structure_descriptors, update_ml, sp_tol, weights;
-    conf =conf,
-    rank = rank,
-    systems = systems)
+            conf =conf,
+            rank = rank,
+            systems = systems)
+
+
+
 end
 
 
@@ -513,6 +522,27 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filena
         for n in eachindex(kernel.params)
             print(file, kernel.params[n])
             for data_point in kernel.data_points[n]
+                print(file, " "); print(file, data_point)
+            end
+            print(file, "\n")
+        end
+    end
+end
+
+function write_params(params_data_points_tuple::Tuple{Vector{Float64}, Vector{SVector{9, Float64}}}, conf=get_empty_config(); filename=get_ml_filename(conf))
+    open(filename*".dat", "w") do file
+        # Write header to file
+        println(file, "begin ", get_system(conf))
+        println(file, "  rcut = ", get_ml_rcut(conf))
+        println(file, "  sim_params = ", get_sim_params(conf))
+        println(file, "  env_scale = ", get_env_scale(conf))
+        println(file, "  apply_distortion = ", get_apply_distortion(conf))
+        println(file, "end")
+        println(file, "")
+        params, data_points = params_data_points_tuple
+        for n in eachindex(params)
+            print(file, params[n])
+            for data_point in data_points[n]
                 print(file, " "); print(file, data_point)
             end
             print(file, "\n")

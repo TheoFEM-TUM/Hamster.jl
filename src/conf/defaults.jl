@@ -133,6 +133,13 @@ The `nhamster` tag sets the number of `Hamster` processes to be spawned for para
 get_nhamster(conf::Config)::Int64 = conf("nhamster") == "default" ? 1 : conf("nhamster")
 
 """
+    only_sample=false
+
+The `only_sample` tag determines whether to only sample kernel vectors. If using single rank ideally use only 1 rank
+"""
+get_only_sample(conf::Config)::Bool = conf("only_sample") == "default" ? false : conf("only_sample")
+
+"""
     seed=none
 
 The `seed` tag can be used to set a custom seed for RNG.
