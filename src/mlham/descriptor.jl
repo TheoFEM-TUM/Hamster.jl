@@ -107,12 +107,12 @@ function reshape_structure_descriptors(descriptors, counts)
                 for R in eachindex(descriptors[n]) 
                 for (i, j, descriptor) 
                 in zip(findnz(descriptors[n][R])...)]...)
-    return out
+    return Float32.(out)
 end
 
 function reshape_structure_descriptor_single_system(descriptors)
     out = hcat([Vector(descriptor)  for R in eachindex(descriptors) for (i, j, descriptor) in zip(findnz(descriptors[R])...)]...)
-    return out
+    return Float32.(out)
 end
 
 """
@@ -227,7 +227,7 @@ Selects a subset of descriptor vectors using K-Means clustering, weighted by clu
 # Returns
 - A matrix of selected descriptor vectors with `Npoints` columns.
 """
-function kmeans_chunked(X::Matrix{Float64}, k::Int;
+function kmeans_chunked(X::Matrix{Float32}, k::Int;
                         weights::Vector{Float64}=ones(size(X,2)),
                         chunk_size::Int=50_000,
                         maxiter::Int=300,
