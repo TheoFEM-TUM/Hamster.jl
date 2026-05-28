@@ -336,7 +336,7 @@ function unique_descriptors_with_weights(descriptors, weights)
     return unique_descriptors, unique_weights
 end
 
-function sample_structure_descriptors(descriptors, Np_per_strc; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random", weight_factor = -1.0)
+function sample_structure_descriptors(descriptors, Np_per_strc; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random", weight_factor = -1.0, chunk_size=1000)
     Random.seed!(1234)
     f = weight_factor
     w_strc = reduce(vcat, (fill(x^f, Int(x)) for x in Np_per_strc))
