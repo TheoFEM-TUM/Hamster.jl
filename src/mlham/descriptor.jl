@@ -237,17 +237,37 @@ function kmeans_chunked(X::Matrix{Float32}, k::Int;
     centers = X[:, sample(1:n, Weights(weights), k, replace=false)]
     labels  = zeros(Int, n)
     prev_cost = Inf
-    chunks = collect(1:chunk_size:n)
+    chunks  = 1:chunk_size:n
+    nthreads = Threads.nthreads()
 
     for iter in 1:maxiter
         time_start = time()
+
         # --- Parallel chunked assignment ---
         results = tmap(chunks) do i
             batch = i:min(i + chunk_size - 1, n)
-            Xbatch = X[:, batch]
-            D = pairwise(SqEuclidean(), centers, Xbatch; dims=2)
-            batch_labels = [argmin(D[:, j]) for j in 1:size(D, 2)]
-            mins = [D[batch_labels[j], j] for j in 1:size(D, 2)]
+            batch_len = length(batch)
+            batch_labels = Vector{Int}(undef, batch_len)
+            mins         = Vector{Float32}(undef, batch_len)
+
+            for (j, col) in enumerate(batch)
+                best_dist = Inf32
+                best_c    = 1
+                @inbounds for c in 1:k
+                    dist = zero(Float32)
+                    @simd for dim in 1:d
+                        diff  = X[dim, col] - centers[dim, c]
+                        dist += diff * diff
+                    end
+                    if dist < best_dist
+                        best_dist = dist
+                        best_c    = c
+                    end
+                end
+                batch_labels[j] = best_c
+                mins[j]         = best_dist
+            end
+
             w = weights[batch]
             return (batch_labels, dot(mins, w))
         end
@@ -260,29 +280,42 @@ function kmeans_chunked(X::Matrix{Float32}, k::Int;
             cost += results[ci][2]
         end
 
-        # --- Weighted centroid update ---
-        new_centers = zeros(d, k)
-        mass = zeros(k)
-        for i in 1:n
+        # --- Parallel weighted centroid update ---
+        local_centers = [zeros(Float32, d, k) for _ in 1:nthreads]
+        local_mass    = [zeros(Float64, k)     for _ in 1:nthreads]
+
+        Threads.@threads for i in 1:n
+            t = Threads.threadid()
             c = labels[i]
-            new_centers[:, c] .+= weights[i] .* X[:, i]
-            mass[c] += weights[i]
+            w = weights[i]
+            @inbounds @simd for dim in 1:d
+                local_centers[t][dim, c] += w * X[dim, i]
+            end
+            local_mass[t][c] += w
         end
+
+        # --- Reduce per-thread accumulators ---
+        new_centers = sum(local_centers)
+        mass        = sum(local_mass)
+
         for c in 1:k
             if mass[c] > 0
-                new_centers[:, c] ./= mass[c]
+                @inbounds @simd for dim in 1:d
+                    new_centers[dim, c] /= mass[c]
+                end
             else
                 new_centers[:, c] = X[:, rand(1:n)]
             end
         end
+
         time_elapsed = time() - time_start
+
         # --- Convergence check ---
         if abs(prev_cost - cost) / (abs(prev_cost) + 1e-10) < tol
             @info "Converged at iteration $iter"
-            labels_final = labels
-            return (assignments=labels_final, centers=new_centers, totalcost=cost)
+            return (assignments=copy(labels), centers=new_centers, totalcost=cost)
         else
-            @info "Iteration $iter: cost = $cost, time = $(round(time_elapsed, digits=2)) seconds"
+            @info "Iteration $iter: cost = $cost, time = $(round(time_elapsed, digits=2))s"
         end
 
         prev_cost = cost
@@ -290,7 +323,7 @@ function kmeans_chunked(X::Matrix{Float32}, k::Int;
     end
 
     @warn "kmeans_chunked did not converge after $maxiter iterations"
-    return (assignments=labels, centers=centers, totalcost=prev_cost)
+    return (assignments=copy(labels), centers=centers, totalcost=prev_cost)
 end
 
 function unique_descriptors_with_weights(descriptors, weights)
