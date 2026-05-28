@@ -168,6 +168,19 @@ function get_n_all(data, comm)
     return Nε_all, Nk_all, N_eig_avg
 end
 
+function get_nelecs(systems, data_path )
+    nelecs = Dict{String, Int64}()
+    for system in systems
+        if occursin(".h5", data_path)
+            h5open(data_path, "r") do file                
+                g = file[system]
+                nelecs[system] = read(g["nelec"])
+            end
+        end
+    end
+    return nelecs
+end
+
 """
     get_translation_vectors_for_hr_fit(conf=get_empty_config(); hr_fit=get_hr_fit(conf), train_data=get_train_data(conf))::Matrix{Float64}
 

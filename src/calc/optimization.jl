@@ -77,8 +77,8 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       end
       val_config_inds,_  = get_config_inds_for_systems(systems_val, comm, conf, rank=rank, write_output=write_output, is_val=true)
    end
-   local_train_inds = split_indices_into_chunks(train_config_inds, nranks, rank=rank)
-   local_val_inds = split_indices_into_chunks(val_config_inds, nranks, rank=rank)
+   local_train_inds = split_indices_into_chunks(train_config_inds, nranks, get_train_data(conf), rank=rank)
+   local_val_inds = split_indices_into_chunks(val_config_inds, nranks, get_val_data(conf), rank=rank)
    if target_dir != "missing"
       subdirs_dict = get_subdirs(target_dir, systems)
       local_subdirs = [subdirs_dict[k] for k in local_train_inds.keys if haskey(subdirs_dict, k)]
@@ -153,7 +153,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       #println("rank $rank : (    $N_VBM_train   )")
       Nε_val = get_number_of_bands_per_structure(val_bases, local_val_inds, soc=get_soc(conf))
       #assuming same structure
-      N_VBM_val = get_VBM_per_structure(val_strcs, local_val_inds, path = get_train_data(conf), soc=get_soc(conf))
+      N_VBM_val = get_VBM_per_structure(val_strcs, local_val_inds, path = get_val_data(conf), soc=get_soc(conf))
       N_VBM_val_vec = mapreduce(vcat, local_val_inds, init=[]) do (system, val_inds)
          N_VBM_val[system]
       end

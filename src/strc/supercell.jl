@@ -346,20 +346,36 @@ function split_indices_into_chunks(indices::AbstractVector{T}, nchunks; rank=0) 
     end
  end
 
-function split_indices_into_chunks(indices::Dict{String, Vector{T}}, nchunks; rank=0) where {T}
-    all_pairs = [(sys, i) for (sys, idxs) in indices for i in idxs]
-
-    chunk_indices = collect(chunks(all_pairs, n=nchunks))
-
-    if length(chunk_indices) ≥ rank + 1
-        local_inds = OrderedDict{String, Vector{T}}()
-        for (sys, i) in chunk_indices[rank+1]
-            push!(get!(local_inds, sys, T[]), i)
+function zigzag_indices(n, nchunks)
+    # Returns chunk assignment for positions 0..n-1
+    result = Vector{Int}(undef, n)
+    for i in 0:n-1
+        round_num = i ÷ nchunks
+        pos_in_round = i % nchunks
+        if iseven(round_num)
+            result[i+1] = pos_in_round          # forward: 0 1 2
+        else
+            result[i+1] = nchunks - 1 - pos_in_round  # reverse: 2 1 0
         end
-        return local_inds
-    else
-        return Dict{String, Vector{T}}()
     end
+    return result
+end
+
+function split_indices_into_chunks(indices::Dict{String, Vector{T}}, nchunks, data_path; rank=0) where {T}
+    systems = unique(keys(indices))
+    nelecs = get_nelecs(systems, data_path)
+
+    all_pairs = [(sys, i) for (sys, idxs) in indices for i in idxs]
+    sort!(all_pairs, by=((sys, _),) -> nelecs[sys], rev=true)
+
+    assignments = zigzag_indices(length(all_pairs), nchunks)
+    my_pairs = [all_pairs[i] for i in 1:length(all_pairs) if assignments[i] == rank]
+
+    local_inds = OrderedDict{String, Vector{T}}()
+    for (sys, i) in my_pairs
+        push!(get!(local_inds, sys, T[]), i)
+    end
+    return local_inds
 end
 
 """
