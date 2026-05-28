@@ -227,6 +227,69 @@ Selects a subset of descriptor vectors using K-Means clustering, weighted by clu
 # Returns
 - A matrix of selected descriptor vectors with `Npoints` columns.
 """
+function kmeans_chunked(X::Matrix{Float64}, k::Int;
+                        weights::Vector{Float64}=ones(size(X,2)),
+                        chunk_size::Int=50_000,
+                        maxiter::Int=300,
+                        tol::Float64=1e-6)
+
+    d, n = size(X)
+    centers = X[:, sample(1:n, Weights(weights), k, replace=false)]
+    labels  = zeros(Int, n)
+    prev_cost = Inf
+    chunks = collect(1:chunk_size:n)
+
+    for iter in 1:maxiter
+
+        # --- Parallel chunked assignment ---
+        results = tmap(chunks) do i
+            batch = i:min(i + chunk_size - 1, n)
+            Xbatch = X[:, batch]
+            D = pairwise(SqEuclidean(), centers, Xbatch; dims=2)
+            batch_labels = [argmin(D[:, j]) for j in 1:size(D, 2)]
+            mins = [D[batch_labels[j], j] for j in 1:size(D, 2)]
+            w = weights[batch]
+            return (batch_labels, dot(mins, w))
+        end
+
+        # --- Serial write after all tasks complete ---
+        cost = 0.0
+        for (ci, i) in enumerate(chunks)
+            batch = i:min(i + chunk_size - 1, n)
+            labels[batch] .= results[ci][1]
+            cost += results[ci][2]
+        end
+
+        # --- Weighted centroid update ---
+        new_centers = zeros(d, k)
+        mass = zeros(k)
+        for i in 1:n
+            c = labels[i]
+            new_centers[:, c] .+= weights[i] .* X[:, i]
+            mass[c] += weights[i]
+        end
+        for c in 1:k
+            if mass[c] > 0
+                new_centers[:, c] ./= mass[c]
+            else
+                new_centers[:, c] = X[:, rand(1:n)]
+            end
+        end
+
+        # --- Convergence check ---
+        if abs(prev_cost - cost) / (abs(prev_cost) + 1e-10) < tol
+            @info "Converged at iteration $iter"
+            labels_final = labels
+            return (assignments=labels_final, centers=new_centers, totalcost=cost)
+        end
+
+        prev_cost = cost
+        centers   = new_centers
+    end
+
+    @warn "kmeans_chunked did not converge after $maxiter iterations"
+    return (assignments=labels, centers=centers, totalcost=prev_cost)
+end
 
 function unique_descriptors_with_weights(descriptors, weights)
     pairs = collect(zip(eachcol(descriptors), weights))
@@ -238,38 +301,46 @@ function unique_descriptors_with_weights(descriptors, weights)
     return unique_descriptors, unique_weights
 end
 
-function sample_structure_descriptors(descriptors, Np_per_strc; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random", weight_factor = -1.0)
+function sample_structure_descriptors(descriptors, Np_per_strc;
+                                       Ncluster=1, Npoints=1, alpha=0.5,
+                                       ml_sampling="random", weight_factor=-1.0)
     Random.seed!(1234)
     f = weight_factor
     w_strc = reduce(vcat, (fill(x^f, Int(x)) for x in Np_per_strc))
-    #w_strc = w_strc .* [descriptors[4, i] != 0. ? 10.0 : 1.0 for i in 1:length(w_strc)]
     w_strc ./= mean(w_strc)
-    #w_strc = ones(length(w_strc)) # for unweighted sampling
-    #unique_descriptors, w_strc = unique_descriptors_with_weights(descriptors, w_strc)
-    unique_descriptors = descriptors
 
-    result = kmeans(unique_descriptors, Ncluster, weights=w_strc)
-    indices = result.assignments
+    unique_descriptors = descriptors
+    result  = kmeans_chunked(unique_descriptors, Ncluster, weights=w_strc)
+    indices  = result.assignments
     centroids = result.centers
 
+    # --- Parallel cluster sizes (atomic accumulation) ---
     cluster_sizes = zeros(Float64, Ncluster)
-    for i in eachindex(indices)
-        cluster_sizes[indices[i]] += w_strc[i]
+    lk = ReentrantLock()
+    tforeach(eachindex(indices)) do i
+        c = indices[i]
+        w = w_strc[i]
+        lock(lk) do
+            cluster_sizes[c] += w
+        end
     end
     cluster_sizes = ceil.(cluster_sizes)
 
-    cluster_variances = [mean([normdiff(unique_descriptors[:, i], centroids[:, c]) for i in findall(x -> x == c, indices)]) for c in 1:Ncluster]
+    # --- Parallel cluster variances ---
+    cluster_variances = tmap(1:Ncluster) do c
+        members = findall(x -> x == c, indices)
+        isempty(members) ? 0.0 : mean(normdiff(unique_descriptors[:, i], centroids[:, c]) for i in members)
+    end
 
-    nonzero_clusters = findall(s -> s != 0, cluster_sizes)
-    cluster_ids = nonzero_clusters
-    cluster_sizes = cluster_sizes[cluster_ids]
+    # --- Serial bookkeeping (cheap) ---
+    nonzero_clusters  = findall(s -> s != 0, cluster_sizes)
+    cluster_ids       = nonzero_clusters
+    cluster_sizes     = cluster_sizes[cluster_ids]
     cluster_variances = cluster_variances[cluster_ids]
-
-    size_weights = cluster_sizes ./ sum(cluster_sizes)
-    spread_weights = cluster_variances ./ sum(cluster_variances)
-    final_weights = alpha .* size_weights + (1 - alpha) .* spread_weights
-    final_weights ./= sum(final_weights)
-
+    size_weights      = cluster_sizes ./ sum(cluster_sizes)
+    spread_weights    = cluster_variances ./ sum(cluster_variances)
+    final_weights     = alpha .* size_weights + (1 - alpha) .* spread_weights
+    final_weights   ./= sum(final_weights)
     points_per_cluster = round.(Int, final_weights .* Npoints)
     points_per_cluster .= max.(1, points_per_cluster)
     points_per_cluster .= min.(cluster_sizes, points_per_cluster)
@@ -283,29 +354,27 @@ function sample_structure_descriptors(descriptors, Np_per_strc; Ncluster=1, Npoi
         end
     end
 
-    selected_indices = Int64[]
-    for (i, cid) in enumerate(cluster_ids)
+    # --- Parallel point selection per cluster ---
+    selected_chunks = tmap(enumerate(cluster_ids) |> collect) do (i, cid)
         cluster_indices = findall(x -> x == cid, indices)
         num_to_take = min(points_per_cluster[i], length(cluster_indices))
-
-        selected = Int64[]
         if ml_sampling[1] == 'r'
-            selected = sample(cluster_indices, num_to_take, replace=false)
+            sample(cluster_indices, num_to_take, replace=false)
         elseif ml_sampling[1] == 'f'
-            selected = farthest_point_sampling(unique_descriptors, cluster_indices, num_to_take)
+            farthest_point_sampling(unique_descriptors, cluster_indices, num_to_take)
+        else
+            Int64[]
         end
-
-        append!(selected_indices, selected)
     end
+    selected_indices = unique(reduce(vcat, selected_chunks))
 
-    selected_indices = unique(selected_indices)
-
+    # --- Final selection ---
     Np = size(unique_descriptors, 2)
     selected_indices = Npoints >= Np ? collect(1:Np) : selected_indices
 
     Random.seed!()
-
-    return SVector{size(unique_descriptors, 1), Float64}[SVector{size(unique_descriptors, 1)}(unique_descriptors[:, index]) for index in selected_indices]
+    d = size(unique_descriptors, 1)
+    return SVector{d, Float64}[SVector{d}(unique_descriptors[:, i]) for i in selected_indices]
 end
 
 function sample_structure_descriptors_random(descriptors; Npoints=1)
@@ -344,18 +413,21 @@ function farthest_point_sampling(descriptors, cluster_indices, num_to_take)
 
     if cluster_size > 0 && num_to_take > 0
         dists = fill(Inf, cluster_size)
-
         push!(selected, rand(cluster_indices))
+
         while length(selected) < num_to_take
             last = selected[end]
-            for (i, point_index) in enumerate(cluster_indices)
-                d = normdiff(descriptors[:, point_index], descriptors[:, last])
+
+            # --- Parallel distance update ---
+            tforeach(eachindex(cluster_indices)) do i
+                d = normdiff(descriptors[:, cluster_indices[i]], descriptors[:, last])
                 dists[i] = min(dists[i], d)
             end
 
+            # --- Serial selection of farthest unselected point ---
             sorted_inds = sortperm(dists, rev=true)
-            next = findfirst(i->i∉selected, cluster_indices[sorted_inds])
-            push!(selected, cluster_indices[sorted_inds][next])
+            next = findfirst(i -> cluster_indices[i] ∉ selected, sorted_inds)
+            push!(selected, cluster_indices[sorted_inds[next]])
         end
     end
 
