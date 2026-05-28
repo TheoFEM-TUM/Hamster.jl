@@ -308,7 +308,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
 
                 println("total columns: ", total_cols)
 
-                recv_mat = Matrix{Float64}(undef, dim, total_cols)
+                recv_mat = Matrix{Float32}(undef, dim, total_cols)
 
                 # MPI expects number of elements
                 counts_elements = counts_1 .* dim
