@@ -213,6 +213,10 @@ function HamiltonianKernel(params :: Vector{Float64},
         @info "Writing kernel features to file: $rank"
         write_kernel_features_rankfile(feature_vec, feature_shape,"descr",  rank, "descr")
     end
+    if rank != 0
+        #empty vector
+        data_points = Vector{typeof(data_points[1])}(undef, 0)
+    end
     return HamiltonianKernel(params,data_points, sim_params, update, feature_vec, feature_shape, weights)
 end
 
@@ -674,12 +678,12 @@ Set the parameters of a `HamiltonianKernel` instance.
 - Updates the `Vs` field of the `kernel` in place if the consistency checks pass.
 """
 function set_params!(kernel::HamiltonianKernel, params)
-    throw_error = length(kernel.data_points) ≠ length(params)
-    if throw_error
-        error("Parameter vector is not of correct size ($(length(kernel.data_points)) ≠ $(length(params)))!")
-    else
+    #throw_error = length(kernel.data_points) ≠ length(params)
+    #if throw_error
+    #    error("Parameter vector is not of correct size ($(length(kernel.data_points)) ≠ $(length(params)))!")
+    #else
         kernel.params = params
-    end
+    #end
 end
 
 """
