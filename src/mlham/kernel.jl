@@ -256,6 +256,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             update_ml=get_ml_update(conf),
                             sample_strat = get_sample_strat(conf),
                             only_sample = get_only_sample(conf),
+                            kernel_chunck_size = get_kernel_chunk_size(conf),
                             rank=0,
                             nranks=1)
     Nstrc = length(strcs)
@@ -282,7 +283,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
             @info "Sampling data points using clustering strategy with Ncluster = $Ncluster_local"
             
             reshaped_descr = reshape_structure_descriptors(structure_descriptors, Np_per_strc)
-            data_points_local = sample_structure_descriptors(reshaped_descr, Np_per_strc, Ncluster=Ncluster_local, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf), weight_factor = get_weight_factor(conf))
+            data_points_local = sample_structure_descriptors(reshaped_descr, Np_per_strc, Ncluster=Ncluster_local, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf), weight_factor = get_weight_factor(conf), chunk_size=kernel_chunck_size)
             println("Np_per_strc: ", Np_per_strc)
         elseif sample_strat == "single_rank"
             @info "Sampling data points using single_rank strategy with Ncluster = $Ncluster"
@@ -345,7 +346,8 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                     Ncluster = Ncluster,
                     Npoints = Npoints,
                     ml_sampling = get_ml_sampling(conf),
-                    weight_factor = get_weight_factor(conf)
+                    weight_factor = get_weight_factor(conf),
+                    chunk_size = kernel_chunck_size
                 )
 
             else
@@ -364,7 +366,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                 #N_points_single = Npoints
                 #Ncluster_single = Ncluster
                 N_points_vec[i] = N_points_single
-                data_points_local[i] = sample_structure_descriptors(strc_descriptors, [N_descr], Ncluster=Ncluster_single, Npoints=N_points_single, ml_sampling=get_ml_sampling(conf), weight_factor = get_weight_factor(conf))
+                data_points_local[i] = sample_structure_descriptors(strc_descriptors, [N_descr], Ncluster=Ncluster_single, Npoints=N_points_single, ml_sampling=get_ml_sampling(conf), weight_factor = get_weight_factor(conf), chunk_size=kernel_chunck_size)
                 #println(size(data_points_local[i]))
                 system = systems[i]
                 @info "$system Sampling data points using clustering single strategy with Ncluster = $Ncluster_single and Npoints_local_total = $N_points_single"

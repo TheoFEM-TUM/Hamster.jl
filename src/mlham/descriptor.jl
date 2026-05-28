@@ -240,7 +240,7 @@ function kmeans_chunked(X::Matrix{Float64}, k::Int;
     chunks = collect(1:chunk_size:n)
 
     for iter in 1:maxiter
-
+        time_start = time()
         # --- Parallel chunked assignment ---
         results = tmap(chunks) do i
             batch = i:min(i + chunk_size - 1, n)
@@ -275,12 +275,14 @@ function kmeans_chunked(X::Matrix{Float64}, k::Int;
                 new_centers[:, c] = X[:, rand(1:n)]
             end
         end
-
+        time_elapsed = time() - time_start
         # --- Convergence check ---
         if abs(prev_cost - cost) / (abs(prev_cost) + 1e-10) < tol
             @info "Converged at iteration $iter"
             labels_final = labels
             return (assignments=labels_final, centers=new_centers, totalcost=cost)
+        else
+            @info "Iteration $iter: cost = $cost, time = $(round(time_elapsed, digits=2)) seconds"
         end
 
         prev_cost = cost
@@ -303,14 +305,14 @@ end
 
 function sample_structure_descriptors(descriptors, Np_per_strc;
                                        Ncluster=1, Npoints=1, alpha=0.5,
-                                       ml_sampling="random", weight_factor=-1.0)
+                                       ml_sampling="random", weight_factor=-1.0, chunk_size = 50_000)
     Random.seed!(1234)
     f = weight_factor
     w_strc = reduce(vcat, (fill(x^f, Int(x)) for x in Np_per_strc))
     w_strc ./= mean(w_strc)
 
     unique_descriptors = descriptors
-    result  = kmeans_chunked(unique_descriptors, Ncluster, weights=w_strc)
+    result  = kmeans_chunked(unique_descriptors, Ncluster, weights=w_strc, chunk_size=chunk_size)
     indices  = result.assignments
     centroids = result.centers
 
