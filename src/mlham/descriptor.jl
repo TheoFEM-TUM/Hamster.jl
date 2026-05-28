@@ -336,46 +336,38 @@ function unique_descriptors_with_weights(descriptors, weights)
     return unique_descriptors, unique_weights
 end
 
-function sample_structure_descriptors(descriptors, Np_per_strc;
-                                       Ncluster=1, Npoints=1, alpha=0.5,
-                                       ml_sampling="random", weight_factor=-1.0, chunk_size = 50_000)
+function sample_structure_descriptors(descriptors, Np_per_strc; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random", weight_factor = -1.0)
     Random.seed!(1234)
     f = weight_factor
     w_strc = reduce(vcat, (fill(x^f, Int(x)) for x in Np_per_strc))
+    #w_strc = w_strc .* [descriptors[4, i] != 0. ? 10.0 : 1.0 for i in 1:length(w_strc)]
     w_strc ./= mean(w_strc)
-
+    #w_strc = ones(length(w_strc)) # for unweighted sampling
+    #unique_descriptors, w_strc = unique_descriptors_with_weights(descriptors, w_strc)
     unique_descriptors = descriptors
-    result  = kmeans_chunked(unique_descriptors, Ncluster, weights=w_strc, chunk_size=chunk_size)
-    indices  = result.assignments
+
+    result = kmeans(unique_descriptors, Ncluster, weights=w_strc)
+    indices = result.assignments
     centroids = result.centers
 
-    # --- Parallel cluster sizes (atomic accumulation) ---
     cluster_sizes = zeros(Float64, Ncluster)
-    lk = ReentrantLock()
-    tforeach(eachindex(indices)) do i
-        c = indices[i]
-        w = w_strc[i]
-        lock(lk) do
-            cluster_sizes[c] += w
-        end
+    for i in eachindex(indices)
+        cluster_sizes[indices[i]] += w_strc[i]
     end
     cluster_sizes = ceil.(cluster_sizes)
 
-    # --- Parallel cluster variances ---
-    cluster_variances = tmap(1:Ncluster) do c
-        members = findall(x -> x == c, indices)
-        isempty(members) ? 0.0 : mean(normdiff(unique_descriptors[:, i], centroids[:, c]) for i in members)
-    end
+    cluster_variances = [mean([normdiff(unique_descriptors[:, i], centroids[:, c]) for i in findall(x -> x == c, indices)]) for c in 1:Ncluster]
 
-    # --- Serial bookkeeping (cheap) ---
-    nonzero_clusters  = findall(s -> s != 0, cluster_sizes)
-    cluster_ids       = nonzero_clusters
-    cluster_sizes     = cluster_sizes[cluster_ids]
+    nonzero_clusters = findall(s -> s != 0, cluster_sizes)
+    cluster_ids = nonzero_clusters
+    cluster_sizes = cluster_sizes[cluster_ids]
     cluster_variances = cluster_variances[cluster_ids]
-    size_weights      = cluster_sizes ./ sum(cluster_sizes)
-    spread_weights    = cluster_variances ./ sum(cluster_variances)
-    final_weights     = alpha .* size_weights + (1 - alpha) .* spread_weights
-    final_weights   ./= sum(final_weights)
+
+    size_weights = cluster_sizes ./ sum(cluster_sizes)
+    spread_weights = cluster_variances ./ sum(cluster_variances)
+    final_weights = alpha .* size_weights + (1 - alpha) .* spread_weights
+    final_weights ./= sum(final_weights)
+
     points_per_cluster = round.(Int, final_weights .* Npoints)
     points_per_cluster .= max.(1, points_per_cluster)
     points_per_cluster .= min.(cluster_sizes, points_per_cluster)
@@ -389,27 +381,29 @@ function sample_structure_descriptors(descriptors, Np_per_strc;
         end
     end
 
-    # --- Parallel point selection per cluster ---
-    selected_chunks = tmap(enumerate(cluster_ids) |> collect) do (i, cid)
+    selected_indices = Int64[]
+    for (i, cid) in enumerate(cluster_ids)
         cluster_indices = findall(x -> x == cid, indices)
         num_to_take = min(points_per_cluster[i], length(cluster_indices))
-        if ml_sampling[1] == 'r'
-            sample(cluster_indices, num_to_take, replace=false)
-        elseif ml_sampling[1] == 'f'
-            farthest_point_sampling(unique_descriptors, cluster_indices, num_to_take)
-        else
-            Int64[]
-        end
-    end
-    selected_indices = unique(reduce(vcat, selected_chunks))
 
-    # --- Final selection ---
+        selected = Int64[]
+        if ml_sampling[1] == 'r'
+            selected = sample(cluster_indices, num_to_take, replace=false)
+        elseif ml_sampling[1] == 'f'
+            selected = farthest_point_sampling(unique_descriptors, cluster_indices, num_to_take)
+        end
+
+        append!(selected_indices, selected)
+    end
+
+    selected_indices = unique(selected_indices)
+
     Np = size(unique_descriptors, 2)
     selected_indices = Npoints >= Np ? collect(1:Np) : selected_indices
 
     Random.seed!()
-    d = size(unique_descriptors, 1)
-    return SVector{d, Float64}[SVector{d}(unique_descriptors[:, i]) for i in selected_indices]
+
+    return SVector{size(unique_descriptors, 1), Float64}[SVector{size(unique_descriptors, 1)}(unique_descriptors[:, index]) for index in selected_indices]
 end
 
 function sample_structure_descriptors_random(descriptors; Npoints=1)
