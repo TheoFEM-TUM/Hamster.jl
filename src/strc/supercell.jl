@@ -378,6 +378,24 @@ function split_indices_into_chunks(indices::Dict{String, Vector{T}}, nchunks, da
     return local_inds
 end
 
+
+function split_indices_into_chunks(indices::Dict{String, Vector{T}}, nchunks; rank=0) where {T}
+    all_pairs = [(sys, i) for (sys, idxs) in indices for i in idxs]
+
+    chunk_indices = collect(chunks(all_pairs, n=nchunks))
+
+    if length(chunk_indices) ≥ rank + 1
+        local_inds = OrderedDict{String, Vector{T}}()
+        for (sys, i) in chunk_indices[rank+1]
+            push!(get!(local_inds, sys, T[]), i)
+        end
+        return local_inds
+    else
+        return Dict{String, Vector{T}}()
+    end
+end
+
+
 """
     get_number_of_bands_per_structure(bases, indices; soc=false) -> Dict{String, Int}
 
