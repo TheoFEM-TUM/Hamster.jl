@@ -53,9 +53,9 @@ function get_rllm_from_file(overlaps::Vector{TBOverlap},file = nothing, conf=get
     rllm_dict = Dict{String, CubicSpline{Float64}}()
     yes = true
     #rllm_file = rllm_type == "train" ? rllm_file : "val_$rllm_file"
-    if verbosity > 0 && rank == 0; println("     Getting distance dependence..."); end
+    #if verbosity > 0 && rank == 0; println("     Getting distance dependence..."); end
     time = @elapsed if yes
-        if verbosity > 1 && rank == 0; println("     Reading distance dependence from file..."); end
+        #if verbosity > 1 && rank == 0; println("     Reading distance dependence from file..."); end
         read_rllm(overlaps,file, comm, rllm_dict, filename=rllm_file)
     end
     if verbosity > 0 && rank == 0; println("     Finished in $time s."); end

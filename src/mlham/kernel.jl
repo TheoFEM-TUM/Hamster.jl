@@ -417,32 +417,35 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
             #Np_per_strc_per_rank = MPI.Gather(Np_per_strc, 0, comm)
 
             if rank == 0
-                total_cols = sum(counts_1)
+                time = @elapsed begin
+                    total_cols = sum(counts_1)
 
-                reshaped_descr = reshape(data_points_buf.data, dim, total_cols)
+                    reshaped_descr = reshape(data_points_buf.data, dim, total_cols)
 
-                println("size reshaped_descr: ", size(reshaped_descr))
+                    println("size reshaped_descr: ", size(reshaped_descr))
 
 
-                # build local descriptor matrix
+                    # build local descriptor matrix
 
-                sub_descr = build_submatrices(reshaped_descr, conf)
-                keys_list = []
-                for key in keys(sub_descr)
-                    push!(keys_list, key)
-                    #println(keys_list[end])
+                    sub_descr = build_submatrices(reshaped_descr, conf)
+                    keys_list = []
+                    for key in keys(sub_descr)
+                        push!(keys_list, key)
+                        #println(keys_list[end])
+                    end
+                    N_key = length(keys_list)
+
+                    Np_Nc_dict = calc_npoint_ncluster(sub_descr, Npoints, Ncluster)
+
+                    data_points_local = Vector{Any}(undef, N_key)
+                    tmap!(data_points_local, 1:N_key) do n
+                        Np, Nc = Np_Nc_dict[keys_list[n]]
+                        #println("Sampling key: ", keys_list[n], " with Np = ", Np, " and Nc = ", Nc)
+                        sample_structure_descriptors(sub_descr[keys_list[n]], Ncluster=Nc, Npoints=Np, ml_sampling=get_ml_sampling(conf))      
+                    end
+                    data_points_local = reduce(vcat, data_points_local)
                 end
-                N_key = length(keys_list)
-
-                Np_Nc_dict = calc_npoint_ncluster(sub_descr, Npoints, Ncluster)
-
-                data_points_local = Vector{Any}(undef, N_key)
-                tmap!(data_points_local, 1:N_key) do n
-                    Np, Nc = Np_Nc_dict[keys_list[n]]
-                    #println("Sampling key: ", keys_list[n], " with Np = ", Np, " and Nc = ", Nc)
-                    sample_structure_descriptors(sub_descr[keys_list[n]], Ncluster=Nc, Npoints=Np, ml_sampling=get_ml_sampling(conf))      
-                end
-                data_points_local = reduce(vcat, data_points_local)
+                println("Sampling data points using split strategy finished in $time s.")
             else
                 data_points_local = Matrix{Float64}(undef, dim - 1, 0)
             end
