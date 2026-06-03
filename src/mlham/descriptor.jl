@@ -305,7 +305,7 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster)
     keys_list = []
     for key in keys(descr_dict)
         push!(keys_list, key)
-        println(keys_list[end])
+        #println(keys_list[end])
     end
     N_key = length(keys_list)
     descr_weights = zeros(Float64, N_key)
