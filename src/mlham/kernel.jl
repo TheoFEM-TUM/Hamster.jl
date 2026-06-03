@@ -213,10 +213,9 @@ function HamiltonianKernel(params :: Vector{Float64},
         @info "Writing kernel features to file: $rank"
         write_kernel_features_rankfile(feature_vec, feature_shape,"descr",  rank, "descr")
     end
-    if rank != 0
-        #empty vector
-        data_points = Vector{typeof(data_points[1])}(undef, 0)
-    end
+
+    data_points = Vector{typeof(data_points[1])}(undef, 0)
+
     return HamiltonianKernel(params,data_points, sim_params, update, feature_vec, feature_shape, weights)
 end
 
@@ -489,10 +488,14 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
     end
     params, data_points = init_ml_params!(data_points, conf)
 
-    if only_sample
-        write_params((params, data_points), conf, filename=get_ml_filename(conf)*"_sample")
-        sleep(10)
-        throw(ErrorException("Forcefully stopping programm because of only_sample=true"))
+    if rank == 0
+        filename = only_sample ? "ml_params_sample" : "ml_params_temp"
+        write_params((params, data_points), conf, filename=filename)
+        if only_sample
+            @info "Only sampling data points and writing to file because only_sample=true. Stopping program now."
+            sleep(10)
+            throw(ErrorException("Forcefully stopping programm because of only_sample=true"))
+        end
     end
 
     return HamiltonianKernel(params, data_points, sim_params,structure_descriptors, update_ml, sp_tol, weights;
@@ -584,6 +587,7 @@ Writes the parameters and configuration settings of a HamiltonianKernel object t
 - `filename`: The name of the file to which the data will be written (default: `get_ml_filename(conf)`).
 """
 function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filename=get_ml_filename(conf))
+    _, data_points = read_ml_params(conf, filename="ml_params_temp")
     open(filename*".dat", "w") do file
         # Write header to file
         println(file, "begin ", get_system(conf))
@@ -595,7 +599,7 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filena
         println(file, "")
         for n in eachindex(kernel.params)
             print(file, kernel.params[n])
-            for data_point in kernel.data_points[n]
+            for data_point in data_points[n]
                 print(file, " "); print(file, data_point)
             end
             print(file, "\n")
