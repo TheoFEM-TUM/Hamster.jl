@@ -100,7 +100,9 @@ function get_geometry_tensor(strc, basis, file = nothing, conf=get_empty_config(
                                 tmethod=get_tmethod(conf), 
                                 rcut=get_rcut(conf), 
                                 sp_tol=get_sp_tol(conf), 
-                                rcut_tol=get_rcut_tol(conf), rllm_type = "train")
+                                rcut_tol=get_rcut_tol(conf),
+                                verbosity = get_verbosity(conf),
+                                rllm_type = "train")
 
     ij_map = get_ion_orb_to_index_map(length.(basis.orbitals))
     ion_types = get_ion_types(strc.ions)
