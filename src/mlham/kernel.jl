@@ -286,19 +286,19 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         if sample_strat == "cluster"
             @info "Sampling data points using clustering strategy with Ncluster = $Ncluster_local"
             
-            reshaped_descr = reshape_structure_descriptors(structure_descriptors, Np_per_strc)
-            data_points_local = sample_structure_descriptors(reshaped_descr, Np_per_strc, Ncluster=Ncluster_local, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf), weight_factor = get_weight_factor(conf), chunk_size=kernel_chunck_size)
-            println("Np_per_strc: ", Np_per_strc)
+            reshaped_descr = reshape_structure_descriptors(structure_descriptors, Np_per_strc, get_weight_factor(conf))
+            data_points_local = sample_structure_descriptors(reshaped_descr, Ncluster=Ncluster_local, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
+            #println("Np_per_strc: ", Np_per_strc)
         elseif sample_strat == "single_rank"
             @info "Sampling data points using single_rank strategy with Ncluster = $Ncluster"
 
             # build local descriptor matrix
-            data_points_local = reshape_structure_descriptors(structure_descriptors, Np_per_strc)
+            data_points_local = reshape_structure_descriptors(structure_descriptors, Np_per_strc, get_weight_factor(conf))
 
             println("local size: ", size(data_points_local))
 
             dim = size(data_points_local, 1)
-            local_cols::Int32 = size(data_points_local, 2)
+            local_cols = size(data_points_local, 2)
 
             # gather number of columns from all ranks
             counts_1 = MPI.Gather(local_cols, 0, comm)
@@ -329,7 +329,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
             )
 
             # gather structure counts
-            Np_per_strc_per_rank = MPI.Gather(Np_per_strc, 0, comm)
+            #Np_per_strc_per_rank = MPI.Gather(Np_per_strc, 0, comm)
 
             if rank == 0
                 total_cols = sum(counts_1)
@@ -339,23 +339,20 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                 println("size reshaped_descr: ", size(reshaped_descr))
 
                 # combine structure counts
-                Np_per_strc = vcat(Np_per_strc_per_rank...)
+                #Np_per_strc = vcat(Np_per_strc_per_rank...)
 
-                println("Np_per_strc: ", Np_per_strc)
+                #println("Np_per_strc: ", Np_per_strc)
 
                 # sampling
                 data_points_local = sample_structure_descriptors(
                     reshaped_descr,
-                    Np_per_strc,
                     Ncluster = Ncluster,
                     Npoints = Npoints,
-                    ml_sampling = get_ml_sampling(conf),
-                    weight_factor = get_weight_factor(conf),
-                    chunk_size = kernel_chunck_size
+                    ml_sampling = get_ml_sampling(conf)
                 )
 
             else
-                data_points_local = Matrix{Float64}(undef, dim, 0)
+                data_points_local = Matrix{Float64}(undef, dim - 1, 0)
             end
 
         elseif sample_strat == "cluster_single"
@@ -370,17 +367,87 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                 #N_points_single = Npoints
                 #Ncluster_single = Ncluster
                 N_points_vec[i] = N_points_single
-                data_points_local[i] = sample_structure_descriptors(strc_descriptors, [N_descr], Ncluster=Ncluster_single, Npoints=N_points_single, ml_sampling=get_ml_sampling(conf), weight_factor = get_weight_factor(conf), chunk_size=kernel_chunck_size)
+                data_points_local[i] = sample_structure_descriptors(strc_descriptors, Ncluster=Ncluster_single, Npoints=N_points_single, ml_sampling=get_ml_sampling(conf))
                 #println(size(data_points_local[i]))
                 system = systems[i]
                 @info "$system Sampling data points using clustering single strategy with Ncluster = $Ncluster_single and Npoints_local_total = $N_points_single"
             end
             data_points_local = reduce(vcat, data_points_local)
-        else
-            data_points_local = sample_structure_descriptors_random(reshape_structure_descriptors(structure_descriptors, Np_per_strc), Npoints=Npoints_local)
-            @info "Sampling data points using random strategy with Npoints_local = $Npoints_local"
-        end
+        elseif sample_strat == "split"
+            if rank == 0
+                @info "Sampling data points using split strategy with Ncluster = $Ncluster"
+            end
 
+            # build local descriptor matrix
+            data_points_local = reshape_structure_descriptors(structure_descriptors, Np_per_strc, get_weight_factor(conf))
+
+            println("local size: ", size(data_points_local))
+
+            dim = size(data_points_local, 1)
+            local_cols = size(data_points_local, 2)
+
+            # gather number of columns from all ranks
+            counts_1 = MPI.Gather(local_cols, 0, comm)
+            counts_1 = MPI.bcast(counts_1, 0, comm)
+
+            data_points_buf = nothing
+            recv_mat = nothing
+
+            if rank == 0
+                total_cols = sum(counts_1)
+
+                println("total columns: ", total_cols)
+
+                recv_mat = Matrix{Float32}(undef, dim, total_cols)
+
+                # MPI expects number of elements
+                counts_elements = counts_1 .* dim
+
+                data_points_buf = MPI.VBuffer(vec(recv_mat), counts_elements)
+            end
+
+            # gather all matrices as flat vectors
+            MPI.Gatherv!(
+                vec(data_points_local),
+                data_points_buf,
+                0,
+                comm
+            )
+
+            # gather structure counts
+            #Np_per_strc_per_rank = MPI.Gather(Np_per_strc, 0, comm)
+
+            if rank == 0
+                total_cols = sum(counts_1)
+
+                reshaped_descr = reshape(data_points_buf.data, dim, total_cols)
+
+                println("size reshaped_descr: ", size(reshaped_descr))
+
+
+                # build local descriptor matrix
+
+                sub_descr = build_submatrices(reshaped_descr, conf)
+                keys_list = []
+                for key in keys(sub_descr)
+                    push!(keys_list, key)
+                    println(keys_list[end])
+                end
+                N_key = length(keys_list)
+
+                Np_Nc_dict = calc_npoint_ncluster(sub_descr, Npoints, Ncluster)
+
+                data_points_local = Vector{Any}(undef, N_key)
+                tmap!(data_points_local, 1:N_key) do n
+                    Np, Nc = Np_Nc_dict[keys_list[n]]
+                    #println("Sampling key: ", keys_list[n], " with Np = ", Np, " and Nc = ", Nc)
+                    sample_structure_descriptors(sub_descr[keys_list[n]], Ncluster=Nc, Npoints=Np, ml_sampling=get_ml_sampling(conf))      
+                end
+                data_points_local = reduce(vcat, data_points_local)
+            else
+                data_points_local = Matrix{Float64}(undef, dim - 1, 0)
+            end
+        end
         local_counts::Int32 = length(data_points_local)
         counts = MPI.Gather(local_counts, 0, comm)
         counts = MPI.bcast(counts, 0, comm)

@@ -98,7 +98,7 @@ Reshapes a nested structure of sparse descriptors into a dense matrix (to be use
 # Returns
 - A matrix (`Matrix{Float64}`) where each column corresponds to a flattened descriptor.
 """
-function reshape_structure_descriptors(descriptors, counts)
+function reshape_structure_descriptors(descriptors, counts, weight_factor)
     out = hcat([begin 
                     counts[n] += 1
                     Vector(descriptor) 
@@ -107,14 +107,69 @@ function reshape_structure_descriptors(descriptors, counts)
                 for R in eachindex(descriptors[n]) 
                 for (i, j, descriptor) 
                 in zip(findnz(descriptors[n][R])...)]...)
-    return Float32.(out)
+    w = get_descriptor_weights(counts, weight_factor)
+    return Float32.(vcat(out, w'))
 end
 
 function reshape_structure_descriptor_single_system(descriptors)
     out = hcat([Vector(descriptor)  for R in eachindex(descriptors) for (i, j, descriptor) in zip(findnz(descriptors[R])...)]...)
-    return Float32.(out)
+    w = ones(size(out, 2))
+    return Float32.(vcat(out, w'))
 end
 
+function build_submatrices(
+    X::AbstractMatrix,
+    conf;
+    Z_scale=get_Z_scale(conf),
+    overlap_scale=get_overlap_scale(conf)
+)
+    d, n = size(X)
+
+    # Pass 1: count rows per (k1,k2)
+    local_counts = [Dict{Tuple{Int,Int,Int},Int}() for _ in 1:256]
+
+    Threads.@threads for i in 1:n
+        tid = Threads.threadid()
+        key = (
+            round(Int, X[1,i] / overlap_scale),
+            round(Int, X[2,i] / Z_scale),
+            round(Int, X[3,i] / Z_scale)
+        )
+        local_counts[tid][key] = get(local_counts[tid], key, 0) + 1
+    end
+
+    # Merge counts
+    counts = Dict{Tuple{Int,Int,Int},Int}()
+
+    for lc in local_counts
+        for (key, c) in lc
+            counts[key] = get(counts, key, 0) + c
+        end
+    end
+
+    # Preallocate submatrices
+    submatrices = Dict{Tuple{Int,Int,Int},Matrix{eltype(X)}}()
+
+    for (key, c) in counts
+        submatrices[key] = Matrix{eltype(X)}(undef, d, c)
+    end
+
+    # Pass 2: fill matrices
+    cursors = Dict(key => Threads.Atomic{Int}(1) for key in keys(counts))
+
+    Threads.@threads for i in 1:n
+        key = (
+            round(Int, X[1,i] / overlap_scale),
+            round(Int, X[2,i] / Z_scale),
+            round(Int, X[3,i] / Z_scale)
+        )
+
+        col = Threads.atomic_add!(cursors[key], 1)
+        submatrices[key][:, col] = X[:, i]
+    end
+
+    return submatrices
+end
 """
     decide_orbswap(itype, jtype, l_i, m_i, l_j, m_j) -> Bool
 
@@ -227,13 +282,7 @@ Selects a subset of descriptor vectors using K-Means clustering, weighted by clu
 # Returns
 - A matrix of selected descriptor vectors with `Npoints` columns.
 """
-
-
-function sample_structure_descriptors(descriptors, Np_per_strc;
-        Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random",
-        weight_factor=-1.0, chunk_size=1000)
-
-    Random.seed!(1234)
+function get_descriptor_weights(Np_per_strc, weight_factor = -1.0)
     f = weight_factor
 
     # --- Weight construction ---
@@ -247,134 +296,106 @@ function sample_structure_descriptors(descriptors, Np_per_strc;
         w_strc[j] = Float64(Np_per_strc[k])^f
     end
     w_strc ./= mean(w_strc)
+    return w_strc
+end
 
-    unique_descriptors = descriptors
-    result    = kmeans(unique_descriptors, Ncluster, weights=w_strc)
-    @info "K-Means finished"
-    indices   = result.assignments
-    centroids = result.centers
-    D  = size(unique_descriptors, 1)
+function calc_npoint_ncluster(descr_dict, Npoints, Ncluster)
+    alpha = 0.
+    N_key = length(keys(descr_dict))
+    keys_list = []
+    for key in keys(descr_dict)
+        push!(keys_list, key)
+        println(keys_list[end])
+    end
+    N_key = length(keys_list)
+    descr_weights = zeros(Float64, N_key)
+    tforeach(eachindex(keys_list)) do n
+        weights = fweights(descr_dict[keys_list[n]][end, :])
+        descr = descr_dict[keys_list[n]][1:end-1,:]
+        descr_weights[n] = sum([var(descr[i, :], weights) for i in 1:size(descr, 1)]) * alpha + sum(weights) * (1 - alpha)
+    end
+    descr_weights ./= sum(descr_weights)
+    np_nc_dict = Dict{Tuple{Int, Int, Int}, Tuple{Int, Int}}()
+    Np_total = 0
+    Ncluster_total = 0
+    for n in eachindex(keys_list)
+        Np = ceil(Int,max(1, Npoints * descr_weights[n]))
+        Nc = ceil(Int,max(1, Ncluster * descr_weights[n]))
+        @assert Np >= Nc
+        Np_total += Np
+        Ncluster_total += Nc
+        np_nc_dict[keys_list[n]] = (Np, Nc)
+    end
+    @info "Total Np requested: $Np_total, Total Ncluster requested: $Ncluster_total"
+    return np_nc_dict
+end
+
+function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random")
+    #d × n
+    unique_descriptors = descriptors_w[1:end-1, :]
     Np = size(unique_descriptors, 2)
+    if Npoints < Np
+        w_strc = descriptors_w[end, :]
 
-    # --- Build cluster_lists and cluster_sizes with per-chunk buckets ---
-    chnks   = collect(chunks(eachindex(indices); n=Threads.nthreads()))
-    nchunks = length(chnks)
+        result = kmeans(unique_descriptors, Ncluster, weights=w_strc)
+        indices = result.assignments
+        centroids = result.centers
 
-    local_lists = [[Int[] for _ in 1:Ncluster] for _ in 1:nchunks]
-    local_sizes = [zeros(Float64, Ncluster)    for _ in 1:nchunks]
-
-    tforeach(1:nchunks) do k
-        ll = local_lists[k]
-        ls = local_sizes[k]
-        for i in chnks[k]
-            c = indices[i]
-            push!(ll[c], i)
-            ls[c] += w_strc[i]
+        cluster_sizes = zeros(Float64, Ncluster)
+        for i in eachindex(indices)
+            cluster_sizes[indices[i]] += w_strc[i]
         end
-    end
+        cluster_sizes = ceil.(cluster_sizes)
 
-    # Merge (sequential, O(Ncluster))
-    cluster_lists = [Int[] for _ in 1:Ncluster]
-    cluster_sizes = zeros(Float64, Ncluster)
-    for k in 1:nchunks
-        for c in 1:Ncluster
-            append!(cluster_lists[c], local_lists[k][c])
-            cluster_sizes[c] += local_sizes[k][c]
-        end
-    end
-    cluster_sizes = ceil.(cluster_sizes)
+        cluster_variances = [mean([normdiff(unique_descriptors[:, i], centroids[:, c]) for i in findall(x -> x == c, indices)]) for c in 1:Ncluster]
 
-    # --- Cluster variances ---
-    vchnks  = collect(chunks(1:Ncluster; n=Threads.nthreads()))
-    nvchnks = length(vchnks)
-    vtmps   = [Vector{Float64}(undef, D) for _ in 1:nvchnks]
+        nonzero_clusters = findall(s -> s != 0, cluster_sizes)
+        cluster_ids = nonzero_clusters
+        cluster_sizes = cluster_sizes[cluster_ids]
+        cluster_variances = cluster_variances[cluster_ids]
 
-    cluster_variances = Vector{Float64}(undef, Ncluster)
+        size_weights = cluster_sizes ./ sum(cluster_sizes)
+        spread_weights = cluster_variances ./ sum(cluster_variances)
+        final_weights = alpha .* size_weights + (1 - alpha) .* spread_weights
+        final_weights ./= sum(final_weights)
 
-    tforeach(1:nvchnks) do k
-        tmp = vtmps[k]
-        for c in vchnks[k]
-            ids = cluster_lists[c]
-            if isempty(ids)
-                cluster_variances[c] = 0.0
-                continue
+        points_per_cluster = round.(Int, final_weights .* Npoints)
+        points_per_cluster .= max.(1, points_per_cluster)
+        points_per_cluster .= min.(cluster_sizes, points_per_cluster)
+
+        diff = Npoints - sum(points_per_cluster)
+        if diff != 0
+            sorted_clusters = sortperm(final_weights, rev=true)
+            for i in 1:abs(diff)
+                idx = sorted_clusters[mod1(i, length(sorted_clusters))]
+                points_per_cluster[idx] += sign(diff)
             end
-            s = 0.0
-            @inbounds for i in ids
-                for d in 1:D
-                    tmp[d] = unique_descriptors[d, i] - centroids[d, c]
-                end
-                s += sqrt(sum(abs2, tmp))
-            end
-            cluster_variances[c] = s / length(ids)
         end
-    end
 
-    nonzero           = findall(!iszero, cluster_sizes)
-    cluster_ids       = nonzero
-    cluster_sizes     = cluster_sizes[nonzero]
-    cluster_variances = cluster_variances[nonzero]
+        selected_indices = Int64[]
+        for (i, cid) in enumerate(cluster_ids)
+            cluster_indices = findall(x -> x == cid, indices)
+            num_to_take = min(points_per_cluster[i], length(cluster_indices))
 
-    size_weights   = cluster_sizes    ./ sum(cluster_sizes)
-    spread_weights = cluster_variances ./ sum(cluster_variances)
-    final_weights  = alpha .* size_weights .+ (1 - alpha) .* spread_weights
-    final_weights ./= sum(final_weights)
-
-    points_per_cluster = max.(1, round.(Int, final_weights .* Npoints))
-    points_per_cluster = min.(Int.(cluster_sizes), points_per_cluster)
-
-    diff = Npoints - sum(points_per_cluster)
-    if diff != 0
-        sorted_clusters = sortperm(final_weights, rev=true)
-        for i in 1:abs(diff)
-            idx = sorted_clusters[mod1(i, length(sorted_clusters))]
-            points_per_cluster[idx] += sign(diff)
-        end
-    end
-
-    # --- Sampling ---
-    nc      = length(cluster_ids)
-    schnks  = collect(chunks(1:nc; n=Threads.nthreads()))
-    nschnks = length(schnks)
-    rngs    = [MersenneTwister(1234 + k) for k in 1:nschnks]
-
-    per_cluster_chosen = Vector{Vector{Int}}(undef, nc)
-    tforeach(1:nschnks) do k
-        rng = rngs[k]
-        for i in schnks[k]
-            cid = cluster_ids[i]
-            ids = cluster_lists[cid]
-            n   = min(points_per_cluster[i], length(ids))
-            per_cluster_chosen[i] = if ml_sampling[1] == 'r'
-                sample(rng, ids, n, replace=false)
+            selected = Int64[]
+            if ml_sampling[1] == 'r'
+                selected = sample(cluster_indices, num_to_take, replace=false)
             elseif ml_sampling[1] == 'f'
-                farthest_point_sampling(unique_descriptors, ids, n)
-            else
-                ids[1:n]
+                selected = farthest_point_sampling(unique_descriptors, cluster_indices, num_to_take)
             end
-        end
-    end
 
-    selected = unique!(reduce(vcat, per_cluster_chosen))
+            append!(selected_indices, selected)
+        end
+
+        selected_indices = unique(selected_indices)
+
+    end
+    selected_indices = Npoints >= Np ? collect(1:Np) : selected_indices
 
     Random.seed!()
 
-    if Npoints >= Np
-        out = Vector{SVector{D, Float64}}(undef, Np)
-        tforeach(eachindex(out)) do i
-            out[i] = SVector{D}(unique_descriptors[:, i])
-        end
-        return out
-    end
-
-    ns  = length(selected)
-    out = Vector{SVector{D, Float64}}(undef, ns)
-    tforeach(eachindex(out)) do i
-        out[i] = SVector{D}(unique_descriptors[:, selected[i]])
-    end
-    return out
+    return SVector{size(unique_descriptors, 1), Float64}[SVector{size(unique_descriptors, 1)}(unique_descriptors[:, index]) for index in selected_indices]
 end
-
 function sample_structure_descriptors_random(descriptors; Npoints=1)
     Random.seed!(1234)
 
