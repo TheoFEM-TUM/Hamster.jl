@@ -326,7 +326,7 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster)
         Ncluster_total += Nc
         np_nc_dict[keys_list[n]] = (Np, Nc)
     end
-    @info "Total Np requested: $Np_total, Total Ncluster requested: $Ncluster_total"
+    @info "Total Np requested: $Np_total, Total Ncluster requested: $Ncluster_total, Total number of keys: $N_key"
     return np_nc_dict
 end
 
