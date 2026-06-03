@@ -300,7 +300,7 @@ function get_descriptor_weights(Np_per_strc, weight_factor = -1.0)
 end
 
 function calc_npoint_ncluster(descr_dict, Npoints, Ncluster)
-    alpha = 0.
+    alpha = 0.5
     N_key = length(keys(descr_dict))
     keys_list = []
     for key in keys(descr_dict)
