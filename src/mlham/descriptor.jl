@@ -321,7 +321,7 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
     for n in eachindex(keys_list)
         Np = ceil(Int,max(1, Npoints * descr_weights[n]))
         Nc = ceil(Int,max(1, Ncluster * descr_weights[n]))
-        key_tuple = keyslist[n]
+        key_tuple = keys_list[n]
         key1, key2 = key_tuple[1], key_tuple[2]
         if key1 == key2
             Nc = 10
