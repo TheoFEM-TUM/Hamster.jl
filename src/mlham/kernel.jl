@@ -435,7 +435,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                     end
                     N_key = length(keys_list)
 
-                    Np_Nc_dict = calc_npoint_ncluster(sub_descr, Npoints, Ncluster)
+                    Np_Nc_dict = calc_npoint_ncluster(sub_descr, Npoints, Ncluster, conf)
 
                     data_points_local = Vector{Any}(undef, N_key)
                     tmap!(data_points_local, 1:N_key) do n
