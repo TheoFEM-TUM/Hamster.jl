@@ -319,12 +319,16 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
     Np_total = 0
     Ncluster_total = 0
     for n in eachindex(keys_list)
+        N_descr = size(descr_dict[keys_list[n]], 2)
         Np = ceil(Int,max(1, Npoints * descr_weights[n]))
         Nc = ceil(Int,max(1, Ncluster * descr_weights[n]))
         key_tuple = keys_list[n]
-        key1, key2 = key_tuple[1], key_tuple[2]
-        println("Key 1: $key1, Key 2: $key2, descr_weight: $(descr_weights[n])")
-        if key1 == key2
+        key_overlap, key_Z1, key_Z2 = key_tuple[1], key_tuple[2], key_tuple[3]
+        overlap_string = get_overlap_string(key_overlap)
+        element_label_1 = elements[key_Z1].symbol
+        element_label_2 = elements[key_Z2].symbol
+        @info "Overlap: $overlap_string, Element 1: $element_label_1, Element 2: $element_label_2, N_descr: $N_descr"
+        if key_overlap == key_Z1 && key_Z1 == key_Z2
             Nc = 20
             Np = 100
         else

@@ -387,3 +387,20 @@ get_overlap_label_id(v::Vpdπ) = 7
 get_overlap_label_id(v::Vddσ) = 8
 get_overlap_label_id(v::Vddπ) = 9
 get_overlap_label_id(v::Vddδ) = 10
+
+function get_overlap_string(i) 
+    if i == 0; return "ZeroOverlap";
+    elseif i == 1; return "Vssσ";
+    elseif i == 2; return "Vspσ";
+    elseif i == 3; return "Vppσ";
+    elseif i == 4; return "Vppπ";
+    elseif i == 5; return "Vsdσ";
+    elseif i == 6; return "Vpdσ";
+    elseif i == 7; return "Vpdπ";
+    elseif i == 8; return "Vddσ";
+    elseif i == 9; return "Vddπ";
+    elseif i == 10; return "Vddδ";
+    else error("Invalid overlap label id: $i")
+    end
+end
+
