@@ -323,11 +323,12 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
         Nc = ceil(Int,max(1, Ncluster * descr_weights[n]))
         key_tuple = keys_list[n]
         key1, key2 = key_tuple[1], key_tuple[2]
+        println("Key 1: $key1, Key 2: $key2, descr_weight: $(descr_weights[n])")
         if key1 == key2
-            Nc = 10
+            Nc = 20
             Np = 100
         else
-            Nc = 50
+            Nc = 100
             Np = 500
         end
         @assert Np >= Nc
