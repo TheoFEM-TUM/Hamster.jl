@@ -61,12 +61,15 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
                 orb_j_type = basis.orbitals[jion][jorb].type
                 baseorb = orbswap ? Tuple([orb_j_type, orb_i_type]) : Tuple([orb_i_type, orb_j_type])
                 me = get_me_label(orb_i_type, orb_j_type, baseorb)
-                Overlap_ID = get_overlap_label_id(me)
+                same_ion = iion == jion 
+                Overlap_ID = get_overlap_label_id(me, same_ion)
                 Overlap_ID *= overlap_scale
                 Zs = Zs .* Z_scale
                 Δr_in *= R_scale
                 #Overlap_ID *= 100
                 #Zs = Zs .* 100.0
+
+                
 
                 if apply_distortion || apply_distance_distortion
                     φ = φ / 2π * strc_scale
@@ -327,14 +330,15 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
         overlap_string = get_overlap_string(key_overlap)
         element_label_1 = elements[key_Z1].symbol
         element_label_2 = elements[key_Z2].symbol
-        @info "Overlap: $overlap_string, Element 1: $element_label_1, Element 2: $element_label_2, N_descr: $N_descr"
-        if key_overlap == key_Z1 && key_Z1 == key_Z2
+        
+        if key_overlap  < 11
             Nc = 20
             Np = 100
         else
             Nc = 100
             Np = 500
         end
+        @info "Overlap: $overlap_string, Element 1: $element_label_1, Element 2: $element_label_2, N_descr: $N_descr, Nc : $Nc"
         @assert Np >= Nc
         Np_total += Np
         Ncluster_total += Nc
