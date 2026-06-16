@@ -59,10 +59,15 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
 
                 orb_i_type = basis.orbitals[iion][iorb].type
                 orb_j_type = basis.orbitals[jion][jorb].type
-                baseorb = orbswap ? Tuple([orb_j_type, orb_i_type]) : Tuple([orb_i_type, orb_j_type])
-                me = get_me_label(orb_i_type, orb_j_type, baseorb)
+                
                 same_ion = iion == jion 
-                Overlap_ID = get_overlap_label_id(me, same_ion)
+
+                Overlap_ID = orbital_pairs_to_id[canonical_pair(lm_to_orbital_map[(orb_i_type.l, orb_i_type.m)], lm_to_orbital_map[(orb_j_type.l, orb_j_type.m)])]
+                if same_ion
+                    Overlap_ID += length(orbital_pairs) + 1
+                end
+
+
                 Overlap_ID *= overlap_scale
                 Zs = Zs .* Z_scale
                 Δr_in *= R_scale
@@ -327,18 +332,22 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
         Nc = ceil(Int,max(1, Ncluster * descr_weights[n]))
         key_tuple = keys_list[n]
         key_overlap, key_Z1, key_Z2 = key_tuple[1], key_tuple[2], key_tuple[3]
-        overlap_string = get_overlap_string(key_overlap)
+        N_overlap_ids = length(orbital_pairs)
+        same_ion = key_overlap > N_overlap_ids
+        true_key_overlap = same_ion ? key_overlap - N_overlap_ids - 1 : key_overlap
         element_label_1 = elements[key_Z1].symbol
         element_label_2 = elements[key_Z2].symbol
-        
-        if key_overlap  < 11
-            Nc = 20
-            Np = 100
+        overlap_label = orbital_id_to_pairs[true_key_overlap]
+        if same_ion
+            Nc = 10
+            Np = 50
         else
-            Nc = 100
-            Np = 500
+            Nc = 50
+            Np = 250
         end
-        @info "Overlap: $overlap_string, Element 1: $element_label_1, Element 2: $element_label_2, N_descr: $N_descr, Nc : $Nc"
+        same_ion_label = same_ion ? "DI" : "NN"
+        label = "$element_label_1-$element_label_2-$(overlap_label[1])-$(overlap_label[2])-$same_ion_label"
+        @info "Overlap: $label, N_descr: $N_descr, Nc : $Nc"
         @assert Np >= Nc
         Np_total += Np
         Ncluster_total += Nc

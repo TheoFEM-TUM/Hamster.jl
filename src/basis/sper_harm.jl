@@ -29,6 +29,24 @@ const lm_to_orbital_map = Dict(
     (2, -2) => "dxy"
     )
 
+const orbital_list = sort(collect(values(lm_to_orbital_map)))
+
+canonical_pair(a, b) = a <= b ? (a, b) : (b, a)
+
+const orbital_pairs = [
+    canonical_pair(orbital_list[i], orbital_list[j])
+    for j in eachindex(orbital_list)
+    for i in 1:j
+]
+
+const orbital_pairs_to_id = Dict(
+    p => i for (i, p) in enumerate(orbital_pairs)
+)
+
+const orbital_id_to_pairs = Dict(
+    i => p for (i, p) in enumerate(orbital_pairs)
+)
+
 """
     get_spherical(l, m)
 
