@@ -307,7 +307,7 @@ function get_descriptor_weights(Np_per_strc, weight_factor = -1.0)
     return w_strc
 end
 
-function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_alpha(conf))
+function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_alpha(conf), Nc_min = get_nc_min(conf), Nc_max = get_nc_max(conf))
     #alpha = 0.5
     N_key = length(keys(descr_dict))
     keys_list = []
@@ -338,13 +338,15 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
         element_label_1 = elements[key_Z1].symbol
         element_label_2 = elements[key_Z2].symbol
         overlap_label = orbital_id_to_pairs[true_key_overlap]
-        if same_ion
-            Nc = 50
-            Np = 250
-        else
-            Nc = 50
-            Np = 250
-        end
+        #Nc_min = 10
+        #Nc_max = 200
+
+        Nc = ceil(Int, max(Nc_min, N_descr * 0.1))
+        Nc = ceil(Int, min(Nc_max, Nc))
+        #Nc = 50
+        Np = ceil(Int, Nc * 5)
+        #Np = 250
+
         same_ion_label = same_ion ? "DI" : "NN"
         label = "$element_label_1-$element_label_2-$(overlap_label[1])-$(overlap_label[2])-$same_ion_label"
         @info "Overlap: $label, N_descr: $N_descr, Nc : $Nc"
