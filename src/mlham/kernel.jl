@@ -214,7 +214,7 @@ function HamiltonianKernel(params :: Vector{Float64},
         write_kernel_features_rankfile(feature_vec, feature_shape,"descr",  rank, "descr")
     end
 
-    data_points = Vector{typeof(data_points[1])}(undef, 0)
+    #data_points = Vector{typeof(data_points[1])}(undef, 0)
 
     return HamiltonianKernel(params,data_points, sim_params, update, feature_vec, feature_shape, weights)
 end

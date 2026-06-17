@@ -339,8 +339,8 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
         element_label_2 = elements[key_Z2].symbol
         overlap_label = orbital_id_to_pairs[true_key_overlap]
         if same_ion
-            Nc = 10
-            Np = 50
+            Nc = 50
+            Np = 250
         else
             Nc = 50
             Np = 250
