@@ -28,7 +28,7 @@ Generates kernel feature vectors based on structure descriptors and data points.
 - `tol`: Tolerance for filtering small values (default = 1e-8).
 """
 
-function get_kernel_features(structure_descriptors, data_points, sim_params, tol = 1e-8; conf = get_empty_config(), rank = 0, systems = nothing)
+function get_kernel_features_old(structure_descriptors, data_points, sim_params, tol = 1e-8; conf = get_empty_config(), rank = 0, systems = nothing)
     #verbosity = get_verbosity(conf)
     tol = 0.5
     #println(tol)
@@ -75,115 +75,49 @@ function get_kernel_features(structure_descriptors, data_points, sim_params, tol
     return Desc_Vec, (descr_sizes, N_dp)
 end
 
-function write_kernel_features_rankfile(
-        Desc_Vec::Vector,
-        meta::Tuple,
-        filename_prefix::AbstractString,
-        rank::Int,
-        descr_dir::AbstractString)
 
-    # ensure directory exists
-    mkpath(descr_dir)
+function get_kernel_features(structure_descriptors, data_points, sim_params, tol = 1e-8; conf = get_empty_config(), rank = 0, systems = nothing)
+    #verbosity = get_verbosity(conf)
+    data_points_dict = build_submatrices(data_points, conf)
+    Z_scale=get_Z_scale(conf)
+    overlap_scale=get_overlap_scale(conf)
+    tol = 0.5
+    #println(tol)
+    #println("NTHREADS",Threads.nthreads())
+    N_mats = size(structure_descriptors)[1]
+    systems = systems === nothing ? [string("system_", i) for i in 1:N_mats] : systems
+    #N_dp = size(data_points)[1]
+    descr_sizes = [(size(structure_descriptors[i])[1], size(structure_descriptors[i][1])[1]) for i in 1:N_mats]
 
-    # build filename
-    filename = joinpath(descr_dir, "$(filename_prefix)_rank$(rank).h5")
+    Desc_Vec = [ [ ([(spzeros(N_dp), (0, 0, 0)) for _ in 1: length(zip(findnz(h_env[R])...))], length(zip(findnz(h_env[R])...))) for R in 1:descr_sizes[i][1]]
+        for i in 1:N_mats ]
+    N_test = zeros(Int, N_mats)
 
-    descr_sizes, N_dp = meta
-    N_mats = length(Desc_Vec)
+    for i in 1:N_mats
+        N_R, Ne = descr_sizes[i]
+        for R in 1:N_R
+            @views h_env_R = structure_descriptors[i][R]
 
-    h5open(filename, "w") do file
-
-        # --- metadata ---
-        meta_grp = create_group(file, "metadata")
-        # convert tuple vector to 2×N numeric matrix
-        descr_sizes_mat = reduce(hcat, [[a;b] for (a,b) in descr_sizes])
-        meta_grp["descr_sizes"] = descr_sizes_mat
-        meta_grp["N_dp"] = N_dp
-        meta_grp["N_mats"] = N_mats
-
-        # --- Desc_Vec storage ---
-        data_grp = create_group(file, "Desc_Vec")
-
-        # Parallel over N_mats using tforeach
-        tforeach(1:N_mats) do i
-            grp_i = create_group(data_grp, "mat_$i")
-
-            tforeach(1:N_dp) do d
-                grp_d = create_group(grp_i, "dp_$d")
-                local_R = Desc_Vec[i][d]
-
-                for R in eachindex(local_R)
-                    spmat = local_R[R]
-                    if nnz(spmat) > 0
-                        I, J, V = findnz(spmat)
-                        grp_R = create_group(grp_d, "R_$R")
-                        grp_R["I"] = I
-                        grp_R["J"] = J
-                        grp_R["V"] = V
-                        grp_R["m"] = size(spmat,1)
-                        grp_R["n"] = size(spmat,2)
-                    end
-                end
-            end
-        end
-    end
-
-    return filename
-end
-
-# -----------------------------
-# READ per-rank with tforeach
-# -----------------------------
-function read_kernel_features_rankfile(
-        filename_prefix::AbstractString,
-        rank::Int,
-        descr_dir::AbstractString)
-
-    filename = joinpath(descr_dir, "$(filename_prefix)_rank$(rank).h5")
-
-    h5open(filename, "r") do file
-
-        # --- metadata ---
-        meta_grp = file["metadata"]
-        descr_sizes_mat = read(meta_grp["descr_sizes"])
-        N_dp = read(meta_grp["N_dp"])
-        N_mats = read(meta_grp["N_mats"])
-
-        descr_sizes = [(descr_sizes_mat[1,i], descr_sizes_mat[2,i])
-                       for i in 1:size(descr_sizes_mat,2)]
-
-        data_grp = file["Desc_Vec"]
-
-        Desc_Vec = Vector{Vector{Vector{SparseMatrixCSC{Float64,Int}}}}(undef, N_mats)
-
-        # Parallel over N_mats using tforeach
-        tforeach(1:N_mats) do i
-            N_R, Ne = descr_sizes[i]
-            Desc_Vec[i] = Vector{Vector{SparseMatrixCSC{Float64,Int}}}(undef, N_dp)
-
-            grp_i = data_grp["mat_$i"]
-
-            tforeach(1:N_dp) do d
-                Desc_Vec[i][d] = [spzeros(Float64, Ne, Ne) for _ in 1:N_R]
-                grp_d = grp_i["dp_$d"]
-
-                for R in 1:N_R
-                    key = "R_$R"
-                    if haskey(grp_d, key)
-                        grp_R = grp_d[key]
-                        I = read(grp_R["I"])
-                        J = read(grp_R["J"])
-                        V = read(grp_R["V"])
-                        m = read(grp_R["m"])
-                        n = read(grp_R["n"])
-                        Desc_Vec[i][d][R] = sparse(I, J, V, m, n)
-                    end
-                end
+            tforeach(enumerate(zip(findnz(h_env[R])...))) do (m, (i_mat, j_mat, hin))
+                overlap_id = floor(Int, hin[1] / overlap_scale)
+                Z_1_id = floor(Int, hin[2] / Z_scale)
+                Z_2_id = floor(Int, hin[3] / Z_scale)
+                key = (overlap_id, Z_1_id, Z_2_id)
+                data_points_mat = @view data_points_dict[key]
+                N_dp = size(data_points_mat)[2]
+                val_vec = exp_sim2(data_point, hin, σ=sim_params)
+                val_vec = sparse(val_vec[abs.(val_vec) .<= tol] .= 0)
+                N_test[i] += nnz(val_vec)
+                Desc_Vec[i][R][1][m] = (val_vec,(i_mat,j_mat, key))
             end
         end
 
-        return Desc_Vec, (descr_sizes, N_dp)
+        @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Npoints = $(N_test[i])"
     end
+    structure_descriptors = nothing
+    GC.gc()
+    #println("N_test",N_test)
+    return Desc_Vec, (descr_sizes, N_dp)
 end
 
 
@@ -515,7 +449,7 @@ end
 
 exp_sim(x₁, x₂; σ=√0.05)::Float64 = exp(-normdiff(x₁, x₂)^2 / (2σ^2))
 
-
+exp_sim2(x₁, x₂; σ=√0.05)::Float64 = exp(-sum((x₁.- x₂).^2, dims = 1) / (2σ^2))
 
 
 
@@ -540,13 +474,17 @@ Constructs a set of real-space Hamiltonians from a `HamiltonianKernel`.
 
 function get_hr(kernel::HamiltonianKernel, mode, index; apply_soc=false)
     @views desc_vec = kernel.feature_vec[index]
-    N_dp = kernel.feature_shape[2]
     (NR, Ne) = kernel.feature_shape[1][index]
     Hr = get_empty_complex_hamiltonians(Ne, NR, mode)
-
-    Hr = tmapreduce(.+, 1:N_dp) do d
-        desc_vec[d] .* kernel.params[d]
+    for R in 1:NR
+        nnz_ham = desc_vec[R][2]
+        tforeach(1:nnz_ham) do m
+            desc_vec_single,(i, j, key) = @views desc_vec[R][1][m]
+            weigths = @views kernel.params_dict[key]
+            Hr[R][i,j] = desc_vec_single .* weigths
+        end
     end
+
     return apply_soc ? apply_spin_basis.(Hr) : Hr
 end
 
@@ -777,6 +715,36 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
     dparams = zeros(length(kernel.params))
+    dparam_dict = 0
+    if kernel.update
+        for (bi, index) in enumerate(indices)
+            
+            for R in eachindex(dL_dHr[bi])
+                @views desc_vec, nnz_ham = kernel.feature_vec[index][R]
+                tforeach(1:nnz_ham) do m
+                    @views desc_vec_small, (i,j,key) =  desc_vec[m]
+
+                    if !soc
+                        dparams_dict[key] .+= desc_vec_small .* real(dL_dHr[bi][R][i, j])
+                    else
+                        i1 = 2*i-1; j1 = 2*j-1
+                        i2 = 2*i; j2 = 2*j
+                        dparams_dict[key] .+= desc_vec_small .* real(dL_dHr[bi][R][i1, j1] + dL_dHr[bi][R][i2, j2])
+                    end
+                    
+                end
+            end
+        end
+        dparams = dparams_dict
+        dparams_penal = backward(reg, kernel.params)
+        return dparams .+ dparams_penal
+    else 
+        return dparams
+    end
+end
+
+function get_model_gradient_old(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
+    dparams = zeros(length(kernel.params))
     weights = kernel.weights
     #weights = ones(length(dparams)) # for unweighted gradients
     #weights = (weights .-1) .*2 .+1
@@ -803,4 +771,3 @@ function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc
         return dparams
     end
 end
-
