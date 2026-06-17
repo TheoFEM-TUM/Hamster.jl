@@ -17,7 +17,7 @@ function str_to_orb(str)::Angular
 end
 
 # Dictionary mapping (l,mₗ) to their conventional names
-const lm_to_orbital_map = Dict(
+const lm_to_orbital_map_old = Dict(
     (0, 0) => "s",
     (1, 0) => "pz",
     (1, 1) => "px",
@@ -29,7 +29,19 @@ const lm_to_orbital_map = Dict(
     (2, -2) => "dxy"
     )
 
-const orbital_list = sort(collect(values(lm_to_orbital_map)))
+const lm_to_orbital_map = Dict(
+    (0, 0) => "s",
+    (1, 0) => "p",
+    (1, 1) => "p",
+    (1, -1) => "p",
+    (2, 0) => "d",
+    (2, 1) => "d",
+    (2, -1) => "d",
+    (2, 2) => "d",
+    (2, -2) => "d"
+    )
+
+const orbital_list = unique(sort(collect(values(lm_to_orbital_map))))
 
 canonical_pair(a, b) = a <= b ? (a, b) : (b, a)
 
