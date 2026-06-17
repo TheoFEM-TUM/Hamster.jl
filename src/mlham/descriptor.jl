@@ -134,7 +134,8 @@ function build_submatrices(
     d, n = size(X)
 
     # Pass 1: count rows per (k1,k2)
-    local_counts = [Dict{Tuple{Int,Int,Int},Int}() for _ in 1:256]
+    nthreads_total = Threads.maxthreadid() 
+    local_counts = [Dict{Tuple{Int,Int,Int},Int}() for _ in 1:nthreads_total]
 
     Threads.@threads for i in 1:n
         tid = Threads.threadid()
