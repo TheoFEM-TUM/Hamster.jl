@@ -222,7 +222,7 @@ function forward(ham::EffectiveHamiltonian, index, loss, data::EigData)
     Es, vs = diagonalize(Hk)
     L_train = loss(Es, data.Es)
     L_train_MAE = forward_MAE(loss, Es, data.Es)
-    println("NZ : $(count(iszero, ham.models[2].params))")
+    #println("NZ : $(count(iszero, ham.models[2].params))")
     return L_train, (Es, vs), L_train_MAE
 end
 
