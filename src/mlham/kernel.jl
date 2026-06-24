@@ -765,6 +765,8 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
     dparams = zeros(length(kernel.params))
+    nt = Threads.maxthreadid() 
+    dparams_threads = [zeros(length(kernel.params)) for _ in 1:nt]
     key_ranges = kernel.key_ranges
     if kernel.update
         for (bi, index) in enumerate(indices)
@@ -772,18 +774,22 @@ function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc
             for R in eachindex(dL_dHr[bi])
                 @views desc_vec, nnz_ham = kernel.feature_vec[index][R]
                 tforeach(1:nnz_ham) do m
+                    tid = Threads.threadid()
                     @views desc_vec_small, (i,j,key) =  desc_vec[m]
 
                     if !soc
-                        dparams[key_ranges[key]]  .+= desc_vec_small .* real(dL_dHr[bi][R][i, j])
+                        dparams_threads[tid][key_ranges[key]]  .+= desc_vec_small .* real(dL_dHr[bi][R][i, j])
                     else
                         i1 = 2*i-1; j1 = 2*j-1
                         i2 = 2*i; j2 = 2*j
-                        dparams[key_ranges[key]] .+= desc_vec_small .* real(dL_dHr[bi][R][i1, j1] + dL_dHr[bi][R][i2, j2])
+                        dparams_threads[tid][key_ranges[key]] .+= desc_vec_small .* real(dL_dHr[bi][R][i1, j1] + dL_dHr[bi][R][i2, j2])
                     end
                     
                 end
             end
+        end
+        for dp in dparams_threads
+            dparams .+= dp
         end
         dparams_penal = backward(reg, kernel.params)
         return dparams .+ dparams_penal
