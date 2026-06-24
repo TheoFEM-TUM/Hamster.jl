@@ -88,13 +88,13 @@ function get_kernel_features(structure_descriptors, data_points, key_ranges, sim
     N_mats = size(structure_descriptors)[1]
     systems = systems === nothing ? [string("system_", i) for i in 1:N_mats] : systems
     N_dp = size(data_points)[1]
-    dim = size(data_points[1])[1]
+    #dim = size(data_points[1])[1]
     descr_sizes = [(size(structure_descriptors[i])[1], size(structure_descriptors[i][1])[1]) for i in 1:N_mats]
 
     Desc_Vec = [
         [ begin
             n = nnz(structure_descriptors[i][R])
-            ([(spzeros(dim), (0, 0, (0, 0, 0))) for _ in 1:n], n)
+            (Vector{Tuple{SparseVector{Float64, Int64}, Tuple{Int64, Int64, Tuple{Int64,Int64,Int64}}}}(undef, n), n)
         end
         for R in 1:descr_sizes[i][1] ]
         for i in 1:N_mats
@@ -424,15 +424,17 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
             @info "Number of datapoints changed from $N_theo to $N_real"
         end
         # COV_EXCL_STOP
+        presorted = false
     elseif data_points === nothing
         _, data_points = read_ml_params(conf, filename=get_ml_init_params(conf))
         weights = ones(Int, length(data_points))
+        presorted = true
     else
         weights = ones(Int, length(data_points))
     end
     params, data_points = init_ml_params!(data_points, conf)
 
-    data_points, params, key_ranges = sort_by_key(data_points, params, conf)
+    data_points, params, key_ranges = sort_by_key(data_points, params, conf, presorted = presorted)
     ok = check_consistency(data_points, params; key_ranges=key_ranges)
 
 
