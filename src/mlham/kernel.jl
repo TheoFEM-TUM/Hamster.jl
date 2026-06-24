@@ -423,18 +423,16 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         if rank == 0 && verbosity > 0
             @info "Number of datapoints changed from $N_theo to $N_real"
         end
-        # COV_EXCL_STOP
-        presorted = false
+
     elseif data_points === nothing
         _, data_points = read_ml_params(conf, filename=get_ml_init_params(conf))
         weights = ones(Int, length(data_points))
-        presorted = true
     else
         weights = ones(Int, length(data_points))
     end
     params, data_points = init_ml_params!(data_points, conf)
 
-    data_points, params, key_ranges = sort_by_key(data_points, params, conf, presorted = presorted)
+    data_points, params, key_ranges = sort_by_key(data_points, params, conf)
     ok = check_consistency(data_points, params; key_ranges=key_ranges)
 
 
