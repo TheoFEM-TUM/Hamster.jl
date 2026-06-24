@@ -783,43 +783,32 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 """
 
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
+    dparams = zeros(length(kernel.params))
     key_ranges = kernel.key_ranges
-    N_params = length(kernel.params)
-    dparams = zeros(N_params)
-
     if kernel.update
         for (bi, index) in enumerate(indices)
+            
             for R in eachindex(dL_dHr[bi])
                 @views desc_vec, nnz_ham = kernel.feature_vec[index][R]
-
-                dparams .+= tmapreduce(.+, 1:nnz_ham; init=zeros(N_params)) do m
-                    local_dp = zeros(N_params)
-                    @views desc_vec_small, (i, j, key) = desc_vec[m]
-
-                    if !haskey(key_ranges, key)
-                        return local_dp
-                    end
+                tforeach(1:nnz_ham) do m
+                    @views desc_vec_small, (i,j,key) =  desc_vec[m]
 
                     if !soc
-                        local_dp[key_ranges[key]] .+=
-                            desc_vec_small .* real(dL_dHr[bi][R][i, j])
+                        dparams[key_ranges[key]]  .+= desc_vec_small .* real(dL_dHr[bi][R][i, j])
                     else
-                        i1, j1 = 2i-1, 2j-1
-                        i2, j2 = 2i,   2j
-                        local_dp[key_ranges[key]] .+=
-                            desc_vec_small .* real(
-                                dL_dHr[bi][R][i1, j1] + dL_dHr[bi][R][i2, j2])
+                        i1 = 2*i-1; j1 = 2*j-1
+                        i2 = 2*i; j2 = 2*j
+                        dparams[key_ranges[key]] .+= desc_vec_small .* real(dL_dHr[bi][R][i1, j1] + dL_dHr[bi][R][i2, j2])
                     end
-
-                    local_dp
+                    
                 end
             end
         end
-
-        dparams .+= backward(reg, kernel.params)
+        dparams_penal = backward(reg, kernel.params)
+        return dparams .+ dparams_penal
+    else 
+        return dparams
     end
-
-    return dparams
 end
 
 function get_model_gradient_old(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
