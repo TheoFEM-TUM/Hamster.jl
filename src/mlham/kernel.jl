@@ -130,20 +130,6 @@ function get_kernel_features(structure_descriptors, data_points, key_ranges, sim
     end
     structure_descriptors = nothing
     GC.gc()
-    covered_keys = Set{Tuple{Int,Int,Int}}()
-    for mat in Desc_Vec
-        for (desc_vec, nnz_ham) in mat
-            for m in 1:nnz_ham
-                _, (i, j, key) = desc_vec[m]
-                push!(covered_keys, key)
-            end
-        end
-    end
-    missing_keys = [k for k in keys(key_ranges) if k ∉ covered_keys]
-    println("Keys in key_ranges but never in feature_vec: ", length(missing_keys), " / ", length(key_ranges))
-    for k in missing_keys
-        println("  ", k, " => range ", key_ranges[k])
-    end
     #println("N_test",N_test)
     return Desc_Vec, (descr_sizes, N_dp)
 end
