@@ -122,7 +122,7 @@ function get_kernel_features(structure_descriptors, data_points, key_ranges, sim
                 val_vec[abs.(val_vec) .<= tol] .= 0
                 val_vec = sparse(val_vec)
                 covered = nnz(val_vec) > 0 ? 1 : 0
-                N_test[n] = covered
+                N_test_temp[n] = covered
                 #N_total[i] += 1
                 #println(nnz(val_vec))
                 Desc_Vec[i][R][1][n] = (val_vec,(i_mat,j_mat, key))
