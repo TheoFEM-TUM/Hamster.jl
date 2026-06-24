@@ -82,7 +82,7 @@ function get_kernel_features(structure_descriptors, data_points, key_ranges, sim
     #data_points_dict = build_submatrices(data_points, conf)
     Z_scale=get_Z_scale(conf)
     overlap_scale=get_overlap_scale(conf)
-    tol = 0.1
+    tol = 0.5
     #println(tol)
     #println("NTHREADS",Threads.nthreads())
     N_mats = size(structure_descriptors)[1]
@@ -104,9 +104,11 @@ function get_kernel_features(structure_descriptors, data_points, key_ranges, sim
     for i in 1:N_mats
         N_R, Ne = descr_sizes[i]
         for R in 1:N_R
-            @views h_env_R = structure_descriptors[i][R]
+            h_env_R = structure_descriptors[i][R]
             #Nnz = Desc_Vec[i][R][2]
             touples = collect(zip(findnz(h_env_R)...))
+            N_total_temp  = length(touples)
+            N_test_temp = zeros(N_total_temp)
             tforeach(1:length(touples)) do n
                 i_mat, j_mat, hin = touples[n]
                 overlap_id = floor(Int, hin[1] / overlap_scale)
@@ -120,11 +122,13 @@ function get_kernel_features(structure_descriptors, data_points, key_ranges, sim
                 val_vec[abs.(val_vec) .<= tol] .= 0
                 val_vec = sparse(val_vec)
                 covered = nnz(val_vec) > 0 ? 1 : 0
-                N_test[i] += covered
-                N_total[i] += 1
+                N_test[n] = covered
+                #N_total[i] += 1
                 #println(nnz(val_vec))
                 Desc_Vec[i][R][1][n] = (val_vec,(i_mat,j_mat, key))
             end
+            N_test[i] += sum(N_test_temp)
+            N_total[i] += N_total_temp
         end
         @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Ncovered = ( $(N_test[i]) / $(N_total[i]) ) || $(ceil(Int, N_test[i] / N_total[i] * 100 )) %"
     end
