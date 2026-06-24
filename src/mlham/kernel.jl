@@ -126,8 +126,7 @@ function get_kernel_features(structure_descriptors, data_points, key_ranges, sim
                 Desc_Vec[i][R][1][n] = (val_vec,(i_mat,j_mat, key))
             end
         end
-
-        @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Ncovered = ( $(N_test[i]) / $(N_total[i]) )"
+        @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Ncovered = ( $(N_test[i]) / $(N_total[i]) ) || $(ceil(Int, N_test[i] / N_total[i] * 100 )) %"
     end
     structure_descriptors = nothing
     GC.gc()
