@@ -109,44 +109,21 @@ function get_kernel_features(structure_descriptors, data_points, key_ranges, sim
             touples = collect(zip(findnz(h_env_R)...))
             tforeach(1:length(touples)) do n
                 i_mat, j_mat, hin = touples[n]
-
                 overlap_id = floor(Int, hin[1] / overlap_scale)
-                Z_1_id     = floor(Int, hin[2] / Z_scale)
-                Z_2_id     = floor(Int, hin[3] / Z_scale)
-                key        = (overlap_id, Z_1_id, Z_2_id)
-
-                @assert haskey(key_ranges, key) "Descriptor key $key not found in key_ranges for hin=$hin"
-
-                rng = key_ranges[key]
-                data_points_vector = @view data_points[rng]
-
-                # Verify every datapoint in this bucket maps back to the same key
-                for (local_idx, dp) in enumerate(data_points_vector)
-                    dp_key = (
-                        floor(Int, dp[1] / overlap_scale),
-                        floor(Int, dp[2] / Z_scale),
-                        floor(Int, dp[3] / Z_scale)
-                    )
-                    @assert dp_key == key """
-                    Key mismatch in bucket lookup:
-                    descriptor key = $key
-                    datapoint key  = $dp_key
-                    global param index = $(first(rng) + local_idx - 1)
-                    local index = $local_idx
-                    hin = $hin
-                    dp  = $dp
-                    """
-                end
-
+                Z_1_id = floor(Int, hin[2] / Z_scale)
+                Z_2_id = floor(Int, hin[3] / Z_scale)
+                key = (overlap_id, Z_1_id, Z_2_id)
+                #data_points_mat = reduce(hcat, @view data_points[key_ranges[key]])
+                data_points_vector = @view data_points[key_ranges[key]]
+                #N_dp = size(data_points_mat)[2]
                 val_vec = exp_sim_all(data_points_vector, hin, σ=sim_params)
                 val_vec[abs.(val_vec) .<= tol] .= 0
                 val_vec = sparse(val_vec)
-
                 covered = nnz(val_vec) > 0 ? 1 : 0
                 N_test[i] += covered
                 N_total[i] += 1
-
-                Desc_Vec[i][R][1][n] = (val_vec, (i_mat, j_mat, key))
+                #println(nnz(val_vec))
+                Desc_Vec[i][R][1][n] = (val_vec,(i_mat,j_mat, key))
             end
         end
         @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Ncovered = ( $(N_test[i]) / $(N_total[i]) ) || $(ceil(Int, N_test[i] / N_total[i] * 100 )) %"
@@ -674,17 +651,17 @@ function read_ml_params(target_dir::String, conf=get_empty_config(); filename=ge
     if !occursin(".dat", filename); filename *= ".dat"; end
     lines = open_and_read(joinpath(target_dir, filename))
     lines = split_lines(lines)
-    N = length(lines[8]) - 1
+    N = length(lines[10]) - 1
 
     # Check that header params match Config
     @assert parse(Float64, lines[2][end]) == get_ml_rcut(conf)
     @assert parse(Float64, lines[3][end]) == get_sim_params(conf)
     @assert parse(Float64, lines[4][end]) == get_env_scale(conf)
-    @assert parse(Bool, lines[5][end]) == get_apply_distortion(conf)
+    @assert parse(Bool, lines[7][end]) == get_apply_distortion(conf)
 
     data_points = SVector{N, Float64}[]
     params = Float64[]
-    for line in lines[8:end]
+    for line in lines[10:end]
         if length(line) > 1
             parsed_line = parse.(Float64, line)
             push!(params, parsed_line[1])
@@ -697,17 +674,17 @@ function read_ml_params( conf=get_empty_config(); filename=get_ml_filename(conf)
     if !occursin(".dat", filename); filename *= ".dat"; end
     lines = open_and_read(filename)
     lines = split_lines(lines)
-    N = length(lines[8]) - 1
+    N = length(lines[10]) - 1
 
     # Check that header params match Config
     @assert parse(Float64, lines[2][end]) == get_ml_rcut(conf)
     @assert parse(Float64, lines[3][end]) == get_sim_params(conf)
     @assert parse(Float64, lines[4][end]) == get_env_scale(conf)
-    @assert parse(Bool, lines[5][end]) == get_apply_distortion(conf)
+    @assert parse(Bool, lines[7][end]) == get_apply_distortion(conf)
 
     data_points = SVector{N, Float64}[]
     params = Float64[]
-    for line in lines[8:end]
+    for line in lines[10:end]
         if length(line) > 1
             parsed_line = parse.(Float64, line)
             push!(params, parsed_line[1])
