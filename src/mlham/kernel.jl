@@ -498,7 +498,7 @@ function get_hr(kernel::HamiltonianKernel, mode, index; apply_soc=false)
         Is = Vector{Int}(undef, nnz_ham)
         Js = Vector{Int}(undef, nnz_ham)
         Vs = Vector{ComplexF64}(undef, nnz_ham)
-        keep = falses(nnz_ham)
+        #keep = falses(nnz_ham)
 
         tforeach(1:nnz_ham) do m
             desc_vec_single, (i, j, key) = @views desc_vec[R][1][m]
@@ -515,16 +515,17 @@ function get_hr(kernel::HamiltonianKernel, mode, index; apply_soc=false)
             end
 
             val = dot(desc_vec_single, params)
-            if val > 1e-4
-                Is[m] = i
-                Js[m] = j
-                Vs[m] = val
-                keep[m] = true
-            end
+
+            Is[m] = i
+            Js[m] = j
+            Vs[m] = val
+            #keep[m] = true
+
         end
 
         # Sequential, safe construction of the sparse matrix for this R
-        Hr[R] = sparse(Is[keep], Js[keep], Vs[keep], Ne, Ne)
+        #Hr[R] = sparse(Is[keep], Js[keep], Vs[keep], Ne, Ne)
+        Hr[R] = sparse(Is, Js, Vs, Ne, Ne)
     end
 
     return apply_soc ? apply_spin_basis.(Hr) : Hr
