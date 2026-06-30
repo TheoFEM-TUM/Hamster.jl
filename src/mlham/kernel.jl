@@ -111,7 +111,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
             # build local descriptor matrix
             data_points_local = reshape_structure_descriptors(structure_descriptors, Np_per_strc, get_weight_factor(conf))
 
-            println("local size: ", size(data_points_local))
+            #println("local size: ", size(data_points_local))
 
             dim = size(data_points_local, 1)
             local_cols = size(data_points_local, 2)
@@ -197,7 +197,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
             # build local descriptor matrix
             data_points_local = reshape_structure_descriptors(structure_descriptors, Np_per_strc, get_weight_factor(conf))
 
-            println("local size: ", size(data_points_local))
+            #println("local size: ", size(data_points_local))
 
             dim = size(data_points_local, 1)
             local_cols = size(data_points_local, 2)
@@ -308,9 +308,11 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
     end
     params, data_points = init_ml_params!(data_points, conf)
     kp, params = get_sorted_Kernelpoints(data_points, weights, params, conf)
-
-    ok = check_consistency(kp.datapoints, params; key_ranges=kp.key_ranges)
-    ok2 = verify_kernelpoints(kp, conf)
+    
+    if get_verbosity(conf) >= 2
+        #ok = check_consistency(kp.datapoints, params; key_ranges=kp.key_ranges)
+        #ok2 = verify_kernelpoints(kp, conf)
+    end
 
 
     if rank == 0

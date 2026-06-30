@@ -337,6 +337,7 @@ end
 
 function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_alpha(conf), Nc_min = get_nc_min(conf), Nc_max = get_nc_max(conf))
     #alpha = 0.5
+    verbosity = get_verbosity(conf)
     N_key = length(keys(descr_dict))
     keys_list = []
     for key in keys(descr_dict)
@@ -377,7 +378,7 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
 
         same_ion_label = same_ion ? "DI" : "NN"
         label = "$element_label_1-$element_label_2-$(overlap_label[1])-$(overlap_label[2])-$same_ion_label"
-        @info "Overlap: $label, N_descr: $N_descr, Nc : $Nc"
+        if verbosity>1; @info "Overlap: $label, N_descr: $N_descr, Nc : $Nc" ; end
         @assert Np >= Nc
         Np_total += Np
         Ncluster_total += Nc
