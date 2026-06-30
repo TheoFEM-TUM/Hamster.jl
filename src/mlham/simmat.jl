@@ -2,16 +2,17 @@
 struct Kernelpoints
     datapoints :: Vector{SVector{9, Float64}}
     weights :: Vector{Int64}
+    keys :: Vector{Tuple{Int64,Int64,Int64}}
     key_ranges :: Dict{Tuple{Int64,Int64,Int64}, UnitRange{Int}}
-    keys       :: Vector{Tuple{Int64,Int64,Int64}}
-    key_sizes  :: Vector{Int64}
+    key_sizes  :: Dict{Tuple{Int64,Int64,Int64}, Int64}
 end
 
 function get_sorted_Kernelpoints(data_points::Vector{SVector{9, Float64}}, weights = ones(Int64, length(data_points)), params = zeros(Float64, length(data_points)), conf = get_empty_config())
     Xsorted, weights_sorted, params_sorted, key_ranges = sort_by_key(data_points, weights, params, conf)
     ks = sort(collect(keys(key_ranges)))
     sizes = [length(key_ranges[k]) for k in ks]
-    return Kernelpoints(Xsorted, weights_sorted, key_ranges, ks, sizes), params_sorted
+    key_sizes = Dict(zip(ks, sizes))
+    return Kernelpoints(Xsorted, weights_sorted, ks, key_ranges, key_sizes), params_sorted
 end
 
 function sort_by_key(
@@ -25,22 +26,22 @@ function sort_by_key(
     n = length(X)
     @assert length(weights) == n "weights must have one entry per element of X"
 
-    nthreads_total = Threads.maxthreadid() 
+    nthreads_total = Threads.maxthreadid()
 
-    # Pass 1: count rows per (k1,k2,k3)
+    keyfun(p) = (
+        round(Int, p[1] / overlap_scale),
+        round(Int, p[2] / Z_scale),
+        round(Int, p[3] / Z_scale)
+    )
+
+    # Pass 1: count rows per key, per thread (order-independent merge)
     local_counts = [Dict{Tuple{Int,Int,Int},Int}() for _ in 1:nthreads_total]
     Threads.@threads for i in 1:n
         tid = Threads.threadid()
-        p = X[i]
-        key = (
-            round(Int, p[1] / overlap_scale),
-            round(Int, p[2] / Z_scale),
-            round(Int, p[3] / Z_scale)
-        )
+        key = keyfun(X[i])
         local_counts[tid][key] = get(local_counts[tid], key, 0) + 1
     end
 
-    # Merge counts
     counts = Dict{Tuple{Int,Int,Int},Int}()
     for lc in local_counts
         for (key, c) in lc
@@ -48,7 +49,7 @@ function sort_by_key(
         end
     end
 
-    # Canonical ordering of keys and their offsets into Xsorted
+    # Canonical key ordering -> fixed, nthreads-independent bucket ranges
     keys_sorted = sort(collect(keys(counts)))
     offsets = Dict{Tuple{Int,Int,Int},Int}()
     key_ranges = Dict{Tuple{Int,Int,Int},UnitRange{Int}}()
@@ -61,23 +62,36 @@ function sort_by_key(
         end
     end
 
+    # Pass 2: scatter into buckets using atomics. Intra-bucket order here
+    # is racy/nthreads-dependent, but that's fixed up in Pass 3 below.
     Xsorted = Vector{SVector{9,Float64}}(undef, n)
     weights_sorted = Vector{eltype(weights)}(undef, n)
     params_sorted = Vector{eltype(params)}(undef, n)
+    orig_idx = Vector{Int}(undef, n)  # track original index per slot
 
-    # Pass 2: fill Xsorted and weights_sorted together, using atomic offsets per key
-    offset_atomics = Dict(key => Threads.Atomic{Int}(offsets[key]) for key in keys(counts))
+    offset_atomics = Dict(key => Threads.Atomic{Int}(offsets[key]) for key in keys_sorted)
     Threads.@threads for i in 1:n
-        p = X[i]
-        key = (
-            round(Int, p[1] / overlap_scale),
-            round(Int, p[2] / Z_scale),
-            round(Int, p[3] / Z_scale)
-        )
+        key = keyfun(X[i])
         dest = Threads.atomic_add!(offset_atomics[key], 1)
-        Xsorted[dest] = p
+        Xsorted[dest] = X[i]
         weights_sorted[dest] = weights[i]
         params_sorted[dest] = params[i]
+        orig_idx[dest] = i
+    end
+
+    # Pass 3: deterministic fixup - within each bucket, reorder by original
+    # index. This is the step that makes the result independent of
+    # nthreads and scheduling: bucket *contents* were already fixed by
+    # `key_ranges`, and now bucket *order* is fixed too.
+    Threads.@threads for key in keys_sorted
+        r = key_ranges[key]
+        length(r) <= 1 && continue
+        perm = sortperm(view(orig_idx, r))
+        if !issorted(view(orig_idx, r))
+            Xsorted[r] = Xsorted[r][perm]
+            weights_sorted[r] = weights_sorted[r][perm]
+            params_sorted[r] = params_sorted[r][perm]
+        end
     end
 
     return Xsorted, weights_sorted, params_sorted, key_ranges
@@ -143,24 +157,6 @@ function verify_kernelpoints(kp::Kernelpoints, conf = get_empty_config();
     n = length(kp.datapoints)
     ok = true
 
-    # --- Check 1: key_sizes matches the length of each key's range ---
-    if length(kp.keys) != length(kp.key_sizes)
-        @warn "keys and key_sizes have different lengths" length(kp.keys) length(kp.key_sizes)
-        ok = false
-    end
-
-    for (k, sz) in zip(kp.keys, kp.key_sizes)
-        if !haskey(kp.key_ranges, k)
-            @warn "key in keys but missing from key_ranges" key=k
-            ok = false
-            continue
-        end
-        actual_len = length(kp.key_ranges[k])
-        if actual_len != sz
-            @warn "key_sizes mismatch" key=k expected=sz actual=actual_len
-            ok = false
-        end
-    end
 
     # --- Check 2: every key in key_ranges is in keys, and vice versa ---
     keyset_from_keys = Set(kp.keys)
@@ -293,7 +289,10 @@ function get_kernel_features_old(structure_descriptors, data_points, sim_params,
 end
 
 
-function get_kernel_features(structure_descriptors, data_points, key_ranges, sim_params, tol = 1e-8; conf = get_empty_config(), rank = 0, systems = nothing)
+function get_kernel_features(structure_descriptors, kp, sim_params, tol = 1e-8; conf = get_empty_config(), rank = 0, systems = nothing)
+    data_points = kp.datapoints
+    key_ranges = kp.key_ranges
+    key_sizes = kp.key_sizes
     #verbosity = get_verbosity(conf)
     #data_points_dict = build_submatrices(data_points, conf)
     Z_scale=get_Z_scale(conf)
@@ -306,7 +305,10 @@ function get_kernel_features(structure_descriptors, data_points, key_ranges, sim
     N_dp = size(data_points)[1]
     #dim = size(data_points[1])[1]
     descr_sizes = [(size(structure_descriptors[i])[1], size(structure_descriptors[i][1])[1]) for i in 1:N_mats]
-
+    #cum_sim = Dict()
+    #for (key, size) in key_sizes
+        #cum_sim[key] = zeros(size)
+    #end
     Desc_Vec = [
         [ begin
             n = nnz(structure_descriptors[i][R])
@@ -324,6 +326,7 @@ function get_kernel_features(structure_descriptors, data_points, key_ranges, sim
             #Nnz = Desc_Vec[i][R][2]
             touples = collect(zip(findnz(h_env_R)...))
             N_total_temp  = length(touples)
+            #@assert N_total_temp == Desc_Vec[i][R][2]
             N_test_temp = zeros(N_total_temp)
             tforeach(1:length(touples)) do n
                 i_mat, j_mat, hin = touples[n]
@@ -342,12 +345,20 @@ function get_kernel_features(structure_descriptors, data_points, key_ranges, sim
                 #N_total[i] += 1
                 #println(nnz(val_vec))
                 Desc_Vec[i][R][1][n] = (val_vec,(i_mat,j_mat, key))
+                #@assert size(Desc_Vec[i][R][1][n][1])[1] == key_sizes[key]
+                #cum_sim[key] += val_vec
             end
             N_test[i] += sum(N_test_temp)
             N_total[i] += N_total_temp
         end
         @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Ncovered = ( $(N_test[i]) / $(N_total[i]) ) || $(ceil(Int, N_test[i] / N_total[i] * 100 )) %"
     end
+    #for (key, vec) in cum_sim
+        #zero_positions = length(findall(==(0.0), vec))
+        #if zero_positions > 0
+            #println("$key: $zero_positions")
+        #end
+    #end
     structure_descriptors = nothing
     GC.gc()
     #println("N_test",N_test)

@@ -31,7 +31,7 @@ function HamiltonianKernel(params :: Vector{Float64},
     rank = 0,
     systems = nothing
     )
-    sm = get_kernel_features(structure_descriptors, kp.data_points, kp.key_ranges, sim_params, tol, conf = conf, rank = rank, systems = systems)
+    sm = get_kernel_features(structure_descriptors, kp, sim_params, tol, conf = conf, rank = rank, systems = systems)
 
     return HamiltonianKernel(params,kp, sim_params, update, sm)
 end
@@ -309,7 +309,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
     params, data_points = init_ml_params!(data_points, conf)
     kp, params = get_sorted_Kernelpoints(data_points, weights, params, conf)
 
-    ok = check_consistency(kp.data_points, params; key_ranges=kp.key_ranges)
+    ok = check_consistency(kp.datapoints, params; key_ranges=kp.key_ranges)
     ok2 = verify_kernelpoints(kp, conf)
 
 
@@ -437,7 +437,7 @@ Writes the parameters and configuration settings of a HamiltonianKernel object t
 - `filename`: The name of the file to which the data will be written (default: `get_ml_filename(conf)`).
 """
 function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filename=get_ml_filename(conf))
-    data_points = kernel.data_points
+    data_points = kernel.kp.datapoints
     open(filename*".dat", "w") do file
         # Write header to file
         println(file, "begin ", get_system(conf))

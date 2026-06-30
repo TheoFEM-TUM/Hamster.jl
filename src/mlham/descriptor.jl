@@ -206,125 +206,6 @@ function build_submatrices(
     return submatrices
 end
 
-function sort_by_key(
-    X::Vector{SVector{9,Float64}},
-    weights::AbstractVector,
-    conf;
-    Z_scale=get_Z_scale(conf),
-    overlap_scale=get_overlap_scale(conf)
-)
-    n = length(X)
-    @assert length(weights) == n "weights must have one entry per element of X"
-
-    nthreads_total = Threads.maxthreadid() 
-
-    # Pass 1: count rows per (k1,k2,k3)
-    local_counts = [Dict{Tuple{Int,Int,Int},Int}() for _ in 1:nthreads_total]
-    Threads.@threads for i in 1:n
-        tid = Threads.threadid()
-        p = X[i]
-        key = (
-            round(Int, p[1] / overlap_scale),
-            round(Int, p[2] / Z_scale),
-            round(Int, p[3] / Z_scale)
-        )
-        local_counts[tid][key] = get(local_counts[tid], key, 0) + 1
-    end
-
-    # Merge counts
-    counts = Dict{Tuple{Int,Int,Int},Int}()
-    for lc in local_counts
-        for (key, c) in lc
-            counts[key] = get(counts, key, 0) + c
-        end
-    end
-
-    # Canonical ordering of keys and their offsets into Xsorted
-    keys_sorted = sort(collect(keys(counts)))
-    offsets = Dict{Tuple{Int,Int,Int},Int}()
-    key_ranges = Dict{Tuple{Int,Int,Int},UnitRange{Int}}()
-    let pos = 1
-        for key in keys_sorted
-            c = counts[key]
-            offsets[key] = pos
-            key_ranges[key] = pos:(pos + c - 1)
-            pos += c
-        end
-    end
-
-    Xsorted = Vector{SVector{9,Float64}}(undef, n)
-    weights_sorted = Vector{eltype(weights)}(undef, n)
-
-    # Pass 2: fill Xsorted and weights_sorted together, using atomic offsets per key
-    offset_atomics = Dict(key => Threads.Atomic{Int}(offsets[key]) for key in keys(counts))
-    Threads.@threads for i in 1:n
-        p = X[i]
-        key = (
-            round(Int, p[1] / overlap_scale),
-            round(Int, p[2] / Z_scale),
-            round(Int, p[3] / Z_scale)
-        )
-        dest = Threads.atomic_add!(offset_atomics[key], 1)
-        Xsorted[dest] = p
-        weights_sorted[dest] = weights[i]
-    end
-
-    return Xsorted, weights_sorted, key_ranges
-end
-
-function check_consistency(data_points, params; key_ranges=nothing, verbose=true)
-    ok = true
-
-    # 1. Basic length match
-    if length(data_points) != length(params)
-        ok = false
-        verbose && @warn "data_points/params length mismatch" len_dp=length(data_points) len_params=length(params)
-    end
-
-    if key_ranges === nothing
-        verbose && ok && println("Consistency OK: $(length(data_points)) points, $(length(params)) params, lengths match.")
-        return ok
-    end
-
-    # 2. key_ranges total coverage vs actual lengths
-    total_range_len = sum(length(r) for r in values(key_ranges); init=0)
-    if total_range_len != length(data_points)
-        ok = false
-        verbose && @warn "key_ranges total length doesn't match data_points" total_range_len=total_range_len len_dp=length(data_points)
-    end
-    if total_range_len != length(params)
-        ok = false
-        verbose && @warn "key_ranges total length doesn't match params" total_range_len=total_range_len len_params=length(params)
-    end
-
-    # 3. Ranges partition [1:n] cleanly (no gaps/overlaps)
-    all_ranges = sort(collect(values(key_ranges)), by = first)
-    expected_start = 1
-    for r in all_ranges
-        if first(r) != expected_start
-            ok = false
-            verbose && @warn "gap or overlap in key_ranges" range=r expected_start=expected_start
-            expected_start = last(r) + 1
-            continue
-        end
-        expected_start = last(r) + 1
-    end
-    n = length(data_points)
-    if expected_start - 1 != n
-        ok = false
-        verbose && @warn "key_ranges don't cover full data_points length" covered=(expected_start - 1) total=n
-    end
-
-    # 4. Per-key: data_points[range] and params[range] have matching length (always true by construction, but check max index validity)
-    max_idx = maximum(last(r) for r in values(key_ranges); init=0)
-    if max_idx > n
-        ok = false
-        verbose && @warn "key_ranges index out of bounds for data_points/params" max_idx=max_idx n=n
-    end
-
-    verbose && ok && println("Consistency OK: $(length(key_ranges)) keys, $n points, ranges partition cleanly.")
-    return ok
-end
 """
     decide_orbswap(itype, jtype, l_i, m_i, l_j, m_j) -> Bool
 
@@ -488,7 +369,7 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
         #Nc_min = 10
         #Nc_max = 200
 
-        Nc = ceil(Int, max(Nc_min, N_descr * 0.1))
+        Nc = ceil(Int, max(Nc_min, N_descr * 0.2))
         Nc = ceil(Int, min(Nc_max, Nc))
         #Nc = 50
         Np = ceil(Int, Nc * 5)
@@ -508,6 +389,7 @@ end
 
 function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random")
     #d × n
+    Random.seed!(1234)
     unique_descriptors = descriptors_w[1:end-1, :]
     Np = size(unique_descriptors, 2)
     if Npoints < Np
@@ -606,7 +488,6 @@ greedy farthest-point sampling based on Euclidean distance.
 function farthest_point_sampling(descriptors, cluster_indices, num_to_take)
     cluster_size = length(cluster_indices)
     selected = Int[]
-
     if cluster_size > 0 && num_to_take > 0
         dists = fill(Inf, cluster_size)
         push!(selected, rand(cluster_indices))
@@ -626,6 +507,5 @@ function farthest_point_sampling(descriptors, cluster_indices, num_to_take)
             push!(selected, cluster_indices[sorted_inds[next]])
         end
     end
-
     return selected
 end

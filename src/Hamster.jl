@@ -29,7 +29,7 @@ include("soc/soc_utils.jl"); include("soc/soc_matrix.jl"); include("soc/soc_mode
 include("optim/adam.jl"); include("optim/loss.jl"); include("optim/data.jl"); include("optim/gd_optimizer.jl"); include("optim/profiler.jl")
 include("optim/optimize.jl")
 
-include("mlham/descriptor.jl"); include("mlham/kernel.jl") ; include("mlham/simmat.jl")
+include("mlham/simmat.jl"); include("mlham/descriptor.jl"); include("mlham/kernel.jl")
 
 include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hyperopt.jl")
 
@@ -50,8 +50,10 @@ export write_hr, read_hr, write_ham, read_ham
 export SOCModel
 
 export Loss, Regularization, update!, DataLoader, GDOptimizer, optimize_model!, HamsterProfiler
-
+export Kernelpoints, SimMat
 export HamiltonianKernel
+
+
 
 export run_calculation
 

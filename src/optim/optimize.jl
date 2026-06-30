@@ -31,6 +31,7 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_emp
         for (batch_id, indices) in enumerate(chunks(1:ham_train.Nstrc, n=Nbatch))
             train_step!(ham_train, indices, optim, dl.train_data, prof, iter, batch_id, comm, conf, rank=rank, nranks=nranks)
             print_train_status(prof, iter, batch_id, verbosity=verbosity)
+            #if rank == 0;@info "NEXT";end
         end
         if validate && mod(iter, valeachiter) == 0
             print_val_start(prof, iter, verbosity=verbosity)
@@ -114,6 +115,8 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         model_grad = MPI.Reduce(model_grad_local, +, comm, root=0)
         if rank == 0; update!(model, optim.adam, model_grad ./ Nstrc_tot); end
         params = get_params(model)
+        #if rank == 0; @info "NZ params $(count(iszero, params))" ; end
+        #if rank == 0; @info "NZ grad params $(count(iszero, model_grad))" ; end
         MPI.Bcast!(params, comm, root=0)
         set_params!(model, params)
     end
