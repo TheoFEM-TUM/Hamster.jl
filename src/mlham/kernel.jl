@@ -8,134 +8,12 @@ A kernel structure used for computing weighted similarity functions.
 - `xs :: Vector{T1}`: Sample points.
 - `sim_params :: T2`: Parameters for the similarity function.
 """
-mutable struct HamiltonianKernel{T1, T2, T3}
+mutable struct HamiltonianKernel{}
     params :: Vector{Float64}
-    data_points :: Vector{T1}
-    key_ranges :: Dict{Tuple{Int,Int,Int},UnitRange{Int}}
+    kp :: Kernelpoints
     sim_params :: Float64
     update :: Bool
-    feature_vec :: Vector{T3}
-    feature_shape :: Tuple{Vector{T2}, Int64}
-    weights :: Vector{Int64}
-end
-
-"""
-    get_kernel_features(structure_descriptors, data_points, sim_params, tol = 1e-8) -> Vector{T3}, Tuple{Vector{T2}, Int64}
-Generates kernel feature vectors based on structure descriptors and data points.
-# Arguments
-- `structure_descriptors`: A collection of structure descriptors.
-- `data_points`: A collection of data points.
-- `sim_params`: Parameters for the similarity function.
-- `tol`: Tolerance for filtering small values (default = 1e-8).
-"""
-
-function get_kernel_features_old(structure_descriptors, data_points, sim_params, tol = 1e-8; conf = get_empty_config(), rank = 0, systems = nothing)
-    #verbosity = get_verbosity(conf)
-    tol = 0.5
-    #println(tol)
-    #println("NTHREADS",Threads.nthreads())
-    N_mats = size(structure_descriptors)[1]
-    systems = systems === nothing ? [string("system_", i) for i in 1:N_mats] : systems
-    N_dp = size(data_points)[1]
-    descr_sizes = [(size(structure_descriptors[i])[1], size(structure_descriptors[i][1])[1]) for i in 1:N_mats]
-    Desc_Vec = [ [[ spzeros(Float64, descr_sizes[i][2], descr_sizes[i][2]) for _ in 1:descr_sizes[i][1] ] for d in 1:N_dp]
-      for i in 1:N_mats ]
-    N_test = zeros(Int, N_mats)
-    N_max = 0
-    for i in 1:N_mats
-    #for i in 1:N_mats
-        @views h_env = structure_descriptors[i]
-        #for d in 1:N_dp
-        tforeach(1:N_dp) do d
-            @views data_point = data_points[d]
-            N_R, Ne = descr_sizes[i]
-            for R in 1:N_R
-                is = Vector{Int32}() 
-                js = Vector{Int32}() 
-                vals = Vector{Float64}() 
-                for (i_mat, j_mat, hin) in zip(findnz(h_env[R])...)
-                    val = exp_sim(data_point, hin, σ=sim_params)
-                    #N_max += 1
-                    if abs(val) > tol
-                        push!(is, i_mat)
-                        push!(js, j_mat)
-                        push!(vals, val)
-                        N_test[i]+= 1
-                    end
-                end
-                if size(is)[1] > 0
-                    Desc_Vec[i][d][R] = sparse(is, js, vals, Ne, Ne)
-                end
-            end
-        end
-        @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Npoints = $(N_test[i])"
-    end
-    structure_descriptors = nothing
-    GC.gc()
-    #println("N_test",N_test)
-    return Desc_Vec, (descr_sizes, N_dp)
-end
-
-
-function get_kernel_features(structure_descriptors, data_points, key_ranges, sim_params, tol = 1e-8; conf = get_empty_config(), rank = 0, systems = nothing)
-    #verbosity = get_verbosity(conf)
-    #data_points_dict = build_submatrices(data_points, conf)
-    Z_scale=get_Z_scale(conf)
-    overlap_scale=get_overlap_scale(conf)
-    tol = 0.5
-    #println(tol)
-    #println("NTHREADS",Threads.nthreads())
-    N_mats = size(structure_descriptors)[1]
-    systems = systems === nothing ? [string("system_", i) for i in 1:N_mats] : systems
-    N_dp = size(data_points)[1]
-    #dim = size(data_points[1])[1]
-    descr_sizes = [(size(structure_descriptors[i])[1], size(structure_descriptors[i][1])[1]) for i in 1:N_mats]
-
-    Desc_Vec = [
-        [ begin
-            n = nnz(structure_descriptors[i][R])
-            (Vector{Tuple{SparseVector{Float64, Int64}, Tuple{Int64, Int64, Tuple{Int64,Int64,Int64}}}}(undef, n), n)
-        end
-        for R in 1:descr_sizes[i][1] ]
-        for i in 1:N_mats
-    ]
-    N_test = zeros(Int64, N_mats)
-    N_total = zeros(Int64, N_mats)
-    for i in 1:N_mats
-        N_R, Ne = descr_sizes[i]
-        for R in 1:N_R
-            h_env_R = structure_descriptors[i][R]
-            #Nnz = Desc_Vec[i][R][2]
-            touples = collect(zip(findnz(h_env_R)...))
-            N_total_temp  = length(touples)
-            N_test_temp = zeros(N_total_temp)
-            tforeach(1:length(touples)) do n
-                i_mat, j_mat, hin = touples[n]
-                overlap_id = floor(Int, hin[1] / overlap_scale)
-                Z_1_id = floor(Int, hin[2] / Z_scale)
-                Z_2_id = floor(Int, hin[3] / Z_scale)
-                key = (overlap_id, Z_1_id, Z_2_id)
-                #data_points_mat = reduce(hcat, @view data_points[key_ranges[key]])
-                data_points_vector = @view data_points[key_ranges[key]]
-                #N_dp = size(data_points_mat)[2]
-                val_vec = exp_sim_all(data_points_vector, hin, σ=sim_params)
-                val_vec[abs.(val_vec) .<= tol] .= 0
-                val_vec = sparse(val_vec)
-                covered = nnz(val_vec) > 0 ? 1 : 0
-                N_test_temp[n] = covered
-                #N_total[i] += 1
-                #println(nnz(val_vec))
-                Desc_Vec[i][R][1][n] = (val_vec,(i_mat,j_mat, key))
-            end
-            N_test[i] += sum(N_test_temp)
-            N_total[i] += N_total_temp
-        end
-        @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Ncovered = ( $(N_test[i]) / $(N_total[i]) ) || $(ceil(Int, N_test[i] / N_total[i] * 100 )) %"
-    end
-    structure_descriptors = nothing
-    GC.gc()
-    #println("N_test",N_test)
-    return Desc_Vec, (descr_sizes, N_dp)
+    sm :: SimMat
 end
 
 
@@ -144,30 +22,25 @@ end
     HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update, tol) -> HamiltonianKernel
 """
 function HamiltonianKernel(params :: Vector{Float64},
-    data_points,
-    key_ranges,
+    kp,
     sim_params,
     structure_descriptors,
     update :: Bool,
-    tol :: Float64,
-    weights;
+    tol :: Float64;
     conf = get_empty_config(),
     rank = 0,
     systems = nothing
     )
+    sm = get_kernel_features(structure_descriptors, kp.data_points, kp.key_ranges, sim_params, tol, conf = conf, rank = rank, systems = systems)
 
-    feature_vec, feature_shape = get_kernel_features(structure_descriptors, data_points,key_ranges, sim_params, tol, conf = conf, rank = rank, systems = systems)
-    #data_points = Vector{typeof(data_points[1])}(undef, 0)
-
-    return HamiltonianKernel(params,data_points,key_ranges, sim_params, update, feature_vec, feature_shape, weights)
+    return HamiltonianKernel(params,kp, sim_params, update, sm)
 end
 
 """
     HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update) -> HamiltonianKernel
 """
 function HamiltonianKernel(params :: Vector{Float64},
-    data_points,
-    key_ranges ,
+    kp,
     sim_params,
     structure_descriptors,
     update :: Bool,
@@ -177,8 +50,7 @@ function HamiltonianKernel(params :: Vector{Float64},
     )
 
     return HamiltonianKernel(params,
-    data_points,
-    key_ranges,
+    kp,
     sim_params,
     structure_descriptors,
     update,
@@ -435,9 +307,10 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         weights = ones(Int, length(data_points))
     end
     params, data_points = init_ml_params!(data_points, conf)
+    kp, params = get_sorted_Kernelpoints(data_points, weights, params, conf)
 
-    data_points, params, key_ranges = sort_by_key(data_points, params, conf)
-    ok = check_consistency(data_points, params; key_ranges=key_ranges)
+    ok = check_consistency(kp.data_points, params; key_ranges=kp.key_ranges)
+    ok2 = verify_kernelpoints(kp, conf)
 
 
     if rank == 0
@@ -450,7 +323,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         end
     end
 
-    return HamiltonianKernel(params, data_points, key_ranges, sim_params,structure_descriptors, update_ml, sp_tol, weights;
+    return HamiltonianKernel(params, kp, sim_params,structure_descriptors, update_ml, sp_tol;
             conf =conf,
             rank = rank,
             systems = systems)
@@ -458,16 +331,6 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
 
 
 end
-
-
-
-
-exp_sim2(x1::SVector{9,Float64}, x2::SVector{9,Float64}; σ=√0.05) =
-    exp(-normdiff(x1, x2)^2 / (2σ^2))
-
-exp_sim_all(x1, x2::SVector{9,Float64}; σ=√0.05) = exp_sim2.(x1, Ref(x2); σ=σ)
-
-
 
 
 """
@@ -489,9 +352,9 @@ Constructs a set of real-space Hamiltonians from a `HamiltonianKernel`.
 
 
 function get_hr(kernel::HamiltonianKernel, mode, index; apply_soc=false)
-    @views desc_vec = kernel.feature_vec[index]
-    (NR, Ne) = kernel.feature_shape[1][index]
-    key_ranges = kernel.key_ranges
+    @views desc_vec = kernel.sm.feature_vec[index]
+    (NR, Ne) = kernel.sm.feature_shape[1][index]
+    key_ranges = kernel.kp.key_ranges
     Hr = get_empty_complex_hamiltonians(Ne, NR, mode)
 
     for R in 1:NR
@@ -767,22 +630,23 @@ function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc
     dparams = zeros(length(kernel.params))
     nt = Threads.maxthreadid() 
     dparams_threads = [zeros(length(kernel.params)) for _ in 1:nt]
-    key_ranges = kernel.key_ranges
+    key_ranges = kernel.kp.key_ranges
+    weights = kernel.kp.weights
     if kernel.update
         for (bi, index) in enumerate(indices)
             
             for R in eachindex(dL_dHr[bi])
-                @views desc_vec, nnz_ham = kernel.feature_vec[index][R]
+                @views desc_vec, nnz_ham = kernel.sm.feature_vec[index][R]
                 tforeach(1:nnz_ham) do m
                     tid = Threads.threadid()
                     @views desc_vec_small, (i,j,key) =  desc_vec[m]
 
                     if !soc
-                        dparams_threads[tid][key_ranges[key]]  .+= desc_vec_small .* real(dL_dHr[bi][R][i, j])
+                        dparams_threads[tid][key_ranges[key]]  .+= weights[key_ranges[key]] .* desc_vec_small .* real(dL_dHr[bi][R][i, j])
                     else
                         i1 = 2*i-1; j1 = 2*j-1
                         i2 = 2*i; j2 = 2*j
-                        dparams_threads[tid][key_ranges[key]] .+= desc_vec_small .* real(dL_dHr[bi][R][i1, j1] + dL_dHr[bi][R][i2, j2])
+                        dparams_threads[tid][key_ranges[key]] .+= weights[key_ranges[key]] .* desc_vec_small .* real(dL_dHr[bi][R][i1, j1] + dL_dHr[bi][R][i2, j2])
                     end
                     
                 end
@@ -800,13 +664,13 @@ end
 
 function get_model_gradient_old(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
     dparams = zeros(length(kernel.params))
-    weights = kernel.weights
+    weights = kernel.kp.weights
     #weights = ones(length(dparams)) # for unweighted gradients
     #weights = (weights .-1) .*2 .+1
     if kernel.update
         tforeach( eachindex(dparams)) do n
             for (bi, index) in enumerate(indices)
-                @views desc_vec = kernel.feature_vec[index][n]
+                @views desc_vec = kernel.sm.feature_vec[index][n]
                 for R in eachindex(dL_dHr[bi])
                     for (i, j, exp_val) in zip(findnz(desc_vec[R])...)
                         if !soc
