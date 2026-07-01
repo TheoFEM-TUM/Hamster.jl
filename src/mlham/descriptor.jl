@@ -391,6 +391,8 @@ end
 function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random")
     #d × n
     Random.seed!(1234)
+    valid = vec(all(isfinite, descriptors_w; dims=1))
+    descriptors_w = descriptors_w[:, valid]
     unique_descriptors = descriptors_w[1:end-1, :]
     Np = size(unique_descriptors, 2)
     if Npoints < Np
