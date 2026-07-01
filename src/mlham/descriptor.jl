@@ -357,8 +357,8 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
     Ncluster_total = 0
     for n in eachindex(keys_list)
         N_descr = size(descr_dict[keys_list[n]], 2)
-        Np = ceil(Int,max(1, Npoints * descr_weights[n]))
-        Nc = ceil(Int,max(1, Ncluster * descr_weights[n]))
+        #Np = ceil(Int,max(1, Npoints * descr_weights[n]))
+        #Nc = ceil(Int,max(1, Ncluster * descr_weights[n]))
         key_tuple = keys_list[n]
         key_overlap, key_Z1, key_Z2 = key_tuple[1], key_tuple[2], key_tuple[3]
         N_overlap_ids = length(orbital_pairs)
