@@ -352,7 +352,7 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 1e-8; 
             N_test[i] += sum(N_test_temp)
             N_total[i] += N_total_temp
         end
-        if verbosity>1; @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Ncovered = ( $(N_test[i]) / $(N_total[i]) ) || $(ceil(Int, N_test[i] / N_total[i] * 100 )) %"; end
+        if get_hyperopt_niter(conf) < 2; @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Ncovered = ( $(N_test[i]) / $(N_total[i]) ) || $(ceil(Int, N_test[i] / N_total[i] * 100 )) %"; end
     end
     #for (key, vec) in cum_sim
         #zero_positions = length(findall(==(0.0), vec))
