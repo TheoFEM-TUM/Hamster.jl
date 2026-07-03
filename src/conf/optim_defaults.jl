@@ -220,4 +220,4 @@ The `valeachiter` tag determines at what iteration interval a validation step is
 """
 get_valeachiter(conf::Config)::Int64 = conf("valeachiter", "Optimizer") == "default" ? 1 : conf("valeachiter", "Optimizer")
 
-get_warmup_ratio(conf::Config)::Float64 = conf("warmup_ratio", "Optimizer") == "default" ? 0.01 : conf("warmup_ratio", "Optimizer")
+get_warmup_ratio(conf::Config)::Float64 = conf("warmup_ratio", "Optimizer") == "default" ? 0.0 : conf("warmup_ratio", "Optimizer")
