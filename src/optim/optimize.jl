@@ -122,8 +122,10 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         set_params!(model, params)
     end
     warmup = max(10.0, warmup_ratio * optim.Niter)
-
     if iter < warmup
+        lr_start = lr_min * 0.01
+        x = iter / warmup
+        optim.adam.eta = lr_start * (lr / lr_start)^x
         optim.adam.eta = lr * iter / warmup
     else
         progress = (iter - warmup) / (optim.Niter - warmup)
