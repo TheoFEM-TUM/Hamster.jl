@@ -76,6 +76,19 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     verbosity=get_verbosity(conf),
     warmup_ratio=get_warmup_ratio(conf))
 
+    warmup = max(10.0, warmup_ratio * optim.Niter)
+    if iter < warmup
+        lr_start = lr_min * 0.01
+        x = iter / warmup
+        optim.adam.eta = lr_start * (lr / lr_start)^x
+        #optim.adam.eta = lr * iter / warmup
+    else
+        progress = (iter - warmup) / (optim.Niter - warmup)
+        optim.adam.eta =
+            lr_min + 0.5 * (lr - lr_min) * (1 + cos(π * progress))
+    end
+    lr_log = optim.adam.eta
+
     Nstrc_tot = MPI.Reduce(length(indices), +, comm, root=0)
     forward_times = Float64[]
     backward_times = Float64[]
@@ -153,7 +166,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
             println(" Forward time: $(forward_time ./ nranks) s")
             println(" Backward time: $(backward_time ./ nranks) s")
             println(" Update time: $(update_time ./ nranks) s")
-            println(" Learning rate: $(optim.adam.eta)")
+            println(" Learning rate: $(lr_log)")
             #println(" MAE: $L_train_MAE eV")
         end
     end
