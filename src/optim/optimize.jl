@@ -126,7 +126,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         lr_start = lr_min * 0.01
         x = iter / warmup
         optim.adam.eta = lr_start * (lr / lr_start)^x
-        optim.adam.eta = lr * iter / warmup
+        #optim.adam.eta = lr * iter / warmup
     else
         progress = (iter - warmup) / (optim.Niter - warmup)
         optim.adam.eta =
