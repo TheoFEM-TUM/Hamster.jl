@@ -73,7 +73,8 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     nranks=1,
     lr=get_lr(conf),
     lr_min=get_lr_min(conf),
-    verbosity=get_verbosity(conf))
+    verbosity=get_verbosity(conf),
+    warmup_ratio=get_warmup_ratio(conf))
 
     Nstrc_tot = MPI.Reduce(length(indices), +, comm, root=0)
     forward_times = Float64[]
@@ -120,7 +121,16 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         MPI.Bcast!(params, comm, root=0)
         set_params!(model, params)
     end
-    optim.adam.eta = lr_min + 0.5 * (lr - lr_min) * (1 + cos(π * iter / optim.Niter))
+    warmup = max(10.0, warmup_ratio * optim.Niter)
+
+    if iter < warmup
+        optim.adam.eta = lr * iter / warmup
+    else
+        progress = (iter - warmup) / (optim.Niter - warmup)
+        optim.adam.eta =
+            lr_min + 0.5 * (lr - lr_min) * (1 + cos(π * progress))
+    end
+    #optim.adam.eta = lr_min + 0.5 * (lr - lr_min) * (1 + cos(π * iter / optim.Niter))
     update_time_local = MPI.Wtime() - update_begin
 
     #L_train = MPI.Reduce(sum(Ls_train.^2), +, comm, root=0)

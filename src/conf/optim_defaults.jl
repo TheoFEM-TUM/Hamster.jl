@@ -219,3 +219,5 @@ get_printeachiter(conf::Config)::Int64 = conf("printeachiter", "Optimizer") == "
 The `valeachiter` tag determines at what iteration interval a validation step is performed.
 """
 get_valeachiter(conf::Config)::Int64 = conf("valeachiter", "Optimizer") == "default" ? 1 : conf("valeachiter", "Optimizer")
+
+get_warmup_ratio(conf::Config)::Float64 = conf("warmup_ratio", "Optimizer") == "default" ? 0.01 : conf("warmup_ratio", "Optimizer")
