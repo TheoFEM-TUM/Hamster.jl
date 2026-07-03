@@ -448,6 +448,8 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filena
         println(file, "  env_scale = ", get_env_scale(conf))
         println(file, "  Z_scale = ", get_Z_scale(conf))
         println(file, "  overlap_scale = ", get_overlap_scale(conf))
+        println(file, "  strc_scale = ", get_strc_scale(conf))
+        println(file, "  R_scale = ", get_R_scale(conf))
         println(file, "  apply_distortion = ", get_apply_distortion(conf))
         println(file, "end")
         println(file, "")

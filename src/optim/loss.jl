@@ -110,12 +110,12 @@ function forward(l::Loss, y, ŷ; offset = off)
     w =  y_mod ./L_E_avg
     #println(maximum(w))
     if isempty(l.wE) && isempty(l.wk)
-        return mean(@. abs(Δy)^l.n)
+        return mean(@. abs(Δy)^l.n)^2
     else
         L = @. abs(Δy)^l.n
         L_n = 1/l.N * 1/l.wStr * (l.wE' * (L .* w) * l.wk)
         #println(w)
-        return L_n 
+        return L_n^2
         #return mean(@. abs(Δy)^l.n)
     end
 end
@@ -162,14 +162,22 @@ function backward(l::Loss, y, ŷ, offset = off)
     y_mod = abs.(Δy) .+ min_delta
     L_E_avg = vec(mean(y_mod, dims = 2))
     w =  y_mod ./L_E_avg
+
+    if isempty(l.wE) && isempty(l.wk)
+        L_n = mean(@. abs(Δy)^l.n)
+    else
+        L = @. abs(Δy)^l.n
+        L_n = 1/l.N * 1/l.wStr * (l.wE' * (L .* w) * l.wk)
+    end
+
     if isempty(l.wE) && isempty(l.wk)
         N = length(y)
-        return @. 1/N * sign(Δy) * l.n * abs(Δy)^(l.n - 1)
+        return @. 1/N * sign(Δy) * l.n * abs(Δy)^(l.n - 1) * L_n
     else
         #L = @. abs(Δy)^l.n
         #L_n = 1/l.N * 1/l.wStr * (l.wE' * L * l.wk)
         #return @. 1/l.N * 1/l.wStr * sign(Δy) * l.wk' * l.wE * l.n * abs(Δy)^(l.n - 1) * 2 * sum(L_n)
-        return @. 1/l.N * 1/l.wStr * sign(Δy) * l.wk' * l.wE * l.n * abs(Δy)^(l.n - 1) * w
+        return @. 1/l.N * 1/l.wStr * sign(Δy) * l.wk' * l.wE * l.n * abs(Δy)^(l.n - 1) * w * L_n
     end
 end
 

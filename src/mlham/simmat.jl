@@ -242,7 +242,7 @@ Generates kernel feature vectors based on structure descriptors and data points.
 
 function get_kernel_features_old(structure_descriptors, data_points, sim_params, tol = 1e-8; conf = get_empty_config(), rank = 0, systems = nothing)
     #verbosity = get_verbosity(conf)
-    tol = 0.5
+    tol = 0.1
     #println(tol)
     #println("NTHREADS",Threads.nthreads())
     N_mats = size(structure_descriptors)[1]
