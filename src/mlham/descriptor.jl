@@ -13,7 +13,8 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
 
     h_env = SparseMatrixCSC{SVector{9, Float64}, Int64}[spzeros(SVector{9, Float64}, Nε, Nε) for _ in 1:NR]
 
-    env = get_environmental_descriptor(h, V, strc, basis, conf) .* env_scale
+    #env = get_environmental_descriptor(h, V, strc, basis, conf) .* env_scale
+    env = get_environmental_descriptor(h, V, strc, basis, conf)
 
     rs_ion = get_ion_positions(strc.ions)
     Ts = frac_to_cart(strc.Rs, strc.lattice)
@@ -39,7 +40,8 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
             Δr_dist = normdiff(ri, rj)
             Δr_in = (apply_distance_distortion || apply_distortion) ? Δr_dist : Δr
             if apply_distortion || apply_distance_distortion
-                Δr_in = Δr_in / rcut * strc_scale
+                #Δr_in = Δr_in / rcut * strc_scale
+                Δr_in = Δr_in / rcut
             end
             for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
                 i = ij_map[(iion, iorb)]
@@ -69,17 +71,17 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
                 end
 
 
-                Overlap_ID *= overlap_scale
-                Zs = Zs .* Z_scale
-                Δr_in *= R_scale
+                #Overlap_ID *= overlap_scale
+                #Zs = Zs .* Z_scale
+                #Δr_in *= R_scale
                 #Overlap_ID *= 100
                 #Zs = Zs .* 100.0
 
                 
 
                 if apply_distortion || apply_distance_distortion
-                    φ = φ / 2π * strc_scale
-                    θs = @. θs / 2π * strc_scale
+                    φ = φ / 2π 
+                    θs = @. θs / 2π 
                 end
                 isorthogonal = decide_orthogonal(Δr, i, j, l_i, l_j; apply_orthogonality=apply_orthogonality)
 
@@ -388,7 +390,7 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
     return np_nc_dict
 end
 
-function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random")
+function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random", dim_weights=nothing)
     #d × n
     Random.seed!(1234)
     weights = descriptors_w[end, :]
@@ -399,10 +401,11 @@ function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alph
     unique_descriptors = unique_descriptors[:, valid]
     w_strc = weights[valid]
     Np = size(unique_descriptors, 2)
+    dw = dim_weights === nothing ? ones(d) : dim_weights.^2
     if Npoints < Np
         #w_strc = descriptors_w[end, :]
         result = Logging.with_logger(NullLogger()) do
-            kmeans(unique_descriptors, Ncluster; weights=w_strc)
+            kmeans(unique_descriptors, Ncluster; weights=w_strc, distance=WeightedSqEuclidean(dw))
         end
         indices = result.assignments
         centroids = result.centers

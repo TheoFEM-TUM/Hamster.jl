@@ -50,6 +50,9 @@ get_strc_scale(conf::Config)::Float64 = conf("strc_scale", "ML") == "default" ? 
 get_Z_scale(conf::Config)::Float64 = conf("Z_scale", "ML") == "default" ? 1.0 : conf("Z_scale", "ML")
 get_R_scale(conf::Config)::Float64 = conf("R_scale", "ML") == "default" ? 1.0 : conf("R_scale", "ML")
 get_overlap_scale(conf::Config)::Float64 = conf("overlap_scale", "ML") == "default" ? 1.0 : conf("overlap_scale", "ML")
+#                    push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{9, Float64}([Overlap_ID, Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii], env[jj]]))
+
+get_dim_weights(conf::Config)::Vector{Float64} = [get_overlap_scale(conf), get_Z_scale(conf), get_Z_scale(conf), get_R_scale(conf), get_strc_scale(conf), get_strc_scale(conf), get_strc_scale(conf),get_env_scale(conf),  get_env_scale(conf)]
 
 """
     sim_params=0.1

@@ -103,7 +103,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
             @info "Sampling data points using clustering strategy with Ncluster = $Ncluster_local"
             
             reshaped_descr = reshape_structure_descriptors(structure_descriptors, Np_per_strc, get_weight_factor(conf))
-            data_points_local = sample_structure_descriptors(reshaped_descr, Ncluster=Ncluster_local, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
+            data_points_local = sample_structure_descriptors(reshaped_descr, Ncluster=Ncluster_local, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf), dim_weights=get_dim_weights(conf))
             #println("Np_per_strc: ", Np_per_strc)
         elseif sample_strat == "single_rank"
             @info "Sampling data points using single_rank strategy with Ncluster = $Ncluster"
@@ -164,7 +164,8 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                     reshaped_descr,
                     Ncluster = Ncluster,
                     Npoints = Npoints,
-                    ml_sampling = get_ml_sampling(conf)
+                    ml_sampling = get_ml_sampling(conf),
+                    dim_weigthts = get_dim_weights(conf)
                 )
 
             else
@@ -183,7 +184,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                 #N_points_single = Npoints
                 #Ncluster_single = Ncluster
                 N_points_vec[i] = N_points_single
-                data_points_local[i] = sample_structure_descriptors(strc_descriptors, Ncluster=Ncluster_single, Npoints=N_points_single, ml_sampling=get_ml_sampling(conf))
+                data_points_local[i] = sample_structure_descriptors(strc_descriptors, Ncluster=Ncluster_single, Npoints=N_points_single, ml_sampling=get_ml_sampling(conf), dim_weigthts=get_dim_weights(conf))
                 #println(size(data_points_local[i]))
                 system = systems[i]
                 @info "$system Sampling data points using clustering single strategy with Ncluster = $Ncluster_single and Npoints_local_total = $N_points_single"
@@ -258,7 +259,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                     tmap!(data_points_local, 1:N_key) do n
                         Np, Nc = Np_Nc_dict[keys_list[n]]
                         #println("Sampling key: ", keys_list[n], " with Np = ", Np, " and Nc = ", Nc)
-                        sample_structure_descriptors(sub_descr[keys_list[n]], Ncluster=Nc, Npoints=Np, ml_sampling=get_ml_sampling(conf))      
+                        sample_structure_descriptors(sub_descr[keys_list[n]], Ncluster=Nc, Npoints=Np, ml_sampling=get_ml_sampling(conf), dim_weigthts=get_dim_weights(conf))      
                     end
                     data_points_local = reduce(vcat, data_points_local)
                 end

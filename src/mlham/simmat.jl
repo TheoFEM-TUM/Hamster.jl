@@ -290,6 +290,7 @@ end
 
 
 function get_kernel_features(structure_descriptors, kp, sim_params, tol = 1e-8; conf = get_empty_config(), rank = 0, systems = nothing)
+    dim_weights = get_dim_weights(conf)
     verbosity = get_verbosity(conf)
     data_points = kp.datapoints
     key_ranges = kp.key_ranges
@@ -338,7 +339,7 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 1e-8; 
                 #data_points_mat = reduce(hcat, @view data_points[key_ranges[key]])
                 data_points_vector = @view data_points[key_ranges[key]]
                 #N_dp = size(data_points_mat)[2]
-                val_vec = exp_sim_all(data_points_vector, hin, σ=sim_params)
+                val_vec = exp_sim_all(data_points_vector, hin, σ=sim_params, dim_weights = dim_weights)
                 val_vec[abs.(val_vec) .<= tol] .= 0
                 val_vec = sparse(val_vec)
                 covered = nnz(val_vec) > 0 ? 1 : 0
@@ -368,7 +369,7 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 1e-8; 
 end
 
 
-exp_sim2(x1::SVector{9,Float64}, x2::SVector{9,Float64}; σ=√0.05) =
-    exp(-normdiff(x1, x2)^2 / (2σ^2))
+exp_sim2(x1::SVector{9,Float64}, x2::SVector{9,Float64}; σ=√0.05, dim_weights = ones(9)) =
+    exp(-normdiff(x1.*dim_weights, x2.*dim_weights)^2 / (2σ^2))
 
-exp_sim_all(x1, x2::SVector{9,Float64}; σ=√0.05) = exp_sim2.(x1, Ref(x2); σ=σ)
+exp_sim_all(x1, x2::SVector{9,Float64}; σ=√0.05, dim_weights = ones(9)) = exp_sim2.(x1, Ref(x2); σ=σ, dim_weights=dim_weights)
