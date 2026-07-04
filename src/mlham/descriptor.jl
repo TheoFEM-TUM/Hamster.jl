@@ -401,7 +401,7 @@ function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alph
     unique_descriptors = unique_descriptors[:, valid]
     w_strc = weights[valid]
     Np = size(unique_descriptors, 2)
-    dw = dim_weights === nothing ? ones(d) : dim_weights
+    dw = dim_weights === nothing ? ones(9) : dim_weights
     if Npoints < Np
         #w_strc = descriptors_w[end, :]
         result = Logging.with_logger(NullLogger()) do
@@ -416,8 +416,12 @@ function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alph
         end
         cluster_sizes = ceil.(cluster_sizes)
 
-        cluster_variances = [mean([normdiff(unique_descriptors[:, i].*dw, centroids[:, c].*dw) for i in findall(x -> x == c, indices)]) for c in 1:Ncluster]
-
+        cluster_variances = [
+            let vals = [normdiff(unique_descriptors[:, i].*dw, centroids[:, c].*dw) for i in findall(x -> x == c, indices)]
+                isempty(vals) ? 0.0 : mean(vals)
+            end
+            for c in 1:Ncluster
+        ]
         nonzero_clusters = findall(s -> s != 0, cluster_sizes)
         cluster_ids = nonzero_clusters
         cluster_sizes = cluster_sizes[cluster_ids]
