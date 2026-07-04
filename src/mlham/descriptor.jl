@@ -337,7 +337,7 @@ function get_descriptor_weights(Np_per_strc, weight_factor = -1.0)
     return w_strc
 end
 
-function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_alpha(conf), Nc_min = get_nc_min(conf), Nc_max = get_nc_max(conf))
+function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_alpha(conf), Nc_min = get_nc_min(conf), Nc_max = get_nc_max(conf), Nc_ratio = get_nc_ratio(conf))
     #alpha = 0.5
     verbosity = get_verbosity(conf)
     N_key = length(keys(descr_dict))
@@ -372,7 +372,7 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
         #Nc_min = 10
         #Nc_max = 200
 
-        Nc = ceil(Int, max(Nc_min, N_descr * 0.2))
+        Nc = ceil(Int, max(Nc_min, N_descr * Nc_ratio))
         Nc = ceil(Int, min(Nc_max, Nc))
         #Nc = 50
         Np = ceil(Int, Nc * 5)
@@ -401,11 +401,11 @@ function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alph
     unique_descriptors = unique_descriptors[:, valid]
     w_strc = weights[valid]
     Np = size(unique_descriptors, 2)
-    dw = dim_weights === nothing ? ones(d) : dim_weights.^2
+    dw = dim_weights === nothing ? ones(d) : dim_weights
     if Npoints < Np
         #w_strc = descriptors_w[end, :]
         result = Logging.with_logger(NullLogger()) do
-            kmeans(unique_descriptors, Ncluster; weights=w_strc, distance=WeightedSqEuclidean(dw))
+            kmeans(unique_descriptors, Ncluster; weights=w_strc, distance=WeightedSqEuclidean(dw.^2))
         end
         indices = result.assignments
         centroids = result.centers
@@ -416,7 +416,7 @@ function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alph
         end
         cluster_sizes = ceil.(cluster_sizes)
 
-        cluster_variances = [mean([normdiff(unique_descriptors[:, i], centroids[:, c]) for i in findall(x -> x == c, indices)]) for c in 1:Ncluster]
+        cluster_variances = [mean([normdiff(unique_descriptors[:, i].*dw, centroids[:, c].*dw) for i in findall(x -> x == c, indices)]) for c in 1:Ncluster]
 
         nonzero_clusters = findall(s -> s != 0, cluster_sizes)
         cluster_ids = nonzero_clusters
