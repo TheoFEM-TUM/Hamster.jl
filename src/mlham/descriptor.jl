@@ -400,41 +400,38 @@ function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alph
     Random.seed!(1234)
     w_strc = descriptors_w[end, :]
     unique_descriptors = descriptors_w[1:end-1, :]
+
     Np = size(unique_descriptors, 2)
     if Npoints < Np
+        #w_strc = descriptors_w[end, :]
         result = Logging.with_logger(NullLogger()) do
             kmeans(standardize_rows(unique_descriptors), Ncluster; weights=w_strc)
         end
         indices = result.assignments
         centroids = result.centers .* std(unique_descriptors, dims=2) .+ mean(unique_descriptors, dims=2)
+
         cluster_sizes = zeros(Float64, Ncluster)
         for i in eachindex(indices)
             cluster_sizes[indices[i]] += w_strc[i]
         end
         cluster_sizes = ceil.(cluster_sizes)
+
         cluster_variances = [mean([normdiff(unique_descriptors[:, i], centroids[:, c]) for i in findall(x -> x == c, indices)]) for c in 1:Ncluster]
+
         nonzero_clusters = findall(s -> s != 0, cluster_sizes)
         cluster_ids = nonzero_clusters
         cluster_sizes = cluster_sizes[cluster_ids]
         cluster_variances = cluster_variances[cluster_ids]
 
-        size_total = sum(cluster_sizes)
-        size_weights = size_total > 0 ?
-            cluster_sizes ./ size_total :
-            fill(1 / length(cluster_sizes), length(cluster_sizes))
-
-        variance_total = sum(cluster_variances)
-        spread_weights = variance_total > 0 ?
-            cluster_variances ./ variance_total :
-            fill(1 / length(cluster_variances), length(cluster_variances))
-
+        size_weights = cluster_sizes ./ sum(cluster_sizes)
+        spread_weights = cluster_variances ./ sum(cluster_variances)
         final_weights = alpha .* size_weights + (1 - alpha) .* spread_weights
         final_weights ./= sum(final_weights)
-        @assert !any(isnan, final_weights) "final_weights contains NaN — check cluster_variances/cluster_sizes upstream"
 
         points_per_cluster = round.(Int, final_weights .* Npoints)
         points_per_cluster .= max.(1, points_per_cluster)
         points_per_cluster .= min.(cluster_sizes, points_per_cluster)
+
         diff = Npoints - sum(points_per_cluster)
         if diff != 0
             sorted_clusters = sortperm(final_weights, rev=true)
@@ -448,21 +445,26 @@ function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alph
         for (i, cid) in enumerate(cluster_ids)
             cluster_indices = findall(x -> x == cid, indices)
             num_to_take = min(points_per_cluster[i], length(cluster_indices))
+
             selected = Int64[]
             if ml_sampling[1] == 'r'
                 selected = sample(cluster_indices, num_to_take, replace=false)
             elseif ml_sampling[1] == 'f'
                 selected = farthest_point_sampling(unique_descriptors, cluster_indices, num_to_take)
             end
+
             append!(selected_indices, selected)
         end
+
         selected_indices = unique(selected_indices)
+
     end
     selected_indices = Npoints >= Np ? collect(1:Np) : selected_indices
+
     Random.seed!()
+
     return SVector{size(unique_descriptors, 1), Float64}[SVector{size(unique_descriptors, 1)}(unique_descriptors[:, index]) for index in selected_indices]
 end
-
 function sample_structure_descriptors_random(descriptors; Npoints=1)
     Random.seed!(1234)
 
