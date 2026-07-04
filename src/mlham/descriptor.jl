@@ -391,12 +391,16 @@ end
 function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random")
     #d × n
     Random.seed!(1234)
-    valid = vec(all(isfinite, descriptors_w; dims=1))
-    descriptors_w = descriptors_w[:, valid]
+    weights = descriptors_w[end, :]
     unique_descriptors = descriptors_w[1:end-1, :]
+
+    valid = vec(all(isfinite, unique_descriptors; dims=1)) .& isfinite.(weights)
+
+    unique_descriptors = unique_descriptors[:, valid]
+    w_strc = weights[valid]
     Np = size(unique_descriptors, 2)
     if Npoints < Np
-        w_strc = descriptors_w[end, :]
+        #w_strc = descriptors_w[end, :]
         result = Logging.with_logger(NullLogger()) do
             kmeans(unique_descriptors, Ncluster; weights=w_strc)
         end
