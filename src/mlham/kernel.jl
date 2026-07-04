@@ -165,7 +165,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                     Ncluster = Ncluster,
                     Npoints = Npoints,
                     ml_sampling = get_ml_sampling(conf),
-                    dim_weigthts = get_dim_weights(conf)
+                    dim_weights = get_dim_weights(conf)
                 )
 
             else
@@ -184,7 +184,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                 #N_points_single = Npoints
                 #Ncluster_single = Ncluster
                 N_points_vec[i] = N_points_single
-                data_points_local[i] = sample_structure_descriptors(strc_descriptors, Ncluster=Ncluster_single, Npoints=N_points_single, ml_sampling=get_ml_sampling(conf), dim_weigthts=get_dim_weights(conf))
+                data_points_local[i] = sample_structure_descriptors(strc_descriptors, Ncluster=Ncluster_single, Npoints=N_points_single, ml_sampling=get_ml_sampling(conf), dim_weights=get_dim_weights(conf))
                 #println(size(data_points_local[i]))
                 system = systems[i]
                 @info "$system Sampling data points using clustering single strategy with Ncluster = $Ncluster_single and Npoints_local_total = $N_points_single"
@@ -259,7 +259,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                     tmap!(data_points_local, 1:N_key) do n
                         Np, Nc = Np_Nc_dict[keys_list[n]]
                         #println("Sampling key: ", keys_list[n], " with Np = ", Np, " and Nc = ", Nc)
-                        sample_structure_descriptors(sub_descr[keys_list[n]], Ncluster=Nc, Npoints=Np, ml_sampling=get_ml_sampling(conf), dim_weigthts=get_dim_weights(conf))      
+                        sample_structure_descriptors(sub_descr[keys_list[n]], Ncluster=Nc, Npoints=Np, ml_sampling=get_ml_sampling(conf), dim_weights=get_dim_weights(conf))      
                     end
                     data_points_local = reduce(vcat, data_points_local)
                 end
