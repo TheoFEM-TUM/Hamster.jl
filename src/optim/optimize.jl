@@ -89,7 +89,8 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     end
     lr_log = optim.adam.eta
 
-    Nstrc_tot = MPI.Reduce(length(indices), +, comm, root=0)
+    #Nstrc_tot = MPI.Reduce(length(indices), +, comm, root=0)
+    Nstrc_tot = MPI.Allreduce(length(indices), +, comm)
     forward_times = Float64[]
     backward_times = Float64[]
     Ls_train = Float64[]
@@ -105,8 +106,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         push!(Ls_train, L_train)
         push!(Ls_train_MAE, L_train_MAE)
     end
-    L_train_sum = MPI.Reduce(sum(Ls_train), +, comm, root=0)
-    MPI.Bcast!(L_train_sum, comm, root=0)
+    L_train_sum = MPI.Allreduce(sum(Ls_train), +, comm)
     L_trains_weights = Ls_train ./ (L_train_sum / Nstrc_tot)
     Ls_train .*= L_trains_weights
 
@@ -204,12 +204,11 @@ Evaluates the validation loss for a Hamiltonian model over a given validation da
 """
 function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1, valeachiter=valeachiter)
     val_begin = MPI.Wtime()
-    Nstrc_tot = MPI.Reduce(length(indices), +, comm, root=0)
+    Nstrc_tot = MPI.Allreduce(length(indices), +, comm)
     Ls_val = map(1:ham_val.Nstrc) do index
         forward(ham_val, index, losses[index], val_data[index])[1] / ham_val.Nstrc
     end
-    Ls_val_sum = MPI.Reduce(sum(Ls_val) * ham_val.Nstrc, +, comm, root=0)
-    MPI.Bcast!(Ls_val_sum, comm, root=0)
+    Ls_val_sum = MPI.Allreduce(sum(Ls_val) * ham_val.Nstrc, +, comm)
     Ls_val_weights = Ls_val ./ (Ls_val_sum / Nstrc_tot)
     Ls_val .*= Ls_val_weights
     Ls_val_MAE = map(1:ham_val.Nstrc) do index
