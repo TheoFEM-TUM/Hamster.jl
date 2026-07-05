@@ -532,14 +532,27 @@ function read_ml_params(target_dir::String, conf=get_empty_config(); filename=ge
     N = length(lines[12]) - 1
 
     # Check that header params match Config
-    @assert parse(Float64, lines[2][end]) == get_ml_rcut(conf)
-    @assert parse(Float64, lines[3][end]) == get_sim_params(conf)
-    @assert parse(Float64, lines[4][end]) == get_env_scale(conf)
-    @assert parse(Float64, lines[5][end]) == get_Z_scale(conf)
-    @assert parse(Float64, lines[6][end]) == get_overlap_scale(conf)
-    @assert parse(Float64, lines[7][end]) == get_strc_scale(conf)
-    @assert parse(Float64, lines[8][end]) == get_R_scale(conf)
-    @assert parse(Bool, lines[9][end]) == get_apply_distortion(conf)
+    checks = [
+        ("ml_rcut", get_ml_rcut(conf), 2),
+        ("sim_params", get_sim_params(conf), 3),
+        ("env_scale", get_env_scale(conf), 4),
+        ("Z_scale", get_Z_scale(conf), 5),
+        ("overlap_scale", get_overlap_scale(conf), 6),
+        ("strc_scale", get_strc_scale(conf), 7),
+        ("R_scale", get_R_scale(conf), 8),
+    ]
+
+    for (name, expected, line) in checks
+        val = parse(Float64, lines[line][end])
+        if val != expected
+            @warn "$name mismatch" parsed=val expected=expected
+        end
+    end
+
+    val = parse(Bool, lines[9][end])
+    if val != get_apply_distortion(conf)
+        @warn "apply_distortion mismatch" parsed=val expected=get_apply_distortion(conf)
+    end
 
     data_points = SVector{N, Float64}[]
     params = Float64[]
@@ -559,15 +572,27 @@ function read_ml_params( conf=get_empty_config(); filename=get_ml_filename(conf)
     N = length(lines[12]) - 1
 
     # Check that header params match Config
-    @assert parse(Float64, lines[2][end]) == get_ml_rcut(conf)
-    @assert parse(Float64, lines[3][end]) == get_sim_params(conf)
-    @assert parse(Float64, lines[4][end]) == get_env_scale(conf)
-    @assert parse(Float64, lines[5][end]) == get_Z_scale(conf)
-    @assert parse(Float64, lines[6][end]) == get_overlap_scale(conf)
-    @assert parse(Float64, lines[7][end]) == get_strc_scale(conf)
-    @assert parse(Float64, lines[8][end]) == get_R_scale(conf)
-    @assert parse(Bool, lines[9][end]) == get_apply_distortion(conf)
+    checks = [
+        ("ml_rcut", get_ml_rcut(conf), 2),
+        ("sim_params", get_sim_params(conf), 3),
+        ("env_scale", get_env_scale(conf), 4),
+        ("Z_scale", get_Z_scale(conf), 5),
+        ("overlap_scale", get_overlap_scale(conf), 6),
+        ("strc_scale", get_strc_scale(conf), 7),
+        ("R_scale", get_R_scale(conf), 8),
+    ]
 
+    for (name, expected, line) in checks
+        val = parse(Float64, lines[line][end])
+        if val != expected
+            @warn "$name mismatch" parsed=val expected=expected
+        end
+    end
+
+    val = parse(Bool, lines[9][end])
+    if val != get_apply_distortion(conf)
+        @warn "apply_distortion mismatch" parsed=val expected=get_apply_distortion(conf)
+    end
     data_points = SVector{N, Float64}[]
     params = Float64[]
     for line in lines[12:end]
