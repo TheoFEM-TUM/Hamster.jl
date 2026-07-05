@@ -95,10 +95,24 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     Ls_train = Float64[]
     Ls_train_MAE = Float64[]
 
-    dL_dHr = map(indices) do index
+    N = length(indices)
+    caches = Vector{Any}(undef, N)
+    L_trains_weights = Vector{Float64}(undef, N)
+    for (i, index) in enumerate(indices)
         f_time = @elapsed L_train, cache, L_train_MAE = forward(ham_train, index, optim.losses[index], train_data[index])
-        b_time = @elapsed dL_dHr_index = backward(ham_train, index, optim.losses[index], train_data[index], cache, conf)
-        push!(forward_times, f_time); push!(backward_times, b_time); push!(Ls_train, L_train); push!(Ls_train_MAE, L_train_MAE)
+        caches[i] = cache
+        push!(forward_times, f_time)
+        push!(Ls_train, L_train)
+        push!(Ls_train_MAE, L_train_MAE)
+    end
+    L_train_sum = MPI.Reduce(sum(Ls_train), +, comm, root=0)
+    MPI.Bcast!(L_train_sum, comm, root=0)
+    L_trains_weights = Ls_train ./ (L_train_sum / Nstrc_tot)
+    Ls_train .*= L_trains_weights
+
+    dL_dHr = map(enumerate(indices)) do (i, index)
+        b_time = @elapsed dL_dHr_index = backward(L_trains_weights[i], ham_train, index, optim.losses[index], train_data[index], caches[i], conf)
+        push!(backward_times, b_time)
         return dL_dHr_index
     end
     
@@ -190,9 +204,14 @@ Evaluates the validation loss for a Hamiltonian model over a given validation da
 """
 function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1, valeachiter=valeachiter)
     val_begin = MPI.Wtime()
+    Nstrc_tot = MPI.Reduce(length(indices), +, comm, root=0)
     Ls_val = map(1:ham_val.Nstrc) do index
         forward(ham_val, index, losses[index], val_data[index])[1] / ham_val.Nstrc
     end
+    Ls_val_sum = MPI.Reduce(sum(Ls_val) * ham_val.Nstrc, +, comm, root=0)
+    MPI.Bcast!(Ls_val_sum, comm, root=0)
+    Ls_val_weights = Ls_val ./ (Ls_val_sum / Nstrc_tot)
+    Ls_val .*= Ls_val_weights
     Ls_val_MAE = map(1:ham_val.Nstrc) do index
         forward(ham_val, index, losses[index], val_data[index])[3] / ham_val.Nstrc
     end
@@ -276,9 +295,9 @@ The function behavior varies depending on the type of `data`, which can be eithe
 # Returns
 - `gradient`: The computed gradient of the loss with respect to the parameters of `ham`.
 """
-function backward(ham::EffectiveHamiltonian, index, loss, data::EigData, cache, conf=get_empty_config(); nthreads_kpoints=get_nthreads_kpoints(conf), nthreads_bands=get_nthreads_bands(conf))
+function backward(L_train_weight::Float64, ham::EffectiveHamiltonian, index, loss, data::EigData, cache, conf=get_empty_config(); nthreads_kpoints=get_nthreads_kpoints(conf), nthreads_bands=get_nthreads_bands(conf))
     Es_tb, vs = cache
-    dL_dE = backward(loss, Es_tb, data.Es)
+    dL_dE = backward(loss, Es_tb, data.Es) .* L_train_weight
     dE_dHr = get_eigenvalue_gradient(vs, ham.Rs[index], data.kp, ham.sp_mode, ham.sp_iterators[index], nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=ham.sp_tol)
     dL_dHr = chain_rule(dL_dE, dE_dHr, ham.sp_mode, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=ham.sp_tol)
     return dL_dHr
