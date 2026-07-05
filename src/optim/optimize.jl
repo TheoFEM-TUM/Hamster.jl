@@ -243,7 +243,7 @@ function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1
     if rank == 0
         prof.val_times[iter] = val_time ./ nranks
         prof.L_val[iter-valeachiter+1:iter] .= L_val ./ Nstrc_tot
-        prof.L_val_MAE[iter-valeachiter+1:iter] .= L_val_MAE ./ N_strc_tot
+        prof.L_val_MAE[iter-valeachiter+1:iter] .= L_val_MAE ./ Nstrc_tot
     end
 end
 
