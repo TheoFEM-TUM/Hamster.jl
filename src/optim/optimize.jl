@@ -204,7 +204,7 @@ Evaluates the validation loss for a Hamiltonian model over a given validation da
 """
 function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1, valeachiter=valeachiter)
     val_begin = MPI.Wtime()
-    Nstrc_tot = MPI.Allreduce(length(indices), +, comm)
+    Nstrc_tot = MPI.Allreduce(ham_val.Nstrc, +, comm)
     Ls_val = map(1:ham_val.Nstrc) do index
         forward(ham_val, index, losses[index], val_data[index])[1] / ham_val.Nstrc
     end
