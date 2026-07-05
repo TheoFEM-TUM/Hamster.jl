@@ -530,7 +530,7 @@ function read_ml_params(target_dir::String, conf=get_empty_config(); filename=ge
     lines = open_and_read(joinpath(target_dir, filename))
     lines = split_lines(lines)
     N = length(lines[12]) - 1
-
+    warn_yes = get_hyperopt_niter(conf) < 2
     # Check that header params match Config
     checks = [
         ("ml_rcut", get_ml_rcut(conf), 2),
@@ -544,13 +544,13 @@ function read_ml_params(target_dir::String, conf=get_empty_config(); filename=ge
 
     for (name, expected, line) in checks
         val = parse(Float64, lines[line][end])
-        if val != expected
+        if val != expected && warn_yes
             @warn "$name mismatch" parsed=val expected=expected
         end
     end
 
     val = parse(Bool, lines[9][end])
-    if val != get_apply_distortion(conf)
+    if val != get_apply_distortion(conf) && warn_yes
         @warn "apply_distortion mismatch" parsed=val expected=get_apply_distortion(conf)
     end
 
@@ -570,7 +570,7 @@ function read_ml_params( conf=get_empty_config(); filename=get_ml_filename(conf)
     lines = open_and_read(filename)
     lines = split_lines(lines)
     N = length(lines[12]) - 1
-
+    warn_yes = get_hyperopt_niter(conf) < 2
     # Check that header params match Config
     checks = [
         ("ml_rcut", get_ml_rcut(conf), 2),
@@ -584,13 +584,13 @@ function read_ml_params( conf=get_empty_config(); filename=get_ml_filename(conf)
 
     for (name, expected, line) in checks
         val = parse(Float64, lines[line][end])
-        if val != expected
+        if val != expected && warn_yes
             @warn "$name mismatch" parsed=val expected=expected
         end
     end
 
     val = parse(Bool, lines[9][end])
-    if val != get_apply_distortion(conf)
+    if val != get_apply_distortion(conf) && warn_yes
         @warn "apply_distortion mismatch" parsed=val expected=get_apply_distortion(conf)
     end
     data_points = SVector{N, Float64}[]
