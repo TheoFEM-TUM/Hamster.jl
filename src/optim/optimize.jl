@@ -206,13 +206,13 @@ function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1
     val_begin = MPI.Wtime()
     Nstrc_tot = MPI.Allreduce(ham_val.Nstrc, +, comm)
     Ls_val = map(1:ham_val.Nstrc) do index
-        forward(ham_val, index, losses[index], val_data[index])[1] / ham_val.Nstrc
+        forward(ham_val, index, losses[index], val_data[index])[1] 
     end
     Ls_val_sum = MPI.Allreduce(sum(Ls_val) * ham_val.Nstrc, +, comm)
     Ls_val_weights = Ls_val ./ (Ls_val_sum / Nstrc_tot)
     Ls_val .*= Ls_val_weights
     Ls_val_MAE = map(1:ham_val.Nstrc) do index
-        forward(ham_val, index, losses[index], val_data[index])[3] / ham_val.Nstrc
+        forward(ham_val, index, losses[index], val_data[index])[3] 
     end
 
     all_systems = MPI.gather(ham_val.systems, comm, root=0)
@@ -242,8 +242,8 @@ function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1
     L_val_MAE = MPI.Reduce(sum(Ls_val_MAE), +, comm, root=0)
     if rank == 0
         prof.val_times[iter] = val_time ./ nranks
-        prof.L_val[iter-valeachiter+1:iter] .= L_val ./ nranks
-        prof.L_val_MAE[iter-valeachiter+1:iter] .= L_val_MAE ./ nranks
+        prof.L_val[iter-valeachiter+1:iter] .= L_val ./ Nstrc_tot
+        prof.L_val_MAE[iter-valeachiter+1:iter] .= L_val_MAE ./ N_strc_tot
     end
 end
 
