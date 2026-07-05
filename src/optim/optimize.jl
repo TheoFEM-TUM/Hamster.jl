@@ -208,7 +208,7 @@ function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1
     Ls_val = map(1:ham_val.Nstrc) do index
         forward(ham_val, index, losses[index], val_data[index])[1] 
     end
-    Ls_val_sum = MPI.Allreduce(sum(Ls_val) * ham_val.Nstrc, +, comm)
+    Ls_val_sum = MPI.Allreduce(sum(Ls_val), +, comm)
     Ls_val_weights = Ls_val ./ (Ls_val_sum / Nstrc_tot)
     Ls_val .*= Ls_val_weights
     Ls_val_MAE = map(1:ham_val.Nstrc) do index
