@@ -340,7 +340,7 @@ end
 """Distribute `total` across weighted `weights`, respecting per-key `caps`.
 Excess from capped keys is redistributed to uncapped keys in proportion
 to their weights, iterated until stable."""
-function water_fill(total::Real, weights::Vector{Float64}, caps::Vector{<:Real})
+function water_fill_capped(total::Real, weights::Vector{Float64}, caps::Vector{<:Real})
     n = length(weights)
     alloc = zeros(Float64, n)
     remaining_idx = collect(1:n)
@@ -363,7 +363,30 @@ function water_fill(total::Real, weights::Vector{Float64}, caps::Vector{<:Real})
     return alloc
 end
 
-function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_alpha(conf), Nc_min = get_nc_min(conf), Nc_max = get_nc_max(conf), Nc_ratio = get_nc_ratio(conf))
+"""Distribute `total` across weighted `weights`, respecting per-key `caps`
+and `floors` (each key gets at least `floors[i]`, at most `caps[i]`).
+Floors are guaranteed first; remaining budget is water-filled by weight
+into the headroom (`caps .- floors`) above each floor."""
+function water_fill(total::Real, weights::Vector{Float64}, caps::Vector{<:Real},
+                     floors::Vector{<:Real} = zeros(length(weights)))
+    @assert all(floors .<= caps) "each floor must be <= its cap"
+
+    baseline = float.(floors)
+    surplus_total = float(total) - sum(baseline)
+    surplus_caps = float.(caps) .- baseline
+
+    if surplus_total <= 0
+        if surplus_total < 0
+            @warn "Total ($total) insufficient to cover floor sum ($(sum(baseline))); returning floors, caps may be violated relative to total"
+        end
+        return baseline
+    end
+
+    surplus_alloc = water_fill_capped(surplus_total, weights, surplus_caps)
+    return baseline .+ surplus_alloc
+end
+
+function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_alpha(conf), Nc_min = get_nc_min(conf), Nc_max = get_nc_max(conf))
     verbosity = get_verbosity(conf)
     keys_list = collect(keys(descr_dict))
     N_key = length(keys_list)
@@ -379,21 +402,14 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
     Nc_vec = zeros(Int, N_key)
     Np_vec = zeros(Int, N_key)
     N_ratio = Npoints / Ncluster
-    if Nc_min < 0
-        Nc_caps = Nc_max > 0 ? fill(Float64(Nc_max), N_key) : fill(Inf, N_key)
-        Nc_vec .= ceil.(Int, water_fill(Float64(Ncluster), descr_weights, Nc_caps))
 
-        Np_caps = Float64.(Nc_vec .* 10)
-        Np_vec .= ceil.(Int, water_fill(Float64(Npoints), descr_weights, Np_caps))
-        Np_vec .=  ceil.(Int, Nc_vec .* N_ratio)
-    else
-        for n in eachindex(keys_list)
-            N_descr = size(descr_dict[keys_list[n]], 2)
-            Nc = ceil(Int, max(Nc_min, N_descr * Nc_ratio))
-            Nc_vec[n] = ceil(Int, min(Nc_max, Nc))
-            Np_vec[n] = ceil(Int, Nc_vec[n] * N_ratio)
-        end
-    end
+    Nc_caps = Nc_max > 0 ? fill(Float64(Nc_max), N_key) : fill(Inf, N_key)
+    Nc_floors = Nc_min > 0 ? fill(Float64(Nc_min), N_key) : zeros(Float64, N_key)
+    Nc_vec .= ceil.(Int, water_fill(Float64(Ncluster), descr_weights, Nc_caps, Nc_floors))
+
+    #Np_caps = Float64.(Nc_vec .* 10)
+    #Np_vec .= ceil.(Int, water_fill(Float64(Npoints), descr_weights, Np_caps))
+    Np_vec .=  ceil.(Int, Nc_vec .* N_ratio)
 
     np_nc_dict = Dict{Tuple{Int, Int, Int}, Tuple{Int, Int}}()
     Np_total = 0
