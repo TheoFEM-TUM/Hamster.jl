@@ -437,7 +437,7 @@ function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alph
     if Npoints < Np
         #w_strc = descriptors_w[end, :]
         result = Logging.with_logger(NullLogger()) do
-            kmeans(unique_descriptors, Ncluster; weights=w_strc, distance=WeightedSqEuclidean(dw.^2))
+            kmeans(unique_descriptors, Ncluster; weights=w_strc, distance=WeightedSqEuclidean(dw.^2), maxiter=50,init=:kmpp)
         end
         indices = result.assignments
         centroids = result.centers
