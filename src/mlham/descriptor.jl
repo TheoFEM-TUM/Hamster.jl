@@ -337,16 +337,37 @@ function get_descriptor_weights(Np_per_strc, weight_factor = -1.0)
     return w_strc
 end
 
-function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_alpha(conf), Nc_min = get_nc_min(conf), Nc_max = get_nc_max(conf), Nc_ratio = get_nc_ratio(conf))
-    #alpha = 0.5
-    verbosity = get_verbosity(conf)
-    N_key = length(keys(descr_dict))
-    keys_list = []
-    for key in keys(descr_dict)
-        push!(keys_list, key)
-        #println(keys_list[end])
+"""Distribute `total` across weighted `weights`, respecting per-key `caps`.
+Excess from capped keys is redistributed to uncapped keys in proportion
+to their weights, iterated until stable."""
+function water_fill(total::Real, weights::Vector{Float64}, caps::Vector{<:Real})
+    n = length(weights)
+    alloc = zeros(Float64, n)
+    remaining_idx = collect(1:n)
+    remaining_total = float(total)
+    remaining_weight = sum(weights)
+
+    while !isempty(remaining_idx) && remaining_weight > 0
+        for i in remaining_idx
+            alloc[i] = remaining_total * weights[i] / remaining_weight
+        end
+        over_cap = [i for i in remaining_idx if alloc[i] > caps[i]]
+        isempty(over_cap) && break
+        for i in over_cap
+            alloc[i] = caps[i]
+            remaining_total -= caps[i]
+            remaining_weight -= weights[i]
+        end
+        remaining_idx = setdiff(remaining_idx, over_cap)
     end
+    return alloc
+end
+
+function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_alpha(conf), Nc_min = get_nc_min(conf), Nc_max = get_nc_max(conf), Nc_ratio = get_nc_ratio(conf))
+    verbosity = get_verbosity(conf)
+    keys_list = collect(keys(descr_dict))
     N_key = length(keys_list)
+
     descr_weights = zeros(Float64, N_key)
     tforeach(eachindex(keys_list)) do n
         weights = fweights(descr_dict[keys_list[n]][end, :])
@@ -354,13 +375,29 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
         descr_weights[n] = sum([var(descr[i, :], weights) for i in 1:size(descr, 1)]) * alpha + sum(weights) * (1 - alpha)
     end
     descr_weights ./= sum(descr_weights)
+
+    Nc_vec = zeros(Int, N_key)
+    Np_vec = zeros(Int, N_key)
+
+    if Nc_min < 0
+        Nc_caps = Nc_max > 0 ? fill(Float64(Nc_max), N_key) : fill(Inf, N_key)
+        Nc_vec .= ceil.(Int, water_fill(Float64(Ncluster), descr_weights, Nc_caps))
+
+        Np_caps = Float64.(Nc_vec .* 10)
+        Np_vec .= ceil.(Int, water_fill(Float64(Npoints), descr_weights, Np_caps))
+    else
+        for n in eachindex(keys_list)
+            N_descr = size(descr_dict[keys_list[n]], 2)
+            Nc = ceil(Int, max(Nc_min, N_descr * Nc_ratio))
+            Nc_vec[n] = ceil(Int, min(Nc_max, Nc))
+            Np_vec[n] = ceil(Int, Nc_vec[n] * 5)
+        end
+    end
+
     np_nc_dict = Dict{Tuple{Int, Int, Int}, Tuple{Int, Int}}()
     Np_total = 0
     Ncluster_total = 0
     for n in eachindex(keys_list)
-        N_descr = size(descr_dict[keys_list[n]], 2)
-        #Np = ceil(Int,max(1, Npoints * descr_weights[n]))
-        #Nc = ceil(Int,max(1, Ncluster * descr_weights[n]))
         key_tuple = keys_list[n]
         key_overlap, key_Z1, key_Z2 = key_tuple[1], key_tuple[2], key_tuple[3]
         N_overlap_ids = length(orbital_pairs)
@@ -369,24 +406,12 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
         element_label_1 = elements[key_Z1].symbol
         element_label_2 = elements[key_Z2].symbol
         overlap_label = orbital_id_to_pairs[true_key_overlap]
-        #Nc_min = 10
-        #Nc_max = 200
-
-        if Nc_min < 0
-            Nc = ceil(Int, Ncluster * descr_weights[n])
-            Np = ceil(Int, Npoints * descr_weights[n])
-            if Nc_max > 0
-                Nc = min(Nc_max, Nc)
-                Np = min(Np, Nc * 10)
-            end
-        else
-            Nc = ceil(Int, max(Nc_min, N_descr * Nc_ratio))
-            Nc = ceil(Int, min(Nc_max, Nc))
-            Np = ceil(Int, Nc * 5)
-        end
-
         same_ion_label = same_ion ? "DI" : "NN"
         label = "$element_label_1-$element_label_2-$(overlap_label[1])-$(overlap_label[2])-$same_ion_label"
+
+        Nc = Nc_vec[n]
+        Np = Np_vec[n]
+        N_descr = size(descr_dict[keys_list[n]], 2)
         if verbosity>1; @info "Overlap: $label, N_descr: $N_descr, Nc : $Nc" ; end
         @assert Np >= Nc
         Np_total += Np
