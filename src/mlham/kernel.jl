@@ -254,16 +254,17 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                     N_key = length(keys_list)
 
                     Np_Nc_dict = calc_npoint_ncluster(sub_descr, Npoints, Ncluster, conf)
-
-                    data_points_local = Vector{Any}(undef, N_key)
                     
+                    data_points_local = Vector{Any}(undef, N_key)
+
                     N_key_finished = Threads.Atomic{Int}(0)
 
                     tmap!(data_points_local, 1:N_key) do n
                         Np, Nc = Np_Nc_dict[keys_list[n]]
 
+                        result = nothing
                         elapsed = @elapsed begin
-                            sample_structure_descriptors(
+                            result = sample_structure_descriptors(
                                 sub_descr[keys_list[n]],
                                 Ncluster=Nc,
                                 Npoints=Np,
@@ -275,6 +276,8 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                         finished = Threads.atomic_add!(N_key_finished, 1) + 1
 
                         @info "Thread $(Threads.threadid()) finished key $(keys_list[n]) in $(round(elapsed, digits=2)) s. ($finished / $N_key)"
+
+                        result
                     end
                     
                     data_points_local = reduce(vcat, data_points_local)
