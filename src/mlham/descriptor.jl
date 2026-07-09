@@ -378,19 +378,20 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
 
     Nc_vec = zeros(Int, N_key)
     Np_vec = zeros(Int, N_key)
-
+    N_ratio = Npoints / Ncluster
     if Nc_min < 0
         Nc_caps = Nc_max > 0 ? fill(Float64(Nc_max), N_key) : fill(Inf, N_key)
         Nc_vec .= ceil.(Int, water_fill(Float64(Ncluster), descr_weights, Nc_caps))
 
         Np_caps = Float64.(Nc_vec .* 10)
         Np_vec .= ceil.(Int, water_fill(Float64(Npoints), descr_weights, Np_caps))
+        Np_vec .=  ceil.(Int, Nc_vec .* N_ratio)
     else
         for n in eachindex(keys_list)
             N_descr = size(descr_dict[keys_list[n]], 2)
             Nc = ceil(Int, max(Nc_min, N_descr * Nc_ratio))
             Nc_vec[n] = ceil(Int, min(Nc_max, Nc))
-            Np_vec[n] = ceil(Int, Nc_vec[n] * 5)
+            Np_vec[n] = ceil(Int, Nc_vec[n] * N_ratio)
         end
     end
 
