@@ -372,11 +372,14 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
         #Nc_min = 10
         #Nc_max = 200
 
-        Nc = ceil(Int, max(Nc_min, N_descr * Nc_ratio))
-        Nc = ceil(Int, min(Nc_max, Nc))
-        #Nc = 50
-        Np = ceil(Int, Nc * 5)
-        #Np = 250
+        if Nc_max < 1
+            Nc = ceil(Int, Ncluster * descr_weights[n])
+            Np = ceil(Int, Npoints * descr_weights[n])
+        else
+            Nc = ceil(Int, max(Nc_min, N_descr * Nc_ratio))
+            Nc = ceil(Int, min(Nc_max, Nc))
+            Np = ceil(Int, Nc * 5)
+        end
 
         same_ion_label = same_ion ? "DI" : "NN"
         label = "$element_label_1-$element_label_2-$(overlap_label[1])-$(overlap_label[2])-$same_ion_label"
