@@ -263,12 +263,9 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                     end, rev = true)
 
                     data_points_local = Vector{Any}(undef, N_key)
-
                     N_key_finished = Threads.Atomic{Int}(0)
-
-                    tmap!(data_points_local, 1:N_key) do n
+                    tmap!(data_points_local, 1:N_key; scheduler = GreedyScheduler()) do n
                         Np, Nc = Np_Nc_dict[keys_list[n]]
-
                         result = nothing
                         elapsed = @elapsed begin
                             result = sample_structure_descriptors(
@@ -279,14 +276,11 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                                 dim_weights=get_dim_weights(conf)
                             )
                         end
-
                         finished = Threads.atomic_add!(N_key_finished, 1) + 1
-
                         @info "Thread $(Threads.threadid()) finished key $(keys_list[n]) with Nc=$Nc in $(round(elapsed, digits=2)) s. ($finished / $N_key)"
-
                         result
                     end
-                    
+                                        
                     data_points_local = reduce(vcat, data_points_local)
                 end
                 println("Sampling data points using split strategy finished in $time s.")
