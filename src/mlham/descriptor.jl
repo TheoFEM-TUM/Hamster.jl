@@ -372,9 +372,13 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
         #Nc_min = 10
         #Nc_max = 200
 
-        if Nc_max < 1
+        if Nc_min < 0
             Nc = ceil(Int, Ncluster * descr_weights[n])
             Np = ceil(Int, Npoints * descr_weights[n])
+            if Nc_max > 0
+                Nc = min(Nc_max, Nc)
+                Np = min(Np, Nc * 10)
+            end
         else
             Nc = ceil(Int, max(Nc_min, N_descr * Nc_ratio))
             Nc = ceil(Int, min(Nc_max, Nc))

@@ -105,7 +105,7 @@ get_weight_factor(conf::Config)::Float64 = conf("weight_factor", "ML") == "defau
 get_kernel_chunk_size(conf::Config)::Int64 = conf("kernel_chunk_size", "ML") == "default" ? 50000 : conf("kernel_chunk_size", "ML")
 
 get_alpha(conf::Config)::Float64 = conf("alpha", "ML") == "default" ? 0.5 : conf("alpha", "ML")
-get_nc_min(conf::Config)::Float64 = conf("nc_min", "ML") == "default" ? 1 : conf("nc_min", "ML")
+get_nc_min(conf::Config)::Float64 = conf("nc_min", "ML") == "default" ? -1 : conf("nc_min", "ML")
 get_nc_max(conf::Config)::Float64 = conf("nc_max", "ML") == "default" ? 0 : conf("nc_max", "ML")
 get_nc_ratio(conf::Config)::Float64 = conf("nc_ratio", "ML") == "default" ? 0.1 : conf("nc_ratio", "ML")
 #get_ml_kernel_features_file(conf::Config)::String = conf("kernel_features_file", "ML") == "default" ? "ml_kernel_features.h5" : conf("kernel_features_file", "ML")
