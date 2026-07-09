@@ -256,10 +256,13 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                     Np_Nc_dict = calc_npoint_ncluster(sub_descr, Npoints, Ncluster, conf)
 
                     data_points_local = Vector{Any}(undef, N_key)
+                    N_key_finshed = 0
                     tmap!(data_points_local, 1:N_key) do n
                         Np, Nc = Np_Nc_dict[keys_list[n]]
                         #println("Sampling key: ", keys_list[n], " with Np = ", Np, " and Nc = ", Nc)
-                        sample_structure_descriptors(sub_descr[keys_list[n]], Ncluster=Nc, Npoints=Np, ml_sampling=get_ml_sampling(conf), dim_weights=get_dim_weights(conf))      
+                        sample_structure_descriptors(sub_descr[keys_list[n]], Ncluster=Nc, Npoints=Np, ml_sampling=get_ml_sampling(conf), dim_weights=get_dim_weights(conf))   
+                        N_key_finshed += 1
+                        @info "Sampling key: $(keys_list[n]) finished. $N_key_finshed / $N_key keys finished."   
                     end
                     data_points_local = reduce(vcat, data_points_local)
                 end
