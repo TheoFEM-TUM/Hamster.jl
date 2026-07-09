@@ -251,14 +251,16 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                         push!(keys_list, key)
                         #println(keys_list[end])
                     end
-                    sort!(keys_list; by = k -> begin
-                        Np, Nc = Np_Nc_dict[k]
-                        Np * Nc      # or Nc^2, or whatever best predicts runtime
-                    end, rev = true)
+
                     N_key = length(keys_list)
 
                     Np_Nc_dict = calc_npoint_ncluster(sub_descr, Npoints, Ncluster, conf)
 
+                    sort!(keys_list; by = k -> begin
+                        Np, Nc = Np_Nc_dict[k]
+                        Np * Nc      # or Nc^2, or whatever best predicts runtime
+                    end, rev = true)
+                    
                     data_points_local = Vector{Any}(undef, N_key)
 
                     N_key_finished = Threads.Atomic{Int}(0)
