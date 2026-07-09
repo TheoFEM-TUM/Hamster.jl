@@ -258,7 +258,8 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
 
                     sort!(keys_list; by = k -> begin
                         Np, Nc = Np_Nc_dict[k]
-                        Nc      # or Nc^2, or whatever best predicts runtime
+                        N_descr = size(sub_descr[k])[2]
+                        Nc * N_descr      # or Nc^2, or whatever best predicts runtime
                     end, rev = true)
 
                     data_points_local = Vector{Any}(undef, N_key)
