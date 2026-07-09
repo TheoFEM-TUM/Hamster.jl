@@ -542,7 +542,7 @@ function farthest_point_sampling(descriptors, cluster_indices, num_to_take)
             last = selected[end]
 
             # --- Parallel distance update ---
-            tforeach(eachindex(cluster_indices)) do i
+            foreach(eachindex(cluster_indices)) do i
                 d = normdiff(descriptors[:, cluster_indices[i]], descriptors[:, last])
                 dists[i] = min(dists[i], d)
             end
