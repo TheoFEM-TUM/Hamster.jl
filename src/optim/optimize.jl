@@ -150,17 +150,6 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         MPI.Bcast!(params, comm, root=0)
         set_params!(model, params)
     end
-    warmup = max(10.0, warmup_ratio * optim.Niter)
-    if iter < warmup
-        lr_start = lr_warmup
-        x = iter / warmup
-        optim.adam.eta = lr_start * (lr / lr_start)^x
-        #optim.adam.eta = lr * iter / warmup
-    else
-        progress = (iter - warmup) / (optim.Niter - warmup)
-        optim.adam.eta =
-            lr_min + 0.5 * (lr - lr_min) * (1 + cos(π * progress))
-    end
     #optim.adam.eta = lr_min + 0.5 * (lr - lr_min) * (1 + cos(π * iter / optim.Niter))
     update_time_local = MPI.Wtime() - update_begin
 
