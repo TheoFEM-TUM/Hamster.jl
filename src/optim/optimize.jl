@@ -74,7 +74,9 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     lr=get_lr(conf),
     lr_min=get_lr_min(conf),
     verbosity=get_verbosity(conf),
-    warmup_ratio=get_warmup_ratio(conf))
+    warmup_ratio=get_warmup_ratio(conf),
+    lr_warmup=get_lr_warmup(conf)
+    )
 
     warmup = max(1.0, warmup_ratio * optim.Niter)
     if iter < warmup
@@ -150,7 +152,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     end
     warmup = max(10.0, warmup_ratio * optim.Niter)
     if iter < warmup
-        lr_start = lr_min * 0.01
+        lr_start = lr_warmup
         x = iter / warmup
         optim.adam.eta = lr_start * (lr / lr_start)^x
         #optim.adam.eta = lr * iter / warmup
