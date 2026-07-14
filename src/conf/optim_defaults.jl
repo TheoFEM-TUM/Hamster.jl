@@ -223,3 +223,5 @@ get_valeachiter(conf::Config)::Int64 = conf("valeachiter", "Optimizer") == "defa
 get_warmup_ratio(conf::Config)::Float64 = conf("warmup_ratio", "Optimizer") == "default" ? 0.0 : conf("warmup_ratio", "Optimizer")
 
 get_lr_warmup(conf::Config)::Float64 = conf("lr_warmup", "Optimizer") == "default" ? 0.00001 : conf("lr_warmup", "Optimizer")
+
+get_offset(conf::Config)::Bool = conf("offset", "Optimizer") == "default" ? true : conf("offset", "Optimizer")

@@ -17,10 +17,11 @@ struct Loss
     N :: Float64
     wStr :: Float64
     n :: Int64
+    offset :: Bool
 end
 
-Loss(wE::Vector{Float64}, wk::Vector{Float64}, n::Int64) = Loss(wE, wk, sum(wE)*sum(wk), 1., n)
-Loss(n::Int64) = Loss(Float64[], Float64[], 0, 1., n)
+Loss(wE::Vector{Float64}, wk::Vector{Float64}, n::Int64, offset::Bool) = Loss(wE, wk, sum(wE)*sum(wk), 1., n, offset)
+Loss(n::Int64) = Loss(Float64[], Float64[], 0, 1., n, true)
 """
     Loss(Nε, Nk; conf=get_empty_config(), loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk))
 
@@ -41,7 +42,7 @@ Create a `Loss` object with band weights, k-point weights, and loss norm based o
 # Returns
 - A `Loss` object initialized with the appropriate band weights (`wE`), k-point weights (`wk`), normalization factor, and loss norm (`n`).
 """
-function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk))
+function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk), offset = get_offset(conf))
     n = loss_to_n[loss]
 
     for key in keys(conf.blocks["Optimizer"])
@@ -53,7 +54,7 @@ function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band
             wE[index_range] .= conf(key, "Optimizer")
         end
     end
-    return Loss(wE, wk, n)
+    return Loss(wE, wk, n, offset)
 end
 
 Loss(conf=get_empty_config()) = Loss(loss_to_n[get_loss(conf)])
@@ -96,7 +97,7 @@ Compute the forward pass of the loss function given the true values `y` and the 
 """
 off = true
 min_delta = 0.0
-function forward(l::Loss, y, ŷ; offset = off)
+function forward(l::Loss, y, ŷ; offset = l.offset)
     Δy = y - ŷ
     if offset
         Δy = Δy .- mean(Δy)
@@ -120,7 +121,7 @@ function forward(l::Loss, y, ŷ; offset = off)
     end
 end
 
-function forward_MAE(l::Loss, y, ŷ; offset = off)
+function forward_MAE(l::Loss, y, ŷ; offset = l.offset)
     Δy = y - ŷ
     if offset
         Δy = Δy .- mean(Δy)
@@ -151,7 +152,7 @@ Compute the gradient of the loss function with respect to the predicted values `
 # Returns
 - `dL::AbstractArray`: The gradient of the loss with respect to the predicted values `y`.
 """
-function backward(l::Loss, y, ŷ, offset = off)
+function backward(l::Loss, y, ŷ, offset = l.offset)
     Δy = y - ŷ
     if offset
         Δy = Δy .- mean(Δy)
@@ -253,7 +254,7 @@ Compute the gradient of the regularization penalty with respect to the input (pa
 backward(R::Regularization, x) = R.λ .* map(y -> abs(y) > R.b ? R.n * (y-R.b)^(R.n-1) : 0., x)
 
 
-function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();weights = false, loss=get_loss(conf))
+function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();weights = false, loss=get_loss(conf), offset = get_offset(conf))
     N_strc = length(Nk_all)
     n = loss_to_n[loss]
     #n = 2
@@ -286,7 +287,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();w
         #wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
 
 
-        Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n)
+        Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n, offset)
     end
     
     return Loss_vec
