@@ -39,10 +39,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
             end
             Δr_dist = normdiff(ri, rj)
             Δr_in = (apply_distance_distortion || apply_distortion) ? Δr_dist : Δr
-            if apply_distortion || apply_distance_distortion
-                #Δr_in = Δr_in / rcut * strc_scale
-                Δr_in = Δr_in / rcut
-            end
+
             for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
                 i = ij_map[(iion, iorb)]
                 j = ij_map[(jion, jorb)]
@@ -78,11 +75,6 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
                 #Zs = Zs .* 100.0
 
                 
-
-                if apply_distortion || apply_distance_distortion
-                    φ = φ / 2π 
-                    θs = @. θs / 2π 
-                end
                 isorthogonal = decide_orthogonal(Δr, i, j, l_i, l_j; apply_orthogonality=apply_orthogonality)
 
                 if Δr ≤ rcut && fcut(Δr_dist, rcut+rcut_tol) > 0 && !isorthogonal
