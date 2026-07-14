@@ -17,7 +17,7 @@ get_n(conf::Config, type)::Int64 = conf("n", type) == "default" ? elements[Symbo
 
 The `qeff::Float` determines the effective charge of the ion for Ewald summation.
 """
-get_qeff(conf::Config, type)::Int64 = conf("qeff", type) == "default" ? 0. : conf("qeff", type)
+get_qeff(conf::Config, type)::Float64 = conf("qeff", type) == "default" ? 0. : conf("qeff", type)
 
 """
 **nnaxes**=false
