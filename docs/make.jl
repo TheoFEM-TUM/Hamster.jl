@@ -24,6 +24,12 @@ makedocs(
             "calc/hyperopt.md",
             "calc/helper_functions.md"
         ],
+        "Hamiltonian Models" => [
+            "models/tb.md",
+            "models/soc.md",
+            "models/kernel.md",
+            "models/ewald.md"
+        ],
         "Examples" => [
             "examples/examples.md",
             "examples/model_eval.md",

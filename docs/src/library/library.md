@@ -34,6 +34,14 @@ Modules = [Hamster]
 Pages = ["descriptor.jl", "kernel.jl"]
 ```
 
+# Ewald
+
+```@autodocs
+Modules = [Hamster]
+Pages = ["ewald_onsite.jl", "ewald.jl", "ewald_helper.jl"]
+```
+
+
 # Optimization
 
 ```@autodocs

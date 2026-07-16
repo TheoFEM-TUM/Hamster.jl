@@ -29,7 +29,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config;
     vals = [SVector{8, Float64}[] for R in 1:NR]
     for (iion, jion, R) in iterate_nn_grid_points(strc.point_grid)
         ri = rs_ion[iion]
-        rj = rs_ion[jion] - Ts[:, R]
+        rj = apply_pbc(rs_ion[jion], Ts[:, R])
         Δr = normdiff(ri, rj)
         if apply_distortion
             ri -= strc.ions[iion].dist

@@ -80,7 +80,7 @@ Constructs a point grid for ion positions `rs`, considering all translation vect
 function get_grid_dict(rs, Ts, grid_size)
     grid_dict = Dict{SVector{3, Int64}, Vector{Tuple{Int64, Int64}}}()
     @views for R in axes(Ts, 2), iion in axes(rs, 2)
-        r⃗ = SVector{3}(rs[:, iion] - Ts[:, R])
+        r⃗ = SVector{3}(apply_pbc(rs[:, iion], Ts[:, R]))
         grid_point = get_grid_point(r⃗, grid_size)
         push_grid_point!(grid_dict, grid_point, (iion, R))
     end

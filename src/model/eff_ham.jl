@@ -12,8 +12,9 @@ end
 
 function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); 
                               tb_model=get_tb_model(conf), 
-                              ml_model=get_ml_model(conf), 
-                              sp_mode=get_sp_mode(conf), 
+                              ml_model=get_ml_model(conf),
+                              ewald=get_ewald(conf), 
+                              sp_mode=get_sp_mode(conf),
                               sp_diag=get_sp_diag(conf), 
                               sp_tol=get_sp_tol(conf), 
                               soc=get_soc(conf), 
@@ -65,6 +66,14 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
         models = (models..., soc_model)
         soc_time = MPI.Wtime() - begin_time
         if rank == 0 && verbosity > 1; println("    SOC time: $soc_time s"); end
+    end
+    if ewald
+        if rank == 0 && verbosity > 1; println("   Getting Ewald model..."); end
+        begin_time = MPI.Wtime()
+        ewald_model = EwaldOnsites(strcs, bases, comm, conf, rank=rank)
+        models = (models..., ewald_model)
+        ewald_time = MPI.Wtime() - begin_time
+        if rank == 0 && verbosity > 1; println("    Ewald time: $ewald_time s"); end
     end
 
     eff_ham_time = MPI.Wtime() - eff_ham_begin_time
