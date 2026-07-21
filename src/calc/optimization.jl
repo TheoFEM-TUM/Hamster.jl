@@ -147,7 +147,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       Nε_train = get_number_of_bands_per_structure(train_bases, local_train_inds, soc=get_soc(conf))
       N_VBM_train = get_VBM_per_structure(local_train_inds, path = get_train_data(conf), soc=get_soc(conf))
       N_VBM_train_vec = mapreduce(vcat, local_train_inds, init=[]) do (system, train_inds)
-            N_VBM_train[system]
+            fill(N_VBM_train[system], length(train_inds))
       end
       N_weight_train = get_weight_per_structure(local_train_inds, pc_weight = get_pc_weight(conf))
       N_weight_train_vec = mapreduce(vcat, local_train_inds, init=[]) do (system, train_inds)
@@ -157,12 +157,12 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       Nε_val = get_number_of_bands_per_structure(val_bases, local_val_inds, soc=get_soc(conf))
       #assuming same structure
       N_VBM_val = get_VBM_per_structure(local_val_inds, path = get_val_data(conf), soc=get_soc(conf))
-      N_weight_val_vec = mapreduce(vcat, local_val_inds, init=[]) do (system, train_inds)
-         fill(N_weight_val[system], length(train_inds))
+      N_VBM_val_vec = mapreduce(vcat, local_val_inds, init=[]) do (system, train_inds)
+         fill(N_VBM_val[system], length(train_inds))
       end
       N_weight_val = get_weight_per_structure(local_val_inds, pc_weight = get_pc_weight(conf))
       N_weight_val_vec = mapreduce(vcat, local_val_inds, init=[]) do (system, train_inds)
-            N_weight_val[system]
+            fill(N_weight_val[system], length(train_inds))
       end
 
       combine_local_rllm_files(get_rllm_file(conf), comm_active; rank=active_rank, nranks=active_size)
