@@ -109,9 +109,9 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         push!(pc_weights, optim.losses[index].pc_weight)
     end
     pc_weights_tot = MPI.Allreduce(sum(pc_weights), +, comm)
-    L_train_sum = MPI.Allreduce(sum(Ls_train), +, comm)
-    L_trains_weights = Ls_train ./ (L_train_sum / pc_weights_tot)
-    Ls_train = L_trains_weights .* pc_weights .* Ls_train
+    L_train_sum = MPI.Allreduce(sum(Ls_train .* pc_weights), +, comm)
+    L_trains_weights = Ls_train ./ (L_train_sum / pc_weights_tot) .* pc_weights
+    Ls_train = L_trains_weights .* Ls_train
 
     dL_dHr = map(enumerate(indices)) do (i, index)
         b_time = @elapsed dL_dHr_index = backward(L_trains_weights[i], ham_train, index, optim.losses[index], train_data[index], caches[i], conf)
@@ -202,9 +202,9 @@ function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1
         forward(ham_val, index, losses[index], val_data[index])[1] 
     end
     pc_weights_tot = MPI.Allreduce(sum(pc_weights), +, comm)
-    Ls_val_sum = MPI.Allreduce(sum(Ls_val), +, comm)
-    Ls_val_weights = Ls_val ./ (Ls_val_sum / pc_weights_tot)
-    Ls_val = Ls_val_weights .* pc_weights .* Ls_val
+    Ls_val_sum = MPI.Allreduce(sum(Ls_val .* pc_weights), +, comm)
+    Ls_val_weights = Ls_val ./ (Ls_val_sum / pc_weights_tot) .* pc_weights 
+    Ls_val = Ls_val_weights .* Ls_val
     Ls_val_MAE = map(1:ham_val.Nstrc) do index
         forward(ham_val, index, losses[index], val_data[index])[3] * losses[index].pc_weight
     end
