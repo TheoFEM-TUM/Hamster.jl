@@ -160,7 +160,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       N_VBM_val_vec = mapreduce(vcat, local_val_inds, init=[]) do (system, train_inds)
          fill(N_VBM_val[system], length(train_inds))
       end
-      N_weight_val = get_weight_per_structure(local_val_inds, pc_weight = get_pc_weight(conf))
+      N_weight_val = get_weight_per_structure(local_val_inds, pc_weight = get_pc_weight_val(conf))
       N_weight_val_vec = mapreduce(vcat, local_val_inds, init=[]) do (system, train_inds)
             fill(N_weight_val[system], length(train_inds))
       end

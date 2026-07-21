@@ -88,3 +88,4 @@ The `xdatcar_val` tag sets the path to the validation XDATCAR file.
 get_xdatcar_val(conf::Config)::String = conf("XDATCAR_val", "Supercell") == "default" ? "none" : conf("XDATCAR_val", "Supercell")
 
 get_pc_weight(conf::Config)::Float64 = conf("pc_weight", "Supercell") == "default" ? 0 : conf("pc_weight", "Supercell") * conf( "Nconf", "Supercell")
+get_pc_weight_val(conf::Config)::Float64 = conf("pc_weight_val", "Supercell") == "default" ? 0 : conf("pc_weight_val", "Supercell") * conf( "Nconf", "Supercell")

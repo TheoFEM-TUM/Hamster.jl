@@ -9,7 +9,8 @@ Return the list of system names available for a given configuration `conf`.
 # Returns
 - `Vector{String}`: A list of system names (HDF5 group names or a single system).
 """
-function get_systems(conf; is_val = false, pc_weight = get_pc_weight(conf))
+function get_systems(conf; is_val = false)
+    pc_weight = is_val ? get_pc_weight_val(conf) : get_pc_weight(conf)
     strc_file = is_val && get_xdatcar_val(conf) != "none" ? get_xdatcar_val(conf) : get_xdatcar(conf)
     if isfile(strc_file) && get_train_mode(conf) != "pc"
         h5open(strc_file, "r") do file
