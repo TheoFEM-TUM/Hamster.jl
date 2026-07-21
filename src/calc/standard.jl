@@ -33,8 +33,7 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1,
     systems = get_systems(conf)
     config_inds, _ = get_config_inds_for_systems(systems, comm, conf, rank=rank, write_output=write_output, optimize=false)
     local_inds = split_indices_into_chunks(config_inds, nranks, rank=rank)
-
-    mode = haskey(conf, "Supercell") ? (length(systems) > 1 ? "universal" : "md") : "pc"
+    mode = haskey(conf, "Supercell") ? "universal" : "pc"
     if rank == 0 && verbosity > 1; println("Getting structures..."); end
     begin_time = MPI.Wtime()
     strcs = mapreduce(vcat, local_inds, init=Structure[]) do (system, inds)
@@ -91,13 +90,14 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
         verbosity=get_verbosity(conf))
     
     strc_ind = 0
-    ks = get_kpoints_from_config(conf)
+    
     Nstrc_tot = MPI.Reduce(ham.Nstrc, +, comm, root=0)
 
     for (batch_id, indices) in enumerate(chunks(1:ham.Nstrc, n=Nbatch))
         for index in indices
             strc_ind += 1
             system, config_index = get_system_and_config_index(index, local_inds)
+            ks = get_kpoints_from_config(conf, system = system)
             ham_time_local = @elapsed Hk = get_hamiltonian(ham, index, ks, comm, write_hr=write_hr, config_index=config_index, system=system, rank=rank, nranks=nranks)
             Neig = ham.sp_diag isa Sparse ? get_neig(conf) : size(Hk[1], 1)
 
@@ -115,14 +115,14 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
             if write_hk
                 write_ham(Hk, ks, comm, config_index, filename=ham_file, system=system, rank=rank, nranks=nranks)
             end
-            if Nstrc_tot == 1 && rank == 0
+            if !(config_index isa Int) && rank == 0
                 if !skip_diag; write_to_file(Es, "Es"); end
                 if save_vecs && !skip_diag; write_to_file(vs, "vs"); end
             else
                 if !("tmp" in readdir(pwd())) && rank == 0; mkdir("tmp"); end
                 MPI.Barrier(comm)
-                if !skip_diag; write_to_file(Es, "tmp/Es$config_index"); end
-                if save_vecs && !skip_diag; write_to_file(vs, "tmp/vs$config_index"); end
+                if !skip_diag; write_to_file(Es, "tmp/Es_$(system)_$config_index"); end
+                if save_vecs && !skip_diag; write_to_file(vs, "tmp/vs_$(system)_$config_index"); end
             end
             write_time = MPI.Wtime() - write_begin
             prof.timings[1, strc_ind, 3] = write_time
@@ -143,12 +143,12 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
     end
 end
 
-function get_kpoints_from_config(conf::Config; kpoints_file=get_kpoints_file(conf))::Matrix{Float64}
+function get_kpoints_from_config(conf::Config; kpoints_file=get_kpoints_file(conf), system ="")::Matrix{Float64}
     if occursin("EIGENVAL", kpoints_file)
         ks, _, _ = read_eigenval(kpoints_file)
         return ks
     elseif occursin(".h5", kpoints_file)
-        ks = h5read(kpoints_file, "kpoints")
+        ks = h5read(kpoints_file, "$system/kpoints")
         if ks isa Matrix{Float64}
             return ks
         elseif ks isa Array{Float64, 3}

@@ -91,8 +91,6 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     end
     lr_log = optim.adam.eta
 
-    #Nstrc_tot = MPI.Reduce(length(indices), +, comm, root=0)
-    Nstrc_tot = MPI.Allreduce(length(indices), +, comm)
     forward_times = Float64[]
     backward_times = Float64[]
     Ls_train = Float64[]
@@ -101,16 +99,19 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     N = length(indices)
     caches = Vector{Any}(undef, N)
     L_trains_weights = Vector{Float64}(undef, N)
+    pc_weights = Float64[]
     for (i, index) in enumerate(indices)
         f_time = @elapsed L_train, cache, L_train_MAE = forward(ham_train, index, optim.losses[index], train_data[index])
         caches[i] = cache
         push!(forward_times, f_time)
         push!(Ls_train, L_train)
-        push!(Ls_train_MAE, L_train_MAE)
+        push!(Ls_train_MAE, L_train_MAE * optim.losses[index].pc_weight)
+        push!(pc_weights, optim.losses[index].pc_weight)
     end
+    pc_weights_tot = MPI.Allreduce(sum(pc_weights), +, comm)
     L_train_sum = MPI.Allreduce(sum(Ls_train), +, comm)
-    L_trains_weights = Ls_train ./ (L_train_sum / Nstrc_tot)
-    Ls_train .*= L_trains_weights
+    L_trains_weights = Ls_train ./ (L_train_sum / pc_weights_tot)
+    Ls_train = L_trains_weights .* pc_weights .* Ls_train
 
     dL_dHr = map(enumerate(indices)) do (i, index)
         b_time = @elapsed dL_dHr_index = backward(L_trains_weights[i], ham_train, index, optim.losses[index], train_data[index], caches[i], conf)
@@ -143,7 +144,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     for model in ham_train.models
         model_grad_local = get_model_gradient(model, indices, optim.reg, dL_dHr; soc=ham_train.soc)
         model_grad = MPI.Reduce(model_grad_local, +, comm, root=0)
-        if rank == 0; update!(model, optim.adam, model_grad ./ Nstrc_tot); end
+        if rank == 0; update!(model, optim.adam, model_grad ./ pc_weights_tot); end
         params = get_params(model)
         #if rank == 0; @info "NZ params $(count(iszero, params))" ; end
         #if rank == 0; @info "NZ grad params $(count(iszero, model_grad))" ; end
@@ -161,9 +162,9 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     update_time = MPI.Reduce(update_time_local, +, comm, root=0)
 
     if rank == 0
-        #L_train_MAE = L_train_MAE ./ Nstrc_tot
-        prof.L_train[batch_id, iter] = L_train ./ Nstrc_tot
-        prof.L_train_MAE[batch_id, iter] = L_train_MAE ./ Nstrc_tot
+        #L_train_MAE = L_train_MAE ./ pc_weights_tot
+        prof.L_train[batch_id, iter] = L_train ./ pc_weights_tot
+        prof.L_train_MAE[batch_id, iter] = L_train_MAE ./ pc_weights_tot
         prof.timings[batch_id, iter, 1] = forward_time ./ nranks
         prof.timings[batch_id, iter, 2] = backward_time ./ nranks
         prof.timings[batch_id, iter, 3] = update_time ./ nranks
@@ -195,15 +196,17 @@ Evaluates the validation loss for a Hamiltonian model over a given validation da
 """
 function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1, valeachiter=valeachiter)
     val_begin = MPI.Wtime()
-    Nstrc_tot = MPI.Allreduce(ham_val.Nstrc, +, comm)
+    pc_weights = Float64[]
     Ls_val = map(1:ham_val.Nstrc) do index
+        push!(pc_weights, losses[index].pc_weight)
         forward(ham_val, index, losses[index], val_data[index])[1] 
     end
+    pc_weights_tot = MPI.Allreduce(sum(pc_weights), +, comm)
     Ls_val_sum = MPI.Allreduce(sum(Ls_val), +, comm)
-    Ls_val_weights = Ls_val ./ (Ls_val_sum / Nstrc_tot)
-    Ls_val .*= Ls_val_weights
+    Ls_val_weights = Ls_val ./ (Ls_val_sum / pc_weights_tot)
+    Ls_val = Ls_val_weights .* pc_weights .* Ls_val
     Ls_val_MAE = map(1:ham_val.Nstrc) do index
-        forward(ham_val, index, losses[index], val_data[index])[3] 
+        forward(ham_val, index, losses[index], val_data[index])[3] * losses[index].pc_weight
     end
 
     all_systems = MPI.gather(ham_val.systems, comm, root=0)
@@ -233,8 +236,8 @@ function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1
     L_val_MAE = MPI.Reduce(sum(Ls_val_MAE), +, comm, root=0)
     if rank == 0
         prof.val_times[iter] = val_time ./ nranks
-        prof.L_val[iter-valeachiter+1:iter] .= L_val ./ Nstrc_tot
-        prof.L_val_MAE[iter-valeachiter+1:iter] .= L_val_MAE ./ Nstrc_tot
+        prof.L_val[iter-valeachiter+1:iter] .= L_val ./ pc_weights_tot
+        prof.L_val_MAE[iter-valeachiter+1:iter] .= L_val_MAE ./ pc_weights_tot
     end
 end
 

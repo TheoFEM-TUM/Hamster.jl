@@ -9,11 +9,14 @@ Return the list of system names available for a given configuration `conf`.
 # Returns
 - `Vector{String}`: A list of system names (HDF5 group names or a single system).
 """
-function get_systems(conf; is_val = false)
+function get_systems(conf; is_val = false, pc_weight = get_pc_weight(conf))
     strc_file = is_val && get_xdatcar_val(conf) != "none" ? get_xdatcar_val(conf) : get_xdatcar(conf)
-    if isfile(strc_file) && get_train_mode(conf) == "universal"
+    if isfile(strc_file) && get_train_mode(conf) != "pc"
         h5open(strc_file, "r") do file
             systems = keys(file)
+            if pc_weight == 0
+                systems = [sys for sys in systems if !endswith(sys, "PC")]
+            end
             return systems
         end
     else
@@ -127,13 +130,15 @@ function read_structure_file(system, conf=get_empty_config(); mode="md", sc_posc
     elseif mode == "universal"
         h5open(xdatcar, "r") do file
             system_group = file[system]
-            configs = read(system_group["positions"])
-            lattice = read(system_group["lattice"])
+            configs = read(system_group["configs"])
+            rs_atom = read(system_group["rs_atom"])
+            lattice = read(system_group["lattice"])[:,:,1]
             atom_types = read(system_group["atom_types"])
+            rs_atom = frac_to_cart(rs_atom, lattice)
             for n in axes(configs, 3)
-                configs[:, :, n] .= frac_to_cart(configs[:, :, n], lattice[:, :, n])
+                configs[:, :, n] .= frac_to_cart(configs[:, :, n], lattice)
             end
-            return configs[:, :, 1], atom_types, lattice, configs
+            return rs_atom, atom_types, lattice, configs
         end
     end
 end
@@ -187,7 +192,8 @@ function get_config_inds_for_systems(
 
         if file !== nothing
             # All ranks execute this collectively
-            Nconf_total = size(read(file[system]["positions"]), 3)
+            which_key = haskey(file[system], "configs") ? "configs" : "positions"
+            Nconf_total = size(read(file[system][which_key]), 3)
 
             if Nconf_total < Nconf
                 Nconf = Nconf_total
@@ -198,7 +204,7 @@ function get_config_inds_for_systems(
         end
 
         system_train_inds, system_val_inds =
-            get_config_index_sample(conf; Nconf=Nconf, Nconf_max=Nconf_max)
+            get_config_index_sample(system, conf; Nconf=Nconf, Nconf_max=Nconf_max)
 
         # -------------------------------------------------
         # Only rank 0 writes output (serial HDF5)
@@ -268,7 +274,7 @@ Randomly selects training and validation configuration indices from a given rang
 - `train_config_inds`: A vector of indices for training configurations.
 - `val_config_inds`: A vector of indices for validation configurations.
 """
-function get_config_index_sample(conf=get_empty_config(); 
+function get_config_index_sample(system, conf=get_empty_config(); 
                                 Nconf=get_Nconf(conf), 
                                 Nconf_min=get_Nconf_min(conf), 
                                 Nconf_max=get_Nconf_max(conf),
@@ -278,7 +284,7 @@ function get_config_index_sample(conf=get_empty_config();
                                 val_mode = get_val_mode(conf), 
                                 inds_conf=get_config_inds(conf), 
                                 val_inds_conf=get_val_config_inds(conf)) :: Tuple{Vector{Int64}, Vector{Int64}}
-
+    println(validate)
     # Training config inds
     train_config_inds = Int64[]
     if inds_conf isa Vector{Int64}
@@ -286,7 +292,7 @@ function get_config_index_sample(conf=get_empty_config();
     elseif inds_conf isa String && occursin(".dat", inds_conf)
         train_config_inds = read_from_file(inds_conf, type=Int64)
     elseif inds_conf isa String && occursin(".h5", inds_conf)
-        train_config_inds = h5read(inds_conf, "train_config_inds")
+        train_config_inds = h5read(inds_conf, "$system/train_config_inds")
     end
 
     if (lowercase(train_mode) ∈ ["md", "universal"] || lowercase(train_mode) == lowercase(val_mode)) && length(train_config_inds) < Nconf
@@ -319,6 +325,13 @@ function get_config_index_sample(conf=get_empty_config();
         val_config_inds = [1] # only one config, e.g., pc
     elseif !validate
         val_config_inds = Int64[]
+    end
+
+    if Nconf_max == 1
+        train_config_inds = [1]
+        if validate 
+            val_config_inds = [1]
+        end
     end
 
     return train_config_inds, val_config_inds
@@ -426,7 +439,7 @@ function get_number_of_bands_per_structure(bases, indices; soc=false)
     return Nε_all
 end
 
-function get_VBM_per_structure(structures, indices; path = "eigenval.h5", soc=false)
+function get_VBM_per_structure(indices; path = "eigenval.h5", soc=false)
     N_VBM_all = Dict{String, Int64}()
     i = 0
     for (system, index_list) in indices
@@ -442,6 +455,15 @@ function get_VBM_per_structure(structures, indices; path = "eigenval.h5", soc=fa
         N_VBM_all[system] = N_VBM_system[1]
     end
     return N_VBM_all
+end
+
+function get_weight_per_structure(indices; path = "eigenval.h5", pc_weight = 1)
+    N_weight_all = Dict{String, Int64}()
+    for (system, index_list) in indices
+        N_weight = last(system, 2) == "PC" ? pc_weight : 1
+        N_weight_all[system] = N_weight
+    end
+    return N_weight_all
 end
 
 """

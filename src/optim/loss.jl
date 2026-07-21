@@ -18,10 +18,11 @@ struct Loss
     wStr :: Float64
     n :: Int64
     offset :: Bool
+    pc_weight :: Float64
 end
 
-Loss(wE::Vector{Float64}, wk::Vector{Float64}, n::Int64, offset::Bool) = Loss(wE, wk, sum(wE)*sum(wk), 1., n, offset)
-Loss(n::Int64) = Loss(Float64[], Float64[], 0, 1., n, true)
+Loss(wE::Vector{Float64}, wk::Vector{Float64}, n::Int64, offset::Bool, pc_weight::Float64) = Loss(wE, wk, sum(wE)*sum(wk), 1., n, offset, pc_weight)
+Loss(n::Int64) = Loss(Float64[], Float64[], 0, 1., n, true, 1)
 """
     Loss(Nε, Nk; conf=get_empty_config(), loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk))
 
@@ -54,7 +55,7 @@ function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band
             wE[index_range] .= conf(key, "Optimizer")
         end
     end
-    return Loss(wE, wk, n, offset)
+    return Loss(wE, wk, n, offset, 1)
 end
 
 Loss(conf=get_empty_config()) = Loss(loss_to_n[get_loss(conf)])
@@ -95,7 +96,6 @@ Compute the forward pass of the loss function given the true values `y` and the 
 # Returns
 -`L::Float64`: The loss between `y` and `ŷ`.
 """
-off = true
 min_delta = 0.0
 function forward(l::Loss, y, ŷ; offset = l.offset)
     Δy = y - ŷ
@@ -254,7 +254,7 @@ Compute the gradient of the regularization penalty with respect to the input (pa
 backward(R::Regularization, x) = R.λ .* map(y -> abs(y) > R.b ? R.n * (y-R.b)^(R.n-1) : 0., x)
 
 
-function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();weights = false, loss=get_loss(conf), offset = get_offset(conf))
+function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, conf=get_empty_config();weights = false, loss=get_loss(conf), offset = get_offset(conf))
     N_strc = length(Nk_all)
     n = loss_to_n[loss]
     #n = 2
@@ -265,6 +265,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();w
     for i in 1:N_strc
         Nε = Nε_all[i]
         Nk = Nk_all[i]
+        pc_weight = N_weight_all[i]
         N_VBM = N_VBM_all[i] + 1
         #gap_width = ceil(Int, 0.05 * Nε)
         gap_width = ceil(Int, N_VBM/9)
@@ -287,7 +288,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, conf=get_empty_config();w
         #wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
 
 
-        Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n, offset)
+        Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n, offset, pc_weight)
     end
     
     return Loss_vec

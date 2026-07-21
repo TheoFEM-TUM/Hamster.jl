@@ -174,10 +174,44 @@ Reads and combines their data into a single large array, then writes the merged 
 """
 function collapse_files_with(str; location=joinpath(pwd(), "tmp"))
     files = [file for file in readdir(location) if occursin(str, file)]
-    L_str = length(str)
-    indices = parse.(Int64, [replace(file[L_str+1:end], ".dat"=>"") for file in files])
-    data = [read_from_file(joinpath(location, file)) for file in files[sortperm(indices)]]
-    ndims = length(size(data[1]))
-    data_combined = cat(data..., dims=ndims+1)
-    write_to_file(data_combined, str)
+
+    # Group files by everything between `str` and the final index
+    groups = Dict{String, Vector{String}}()
+
+    for file in files
+        parts = split(replace(file, ".dat" => ""), "_")
+        middle = join(parts[2:end-1], "_")
+        push!(get!(groups, middle, String[]), file)
+    end
+
+    h5open("config_inds.h5", "w") do h5
+        for (middle, group_files) in groups
+
+            # Extract and sort by trailing index
+            indices = [
+                parse(Int, split(replace(file, ".dat" => ""), "_")[end])
+                for file in group_files
+            ]
+
+            p = sortperm(indices)
+            indices = indices[p]
+            group_files = group_files[p]
+
+            # Read and concatenate data
+            data = [
+                read_from_file(joinpath(location, file))
+                for file in group_files
+            ]
+
+            data_combined = cat(data..., dims=ndims(data[1]) + 1)
+
+            # Write combined data
+            outfile = isempty(middle) ? str : "$(str)_$(middle)"
+            write_to_file(data_combined, outfile)
+
+            # Store the original indices; position is implicit:
+            # data_combined[..., i] corresponds to indices[i]
+            h5[middle] = indices
+        end
+    end
 end
