@@ -284,7 +284,6 @@ function get_config_index_sample(system, conf=get_empty_config();
                                 val_mode = get_val_mode(conf), 
                                 inds_conf=get_config_inds(conf), 
                                 val_inds_conf=get_val_config_inds(conf)) :: Tuple{Vector{Int64}, Vector{Int64}}
-    println(validate)
     # Training config inds
     train_config_inds = Int64[]
     if inds_conf isa Vector{Int64}
@@ -457,7 +456,7 @@ function get_VBM_per_structure(indices; path = "eigenval.h5", soc=false)
     return N_VBM_all
 end
 
-function get_weight_per_structure(indices; path = "eigenval.h5", pc_weight = 1)
+function get_weight_per_structure(indices; pc_weight = 1)
     N_weight_all = Dict{String, Int64}()
     for (system, index_list) in indices
         N_weight = last(system, 2) == "PC" ? pc_weight : 1
