@@ -19,10 +19,11 @@ struct Loss
     n :: Int64
     offset :: Bool
     pc_weight :: Float64
+    system :: String
 end
 
-Loss(wE::Vector{Float64}, wk::Vector{Float64}, n::Int64, offset::Bool, pc_weight::Float64) = Loss(wE, wk, sum(wE)*sum(wk), 1., n, offset, pc_weight)
-Loss(n::Int64) = Loss(Float64[], Float64[], 0, 1., n, true, 1)
+Loss(wE::Vector{Float64}, wk::Vector{Float64}, n::Int64, offset::Bool, pc_weight::Float64, system::String) = Loss(wE, wk, sum(wE)*sum(wk), 1., n, offset, pc_weight, system)
+Loss(n::Int64) = Loss(Float64[], Float64[], 0, 1., n, true, 1, "default_system")
 """
     Loss(Nε, Nk; conf=get_empty_config(), loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk))
 
@@ -97,11 +98,14 @@ Compute the forward pass of the loss function given the true values `y` and the 
 -`L::Float64`: The loss between `y` and `ŷ`.
 """
 min_delta = 0.0
-function forward(l::Loss, y, ŷ; offset = l.offset)
+function forward(l::Loss, y, ŷ; offset = 0, offset_flag = l.offset)
     Δy = y - ŷ
-    if offset
+    if offset_flag && l.system != "individual"
+        Δy = Δy .- offset
+    elseif l.system == "individual"
         Δy = Δy .- mean(Δy)
     end
+
     #k_min = argmin(abs.( ŷ[10,:] - ŷ[11, :]))
     #l.wk[k_min] = 1
     #l.wk[k_min] = 0.1 * sum(l.wk)
@@ -121,9 +125,12 @@ function forward(l::Loss, y, ŷ; offset = l.offset)
     end
 end
 
-function forward_MAE(l::Loss, y, ŷ; offset = l.offset)
+function forward_MAE(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset)
     Δy = y - ŷ
-    if offset
+
+    if offset_flag && l.system != "individual"
+        Δy = Δy .- offset
+    elseif l.system == "individual"
         Δy = Δy .- mean(Δy)
     end
 
@@ -152,9 +159,12 @@ Compute the gradient of the loss function with respect to the predicted values `
 # Returns
 - `dL::AbstractArray`: The gradient of the loss with respect to the predicted values `y`.
 """
-function backward(l::Loss, y, ŷ, offset = l.offset)
+function backward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset)
     Δy = y - ŷ
-    if offset
+
+    if offset_flag && l.system != "individual"
+        Δy = Δy .- offset
+    elseif l.system == "individual"
         Δy = Δy .- mean(Δy)
     end
     #k_min = argmin(abs.( ŷ[10,:] - ŷ[11, :]))
@@ -254,7 +264,7 @@ Compute the gradient of the regularization penalty with respect to the input (pa
 backward(R::Regularization, x) = R.λ .* map(y -> abs(y) > R.b ? R.n * (y-R.b)^(R.n-1) : 0., x)
 
 
-function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, conf=get_empty_config();weights = false, loss=get_loss(conf), offset = get_offset(conf))
+function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, conf=get_empty_config();weights = false, loss=get_loss(conf), offset = get_offset(conf), offset_mode = get_offset_mode(conf))
     N_strc = length(Nk_all)
     n = loss_to_n[loss]
     #n = 2
@@ -266,6 +276,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, conf=get_em
         Nε = Nε_all[i]
         Nk = Nk_all[i]
         pc_weight = N_weight_all[i]
+        system = decide_system(systems[i], offset_mode)
         N_VBM = N_VBM_all[i] + 1
         #gap_width = ceil(Int, 0.05 * Nε)
         gap_width = ceil(Int, N_VBM/9)
@@ -288,8 +299,21 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, conf=get_em
         #wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
 
 
-        Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n, offset, pc_weight)
+        Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n, offset, pc_weight, system)
     end
     
     return Loss_vec
+end
+
+function decide_system(system, offset_mode)
+    if startswith(offset_mode, "s")
+        result = endswith(system, "_PC") ? system[1:end-3] : system
+    elseif startswith(offset_mode, "o")
+        result = "one_system"
+    elseif startswith(offset_mode, "i")
+        result = "individual"
+    else
+        result = system
+    end
+    return result
 end

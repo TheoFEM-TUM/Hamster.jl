@@ -225,3 +225,5 @@ get_warmup_ratio(conf::Config)::Float64 = conf("warmup_ratio", "Optimizer") == "
 get_lr_warmup(conf::Config)::Float64 = conf("lr_warmup", "Optimizer") == "default" ? 0.00001 : conf("lr_warmup", "Optimizer")
 
 get_offset(conf::Config)::Bool = conf("offset", "Optimizer") == "default" ? true : conf("offset", "Optimizer")
+
+get_offset_mode(conf::Config)::String = conf("offset_mode", "Optimizer") == "default" ? "system" : conf("offset_mode", "Optimizer")

@@ -284,7 +284,9 @@ function get_config_index_sample(system, conf=get_empty_config();
                                 train_mode=get_train_mode(conf), 
                                 val_mode = get_val_mode(conf), 
                                 inds_conf=get_config_inds(conf), 
-                                val_inds_conf=get_val_config_inds(conf)) :: Tuple{Vector{Int64}, Vector{Int64}}
+                                val_inds_conf=get_val_config_inds(conf),
+                                pc_weight_val = get_pc_weight_val(conf),
+                                pc_weight = get_pc_weight(conf)) :: Tuple{Vector{Int64}, Vector{Int64}}
     # Training config inds
     train_config_inds = Int64[]
     if inds_conf isa Vector{Int64}
@@ -312,7 +314,7 @@ function get_config_index_sample(system, conf=get_empty_config();
     end
 
     if length(val_config_inds) < Nconf && (lowercase(val_mode) ∈ ["md", "universal"]) 
-        Nval = train_mode == val_mode ? round(Int64, Nconf * val_ratio) : Nconf
+        Nval = train_mode == val_mode ? round(Int64, min(Nconf, 1) * val_ratio) : Nconf
         Nval -= length(val_config_inds)
         remaining_indices = lowercase(train_mode) == "pc" ? (Nconf_min:Nconf_max) : setdiff(Nconf_min:Nconf_max, train_config_inds)
         remaining_indices = setdiff(remaining_indices, val_config_inds)
@@ -327,10 +329,21 @@ function get_config_index_sample(system, conf=get_empty_config();
         val_config_inds = Int64[]
     end
 
-    if Nconf_max == 1
-        train_config_inds = [1]
-        if validate 
+    if endswith(system, "_PC")
+        if pc_weight != 0
+            train_config_inds = [1]
+        else
+            train_config_inds = []
+        end
+        if validate && pc_weight_val != 0
             val_config_inds = [1]
+        else
+            val_config_inds = []
+        end
+    elseif pc_weight > 100000
+        train_config_inds = []
+        if validate && pc_weight_val > 100000
+            val_config_inds = []
         end
     end
 

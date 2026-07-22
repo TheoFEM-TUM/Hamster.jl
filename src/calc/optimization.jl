@@ -153,6 +153,9 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       N_weight_train_vec = mapreduce(vcat, local_train_inds, init=[]) do (system, train_inds)
             fill(N_weight_train[system], length(train_inds))
       end
+      N_systems_train = mapreduce(vcat, local_train_inds, init=[]) do (system, train_inds)
+            fill(system, length(train_inds))
+      end
       #println("rank $rank : (    $N_VBM_train   )")
       Nε_val = get_number_of_bands_per_structure(val_bases, local_val_inds, soc=get_soc(conf))
       #assuming same structure
@@ -163,6 +166,9 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       N_weight_val = get_weight_per_structure(local_val_inds, pc_weight = get_pc_weight_val(conf))
       N_weight_val_vec = mapreduce(vcat, local_val_inds, init=[]) do (system, train_inds)
             fill(N_weight_val[system], length(train_inds))
+      end
+      N_systems_val = mapreduce(vcat, local_val_inds, init=[]) do (system, train_inds)
+            fill(system, length(train_inds))
       end
 
       combine_local_rllm_files(get_rllm_file(conf), comm_active; rank=active_rank, nranks=active_size)
@@ -200,7 +206,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
 
       
 
-      optim = GDOptimizer(Nε_all_train, Nk_all_train, N_eig_avg_train, Nε_all_val, Nk_all_val, N_eig_avg_val, N_VBM_train_vec, N_VBM_val_vec, N_weight_train_vec, N_weight_val_vec, conf)
+      optim = GDOptimizer(Nε_all_train, Nk_all_train, N_eig_avg_train, Nε_all_val, Nk_all_val, N_eig_avg_val, N_VBM_train_vec, N_VBM_val_vec, N_weight_train_vec, N_weight_val_vec, N_systems_train, N_systems_val, conf)
 
       prof = HamsterProfiler(3, conf)
       
