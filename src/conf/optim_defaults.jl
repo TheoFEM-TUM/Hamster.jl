@@ -227,3 +227,5 @@ get_lr_warmup(conf::Config)::Float64 = conf("lr_warmup", "Optimizer") == "defaul
 get_offset(conf::Config)::Bool = conf("offset", "Optimizer") == "default" ? true : conf("offset", "Optimizer")
 
 get_offset_mode(conf::Config)::String = conf("offset_mode", "Optimizer") == "default" ? "system" : conf("offset_mode", "Optimizer")
+
+get_offset_step(conf::Config)::Int64 = conf("offset_step", "Optimizer") == "default" ? get_niter(conf) : conf("offset_step", "Optimizer")

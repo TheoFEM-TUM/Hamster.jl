@@ -75,8 +75,13 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     lr_min=get_lr_min(conf),
     verbosity=get_verbosity(conf),
     warmup_ratio=get_warmup_ratio(conf),
-    lr_warmup=get_lr_warmup(conf)
+    lr_warmup=get_lr_warmup(conf),
+    offset_step = get_offset_step(conf)
     )
+
+    if rank == 0 && offset_step == iter
+        println("-------------Iter $iter : offset freeze------------")
+    end
 
     warmup = max(1.0, warmup_ratio * optim.Niter)
     if iter < warmup
@@ -107,38 +112,45 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         push!(forward_times, f_time)
         push!(systems_offsets, (optim.losses[index].system, offset))
     end
+    if offset_step >= iter
+        elapsed = @elapsed begin
+            all_systems_offsets = MPI.gather(systems_offsets, comm, root = 0)
 
-    elapsed = @elapsed begin
-        all_systems_offsets = MPI.gather(systems_offsets, comm, root = 0)
+            # Flatten on rank 0
+            if rank == 0
+                all_systems_offsets = reduce(vcat, all_systems_offsets)
+            else
+                all_systems_offsets = nothing
+            end
 
-        # Flatten on rank 0
-        if rank == 0
-            all_systems_offsets = reduce(vcat, all_systems_offsets)
-        else
-            all_systems_offsets = nothing
+            # Broadcast to all ranks
+            all_systems_offsets = MPI.bcast(all_systems_offsets, comm, root = 0)
+
+            # Every rank computes the averages
+            sums = Dict{String, Float64}()
+            counts = Dict{String, Int}()
+
+            for (system, offset) in all_systems_offsets
+                sums[system] = get(sums, system, 0.0) + offset
+                counts[system] = get(counts, system, 0) + 1
+            end
+
+            systems_offsets_averages = Dict(
+                system => sums[system] / counts[system]
+                for system in keys(sums)
+            )
         end
-
-        # Broadcast to all ranks
-        all_systems_offsets = MPI.bcast(all_systems_offsets, comm, root = 0)
-
-        # Every rank computes the averages
-        sums = Dict{String, Float64}()
-        counts = Dict{String, Int}()
-
-        for (system, offset) in all_systems_offsets
-            sums[system] = get(sums, system, 0.0) + offset
-            counts[system] = get(counts, system, 0) + 1
-        end
-
-        systems_offsets_averages = Dict(
-            system => sums[system] / counts[system]
-            for system in keys(sums)
-        )
+    else 
+        systems_offsets_averages = nothing
+        elapsed = 0
     end
 
 
     for (i, index) in enumerate(indices)
-        f_time = @elapsed L_train, L_train_MAE = forward(caches[i][1], systems_offsets_averages[optim.losses[index].system], optim.losses[index], train_data[index])
+        if offset_step >= iter
+            optim.losses[index].offset = systems_offsets_averages[optim.losses[index].system]
+        end
+        f_time = @elapsed L_train, L_train_MAE = forward(caches[i][1], optim.losses[index], train_data[index])
         forward_times[i] += (f_time + elapsed)
         push!(Ls_train, L_train)
         push!(Ls_train_MAE, L_train_MAE * optim.losses[index].pc_weight)
@@ -150,7 +162,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     Ls_train = L_trains_weights .* Ls_train
 
     dL_dHr = map(enumerate(indices)) do (i, index)
-        b_time = @elapsed dL_dHr_index = backward(L_trains_weights[i], ham_train, index, optim.losses[index], systems_offsets_averages[optim.losses[index].system], train_data[index], caches[i], conf)
+        b_time = @elapsed dL_dHr_index = backward(L_trains_weights[i], ham_train, index, optim.losses[index], train_data[index], caches[i], conf)
         push!(backward_times, b_time)
         return dL_dHr_index
     end
@@ -300,9 +312,9 @@ function forward(ham::EffectiveHamiltonian, index, data::EigData)
     return (Es, vs), offset
 end
 
-function forward(Es, offset::Float64, loss::Loss, data::EigData)
-    L_train = forward(loss, Es, data.Es, offset=offset)
-    L_train_MAE = forward_MAE(loss, Es, data.Es, offset = offset)
+function forward(Es, loss::Loss, data::EigData)
+    L_train = forward(loss, Es, data.Es)
+    L_train_MAE = forward_MAE(loss, Es, data.Es)
     #println("NZ : $(count(iszero, ham.models[2].params))")
     return L_train, L_train_MAE
 end
@@ -338,9 +350,9 @@ The function behavior varies depending on the type of `data`, which can be eithe
 # Returns
 - `gradient`: The computed gradient of the loss with respect to the parameters of `ham`.
 """
-function backward(L_train_weight::Float64, ham::EffectiveHamiltonian, index, loss, offset, data::EigData, cache, conf=get_empty_config(); nthreads_kpoints=get_nthreads_kpoints(conf), nthreads_bands=get_nthreads_bands(conf))
+function backward(L_train_weight::Float64, ham::EffectiveHamiltonian, index, loss, data::EigData, cache, conf=get_empty_config(); nthreads_kpoints=get_nthreads_kpoints(conf), nthreads_bands=get_nthreads_bands(conf))
     Es_tb, vs = cache
-    dL_dE = backward(loss, Es_tb, data.Es, offset = offset) .* L_train_weight
+    dL_dE = backward(loss, Es_tb, data.Es) .* L_train_weight
     dE_dHr = get_eigenvalue_gradient(vs, ham.Rs[index], data.kp, ham.sp_mode, ham.sp_iterators[index], nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=ham.sp_tol)
     dL_dHr = chain_rule(dL_dE, dE_dHr, ham.sp_mode, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=ham.sp_tol)
     return dL_dHr
