@@ -80,7 +80,11 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    end
    if rank == 0 && verbosity > 0
       Nind_train = sum(length(v) for v in values(train_config_inds))
-      Nind_val = sum(length(v) for v in values(val_config_inds))
+      if get_validate(conf)
+         Nind_val = sum(length(v) for v in values(val_config_inds))
+      else
+         Nind_val = 0
+      end
       println("Total : $Nind_train train_inds | $Nind_val val_inds")
    end
    local_train_inds = split_indices_into_chunks(train_config_inds, nranks, get_train_data(conf), rank=rank)
@@ -103,7 +107,11 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    end
    if verbosity > 1
       Nind_train = sum(length(v) for v in values(local_train_inds))
-      Nind_val = sum(length(v) for v in values(local_val_inds))
+      if get_validate(conf) 
+         Nind_val = sum(length(v) for v in values(local_val_inds))
+      else
+         Nind_val = 0
+      end
       println("Rank $rank : $Nind_train train_inds | $Nind_val val_inds")
    end
    color = has_data ? 1 : nothing
