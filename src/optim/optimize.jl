@@ -107,7 +107,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     pc_weights = Float64[]
     systems_offsets = Tuple{String, Float64}[]
     for (i, index) in enumerate(indices)
-        f_time = @elapsed cache, offset = forward(ham_train, index, train_data[index])
+        f_time = @elapsed cache, offset = forward(ham_train, index, train_data[index], optim.losses[index])
         caches[i] = cache
         push!(forward_times, f_time)
         push!(systems_offsets, (optim.losses[index].system, offset))
@@ -303,11 +303,12 @@ The behavior of the function depends on the type of `data`, which can be either 
 - `L_train::Float64`: The calculated loss.
 - `cache`: A preliminary result that is needed to compute the gradient.
 """
-function forward(ham::EffectiveHamiltonian, index, data::EigData)
+function forward(ham::EffectiveHamiltonian, index, data::EigData, l::Loss)
     Hk = get_hamiltonian(ham, index, data.kp)
     Es, vs = diagonalize(Hk)
 
-    offset = mean(Es - data.Es)
+    #offset = mean(Es - data.Es)
+    offset = mean(l.wE' * (Es - data.Es) * l.wk)
 
     return (Es, vs), offset
 end
