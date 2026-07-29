@@ -284,12 +284,14 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, co
         wStr = 1
 
         wE = ones(Nε) * 0.1
-        wE[1] = 0.5
-        wE[2:N_VBM - gap_width ] .= 1
+        wE[1:gap_width] = 0.5
+        wE[gap_width+1:N_VBM - gap_width ] .= 1
         #wE[1] = N_VBM_all[i] == 10 ? 1 : 0.1
         wE[N_VBM - 2 * gap_width : N_VBM - gap_width ] .= 1
         wE[N_VBM + gap_width + 1 : min(N_VBM + 2 * gap_width + 1, Nε)] .= 1
-        wE[N_VBM - gap_width + 1 : min(N_VBM + gap_width, Nε)] .= 3
+        wE[N_VBM - gap_width + 1 : min(N_VBM + gap_width, Nε)] .= 2
+        wE[N_VBM] = 5          # valence band maximum
+        wE[N_VBM+1] = 5        # conduction band minimum
 
         #println("gapwidth $gap_width       wE    (   $wE  )")
 
