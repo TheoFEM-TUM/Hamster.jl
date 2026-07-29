@@ -314,7 +314,7 @@ function get_config_index_sample(system, conf=get_empty_config();
     end
 
     if length(val_config_inds) < Nconf && (lowercase(val_mode) ∈ ["md", "universal"]) 
-        Nval = train_mode == val_mode ? round(Int64, min(Nconf, 1) * val_ratio) : Nconf
+        Nval = train_mode == val_mode ? round(Int64, max(Nconf, 1) * val_ratio) : Nconf
         Nval -= length(val_config_inds)
         remaining_indices = lowercase(train_mode) == "pc" ? (Nconf_min:Nconf_max) : setdiff(Nconf_min:Nconf_max, train_config_inds)
         remaining_indices = setdiff(remaining_indices, val_config_inds)
