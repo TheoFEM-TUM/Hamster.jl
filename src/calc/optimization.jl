@@ -59,6 +59,7 @@ Runs the optimization process for an effective Hamiltonian model using the speci
 """
 function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1, write_output=true)
    systems = get_systems(conf)
+   verbosity = get_verbosity(conf)
    if rank == 0
       println("Rank 0 Number of Systems: ", length(systems))
       println("Rank 0 Number of ranks $nranks")
@@ -77,7 +78,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       end
       val_config_inds,_  = get_config_inds_for_systems(systems_val, comm, conf, rank=rank, write_output=write_output, is_val=true)
    end
-   if rank == 0
+   if rank == 0 && verbosity > 0
       Nind_train = sum(length(v) for v in values(train_config_inds))
       Nind_val = sum(length(v) for v in values(val_config_inds))
       println("Total : $Nind_train train_inds | $Nind_val val_inds")
@@ -100,9 +101,11 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    if rank == 0
       println(!isempty(local_train_inds), " ", !isempty(local_val_inds), " ", get_validate(conf))
    end
-   Nind_train = sum(length(v) for v in values(local_train_inds))
-   Nind_val = sum(length(v) for v in values(local_val_inds))
-   println("Rank $rank : $Nind_train train_inds | $Nind_val val_inds")
+   if verbosity > 1
+      Nind_train = sum(length(v) for v in values(local_train_inds))
+      Nind_val = sum(length(v) for v in values(local_val_inds))
+      println("Rank $rank : $Nind_train train_inds | $Nind_val val_inds")
+   end
    color = has_data ? 1 : nothing
    comm_active = MPI.Comm_split(comm, color, rank)
 
