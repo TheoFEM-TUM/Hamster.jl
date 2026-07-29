@@ -110,7 +110,7 @@ function forward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_flag
 
     k_min = argmin(abs.( ŷ[l.N_VBM+1,:] - ŷ[l.N_VBM, :]))
     l.wk[k_min] = 5
-    #l.wk[k_min] = 0.1 * sum(l.wk)
+    l.wk[k_min] = 0.1 * sum(l.wk)
     #println("wk after $k_min  $(l.wk[k_min])")
     y_mod = abs.(Δy) .+ min_delta
     L_E_avg = vec(mean(y_mod, dims = 2))
@@ -171,7 +171,7 @@ function backward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_fla
     end
     k_min = argmin(abs.( ŷ[l.N_VBM+1,:] - ŷ[l.N_VBM, :]))
     l.wk[k_min] = 5
-    #l.wk[k_min] = 0.1 * sum(l.wk)
+    l.wk[k_min] = 0.1 * sum(l.wk)
     y_mod = abs.(Δy) .+ min_delta
     L_E_avg = vec(mean(y_mod, dims = 2))
     w =  y_mod ./L_E_avg
@@ -282,6 +282,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, co
         N_VBM = N_VBM_all[i]
         #gap_width = ceil(Int, 0.05 * Nε)
         gap_width = ceil(Int, N_VBM/10)
+        SC_size = ceil(Int, N_VBM/10)
         wStr = Nk / N_eig_avg
         wStr = 1
 
@@ -293,7 +294,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, co
         #wE[N_VBM + gap_width + 1 : min(N_VBM + 2 * gap_width + 1, Nε)] .= 1
         #wE[N_VBM - gap_width + 1 : min(N_VBM + gap_width, Nε)] .= 2
         wE[N_VBM - gap_width : min(N_VBM + 1 + gap_width, Nε)] .= 2
-        wE[N_VBM:N_VBM+1] .= 5          # valence band maximum
+        wE[N_VBM:N_VBM+1] .= 5 * SC_size        # valence band maximum
 
         #println("gapwidth $gap_width       wE    (   $wE  )")
 
