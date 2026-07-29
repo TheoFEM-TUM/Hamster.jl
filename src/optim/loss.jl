@@ -21,10 +21,11 @@ mutable struct Loss
     offset_flag :: Bool
     pc_weight :: Float64
     system :: String
+    N_VBM :: Int64
 end
 
-Loss(wE::Vector{Float64}, wk::Vector{Float64}, n::Int64, offset::Float64, offset_flag::Bool, pc_weight::Float64, system::String) = Loss(wE, wk, sum(wE)*sum(wk), 1., n, offset, offset_flag, pc_weight, system)
-Loss(n::Int64) = Loss(Float64[], Float64[], 0, 1., n, 0., true, 1, "default_system")
+Loss(wE::Vector{Float64}, wk::Vector{Float64}, n::Int64, offset::Float64, offset_flag::Bool, pc_weight::Float64, system::String, N_VBM :: Int64) = Loss(wE, wk, sum(wE)*sum(wk), 1., n, offset, offset_flag, pc_weight, system, N_VBM)
+Loss(n::Int64) = Loss(Float64[], Float64[], 0, 1., n, 0., true, 1, "default_system", 1)
 """
     Loss(Nε, Nk; conf=get_empty_config(), loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk))
 
@@ -57,7 +58,7 @@ function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band
             wE[index_range] .= conf(key, "Optimizer")
         end
     end
-    return Loss(wE, wk, n,0, offset, 1)
+    return Loss(wE, wk, n,0, offset, 1, 1)
 end
 
 Loss(conf=get_empty_config()) = Loss(loss_to_n[get_loss(conf)])
@@ -107,8 +108,8 @@ function forward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_flag
         Δy = Δy .- mean(Δy)
     end
 
-    #k_min = argmin(abs.( ŷ[10,:] - ŷ[11, :]))
-    #l.wk[k_min] = 1
+    k_min = argmin(abs.( ŷ[l.N_VBM+1,:] - ŷ[l.N_VBM, :]))
+    l.wk[k_min] = 5
     #l.wk[k_min] = 0.1 * sum(l.wk)
     #println("wk after $k_min  $(l.wk[k_min])")
     y_mod = abs.(Δy) .+ min_delta
@@ -168,8 +169,8 @@ function backward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_fla
     elseif l.system == "individual"
         Δy = Δy .- mean(Δy)
     end
-    #k_min = argmin(abs.( ŷ[10,:] - ŷ[11, :]))
-    #l.wk[k_min] = 1
+    k_min = argmin(abs.( ŷ[l.N_VBM+1,:] - ŷ[l.N_VBM, :]))
+    l.wk[k_min] = 5
     #l.wk[k_min] = 0.1 * sum(l.wk)
     y_mod = abs.(Δy) .+ min_delta
     L_E_avg = vec(mean(y_mod, dims = 2))
@@ -302,7 +303,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, co
         #wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
 
 
-        Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n, 0, offset_flag, pc_weight, system)
+        Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n, 0, offset_flag, pc_weight, system, N_VBM)
     end
     
     return Loss_vec
