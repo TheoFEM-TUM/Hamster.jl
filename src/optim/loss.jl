@@ -111,6 +111,7 @@ function forward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_flag
     k_min = argmin(abs.( ŷ[l.N_VBM+1,:] - ŷ[l.N_VBM, :]))
     l.wk[k_min] = 5
     l.wk[k_min] = 0.1 * sum(l.wk)
+    l.N = sum(l.wE)*sum(l.wk)
     #println("wk after $k_min  $(l.wk[k_min])")
     y_mod = abs.(Δy) .+ min_delta
     L_E_avg = vec(mean(y_mod, dims = 2))
@@ -169,9 +170,6 @@ function backward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_fla
     elseif l.system == "individual"
         Δy = Δy .- mean(Δy)
     end
-    k_min = argmin(abs.( ŷ[l.N_VBM+1,:] - ŷ[l.N_VBM, :]))
-    l.wk[k_min] = 5
-    l.wk[k_min] = 0.1 * sum(l.wk)
     y_mod = abs.(Δy) .+ min_delta
     L_E_avg = vec(mean(y_mod, dims = 2))
     w =  y_mod ./L_E_avg
