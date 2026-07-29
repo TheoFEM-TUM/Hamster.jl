@@ -290,8 +290,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, co
         wE[N_VBM - 2 * gap_width : N_VBM - gap_width ] .= 1
         wE[N_VBM + gap_width + 1 : min(N_VBM + 2 * gap_width + 1, Nε)] .= 1
         wE[N_VBM - gap_width + 1 : min(N_VBM + gap_width, Nε)] .= 2
-        wE[N_VBM] .= 5          # valence band maximum
-        wE[N_VBM+1] .= 5        # conduction band minimum
+        wE[N_VBM:N_VBM+1] .= 5          # valence band maximum
 
         #println("gapwidth $gap_width       wE    (   $wE  )")
 
