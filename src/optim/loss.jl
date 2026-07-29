@@ -277,19 +277,20 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, co
         Nk = Nk_all[i]
         pc_weight = N_weight_all[i]
         system = decide_system(systems[i], offset_mode)
-        N_VBM = N_VBM_all[i] + 1
+        N_VBM = N_VBM_all[i]
         #gap_width = ceil(Int, 0.05 * Nε)
-        gap_width = ceil(Int, N_VBM/9)
+        gap_width = ceil(Int, N_VBM/10)
         wStr = Nk / N_eig_avg
         wStr = 1
 
         wE = ones(Nε) * 0.1
         wE[1:gap_width] .= 0.5
-        wE[gap_width+1:N_VBM - gap_width ] .= 1
+        wE[gap_width+1:N_VBM - gap_width - 1] .= 1
         #wE[1] = N_VBM_all[i] == 10 ? 1 : 0.1
-        wE[N_VBM - 2 * gap_width : N_VBM - gap_width ] .= 1
-        wE[N_VBM + gap_width + 1 : min(N_VBM + 2 * gap_width + 1, Nε)] .= 1
-        wE[N_VBM - gap_width + 1 : min(N_VBM + gap_width, Nε)] .= 2
+        #wE[N_VBM - 2 * gap_width : N_VBM - gap_width ] .= 1
+        #wE[N_VBM + gap_width + 1 : min(N_VBM + 2 * gap_width + 1, Nε)] .= 1
+        #wE[N_VBM - gap_width + 1 : min(N_VBM + gap_width, Nε)] .= 2
+        wE[N_VBM - gap_width : min(N_VBM + 1 + gap_width, Nε)] .= 2
         wE[N_VBM:N_VBM+1] .= 5          # valence band maximum
 
         #println("gapwidth $gap_width       wE    (   $wE  )")
