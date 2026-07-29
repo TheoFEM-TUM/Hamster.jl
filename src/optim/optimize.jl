@@ -308,7 +308,7 @@ function forward(ham::EffectiveHamiltonian, index, data::EigData, l::Loss)
     Es, vs = diagonalize(Hk)
 
     #offset = mean(Es - data.Es)
-    offset = mean(l.wE' * (Es - data.Es) * l.wk)
+    offset = 1/l.wStr * sum(l.wE' * (Es - data.Es) * l.wk)
 
     return (Es, vs), offset
 end
