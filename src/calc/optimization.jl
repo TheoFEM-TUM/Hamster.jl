@@ -61,6 +61,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    systems = get_systems(conf)
    if rank == 0
       println("Rank 0 Number of Systems: ", length(systems))
+      println("Rank 0 Number of ranks $nranks")
    end
    xdatcar_val = get_xdatcar_val(conf)
    #println("xdatcar_val: ", xdatcar_val)
@@ -75,6 +76,11 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
          println("Rank 0 Number of Validation Systems: ", length(systems_val))
       end
       val_config_inds,_  = get_config_inds_for_systems(systems_val, comm, conf, rank=rank, write_output=write_output, is_val=true)
+   end
+   if rank == 0
+      Nind_train = sum(length(v) for v in values(train_config_inds))
+      Nind_val = sum(length(v) for v in values(val_config_inds))
+      println("Total : $Nind_train train_inds | $Nind_val val_inds")
    end
    local_train_inds = split_indices_into_chunks(train_config_inds, nranks, get_train_data(conf), rank=rank)
    local_val_inds = split_indices_into_chunks(val_config_inds, nranks, get_val_data(conf), rank=rank)
@@ -94,7 +100,9 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    if rank == 0
       println(!isempty(local_train_inds), " ", !isempty(local_val_inds), " ", get_validate(conf))
    end
-   
+   Nind_train = sum(length(v) for v in values(local_train_inds))
+   Nind_val = sum(length(v) for v in values(local_val_inds))
+   println("Rank $rank : $Nind_train train_inds | $Nind_val val_inds")
    color = has_data ? 1 : nothing
    comm_active = MPI.Comm_split(comm, color, rank)
 
