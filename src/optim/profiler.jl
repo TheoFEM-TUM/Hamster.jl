@@ -300,7 +300,6 @@ function save(prof::HamsterProfiler, rank=0; filename="hamster_out.h5")
             file["L_val_MAE"]    = prof.L_val_MAE
             file["L_train_BG"]   = prof.L_train_BG
             file["L_val_BG"]     = prof.L_val_BG
-            file["L_val_MAE"]    = prof.L_val_MAE
             file["timings"]      = prof.timings
             file["val_times"]    = prof.val_times
             file["param_values"] = prof.param_values
