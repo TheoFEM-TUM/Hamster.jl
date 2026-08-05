@@ -218,8 +218,9 @@ function get_kpoints_from_config(conf::Config; kpoints_file=get_kpoints(conf))::
     end
 end
 
-function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_config(); rank=0, nranks=1, 
-            write_current_file=get_write_current(conf), current_file=get_current_file(conf), ham_file=get_ham_file(conf))
+function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_config(); rank=0, nranks=1,
+            write_current_file=get_write_current(conf), current_file=get_current_file(conf), ham_file=get_ham_file(conf),
+            current_components=get_current_components(conf))
 
     if write_current_file
         Nstrc_max = MPI.Reduce(length(strcs), MPI.MAX, comm, root=0)
@@ -230,12 +231,12 @@ function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_conf
 
             system, config_index = get_system_and_config_index(ind, local_inds)
             bonds = get_bonds(strcs[ind], bases[ind], conf)
-            write_current(bonds, comm, config_index; ham_file=ham_file, system=system, rank=rank, nranks=nranks, temp=true, skip=skip)
+            write_current(bonds, comm, config_index; ham_file=ham_file, system=system, rank=rank, nranks=nranks, temp=true, skip=skip, components=current_components)
         end
         MPI.Barrier(comm)
         combine_hams(comm, what="Cr", rank=rank, nranks=nranks, filename=current_file)
     end
-    if get_write_hk(conf) || get_write_hr(conf) && rank == 0
+    if (get_write_hk(conf) || get_write_hr(conf)) && rank == 0
         for index in eachindex(strcs)
             system, config_index = get_system_and_config_index(index, local_inds)
             write_orbital_basis(strcs[index], bases[index], conf, system=system, ham_file=ham_file)

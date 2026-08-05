@@ -4,6 +4,7 @@
 @configtag verbosity Int64 1 "Controls output verbosity (0=minimal, 1=normal, 2=verbose, 3=debug)."
 @configtag write_current Bool false "Whether to write current operator."
 @configtag current_file  String "ham.h5" "File where current operator is stored."
+@configtag current_components String "xyz" "Which Cartesian components of the current operator to compute and write, any combination of 'x', 'y', 'z' (e.g. \"x\" or \"xz\"). Defaults to all three."
 @configtag write_hk      Bool false "Whether to write k-space Hamiltonians."
 @configtag ham_file      String "ham.h5" "File where Hamiltonians are stored."
 @configtag write_hr      Bool get_write_current(conf) "Whether to write real-space Hamiltonians. Defaults to true if write_current=true."
