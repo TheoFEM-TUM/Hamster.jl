@@ -310,8 +310,8 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, co
 
         #wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
 
-
-        Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n, 0, offset_flag, pc_weight, system, N_VBM, min_delta, gap_weight)
+        wk_min = gap_weight * sum(wk)
+        Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n, 0, offset_flag, pc_weight, system, N_VBM, min_delta, wk_min)
     end
     
     return Loss_vec
