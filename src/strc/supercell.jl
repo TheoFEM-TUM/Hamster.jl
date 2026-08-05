@@ -471,7 +471,7 @@ function get_VBM_per_structure(indices; path = "eigenval.h5", soc=false)
 end
 
 function get_weight_per_structure(indices; pc_weight = 1)
-    N_weight_all = Dict{String, Int64}()
+    N_weight_all = Dict{String, Float64}()
     for (system, index_list) in indices
         N_weight = last(system, 2) == "PC" ? pc_weight : 1
         N_weight_all[system] = N_weight
