@@ -231,3 +231,5 @@ get_offset_mode(conf::Config)::String = conf("offset_mode", "Optimizer") == "def
 get_offset_step(conf::Config)::Int64 = conf("offset_step", "Optimizer") == "default" ? get_niter(conf) : conf("offset_step", "Optimizer")
 
 get_min_delta(conf::Config)::Float64 = conf("min_delta", "Optimizer") == "default" ? 0.0 : conf("min_delta", "Optimizer")
+
+get_gap_weight(conf::Config)::Float64 = conf("gap_weight", "Optimizer") == "default" ? 1.0 : conf("gap_weight", "Optimizer")

@@ -23,10 +23,11 @@ mutable struct Loss
     system :: String
     N_VBM :: Int64
     min_delta :: Float64
+    gap_weight :: Float64
 end
 
-Loss(wE::Vector{Float64}, wk::Vector{Float64}, n::Int64, offset::Float64, offset_flag::Bool, pc_weight::Float64, system::String, N_VBM :: Int64, min_delta :: Float64) = Loss(wE, wk, sum(wE)*sum(wk), 1., n, offset, offset_flag, pc_weight, system, N_VBM, min_delta)
-Loss(n::Int64) = Loss(Float64[], Float64[], 0, 1., n, 0., true, 1, "default_system", 1, 0.0)
+Loss(wE::Vector{Float64}, wk::Vector{Float64}, n::Int64, offset::Float64, offset_flag::Bool, pc_weight::Float64, system::String, N_VBM :: Int64, min_delta :: Float64, gap_weight :: Float64) = Loss(wE, wk, sum(wE)*sum(wk), 1., n, offset, offset_flag, pc_weight, system, N_VBM, min_delta, gap_weight)
+Loss(n::Int64) = Loss(Float64[], Float64[], 0, 1., n, 0., true, 1, "default_system", 1, 0.0, 1.0)
 """
     Loss(Nε, Nk; conf=get_empty_config(), loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk))
 
@@ -59,7 +60,7 @@ function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band
             wE[index_range] .= conf(key, "Optimizer")
         end
     end
-    return Loss(wE, wk, n,0, offset, 1, 1, 0.0)
+    return Loss(wE, wk, n,0, offset, 1, 1, 0.0, 1.0)
 end
 
 Loss(conf=get_empty_config()) = Loss(loss_to_n[get_loss(conf)])
@@ -101,7 +102,7 @@ Compute the forward pass of the loss function given the true values `y` and the 
 -`L::Float64`: The loss between `y` and `ŷ`.
 """
 min_delta = 0.0
-function forward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_flag, min_delta = l.min_delta)
+function forward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_flag, min_delta = l.min_delta, gap_weight = l.gap_weight)
     Δy = y - ŷ
     if offset_flag && l.system != "individual"
         Δy = Δy .- offset
@@ -110,8 +111,7 @@ function forward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_flag
     end
 
     k_min = argmin(abs.( ŷ[l.N_VBM+1,:] - ŷ[l.N_VBM, :]))
-    l.wk[k_min] = 5
-    l.wk[k_min] = 0.1 * sum(l.wk)
+    l.wk[k_min] = gap_weight
     l.N = sum(l.wE)*sum(l.wk)
     #println("wk after $k_min  $(l.wk[k_min])")
     y_mod = abs.(Δy) .+ min_delta
@@ -273,7 +273,7 @@ Compute the gradient of the regularization penalty with respect to the input (pa
 backward(R::Regularization, x) = R.λ .* map(y -> abs(y) > R.b ? R.n * (y-R.b)^(R.n-1) : 0., x)
 
 
-function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, conf=get_empty_config();weights = false, loss=get_loss(conf), offset_flag = get_offset(conf), offset_mode = get_offset_mode(conf), min_delta = get_min_delta(conf))
+function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, conf=get_empty_config();weights = false, loss=get_loss(conf), offset_flag = get_offset(conf), offset_mode = get_offset_mode(conf), min_delta = get_min_delta(conf), gap_weight = get_gap_weight(conf))
     N_strc = length(Nk_all)
     n = loss_to_n[loss]
     #n = 2
@@ -311,7 +311,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, co
         #wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
 
 
-        Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n, 0, offset_flag, pc_weight, system, N_VBM, min_delta)
+        Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n, 0, offset_flag, pc_weight, system, N_VBM, min_delta, gap_weight)
     end
     
     return Loss_vec
