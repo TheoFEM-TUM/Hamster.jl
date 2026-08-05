@@ -622,7 +622,8 @@ function read_ml_params( conf=get_empty_config(); filename=get_ml_filename(conf)
             push!(data_points, SVector{N, Float64}(parsed_line[2:end]))
         end
     end
-    params = zero_params ? zeroslike(params) : params
+    Nparams = length(params)
+    params = zero_params ? zeros(Nparams) : params
     return params, data_points
 end
 """
