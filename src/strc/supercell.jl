@@ -310,7 +310,7 @@ function get_config_index_sample(system, conf=get_empty_config();
     elseif val_inds_conf isa String && occursin(".dat", val_inds_conf)
         val_config_inds = read_from_file(val_inds_conf, type=Int64)
     elseif val_inds_conf isa String && occursin(".h5", val_inds_conf)
-        val_config_inds = h5read(val_inds_conf, "val_config_inds")
+        val_config_inds = h5read(val_inds_conf, "$system/val_config_inds")
     end
 
     if length(val_config_inds) < Nconf && (lowercase(val_mode) ∈ ["md", "universal"])  && endswith(system, "_PC") == false
