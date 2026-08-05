@@ -100,6 +100,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     backward_times = Float64[]
     Ls_train = Float64[]
     Ls_train_MAE = Float64[]
+    Ls_train_BG = Float64[]
 
     N = length(indices)
     caches = Vector{Any}(undef, N)
@@ -150,10 +151,11 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         if offset_step >= iter
             optim.losses[index].offset = systems_offsets_averages[optim.losses[index].system]
         end
-        f_time = @elapsed L_train, L_train_MAE = forward(caches[i][1], optim.losses[index], train_data[index])
+        f_time = @elapsed L_train, L_train_MAE, L_train_BG = forward(caches[i][1], optim.losses[index], train_data[index])
         forward_times[i] += (f_time + elapsed)
         push!(Ls_train, L_train)
         push!(Ls_train_MAE, L_train_MAE * optim.losses[index].pc_weight)
+        push!(Ls_train_BG, L_train_BG * optim.losses[index].pc_weight)
         push!(pc_weights, optim.losses[index].pc_weight)
     end
     pc_weights_tot = MPI.Allreduce(sum(pc_weights), +, comm)
@@ -169,21 +171,26 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     all_systems = MPI.gather(ham_train.systems[indices], comm, root=0)
     all_losses = MPI.gather(Ls_train, comm, root=0)
     all_losses_MAE = MPI.gather(Ls_train_MAE, comm, root=0)
+    all_losses_BG = MPI.gather(Ls_train_BG, comm, root=0)
     if rank == 0
         all_systems = vcat(all_systems...)
         all_losses = vcat(all_losses...)
         all_losses_MAE = vcat(all_losses_MAE...)
+        all_losses_BG = vcat(all_losses_BG...)
 
         for system in unique(all_systems)
             if !haskey(prof.L_train_system, system)
                 prof.L_train_system[system] = zeros(size(prof.L_train))
                 prof.L_train_system_MAE[system] = zeros(size(prof.L_train_MAE))
+                prof.L_train_system_BG[system] = zeros(size(prof.L_train_BG))
             end
             idxs = findall(s -> s == system, all_systems)
             loss_system = all_losses[idxs]
             loss_system_MAE = all_losses_MAE[idxs]
+            loss_system_BG = all_losses_BG[idxs]
             prof.L_train_system[system][batch_id, iter] = mean(loss_system)
             prof.L_train_system_MAE[system][batch_id, iter] = mean(loss_system_MAE)
+            prof.L_train_system_BG[system][batch_id, iter] = mean(loss_system_BG)
         end
     end
     update_begin = MPI.Wtime()
@@ -203,6 +210,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     #L_train = MPI.Reduce(sum(Ls_train.^2), +, comm, root=0)
     L_train = MPI.Reduce(sum(Ls_train), +, comm, root=0)
     L_train_MAE = MPI.Reduce(sum(Ls_train_MAE), +, comm, root=0)
+    L_train_BG = MPI.Reduce(sum(Ls_train_BG), +, comm, root=0)
     forward_time = MPI.Reduce(sum(forward_times), +, comm, root=0)
     backward_time = MPI.Reduce(sum(backward_times), +, comm, root=0) 
     update_time = MPI.Reduce(update_time_local, +, comm, root=0)
@@ -211,6 +219,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         #L_train_MAE = L_train_MAE ./ pc_weights_tot
         prof.L_train[batch_id, iter] = L_train ./ pc_weights_tot
         prof.L_train_MAE[batch_id, iter] = L_train_MAE ./ pc_weights_tot
+        prof.L_train_BG[batch_id, iter] = L_train_BG ./ pc_weights_tot
         prof.timings[batch_id, iter, 1] = forward_time ./ nranks
         prof.timings[batch_id, iter, 2] = backward_time ./ nranks
         prof.timings[batch_id, iter, 3] = update_time ./ nranks
@@ -254,25 +263,33 @@ function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1
     Ls_val_MAE = map(1:ham_val.Nstrc) do index
         forward(ham_val, index, losses[index], val_data[index])[3] * losses[index].pc_weight
     end
+    Ls_val_BG = map(1:ham_val.Nstrc) do index
+        forward(ham_val, index, losses[index], val_data[index])[4] * losses[index].pc_weight
+    end
 
     all_systems = MPI.gather(ham_val.systems, comm, root=0)
     all_losses = MPI.gather(Ls_val, comm, root=0)
     all_losses_MAE = MPI.gather(Ls_val_MAE, comm, root=0)
+    all_losses_BG = MPI.gather(Ls_val_BG, comm, root=0)
     if rank == 0
         all_systems = vcat(all_systems...)
         all_losses = vcat(all_losses...)
         all_losses_MAE = vcat(all_losses_MAE...)
+        all_losses_BG = vcat(all_losses_BG...)
 
         for system in unique(all_systems)
             if !haskey(prof.L_val_system, system)
                 prof.L_val_system[system] = zeros(size(prof.L_val))
                 prof.L_val_system_MAE[system] = zeros(size(prof.L_val_MAE))
+                prof.L_val_system_BG[system] = zeros(size(prof.L_val_BG))
             end
             idxs = findall(s -> s == system, all_systems)
             loss_system = all_losses[idxs]
             prof.L_val_system[system][iter] = mean(loss_system)
             loss_system_MAE = all_losses_MAE[idxs]
             prof.L_val_system_MAE[system][iter] = mean(loss_system_MAE)
+            loss_system_BG = all_losses_BG[idxs]
+            prof.L_val_system_BG[system][iter] = mean(loss_system_BG)
         end
     end
 
@@ -280,10 +297,12 @@ function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1
     val_time = MPI.Reduce(val_time_local, +, comm, root=0)
     L_val = MPI.Reduce(sum(Ls_val), +, comm, root=0)
     L_val_MAE = MPI.Reduce(sum(Ls_val_MAE), +, comm, root=0)
+    L_val_BG = MPI.Reduce(sum(Ls_val_BG), +, comm, root=0)
     if rank == 0
         prof.val_times[iter] = val_time ./ nranks
         prof.L_val[iter-valeachiter+1:iter] .= L_val ./ pc_weights_tot
         prof.L_val_MAE[iter-valeachiter+1:iter] .= L_val_MAE ./ pc_weights_tot
+        prof.L_val_BG[iter-valeachiter+1:iter] .= L_val_BG ./ pc_weights_tot
     end
 end
 
@@ -316,8 +335,9 @@ end
 function forward(Es, loss::Loss, data::EigData)
     L_train = forward(loss, Es, data.Es)
     L_train_MAE = forward_MAE(loss, Es, data.Es)
+    L_train_BG = forward_BG(loss, Es, data.Es)
     #println("NZ : $(count(iszero, ham.models[2].params))")
-    return L_train, L_train_MAE
+    return L_train, L_train_MAE, L_train_BG
 end
 
 function forward(ham::EffectiveHamiltonian, index, loss, data::EigData)
@@ -325,8 +345,9 @@ function forward(ham::EffectiveHamiltonian, index, loss, data::EigData)
     Es, vs = diagonalize(Hk)
     L_train = loss(Es, data.Es)
     L_train_MAE = forward_MAE(loss, Es, data.Es)
+    L_train_BG = forward_BG(loss, Es, data.Es)
     #println("NZ : $(count(iszero, ham.models[2].params))")
-    return L_train, (Es, vs), L_train_MAE
+    return L_train, (Es, vs), L_train_MAE, L_train_BG
 end
 
 function forward(ham::EffectiveHamiltonian, index, loss, data::HrData)

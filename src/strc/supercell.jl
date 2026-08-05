@@ -297,7 +297,7 @@ function get_config_index_sample(system, conf=get_empty_config();
         train_config_inds = h5read(inds_conf, "$system/train_config_inds")
     end
 
-    if (lowercase(train_mode) ∈ ["md", "universal"] || lowercase(train_mode) == lowercase(val_mode)) && length(train_config_inds) < Nconf
+    if (lowercase(train_mode) ∈ ["md", "universal"] || lowercase(train_mode) == lowercase(val_mode)) && length(train_config_inds) < Nconf && endswith(system, "_PC") == false
         append!(train_config_inds, sample(Nconf_min:Nconf_max, Nconf - length(train_config_inds), replace=false, ordered=true))
     elseif length(train_config_inds) == 0
         push!(train_config_inds, 1)
@@ -313,7 +313,7 @@ function get_config_index_sample(system, conf=get_empty_config();
         val_config_inds = h5read(val_inds_conf, "val_config_inds")
     end
 
-    if length(val_config_inds) < Nconf && (lowercase(val_mode) ∈ ["md", "universal"]) 
+    if length(val_config_inds) < Nconf && (lowercase(val_mode) ∈ ["md", "universal"])  && endswith(system, "_PC") == false
         Nval = train_mode == val_mode ? round(Int64, max(Nconf, 1) * val_ratio) : Nconf
         Nval -= length(val_config_inds)
         remaining_indices = lowercase(train_mode) == "pc" ? (Nconf_min:Nconf_max) : setdiff(Nconf_min:Nconf_max, train_config_inds)
