@@ -585,7 +585,7 @@ function read_ml_params(target_dir::String, conf=get_empty_config(); filename=ge
     end
     return params, data_points
 end
-function read_ml_params( conf=get_empty_config(); filename=get_ml_filename(conf))
+function read_ml_params( conf=get_empty_config(); filename=get_ml_filename(conf), zero_params = get_ml_zero_params(conf))
     if !occursin(".dat", filename); filename *= ".dat"; end
     lines = open_and_read(filename)
     lines = split_lines(lines)
@@ -622,6 +622,7 @@ function read_ml_params( conf=get_empty_config(); filename=get_ml_filename(conf)
             push!(data_points, SVector{N, Float64}(parsed_line[2:end]))
         end
     end
+    params = zero_params ? zeroslike(params) : params
     return params, data_points
 end
 """

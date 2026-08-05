@@ -111,3 +111,5 @@ get_nc_max(conf::Config)::Float64 = conf("nc_max", "ML") == "default" ? -1 : con
 #get_ml_kernel_features_file(conf::Config)::String = conf("kernel_features_file", "ML") == "default" ? "ml_kernel_features.h5" : conf("kernel_features_file", "ML")
 
 get_ml_apply_orthogonality(conf::Config)::Bool = conf("apply_orthogonality", "ML") =="default" ? false : conf("apply_orthogonality", "ML")
+
+get_ml_zero_params(conf::Config)::Bool = conf("zero_params", "ML") == "default" ? false : conf("zero_params", "ML")
