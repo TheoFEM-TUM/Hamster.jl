@@ -415,7 +415,9 @@ function read_current(comm, ind=0; filename="ham.h5", space="r", system="")
     Cy = nothing
     Cz = nothing
     vecs = nothing
-    h5open(filename, "r", comm) do file
+
+    file = isnothing(comm) ? h5open(filename, "r") : h5open(filename, "r", comm)
+    try
         h_group = ind == 0 ? "C$space" : "C$(space)_$(system)_$ind"
         g = file[h_group]
         vecs = read(g["vecs"])
@@ -441,11 +443,13 @@ function read_current(comm, ind=0; filename="ham.h5", space="r", system="")
             has_y && (Cy[R] = SparseMatrixCSC(m, n, colptr, rowval, read(grp["ynzval"])))
             has_z && (Cz[R] = SparseMatrixCSC(m, n, colptr, rowval, read(grp["znzval"])))
         end
+    finally
+        close(file)
     end
     return Cx, Cy, Cz, vecs
 end
 
-read_current(ind::Integer=0; filename="ham.h5", space="r") = read_current(MPI.COMM_WORLD, ind; filename=filename, space=space)
+read_current(ind::Integer=0; filename="ham.h5", space="r") = read_current(nothing, ind; filename=filename, space=space)
 
 """
     write_orbital_basis(strc, basis, conf=get_empty_config(); system=get_system(conf), ham_file=get_ham_file(conf))
