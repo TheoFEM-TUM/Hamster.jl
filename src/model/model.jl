@@ -69,9 +69,9 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
         if isfile(rllm_file) && rank == 0; rm(rllm_file); end
         precalc_rllm(bases; comm, rank, nranks, conf, rllm_file = rllm_file)
     end
-    if rllm_type != "train" && isfile(rllm_file) && load_rllm == false
+"""    if rllm_type != "train" && isfile(rllm_file) && load_rllm == false
         add_to_previous_interpolations!(bases, conf; comm=comm, rank = rank, nranks = nranks)
-    end
+    end"""
     file = nothing
     if occursin(".h5", rllm_file)
         if isnothing(comm)

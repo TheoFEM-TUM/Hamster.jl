@@ -271,7 +271,7 @@ function save_rllm(rllm_dict, comm; filename="rllm.dat", rank=0, nranks=1)
 end
 
 function combine_local_rllm_files(filename, comm; rank=0, nranks=1)
-    for r in 0:nranks
+    for r in 0:nranks-1
         rank_filename = get_rank_filename(filename, r)
         if rank == 0 && isfile(rank_filename)
             rllm_dict = Dict{String, Matrix}()
