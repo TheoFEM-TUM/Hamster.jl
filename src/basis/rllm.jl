@@ -396,4 +396,15 @@ function precalc_rllm(bases::Any; comm = nothing, rank = 0, nranks = 1, conf,
     MPI.Barrier(comm)
     combine_local_rllm_files(rllm_file, comm; rank, nranks)
     MPI.Barrier(comm)
+    wait_for_file(rllm_file; timeout=30.0, poll=0.1)
+end
+
+function wait_for_file(path; timeout=30.0, poll=0.1)
+    t0 = time()
+    while !isfile(path)
+        if time() - t0 > timeout
+            error("Timed out waiting for $path to become visible")
+        end
+        sleep(poll)
+    end
 end
