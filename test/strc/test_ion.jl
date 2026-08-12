@@ -51,6 +51,17 @@
     @test Hamster.get_ion_types(ions, sorted=true) == sort(ion_types)
     @test Hamster.get_ion_types(ions, uniq=true, sorted=true) == sort(unique(ion_types))
 
+    # Test the withorbitals keyword to filter species that have no orbital basis configured
+    conf = get_empty_config()
+    ion_types_worbs = Hamster.element_to_number.(["H", "H", "O"])
+    set_value!(conf, "orbitals", "H", ["s"])
+    set_value!(conf, "orbitals", "O", ["px", "py", "pz"])
+    set_value!(conf, "alpha", "C", 9.1)
+    @test Hamster.get_ion_types(ions, conf, withorbitals=true) == ion_types_worbs
+    @test Hamster.get_ion_types(ions, conf, uniq=true, withorbitals=true) == unique(ion_types_worbs)
+    @test Hamster.get_ion_types(ions, conf, sorted=true, withorbitals=true) == sort(ion_types_worbs)
+    @test Hamster.get_ion_types(ions, conf, uniq=true, sorted=true, withorbitals=true) == sort(unique(ion_types_worbs))
+
     # Test 5: findnext_ion_of_type
     rs_ion = rand(3, 5)
     ion_types = Hamster.element_to_number.(["Ga", "Ga", "As", "Ga", "Si", "As"])
