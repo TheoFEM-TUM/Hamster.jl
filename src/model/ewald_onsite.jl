@@ -108,9 +108,13 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
             ewald = ewald_sum(pos, charges, strc.lattice, rcut=rcut, method=method, alpha=alpha)
         end
 
-        push!(types_per_strc, ion_types)
-        push!(norb_per_strc, size(bases[n]))
-        push!(potentials, ewald.potentials)
+        ion_indices_with_orbs = collect(1:length(ion_types))
+        ion_types_with_orbs = get_ion_types(strc.ions, conf, uniq=true, withorbitals=true)
+        filter!(ind -> ion_types[ind] ∈ ion_types_with_orbs, ion_indices_with_orbs)
+
+        push!(types_per_strc, ion_types[ion_indices_with_orbs])
+        push!(norb_per_strc, size(bases[n])[ion_indices_with_orbs])
+        push!(potentials, ewald.potentials[ion_indices_with_orbs])
         Rs_info[1, n] = size(strc.Rs, 2)
         Rs_info[2, n] = findR0(strc.Rs)
     end
