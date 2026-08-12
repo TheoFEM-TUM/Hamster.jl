@@ -395,5 +395,5 @@ function precalc_rllm(bases::Any; comm = nothing, rank = 0, nranks = 1, conf,
     save_rllm(rllm_dict, comm, filename=rank_rllm_file, rank=rank, nranks=nranks)
     MPI.Barrier(comm)
     combine_local_rllm_files(rllm_file, comm; rank, nranks)
-
+    MPI.Barrier(comm)
 end
