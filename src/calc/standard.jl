@@ -128,7 +128,8 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
         Nbatch=get_nbatch(conf), 
         save_vecs=get_save_vecs(conf), 
         rank=0, 
-        nranks=1, 
+        nranks=1,
+        deflate=get_h5_deflate(conf), 
         write_hk=get_write_hk(conf),
         write_hr=get_write_hr(conf),
         ham_file=get_ham_file(conf),
@@ -146,7 +147,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
             if index ≤ ham.Nstrc
                 strc_ind += 1
                 system, config_index = get_system_and_config_index(index, local_inds)
-                ham_time_local = @elapsed Hk = get_hamiltonian(ham, index, ks, comm, write_hr=write_hr, config_index=config_index, system=system, rank=rank, nranks=nranks)
+                ham_time_local = @elapsed Hk = get_hamiltonian(ham, index, ks, comm, write_hr=write_hr, config_index=config_index, system=system, rank=rank, nranks=nranks, deflate=deflate)
                 Neig = ham.sp_diag isa Sparse ? get_neig(conf) : size(Hk[1], 1)
 
                 Es = zeros(1, 1); vs = zeros(ComplexF64, 1, 1, 1)
@@ -158,7 +159,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
 
                 write_time = @elapsed begin
                     if write_hk
-                        write_ham(Hk, ks, comm, config_index, system=system, rank=rank, nranks=nranks, temp=true)
+                        write_ham(Hk, ks, comm, config_index, system=system, rank=rank, nranks=nranks, temp=true, deflate=deflate)
                     end
                     if Nstrc_tot == 1 && rank == 0
                         if !skip_diag; write_to_file(Es, "Es"); end
@@ -218,8 +219,13 @@ function get_kpoints_from_config(conf::Config; kpoints_file=get_kpoints(conf))::
     end
 end
 
-function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_config(); rank=0, nranks=1,
-            write_current_file=get_write_current(conf), current_file=get_current_file(conf), ham_file=get_ham_file(conf),
+function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_config(); 
+            rank=0, 
+            nranks=1,
+            deflate=get_h5_deflate(conf),
+            write_current_file=get_write_current(conf), 
+            current_file=get_current_file(conf), 
+            ham_file=get_ham_file(conf),
             current_components=get_current_components(conf))
 
     if write_current_file
@@ -231,7 +237,7 @@ function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_conf
 
             system, config_index = get_system_and_config_index(ind, local_inds)
             bonds = get_bonds(strcs[ind], bases[ind], conf)
-            write_current(bonds, comm, config_index; ham_file=ham_file, system=system, rank=rank, nranks=nranks, temp=true, skip=skip, components=current_components)
+            write_current(bonds, comm, config_index; ham_file=ham_file, system=system, rank=rank, nranks=nranks, temp=true, skip=skip, components=current_components, deflate=deflate)
         end
         MPI.Barrier(comm)
         combine_hams(comm, what="Cr", rank=rank, nranks=nranks, filename=current_file)
