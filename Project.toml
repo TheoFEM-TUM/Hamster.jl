@@ -1,6 +1,6 @@
 name = "Hamster"
 uuid = "18155ac2-9efd-4ce8-82c3-162aa40282e9"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["martin <ga63loc@mytum.de>"]
 
 [deps]
