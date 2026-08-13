@@ -113,16 +113,20 @@ The Hamiltonian is stored under a group named:
 Inside this group:
 - `"vecs"`: dataset containing the supplied `vecs` (k or R vectors).
 - Subgroups `"1"`, `"2"`, …, one for each block in `H`, containing:
-  - `"rowval"`, `"colptr"`, `"nzval"`: the CSC representation of the sparse matrix.
+  - `"rowval"`, `"colptr"`: the CSC index arrays, stored as `Int32` to save space.
+  - `"nzval"`: the CSC nonzero values.
   - `"m"`, `"n"`: matrix dimensions.
+
+`"rowval"`, `"colptr"` and `"nzval"` are written with shuffle+deflate compression.
 """
 function write_ham(H, vecs, comm, ind=0;
             temp=false,
-            filename="ham.h5", 
-            space="k", 
-            system="", 
-            rank=0, 
-            nranks=1)
+            filename="ham.h5",
+            space="k",
+            system="",
+            rank=0,
+            nranks=1,
+            deflate=4)
 
     filename = temp ? joinpath("tmp", replace(filename, ".h5" => "_$(rank).h5")) : filename
     h5open(filename, "cw") do file
@@ -132,9 +136,9 @@ function write_ham(H, vecs, comm, ind=0;
         for (i, mat) in enumerate(H)
             smat = issparse(mat) ? mat : sparse(mat)
             grp = create_group(g, "$i")
-            grp["rowval"] = smat.rowval
-            grp["colptr"] = smat.colptr
-            grp["nzval"]  = smat.nzval
+            grp["rowval", shuffle=true, deflate=deflate] = Int32.(smat.rowval)
+            grp["colptr", shuffle=true, deflate=deflate] = Int32.(smat.colptr)
+            grp["nzval",  shuffle=true, deflate=deflate] = smat.nzval
             grp["m"]      = size(smat, 1)
             grp["n"]      = size(smat, 2)
         end
@@ -205,8 +209,8 @@ function read_ham(comm, ind=0; filename="ham.h5", space="k", system="") :: Tuple
         grp = g[name]
         m = read(grp["m"])
         n = read(grp["n"])
-        rowval = read(grp["rowval"])
-        colptr = read(grp["colptr"])
+        rowval = Int64.(read(grp["rowval"]))
+        colptr = Int64.(read(grp["colptr"]))
         nzval  = read(grp["nzval"])
         H[parse(Int64, name)] = SparseMatrixCSC(m, n, colptr, rowval, nzval)
     end
@@ -223,7 +227,8 @@ const ħ_eVfs = 0.6582119569 # ħ in units of eV·fs
                   filename="ham.h5",
                   system="",
                   rank=0,
-                  nranks=1)
+                  nranks=1,
+                  components="xyz")
 
 Compute and write real-space current operators to an HDF5 file.
 
@@ -240,8 +245,9 @@ avoid concurrent write conflicts. The resulting datasets are stored under a
 group named `Cr` (or `Cr_<system>_<ind>` if `ind ≠ 0`), with one subgroup per
 lattice translation.
 
-Sparse matrices are stored explicitly via their `rowval`, `colptr`, and Cartesian
-components (`xnzval`, `ynzval`, `znzval`) of the nonzero entries.
+Sparse matrices are stored explicitly via their `rowval`, `colptr` (as `Int32`)
+and Cartesian components (`xnzval`, `ynzval`, `znzval`) of the nonzero entries,
+compressed with shuffle+deflate.
 
 # Arguments
 - `bonds`: Vector of sparse bond matrices indexed by lattice translation, with
@@ -255,15 +261,25 @@ components (`xnzval`, `ynzval`, `znzval`) of the nonzero entries.
 - `system`: Optional system label used in the HDF5 group name.
 - `rank`: MPI rank of the calling process.
 - `nranks`: Total number of MPI ranks participating in the write.
+- `components`: Which Cartesian components to compute and write, any combination
+  of `'x'`, `'y'`, `'z'` (e.g. `"x"` or `"xz"`). Defaults to `"xyz"`. Components
+  that are left out are neither computed nor stored.
 
 # Notes
 - The reduced Planck constant `ħ` is assumed to be given in units of eV·fs.
-- The current vectors have units of Å/fs and correspond to velocity matrix elements 
+- The current vectors have units of Å/fs and correspond to velocity matrix elements
   (current divided by electron charge).
 - The function performs no collective MPI I/O; writes are serialized across
   ranks using barriers.
 """
-function write_current(bonds, comm, ind=0; ham_file="ham.h5", filename="ham.h5", system="", rank=0, nranks=1, temp=false, skip=false)
+function write_current(bonds, comm, ind=0; ham_file="ham.h5", filename="ham.h5", system="", rank=0, nranks=1, temp=false, skip=false, components="xyz", deflate=4)
+    comps = Symbol.(collect(lowercase(components)))
+    for c in comps
+        c in (:x, :y, :z) || throw(ArgumentError("invalid current component '$c': components must be a combination of 'x', 'y', 'z'"))
+    end
+    isempty(comps) && throw(ArgumentError("components must contain at least one of 'x', 'y', 'z'"))
+    bond_ind = Dict(:x => 1, :y => 2, :z => 3)
+
     Hr, hr_vecs = read_ham(comm, ind, filename=ham_file, space="r", system=system)
 
     filename = temp ? joinpath("tmp", replace(filename, ".h5" => "_$(rank).h5")) : filename
@@ -275,23 +291,24 @@ function write_current(bonds, comm, ind=0; ham_file="ham.h5", filename="ham.h5",
             for R in eachindex(bonds)
                 grp = create_group(g, "$R")
 
-                @views Cx, Cy, Cz = map(bonds[R]) do bonds_i
+                @views C = Dict(c => begin
+                    bonds_i = bonds[R][bond_ind[c]]
                     bs = size(Hr[R], 1) == 2*size(bonds_i, 1) ? apply_spin_basis(bonds_i) : bonds_i
                     elementwise_union_mul(bs, Hr[R], ħ_eVfs)
+                end for c in comps)
+
+                for c in comps[2:end]
+                    @assert C[comps[1]].rowval == C[c].rowval
+                    @assert C[comps[1]].colptr == C[c].colptr
                 end
 
-                @assert Cx.rowval == Cy.rowval
-                @assert Cx.colptr == Cy.colptr                  
-                @assert Cx.rowval == Cz.rowval
-                @assert Cx.colptr == Cz.colptr
-
-                grp["rowval"] = Cx.rowval
-                grp["colptr"] = Cx.colptr
-                grp["xnzval"] = Cx.nzval
-                grp["ynzval"] = Cy.nzval
-                grp["znzval"] = Cz.nzval
-                grp["m"]      = size(Cx, 1)
-                grp["n"]      = size(Cx, 2)
+                grp["rowval", shuffle=true, deflate=deflate] = Int32.(C[comps[1]].rowval)
+                grp["colptr", shuffle=true, deflate=deflate] = Int32.(C[comps[1]].colptr)
+                for c in comps
+                    grp["$(c)nzval", shuffle=true, deflate=deflate] = C[c].nzval
+                end
+                grp["m"] = size(C[comps[1]], 1)
+                grp["n"] = size(C[comps[1]], 2)
             end
         end
     end
@@ -389,40 +406,50 @@ translation vectors.
 # Notes
 - Sparse matrices are reconstructed from their stored CSC components
   (`rowval`, `colptr`, `xnzval`, `ynzval`, `znzval`).
-- The function assumes the file layout produced by `write_current`.
+- The function assumes the file layout produced by `write_current`. If `write_current`
+  was called with a restricted `components` argument, the components that were not
+  written are returned as `nothing`.
 """
 function read_current(comm, ind=0; filename="ham.h5", space="r", system="")
     Cx = nothing
     Cy = nothing
     Cz = nothing
     vecs = nothing
-    h5open(filename, "r", comm) do file
+
+    file = isnothing(comm) ? h5open(filename, "r") : h5open(filename, "r", comm)
+    try
         h_group = ind == 0 ? "C$space" : "C$(space)_$(system)_$ind"
         g = file[h_group]
         vecs = read(g["vecs"])
-        
-        Nε = read(g[keys(g)[1]]["m"])
-        Cx = SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for R in axes(vecs, 2)]
-        Cy = SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for R in axes(vecs, 2)]
-        Cz = SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for R in axes(vecs, 2)]
 
         block_names = sort(filter(x -> x != "vecs", keys(g)))
+        Nε = read(g[block_names[1]]["m"])
+        has_x = haskey(g[block_names[1]], "xnzval")
+        has_y = haskey(g[block_names[1]], "ynzval")
+        has_z = haskey(g[block_names[1]], "znzval")
+
+        Cx = has_x ? SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for R in axes(vecs, 2)] : nothing
+        Cy = has_y ? SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for R in axes(vecs, 2)] : nothing
+        Cz = has_z ? SparseMatrixCSC{ComplexF64, Int64}[spzeros(ComplexF64, Nε, Nε) for R in axes(vecs, 2)] : nothing
+
         for name in block_names
             grp = g[name]
             m = read(grp["m"])
             n = read(grp["n"])
-            rowval = read(grp["rowval"])
-            colptr = read(grp["colptr"])
-            xs = read(grp["xnzval"]); ys = read(grp["ynzval"]); zs = read(grp["znzval"])
-            Cx[parse(Int64, name)] = SparseMatrixCSC(m, n, colptr, rowval, xs)
-            Cy[parse(Int64, name)] = SparseMatrixCSC(m, n, colptr, rowval, ys)
-            Cz[parse(Int64, name)] = SparseMatrixCSC(m, n, colptr, rowval, zs)
+            rowval = Int64.(read(grp["rowval"]))
+            colptr = Int64.(read(grp["colptr"]))
+            R = parse(Int64, name)
+            has_x && (Cx[R] = SparseMatrixCSC(m, n, colptr, rowval, read(grp["xnzval"])))
+            has_y && (Cy[R] = SparseMatrixCSC(m, n, colptr, rowval, read(grp["ynzval"])))
+            has_z && (Cz[R] = SparseMatrixCSC(m, n, colptr, rowval, read(grp["znzval"])))
         end
+    finally
+        close(file)
     end
     return Cx, Cy, Cz, vecs
 end
 
-read_current(ind::Integer=0; filename="ham.h5", space="r") = read_current(MPI.COMM_WORLD, ind; filename=filename, space=space)
+read_current(ind::Integer=0; filename="ham.h5", space="r") = read_current(nothing, ind; filename=filename, space=space)
 
 """
     write_orbital_basis(strc, basis, conf=get_empty_config(); system=get_system(conf), ham_file=get_ham_file(conf))

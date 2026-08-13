@@ -65,6 +65,12 @@
     @test Hamster.get_write_hr(conf) == false
     set_value!(conf, "write_current", true)
     @test Hamster.get_write_hr(conf) == true
+
+    # Test 10: test h5 deflate level
+    conf = get_empty_config()
+    @test Hamster.get_h5_deflate(conf) == 0
+    set_value!(conf, "h5_deflate", 5)
+    @test Hamster.get_h5_deflate(conf) == 5
 end
 
 @testset "Optim defaults" begin
