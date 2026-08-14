@@ -87,6 +87,8 @@ push!(CONFIG_TAGS, ConfigTag{String}("val_data", "Optimizer", conf->"EIGENVAL", 
 
 
 @configtag bandmin Int64 1 "lowest band index to include in optimization." "Optimizer"
+@configtag bandinclude Vector{Int64} Int64[] "indices of additional bands to be included in the fit." "Optimizer"
+@configtag bandmultiplicity Int64 1 "Factor used to scale reference-cell band indices, including `bandmin` and `bandinclude`, for supercell calculations." "Optimizer"
 @configtag val_bandmin Int64 get_bandmin(conf) "lowest band index to include in validation set." "Optimizer"
 @configtag hr_fit Bool false "switches to fitting the model to Hamiltonian data." "Optimizer"
 
