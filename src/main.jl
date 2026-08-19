@@ -34,8 +34,12 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity
         files = ["Es"]
         if get_save_vecs(conf); push!(files, "vs"); end
         collapse_time = @elapsed for str in files
-            if any([occursin(str, file) for file in readdir(joinpath(pwd(), "tmp"))])
+            if any([occursin(str, file) for file in readdir(joinpath(pwd(), "tmp"))]) && get_kpoints_file(conf)[end-2:end] == ".h5"
                 collapse_files_with(str)
+            else 
+                for file in readdir(joinpath(pwd(), "tmp"))
+                    cp(joinpath("tmp", file), "Es.dat"; force=true)
+                end
             end
         end
         rm("tmp", recursive=true)

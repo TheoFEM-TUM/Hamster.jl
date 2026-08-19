@@ -183,35 +183,37 @@ function collapse_files_with(str; location=joinpath(pwd(), "tmp"))
         middle = join(parts[2:end-1], "_")
         push!(get!(groups, middle, String[]), file)
     end
+    if isfile("config_inds.h5")
 
-    h5open("config_inds.h5", "w") do h5
-        for (middle, group_files) in groups
+        h5open("config_inds.h5", "w") do h5
+            for (middle, group_files) in groups
 
-            # Extract and sort by trailing index
-            indices = [
-                parse(Int, split(replace(file, ".dat" => ""), "_")[end])
-                for file in group_files
-            ]
+                # Extract and sort by trailing index
+                indices = [
+                    parse(Int, split(replace(file, ".dat" => ""), "_")[end])
+                    for file in group_files
+                ]
 
-            p = sortperm(indices)
-            indices = indices[p]
-            group_files = group_files[p]
+                p = sortperm(indices)
+                indices = indices[p]
+                group_files = group_files[p]
 
-            # Read and concatenate data
-            data = [
-                read_from_file(joinpath(location, file))
-                for file in group_files
-            ]
+                # Read and concatenate data
+                data = [
+                    read_from_file(joinpath(location, file))
+                    for file in group_files
+                ]
 
-            data_combined = cat(data..., dims=ndims(data[1]) + 1)
+                data_combined = cat(data..., dims=ndims(data[1]) + 1)
 
-            # Write combined data
-            outfile = isempty(middle) ? str : "$(str)_$(middle)"
-            write_to_file(data_combined, outfile)
+                # Write combined data
+                outfile = isempty(middle) ? str : "$(str)_$(middle)"
+                write_to_file(data_combined, outfile)
 
-            # Store the original indices; position is implicit:
-            # data_combined[..., i] corresponds to indices[i]
-            h5[middle] = indices
+                # Store the original indices; position is implicit:
+                # data_combined[..., i] corresponds to indices[i]
+                h5[middle] = indices
+            end
         end
     end
 end
