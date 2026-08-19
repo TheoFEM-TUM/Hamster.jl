@@ -236,5 +236,3 @@ get_min_delta(conf::Config)::Float64 = conf("min_delta", "Optimizer") == "defaul
 get_gap_weight(conf::Config)::Float64 = conf("gap_weight", "Optimizer") == "default" ? 1.0 : conf("gap_weight", "Optimizer")
 
 get_ls_weight(conf::Config)::Bool = conf("ls_weight", "Optimizer") == "default" ? true : conf("ls_weight", "Optimizer")
-
-get_systems(conf::Config)::Vector{String} = conf("systems", "Optimizer") == "default" ? [] : conf("systems", "Optimizer")

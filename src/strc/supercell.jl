@@ -12,14 +12,14 @@ Return the list of system names available for a given configuration `conf`.
 function get_systems(conf; is_val = false)
     pc_weight = is_val ? get_pc_weight_val(conf) : get_pc_weight(conf)
     strc_file = is_val && get_xdatcar_val(conf) != "none" ? get_xdatcar_val(conf) : get_xdatcar(conf)
-    filter_systems = get_systems(conf)
+    filter_systems = get_systems_conf(conf)
     if isfile(strc_file) && get_train_mode(conf) != "pc"
         h5open(strc_file, "r") do file
             systems = keys(file)
             if pc_weight == 0
                 systems = [sys for sys in systems if !endswith(sys, "PC")]
             end
-            if filter_systems isa Vector{String} && length(filter_systems) > 0
+            if length(filter_systems) > 0
                 systems = [sys for sys in systems if sys in filter_systems]
             end
             return systems

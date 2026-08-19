@@ -101,22 +101,27 @@ Compute the forward pass of the loss function given the true values `y` and the 
 # Returns
 -`L::Float64`: The loss between `y` and `ŷ`.
 """
+
+function calc_offset(l::Loss, data_Es, Es)
+    return 1/l.N * (l.wE' * (Es - data_Es) * l.wk)
+end
 min_delta = 0.0
 function forward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_flag, min_delta = l.min_delta, gap_weight = l.gap_weight)
     Δy = y - ŷ
     if offset_flag && l.system != "individual"
         Δy = Δy .- offset
     elseif l.system == "individual"
-        Δy = Δy .- mean(Δy)
+        Δy = Δy .- calc_offset(l, ŷ, y)
     end
 
     k_min = argmin(abs.( ŷ[l.N_VBM+1,:] - ŷ[l.N_VBM, :]))
-    l.wk[k_min] = gap_weight
-    l.N = sum(l.wE)*sum(l.wk)
+    #l.wk[k_min] = gap_weight
+    #l.N = sum(l.wE)*sum(l.wk)
     #println("wk after $k_min  $(l.wk[k_min])")
     y_mod = abs.(Δy) .+ min_delta
     L_E_avg = vec(mean(y_mod, dims = 2))
     w =  y_mod ./L_E_avg
+    w[l.N_VBM:l.N_VBM+1,k_min] .*= gap_weight
     #println(maximum(w))
     if isempty(l.wE) && isempty(l.wk)
         return mean(@. abs(Δy)^l.n)^2
@@ -135,7 +140,7 @@ function forward_MAE(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_
     if offset_flag && l.system != "individual"
         Δy = Δy .- offset
     elseif l.system == "individual"
-        Δy = Δy .- mean(Δy)
+        Δy = Δy .- calc_offset(l, ŷ, y)
     end
 
     if isempty(l.wE) && isempty(l.wk)
@@ -177,11 +182,13 @@ function backward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_fla
     if offset_flag && l.system != "individual"
         Δy = Δy .- offset
     elseif l.system == "individual"
-        Δy = Δy .- mean(Δy)
+        Δy = Δy .- calc_offset(l, ŷ, y)
     end
     y_mod = abs.(Δy) .+ min_delta
     L_E_avg = vec(mean(y_mod, dims = 2))
     w =  y_mod ./L_E_avg
+    k_min = argmin(abs.( ŷ[l.N_VBM+1,:] - ŷ[l.N_VBM, :]))
+    w[l.N_VBM:l.N_VBM+1,k_min] .*= l.gap_weight
 
 """    if isempty(l.wE) && isempty(l.wk)
         L_n = mean(@. abs(Δy)^l.n)
@@ -301,7 +308,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, co
         #wE[N_VBM + gap_width + 1 : min(N_VBM + 2 * gap_width + 1, Nε)] .= 1
         #wE[N_VBM - gap_width + 1 : min(N_VBM + gap_width, Nε)] .= 2
         wE[N_VBM - gap_width : min(N_VBM + 1 + gap_width, Nε)] .= 2 
-        wE[N_VBM:N_VBM+1] .= sum(wE) * 0.25      # valence band maximum
+        wE[N_VBM:N_VBM+1] .= min(sum(wE) * 0.25, 5  )    # valence band maximum
 
         #println("gapwidth $gap_width       wE    (   $wE  )")
 
@@ -310,7 +317,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, co
 
         #wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
 
-        wk_min = get_auto_kpoint_weights(conf) ? gap_weight * sum(wk) : 1.0
+        wk_min = get_auto_kpoint_weights(conf) ? gap_weight : 1.0
         Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n, 0, offset_flag, pc_weight, system, N_VBM, min_delta, wk_min)
     end
     

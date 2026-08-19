@@ -31,6 +31,10 @@ Performs a standard calculation for an effective Hamiltonian model.
 """
 function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1, verbosity=get_verbosity(conf), write_output=true)
     systems = get_systems(conf)
+    if rank == 0
+      println("Rank 0 Number of Systems: ", length(systems))
+      println("Rank 0 Number of ranks $nranks")
+    end
     config_inds, _ = get_config_inds_for_systems(systems, comm, conf, rank=rank, write_output=write_output, optimize=false)
     local_inds = split_indices_into_chunks(config_inds, nranks, rank=rank)
     mode = haskey(conf, "Supercell") ? "universal" : "pc"

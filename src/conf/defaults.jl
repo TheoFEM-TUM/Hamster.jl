@@ -149,3 +149,17 @@ function set_seed!(conf::Config; rank=0)
         Random.seed!(conf("seed") + rank)
     end
 end
+
+#get_systems(conf::Config)::Vector{String} = conf("systems", "Optimizer") == "default" ? [] : (conf("systems", "Optimizer") isa SubString{String} ? [String(conf("systems", "Optimizer"))] : conf("systems", "Optimizer"))
+
+function get_systems_conf(conf::Config)::Vector{String}
+    if conf("systems") == "default" 
+        return []
+    else
+        if conf("systems") isa Vector
+            return conf("systems")
+        else
+            return [conf("systems")]
+        end
+    end
+end
