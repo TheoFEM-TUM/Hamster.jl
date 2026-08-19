@@ -36,7 +36,7 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_emp
         if validate && mod(iter, valeachiter) == 0
             print_val_start(prof, iter, verbosity=verbosity)
             copy_params!(ham_val, ham_train)
-            val_step!(ham_val, optim.val_losses, dl.val_data, prof, iter, comm, rank=rank, nranks=nranks, valeachiter=valeachiter)
+            val_step!(ham_val, optim.val_losses, dl.val_data, prof, iter, comm, rank=rank, nranks=nranks, valeachiter=valeachiter, conf = conf)
             print_val_status(prof, iter, verbosity=verbosity)
         end
         MPI.Barrier(comm)
@@ -76,7 +76,8 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     verbosity=get_verbosity(conf),
     warmup_ratio=get_warmup_ratio(conf),
     lr_warmup=get_lr_warmup(conf),
-    offset_step = get_offset_step(conf)
+    offset_step = get_offset_step(conf),
+    ls_weight = get_ls_weight(conf)
     )
 
     if rank == 0 && offset_step == iter
@@ -159,8 +160,9 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         push!(pc_weights, optim.losses[index].pc_weight)
     end
     pc_weights_tot = MPI.Allreduce(sum(pc_weights), +, comm)
-    L_train_sum = MPI.Allreduce(sum(Ls_train .* pc_weights), +, comm)
-    L_trains_weights = Ls_train ./ (L_train_sum / pc_weights_tot) .* pc_weights
+    L_train_sum = ls_weight ? MPI.Allreduce(sum(Ls_train .* pc_weights), +, comm) : MPI.Allreduce(sum(ones(size(Ls_train)) .* pc_weights), +, comm)
+    
+    L_trains_weights = ls_weight ? Ls_train ./ (L_train_sum / pc_weights_tot) .* pc_weights : ones(size(Ls_train)) ./ (L_train_sum / pc_weights_tot) .* pc_weights
     Ls_train = L_trains_weights .* Ls_train
 
     dL_dHr = map(enumerate(indices)) do (i, index)
@@ -249,7 +251,8 @@ Evaluates the validation loss for a Hamiltonian model over a given validation da
 - `L_val`: The average validation loss computed over all validation structures. This value is also stored in `prof.L_val` at the index corresponding to `iter`.
 - Updates to `prof.val_times`: The elapsed time for the validation step is stored in `prof.val_times[iter]`.
 """
-function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1, valeachiter=valeachiter)
+function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1, valeachiter=valeachiter, conf =get_empty_config())
+    ls_weight = get_ls_weight(conf)
     val_begin = MPI.Wtime()
     pc_weights = Float64[]
     Ls_val = map(1:ham_val.Nstrc) do index
@@ -257,8 +260,8 @@ function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1
         forward(ham_val, index, losses[index], val_data[index])[1] 
     end
     pc_weights_tot = MPI.Allreduce(sum(pc_weights), +, comm)
-    Ls_val_sum = MPI.Allreduce(sum(Ls_val .* pc_weights), +, comm)
-    Ls_val_weights = Ls_val ./ (Ls_val_sum / pc_weights_tot) .* pc_weights 
+    Ls_val_sum = ls_weight ? MPI.Allreduce(sum(Ls_val .* pc_weights), +, comm) : MPI.Allreduce(sum(ones(size(Ls_val)) .* pc_weights), +, comm)
+    Ls_val_weights = ls_weight ? Ls_val ./ (Ls_val_sum / pc_weights_tot) .* pc_weights : ones(size(Ls_val)) ./ (Ls_val_sum / pc_weights_tot) .* pc_weights
     Ls_val = Ls_val_weights .* Ls_val
     Ls_val_MAE = map(1:ham_val.Nstrc) do index
         forward(ham_val, index, losses[index], val_data[index])[3] * losses[index].pc_weight

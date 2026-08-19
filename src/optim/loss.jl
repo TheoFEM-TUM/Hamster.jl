@@ -273,7 +273,7 @@ Compute the gradient of the regularization penalty with respect to the input (pa
 backward(R::Regularization, x) = R.λ .* map(y -> abs(y) > R.b ? R.n * (y-R.b)^(R.n-1) : 0., x)
 
 
-function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, conf=get_empty_config();weights = false, loss=get_loss(conf), offset_flag = get_offset(conf), offset_mode = get_offset_mode(conf), min_delta = get_min_delta(conf), gap_weight = get_gap_weight(conf))
+function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, conf=get_empty_config();weights = false, loss=get_loss(conf), offset_flag = get_offset(conf), offset_mode = get_offset_mode(conf), min_delta = get_min_delta(conf), gap_weight = get_gap_weight(conf), pc_weight_conf = get_pc_weight(conf))
     N_strc = length(Nk_all)
     n = loss_to_n[loss]
     #n = 2
@@ -284,7 +284,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, co
     for i in 1:N_strc
         Nε = Nε_all[i]
         Nk = Nk_all[i]
-        pc_weight = N_weight_all[i]
+        pc_weight = pc_weight_conf > 100000 ? 1 : N_weight_all[i]
         system = decide_system(systems[i], offset_mode)
         N_VBM = N_VBM_all[i]
         #gap_width = ceil(Int, 0.05 * Nε)
@@ -310,7 +310,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, co
 
         #wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
 
-        wk_min = gap_weight * sum(wk)
+        wk_min = get_auto_kpoint_weights(conf) ? gap_weight * sum(wk) : 1.0
         Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n, 0, offset_flag, pc_weight, system, N_VBM, min_delta, wk_min)
     end
     

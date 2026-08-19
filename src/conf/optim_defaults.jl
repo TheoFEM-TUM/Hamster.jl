@@ -54,6 +54,7 @@ The `wE` tag sets the weight of each energy band for the calculation of the loss
 get_band_weights(conf::Config, Nε)::Vector{Float64} = conf("wE", "Optimizer") == "default" ? ones(Nε) : conf("wE", "Optimizer")
 
 get_auto_band_weights(conf::Config)::Bool = conf("auto_band_weights", "Optimizer") == "default" ? true : conf("auto_band_weights", "Optimizer")
+get_auto_kpoint_weights(conf::Config)::Bool = conf("auto_kpoint_weights", "Optimizer") == "default" ? true : conf("auto_kpoint_weights", "Optimizer")
 """
     wk=ones
 
@@ -233,3 +234,7 @@ get_offset_step(conf::Config)::Int64 = conf("offset_step", "Optimizer") == "defa
 get_min_delta(conf::Config)::Float64 = conf("min_delta", "Optimizer") == "default" ? 0.0 : conf("min_delta", "Optimizer")
 
 get_gap_weight(conf::Config)::Float64 = conf("gap_weight", "Optimizer") == "default" ? 1.0 : conf("gap_weight", "Optimizer")
+
+get_ls_weight(conf::Config)::Bool = conf("ls_weight", "Optimizer") == "default" ? true : conf("ls_weight", "Optimizer")
+
+get_systems(conf::Config)::Vector{String} = conf("systems", "Optimizer") == "default" ? [] : conf("systems", "Optimizer")
