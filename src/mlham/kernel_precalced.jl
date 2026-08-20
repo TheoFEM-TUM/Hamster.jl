@@ -1,3 +1,15 @@
+"""
+    mutable struct HamiltonianKernelPrecalced
+
+A precalculated kernel structure for efficient Hamiltonian parameterization with precomputed similarity matrices.
+
+# Fields
+- `params :: Vector{Float64}`: The ML model parameters.
+- `kp :: Kernelpoints`: Kernel points data including sampling points and key ranges.
+- `sim_params :: Float64`: Parameters for the similarity function.
+- `update :: Bool`: Flag indicating whether parameters should be updated during optimization.
+- `sm :: SimMat`: Precomputed similarity matrix containing feature vectors and shapes.
+"""
 mutable struct HamiltonianKernelPrecalced{}
     params :: Vector{Float64}
     kp :: Kernelpoints
@@ -8,6 +20,29 @@ end
 
 
 
+"""
+    HamiltonianKernelPrecalced(kernel::HamiltonianKernel, rank, systems, conf; 
+                               sim_tol=get_ml_sim_tol(conf), 
+                               verbosity=get_verbosity(conf))
+
+Constructs a `HamiltonianKernelPrecalced` object by precomputing the similarity matrix from a `HamiltonianKernel`.
+
+# Arguments
+- `kernel::HamiltonianKernel`: The base kernel from which to construct the precalculated kernel.
+- `rank`: MPI rank of the current process.
+- `systems`: Vector of system objects for distributed computation.
+- `conf`: Configuration object (default: `get_empty_config()`).
+- `sim_tol`: Similarity matrix tolerance (default: `get_ml_sim_tol(conf)`).
+- `verbosity`: Logging verbosity level (default: `get_verbosity(conf)`).
+
+# Returns
+A `HamiltonianKernelPrecalced` object with precomputed similarity matrices for efficient Hamiltonian evaluations.
+
+# Notes
+- The constructor automatically computes sorted kernel points and feature vectors.
+- MPI synchronization is used for distributed similarity matrix computation.
+- Verbosity > 1 will print timing information for the similarity matrix calculation.
+"""
 function HamiltonianKernelPrecalced(kernel::HamiltonianKernel, rank, systems, conf = get_empty_config(); sim_tol = get_ml_sim_tol(conf), verbosity=get_verbosity(conf))
     if rank == 0 && verbosity > 1; println("    Rank 0 : Starting calculation of similarity matrix..."); end
     time = @elapsed begin
@@ -21,6 +56,25 @@ end
 
 
 
+"""
+    get_hr(kernel::HamiltonianKernelPrecalced, mode, index; apply_soc=false)
+
+Retrieve the real-space Hamiltonian matrix for a given structure using precomputed kernel features.
+
+# Arguments
+- `kernel::HamiltonianKernelPrecalced`: The precalculated kernel containing precomputed feature vectors.
+- `mode`: The Hamiltonian mode (e.g., number of orbitals or electronic basis).
+- `index`: Index of the structure for which to retrieve the Hamiltonian.
+- `apply_soc`: Boolean flag to apply spin-orbit coupling transformation (default: `false`).
+
+# Returns
+- `Hr`: Vector of sparse complex Hamiltonian matrices, one for each real-space lattice vector.
+
+# Notes
+- The Hamiltonian is constructed by computing dot products between descriptor vectors and learned parameters.
+- Per-thread storage is used to avoid contention in the parallel loop over non-zero elements.
+- If `apply_soc=true`, the spin-orbit coupling basis transformation is applied to each matrix.
+"""
 function get_hr(kernel::HamiltonianKernelPrecalced, mode, index; apply_soc=false)
     @views desc_vec = kernel.sm.feature_vec[index]
     (NR, Ne) = kernel.sm.feature_shape[1][index]
@@ -96,6 +150,18 @@ Retrieve the parameters associated with a `HamiltonianKernel`.
 """
 get_params(kernel::HamiltonianKernelPrecalced) = kernel.params
 
+"""
+    copy_params!(receiving_model::HamiltonianKernelPrecalced, sending_model::HamiltonianKernelPrecalced)
+
+Copy parameters from one `HamiltonianKernelPrecalced` model to another.
+
+# Arguments
+- `receiving_model::HamiltonianKernelPrecalced`: The destination kernel model to receive parameters.
+- `sending_model::HamiltonianKernelPrecalced`: The source kernel model to copy parameters from.
+
+# Notes
+- This function modifies `receiving_model` in place by updating its `params` field.
+"""
 function copy_params!(receiving_model::HamiltonianKernelPrecalced, sending_model::HamiltonianKernelPrecalced)
     set_params!(receiving_model, get_params(sending_model))
 end
@@ -133,6 +199,19 @@ function write_params(kernel::HamiltonianKernelPrecalced, conf=get_empty_config(
     end
 end
 
+"""
+    write_params(params_data_points_tuple::Tuple{Vector{Float64}, Vector{SVector{8, Float64}}}, conf, filename)
+
+Writes parameters and data points from a tuple to a file in ML parameter format.
+
+# Arguments
+- `params_data_points_tuple`: A tuple containing (params::Vector{Float64}, data_points::Vector{SVector{8, Float64}}).
+- `conf`: Configuration object (default: `get_empty_config()`).
+- `filename`: Output filename (default: `get_ml_filename(conf)`).
+
+# Notes
+- Creates a ".dat" file with header information and parameter/data-point rows.
+"""
 function write_params(params_data_points_tuple::Tuple{Vector{Float64}, Vector{SVector{8, Float64}}}, conf=get_empty_config(); filename=get_ml_filename(conf))
     open(filename*".dat", "w") do file
         # Write header to file
@@ -155,6 +234,22 @@ function write_params(params_data_points_tuple::Tuple{Vector{Float64}, Vector{SV
     end
 end
 
+"""
+    write_datapoints(data_points::Vector{SVector{8, Float64}}, target_dir, conf, filename)
+
+Writes data points to a file in the target directory with ML parameter format.
+
+# Arguments
+- `data_points::Vector{SVector{8, Float64}}`: Vector of data points to write.
+- `target_dir::String`: Target directory path where the file will be written.
+- `conf`: Configuration object (default: `get_empty_config()`).
+- `filename`: Output filename (default: `get_ml_filename(conf)`).
+
+# Notes
+- Initializes a zero parameter vector for all data points.
+- Creates a ".dat" file with ML configuration header and data points.
+- Prints confirmation message upon successful write.
+"""
 function write_datapoints(data_points::Vector{SVector{8, Float64}}, target_dir::String, conf=get_empty_config(); filename=get_ml_filename(conf))
     open(joinpath(target_dir, filename*".dat"), "w") do file
         # Write header to file

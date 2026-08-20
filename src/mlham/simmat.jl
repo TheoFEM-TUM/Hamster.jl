@@ -1,4 +1,16 @@
 
+"""
+    mutable struct Kernelpoints{K<:Tuple}
+
+A structure containing sorted kernel points and associated metadata for efficient parameter organization.
+
+# Fields
+- `datapoints :: Vector{SVector{8, Float64}}`: Sorted vector of 8-dimensional data points representing kernel sampling points.
+- `weights :: Vector{Int64}`: Weight associated with each data point.
+- `keys :: Vector{K}`: List of unique keys (tuples) representing buckets of similar parameters.
+- `key_ranges :: Dict{K, UnitRange{Int}}`: Mapping from keys to index ranges in the sorted datapoints array.
+- `key_sizes :: Dict{K, Int64}`: Number of data points in each key bucket.
+"""
 mutable struct Kernelpoints{K<:Tuple}
     datapoints :: Vector{SVector{8, Float64}}
     weights :: Vector{Int64}
@@ -7,6 +19,25 @@ mutable struct Kernelpoints{K<:Tuple}
     key_sizes  :: Dict{K, Int64}
 end
 
+"""
+    get_sorted_Kernelpoints(data_points, weights, params, conf)
+
+Creates a `Kernelpoints` structure by sorting data points into buckets based on their keys.
+
+# Arguments
+- `data_points::Vector{SVector{8, Float64}}`: Input data points to sort.
+- `weights::Vector{Int64}`: Weights for each data point (default: `ones(Int64, length(data_points))`).
+- `params::Vector{Float64}`: Parameters associated with data points (default: `zeros(Float64, length(data_points))`).
+- `conf`: Configuration object containing key dimension specifications (default: `get_empty_config()`).
+
+# Returns
+- `kp::Kernelpoints`: Sorted kernel points structure with organized buckets.
+- `params_sorted::Vector{Float64}`: Parameters reordered to match sorted data points.
+
+# Notes
+- Data points are partitioned into buckets using key dimensions from configuration.
+- The sorting ensures deterministic ordering independent of thread scheduling.
+"""
 function get_sorted_Kernelpoints(data_points::Vector{SVector{8, Float64}}, weights = ones(Int64, length(data_points)), params = zeros(Float64, length(data_points)), conf = get_empty_config())
     Xsorted, weights_sorted, params_sorted, key_ranges = sort_by_key(data_points, weights, params, conf)
     ks = sort(collect(keys(key_ranges)))
@@ -15,6 +46,28 @@ function get_sorted_Kernelpoints(data_points::Vector{SVector{8, Float64}}, weigh
     return Kernelpoints(Xsorted, weights_sorted, ks, key_ranges, key_sizes), params_sorted
 end
 
+"""
+    sort_by_key(X, weights, params, conf; key_dims)
+
+Sorts data points, weights, and parameters into buckets based on key dimensions using a thread-safe algorithm.
+
+# Arguments
+- `X::Vector{SVector{8,Float64}}`: Input data points to sort.
+- `weights::Vector{Int64}`: Weights corresponding to each data point.
+- `params::Vector{Float64}`: Parameters corresponding to each data point.
+- `conf`: Configuration object (default: `get_empty_config()`).
+- `key_dims`: Indices of dimensions to use for key computation (from configuration).
+
+# Returns
+- `Xsorted::Vector{SVector{8,Float64}}`: Sorted data points partitioned by key.
+- `weights_sorted::Vector{Int64}`: Weights reordered to match sorted data points.
+- `params_sorted::Vector{Float64}`: Parameters reordered to match sorted data points.
+- `key_ranges::Dict`: Mapping from keys to index ranges in sorted arrays.
+
+# Notes
+- Uses a three-pass algorithm: count rows per key, scatter into buckets using atomics, then deterministically reorder within buckets.
+- This approach is thread-safe and produces deterministic results independent of thread scheduling.
+"""
 function sort_by_key(
     X::Vector{SVector{8,Float64}},
     weights::Vector{Int64},
@@ -99,6 +152,26 @@ function sort_by_key(
     return Xsorted, weights_sorted, params_sorted, key_ranges
 end
 
+"""
+    check_consistency(data_points, params; key_ranges, verbose)
+
+Verifies consistency between data points, parameters, and key ranges.
+
+# Arguments
+- `data_points`: Collection of data points.
+- `params::Vector{Float64}`: Parameter vector to check.
+- `key_ranges::Dict`: Optional mapping of keys to index ranges (default: `nothing`).
+- `verbose::Bool`: Enable detailed console output (default: `true`).
+
+# Returns
+- `ok::Bool`: `true` if all consistency checks pass, `false` otherwise.
+
+# Checks
+1. Data points and parameters have matching length.
+2. Key ranges total coverage matches actual lengths.
+3. Key ranges partition indices with no gaps or overlaps.
+4. All range indices are within bounds.
+"""
 function check_consistency(data_points, params; key_ranges=nothing, verbose=true)
     ok = true
 
@@ -152,6 +225,25 @@ function check_consistency(data_points, params; key_ranges=nothing, verbose=true
     verbose && ok && println("Consistency OK: $(length(key_ranges)) keys, $n points, ranges partition cleanly.")
     return ok
 end
+"""
+    verify_kernelpoints(kp::Kernelpoints, conf; key_dims)
+
+Performs comprehensive validation of a `Kernelpoints` structure for internal consistency.
+
+# Arguments
+- `kp::Kernelpoints`: The kernel points structure to verify.
+- `conf`: Configuration object (default: `get_empty_config()`).
+- `key_dims`: Indices of dimensions used for key computation (from configuration).
+
+# Returns
+- `ok::Bool`: `true` if all validation checks pass, `false` if any issue is found.
+
+# Checks
+1. All keys in the `keys` field are present in `key_ranges` and vice versa.
+2. Key ranges partition the index space [1:n] exactly with no gaps or overlaps.
+3. Each datapoint's recomputed key matches the key bucket assigned to its index.
+4. No index is assigned to multiple keys.
+"""
 function verify_kernelpoints(kp::Kernelpoints, conf = get_empty_config();
                               key_dims = get_ml_key_dims(conf))
     n = length(kp.datapoints)
@@ -226,6 +318,20 @@ function verify_kernelpoints(kp::Kernelpoints, conf = get_empty_config();
     return ok
 end
 
+"""
+    struct SimMat{T1, T2}
+
+A structure storing precomputed similarity matrix features for efficient Hamiltonian evaluation.
+
+# Fields
+- `feature_vec :: Vector{T1}`: Feature vectors organized by structure and real-space lattice vectors.
+- `feature_shape :: Tuple{Vector{T2}, Int64}`: Tuple containing (descriptor_sizes, number_of_datapoints).
+- `sim_params :: Float64}`: Similarity function parameter (e.g., Gaussian width σ).
+
+# Notes
+- Feature vectors contain sparse vectors computed as exponential similarities between data points and structure descriptors.
+- The feature vectors are filtered by a tolerance to eliminate small contributions.
+"""
 struct SimMat{T1, T2}
     feature_vec :: Vector{T1}
     feature_shape :: Tuple{Vector{T2}, Int64}
@@ -245,6 +351,29 @@ Generates kernel feature vectors based on structure descriptors and data points.
 """
 
 
+"""
+    get_kernel_features(structure_descriptors, kp, sim_params, tol; conf, rank, systems, key_dims)
+
+Generates precomputed kernel feature vectors based on structure descriptors and sorted kernel points.
+
+# Arguments
+- `structure_descriptors`: Vector of structure descriptor matrices (one per structure).
+- `kp::Kernelpoints`: Sorted kernel points containing data points and key ranges.
+- `sim_params::Float64`: Gaussian width parameter σ for exponential similarity function.
+- `tol::Float64`: Tolerance threshold for filtering small feature values (default: 0.1).
+- `conf`: Configuration object (default: `get_empty_config()`).
+- `rank`: MPI rank for distributed computation and logging (default: 0).
+- `systems`: Labels for each structure (default: auto-generated strings).
+- `key_dims`: Key dimensions from configuration.
+
+# Returns
+- `SimMat{T1, T2}`: Similarity matrix containing feature vectors, descriptor shapes, and parameters.
+
+# Notes
+- Computes exponential similarities between each structural descriptor element and all data points in its key bucket.
+- Filters features below tolerance to maintain sparsity.
+- Provides detailed logging of coverage statistics (number of non-zero features vs. total elements).
+"""
 function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; conf = get_empty_config(), rank = 0, systems = nothing, key_dims = get_ml_key_dims(conf))
     #dim_weights = get_dim_weights(conf)
     data_points = kp.datapoints
@@ -303,7 +432,41 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; c
 end
 
 
+"""
+    exp_sim2(x1::SVector{8,Float64}, x2::SVector{8,Float64}; σ, dim_weights)
+
+Computes the exponential similarity (Gaussian RBF kernel) between two 8-dimensional vectors.
+
+# Arguments
+- `x1::SVector{8,Float64}`: First input vector.
+- `x2::SVector{8,Float64}`: Second input vector.
+- `σ`: Gaussian width parameter (default: `√0.05`).
+- `dim_weights`: Per-dimension scaling weights (default: `ones(8)`).
+
+# Returns
+- `similarity::Float64`: Exponential similarity value in range [0, 1].
+
+# Formula
+Computes: `exp(-||x1 ⊙ w - x2 ⊙ w||² / (2σ²))` where ⊙ denotes element-wise multiplication.
+"""
 exp_sim2(x1::SVector{8,Float64}, x2::SVector{8,Float64}; σ=√0.05, dim_weights = ones(8)) =
     exp(-normdiff(x1.*dim_weights, x2.*dim_weights)^2 / (2σ^2))
 
+"""
+    exp_sim_all(x1, x2::SVector{8,Float64}; σ, dim_weights)
+
+Broadcasts the exponential similarity function over a vector of points x1 against a single point x2.
+
+# Arguments
+- `x1`: Vector of 8-dimensional points.
+- `x2::SVector{8,Float64}`: Reference point for comparison.
+- `σ`: Gaussian width parameter (default: `√0.05`).
+- `dim_weights`: Per-dimension scaling weights (default: `ones(8)`).
+
+# Returns
+- `similarities::Vector`: Exponential similarities between each point in x1 and x2.
+
+# Notes
+- Vectorized version of `exp_sim2` for efficient computation against a reference point.
+"""
 exp_sim_all(x1, x2::SVector{8,Float64}; σ=√0.05, dim_weights = ones(8)) = exp_sim2.(x1, Ref(x2); σ=σ, dim_weights=dim_weights)
