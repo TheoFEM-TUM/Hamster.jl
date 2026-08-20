@@ -182,7 +182,13 @@ end
 
 function get_ml_data_points(eff_ham, conf=get_empty_config(); tb_model=get_tb_model(conf), ml_model=get_ml_model(conf))
     if tb_model && ml_model
-        return eff_ham.models[2].data_points
+        if eff_ham.models[2] isa HamiltonianKernel
+            return eff_ham.models[2].data_points
+        elseif eff_ham.models[2] isa HamiltonianKernelPrecalced
+            return eff_ham.models[2].kp.datapoints
+        else 
+            return nothing
+        end
     else
         return nothing
     end
