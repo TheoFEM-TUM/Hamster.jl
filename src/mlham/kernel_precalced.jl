@@ -96,6 +96,11 @@ Retrieve the parameters associated with a `HamiltonianKernel`.
 """
 get_params(kernel::HamiltonianKernelPrecalced) = kernel.params
 
+function copy_params!(receiving_model::HamiltonianKernelPrecalced, sending_model::HamiltonianKernelPrecalced)
+    set_params!(receiving_model, get_params(sending_model))
+end
+
+
 """
     write_params(kernel::HamiltonianKernelPrecalced, conf=get_empty_config(); filename=get_ml_filename(conf))
 
