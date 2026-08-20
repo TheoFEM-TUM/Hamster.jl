@@ -1,5 +1,5 @@
 
-struct Kernelpoints{K<:Tuple}
+mutable struct Kernelpoints{K<:Tuple}
     datapoints :: Vector{SVector{8, Float64}}
     weights :: Vector{Int64}
     keys :: Vector{K}
