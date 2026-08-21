@@ -17,7 +17,7 @@
 @configtag apply_distance_distortion Bool false "whether distortions (distance only) are considered in descriptor." "ML"
 @configtag apply_orthogonality Bool false "enforce orthogonality of atomic orbitals of different l, m (r=0)" "ML"
 @configtag sim_mat Bool false "precalc similarity matrix of ML descriptors." "ML"
-@configtag sim_tol Float64 0.1 "cutoff tolerance for similarity matrix." "ML"
+@configtag sim_tol Float64 0.01 "cutoff tolerance for similarity matrix." "ML"
 @configtag key_dims Vector{Int64} Int64[] "Which descriptor dimensions to be used as descriptor keys. Only use discrete dimensions!" "ML"
 
 function decide_ml_update(conf::Config)::Bool

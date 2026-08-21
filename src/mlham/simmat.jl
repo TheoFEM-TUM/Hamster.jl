@@ -374,7 +374,7 @@ Generates precomputed kernel feature vectors based on structure descriptors and 
 - Filters features below tolerance to maintain sparsity.
 - Provides detailed logging of coverage statistics (number of non-zero features vs. total elements).
 """
-function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; conf = get_empty_config(), rank = 0, systems = nothing, key_dims = get_ml_key_dims(conf))
+function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; conf = get_empty_config(), rank = 0, systems = nothing, key_dims = get_ml_key_dims(conf), hyperopt_iter = get_hyperopt_niter(conf), verbosity = get_verbosity(conf))
     #dim_weights = get_dim_weights(conf)
     data_points = kp.datapoints
     key_ranges = kp.key_ranges
@@ -424,7 +424,7 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; c
             N_test[i] += sum(N_test_temp)
             N_total[i] += N_total_temp
         end
-        if get_hyperopt_niter(conf) < 2; @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Ncovered = ( $(N_test[i]) / $(N_total[i]) ) || $(ceil(Int, N_test[i] / N_total[i] * 100 )) %"; end
+        if hyperopt_iter < 2 && verbosity > 0; @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Ncovered = ( $(N_test[i]) / $(N_total[i]) ) || $(ceil(Int, N_test[i] / N_total[i] * 100 )) %"; end
     end
     structure_descriptors = nothing
     GC.gc()
