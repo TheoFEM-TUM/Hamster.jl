@@ -53,7 +53,13 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
         begin_time = MPI.Wtime()
         kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, rank=rank, nranks=nranks)
         if ml_data_points ≠ nothing
-            kernel.data_points = ml_data_points
+            if kernel isa HamiltonianKernel
+                kernel.data_points = ml_data_points
+            elseif kernel isa HamiltonianKernelPrecalced
+                kernel.kp.datapoints = ml_data_points
+            else 
+                @warn "what a sick job"
+            end
         end
         models = (models..., kernel)
         ml_time = MPI.Wtime() - begin_time
@@ -182,7 +188,13 @@ end
 
 function get_ml_data_points(eff_ham, conf=get_empty_config(); tb_model=get_tb_model(conf), ml_model=get_ml_model(conf))
     if tb_model && ml_model
-        return eff_ham.models[2].data_points
+        if eff_ham.models[2] isa HamiltonianKernel
+            return eff_ham.models[2].data_points
+        elseif eff_ham.models[2] isa HamiltonianKernelPrecalced
+            return eff_ham.models[2].kp.datapoints
+        else 
+            return nothing
+        end
     else
         return nothing
     end
