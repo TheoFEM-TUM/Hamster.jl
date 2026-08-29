@@ -37,7 +37,9 @@
 		Dict((0, 0) => 1:1, (1, 0) => 1:1),
 		Dict((0, 0) => 1, (1, 0) => 1),
 	)
-	@test !Hamster.verify_kernelpoints(bad_kernel_points, get_empty_config(); key_dims=Int64[1, 2])
+	with_logger(NullLogger()) do
+		@test !Hamster.verify_kernelpoints(bad_kernel_points, get_empty_config(); key_dims=Int64[1, 2])
+	end
 
 	bad_key_ranges = Dict((0,) => 1:1, (1,) => 2:2)
 	@test !Hamster.check_consistency(data_points, [1.0, 2.0], key_ranges=bad_key_ranges, verbose=false)
@@ -73,7 +75,9 @@ end
 	bad_point = SVector{8, Float64}(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 	bad_descriptor = sparse([1], [1], [bad_point], 1, 1)
 	bad_kp = Hamster.get_sorted_Kernelpoints([SVector{8, Float64}(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)], Int64[1], [1.0])
-	@test_throws TaskFailedException Hamster.get_kernel_features([[bad_descriptor]], bad_kp[1], 0.1, 0.01; key_dims=Int64[1])
+	with_logger(NullLogger()) do
+		@test_throws TaskFailedException Hamster.get_kernel_features([[bad_descriptor]], bad_kp[1], 0.1, 0.01; key_dims=Int64[1])
+	end
 end
 
 @testset "Similarity matrix consistency" begin

@@ -32,7 +32,9 @@
         Dict((0,) => 1:1, (1,) => 1:1),
         Dict((0,) => 1, (1,) => 1),
     )
-    @test !Hamster.verify_kernelpoints(bad_kp, get_empty_config(); key_dims=Int64[1])
+    with_logger(NullLogger()) do
+        @test !Hamster.verify_kernelpoints(bad_kp, get_empty_config(); key_dims=Int64[1])
+    end
 end
 
 @testset "HamiltonianKernelPrecalced Tests" begin
