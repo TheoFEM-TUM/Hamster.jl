@@ -341,17 +341,6 @@ end
 
 
 """
-    get_kernel_features(structure_descriptors, data_points, sim_params, tol = 1e-8) -> Vector{T3}, Tuple{Vector{T2}, Int64}
-Generates kernel feature vectors based on structure descriptors and data points.
-# Arguments
-- `structure_descriptors`: A collection of structure descriptors.
-- `data_points`: A collection of data points.
-- `sim_params`: Parameters for the similarity function.
-- `tol`: Tolerance for filtering small values (default = 1e-8).
-"""
-
-
-"""
     get_kernel_features(structure_descriptors, kp, sim_params, tol; conf, rank, systems, key_dims)
 
 Generates precomputed kernel feature vectors based on structure descriptors and sorted kernel points.

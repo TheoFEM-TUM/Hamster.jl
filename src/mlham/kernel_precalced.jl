@@ -93,16 +93,8 @@ function get_hr(kernel::HamiltonianKernelPrecalced, mode, index; apply_soc=false
         tforeach(1:nnz_ham) do m
             desc_vec_single, (i, j, key) = @views desc_vec[R][1][m]
 
-            if !haskey(key_ranges, key)
-                @warn "key not found in key_ranges, skipping" key=key R=R m=m
-                return
-            end
 
             params = @views kernel.params[key_ranges[key]]
-            if length(desc_vec_single) != length(params)
-                @warn "length mismatch, skipping" key=key R=R m=m len_desc=length(desc_vec_single) len_params=length(params)
-                return
-            end
 
             val = dot(desc_vec_single, params)
 
@@ -199,81 +191,6 @@ function write_params(kernel::HamiltonianKernelPrecalced, conf=get_empty_config(
     end
 end
 
-"""
-    write_params(params_data_points_tuple::Tuple{Vector{Float64}, Vector{SVector{8, Float64}}}, conf, filename)
-
-Writes parameters and data points from a tuple to a file in ML parameter format.
-
-# Arguments
-- `params_data_points_tuple`: A tuple containing (params::Vector{Float64}, data_points::Vector{SVector{8, Float64}}).
-- `conf`: Configuration object (default: `get_empty_config()`).
-- `filename`: Output filename (default: `get_ml_filename(conf)`).
-
-# Notes
-- Creates a ".dat" file with header information and parameter/data-point rows.
-"""
-function write_params(params_data_points_tuple::Tuple{Vector{Float64}, Vector{SVector{8, Float64}}}, conf=get_empty_config(); filename=get_ml_filename(conf))
-    open(filename*".dat", "w") do file
-        # Write header to file
-        println(file, "begin ", get_system(conf))
-        println(file, "  rcut = ", get_ml_rcut(conf))
-        println(file, "  sim_params = ", get_ml_sim_params(conf))
-        println(file, "  env_scale = ", get_ml_env_scale(conf))
-        println(file, "  apply_distortion = ", get_ml_apply_distortion(conf))
-        println(file, "  apply_orthogonality = ", get_ml_apply_orthogonality(conf))
-        println(file, "end")
-        println(file, "")
-        params, data_points = params_data_points_tuple
-        for n in eachindex(params)
-            print(file, params[n])
-            for data_point in data_points[n]
-                print(file, " "); print(file, data_point)
-            end
-            print(file, "\n")
-        end
-    end
-end
-
-"""
-    write_datapoints(data_points::Vector{SVector{8, Float64}}, target_dir, conf, filename)
-
-Writes data points to a file in the target directory with ML parameter format.
-
-# Arguments
-- `data_points::Vector{SVector{8, Float64}}`: Vector of data points to write.
-- `target_dir::String`: Target directory path where the file will be written.
-- `conf`: Configuration object (default: `get_empty_config()`).
-- `filename`: Output filename (default: `get_ml_filename(conf)`).
-
-# Notes
-- Initializes a zero parameter vector for all data points.
-- Creates a ".dat" file with ML configuration header and data points.
-- Prints confirmation message upon successful write.
-"""
-function write_datapoints(data_points::Vector{SVector{8, Float64}}, target_dir::String, conf=get_empty_config(); filename=get_ml_filename(conf))
-    open(joinpath(target_dir, filename*".dat"), "w") do file
-        # Write header to file
-        #params = init_ml_params!(data_points, conf)[1]
-        Nparams = length(data_points)
-        params = zeros(Nparams)
-        println(file, "begin ", get_system(conf))
-        println(file, "  rcut = ", get_ml_rcut(conf))
-        println(file, "  sim_params = ", get_ml_sim_params(conf))
-        println(file, "  env_scale = ", get_ml_env_scale(conf))
-        println(file, "  apply_distortion = ", get_ml_apply_distortion(conf))
-        println(file, "  apply_orthogonality = ", get_ml_apply_orthogonality(conf))
-        println(file, "end")
-        println(file, "")
-        for n in eachindex(params)
-            print(file, params[n])
-            for data_point in data_points[n]
-                print(file, " "); print(file, data_point)
-            end
-            print(file, "\n")
-        end
-    end
-    println("Wrote datapoints to ", filename*".dat")
-end
 
 
 """
