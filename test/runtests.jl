@@ -79,6 +79,8 @@ if test_all || test_only == "ML"
     @testset "ML" begin
         include("mlham/test_descriptor.jl")
         include("mlham/test_kernel.jl")
+        include("mlham/test_simmat.jl")
+        include("mlham/test_kernel_precalced.jl")
     end
 end
 
