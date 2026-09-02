@@ -74,8 +74,7 @@ function sort_by_key(
     weights::Vector{Int64},
     params::Vector{Float64},
     conf = get_empty_config();
-    key_dims = get_ml_key_dims(conf),
-    test_resort = false
+    key_dims = get_ml_key_dims(conf)
 )
     n = length(X)
     @assert length(weights) == n "weights must have one entry per element of X"
@@ -144,11 +143,11 @@ function sort_by_key(
         r = key_ranges[key]
         length(r) <= 1 && continue
         perm = sortperm(view(orig_idx, r))
-        if !issorted(view(orig_idx, r)) || test_resort
-            Xsorted[r] = Xsorted[r][perm]
-            weights_sorted[r] = weights_sorted[r][perm]
-            params_sorted[r] = params_sorted[r][perm]
-        end
+
+        Xsorted[r] = Xsorted[r][perm]
+        weights_sorted[r] = weights_sorted[r][perm]
+        params_sorted[r] = params_sorted[r][perm]
+
     end
 
     return Xsorted, weights_sorted, params_sorted, key_ranges
