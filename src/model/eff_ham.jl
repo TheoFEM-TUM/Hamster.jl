@@ -57,8 +57,6 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
                 kernel.data_points = ml_data_points
             elseif kernel isa HamiltonianKernelPrecalced
                 kernel.kp.datapoints = ml_data_points
-            else 
-                @warn "what a sick job"
             end
         end
         models = (models..., kernel)
@@ -192,8 +190,6 @@ function get_ml_data_points(eff_ham, conf=get_empty_config(); tb_model=get_tb_mo
             return eff_ham.models[2].data_points
         elseif eff_ham.models[2] isa HamiltonianKernelPrecalced
             return eff_ham.models[2].kp.datapoints
-        else 
-            return nothing
         end
     else
         return nothing
