@@ -57,6 +57,7 @@ Sorts data points, weights, and parameters into buckets based on key dimensions 
 - `params::Vector{Float64}`: Parameters corresponding to each data point.
 - `conf`: Configuration object (default: `get_empty_config()`).
 - `key_dims`: Indices of dimensions to use for key computation (from configuration).
+- `test_resort`: Boolean flag to force re-sorting within buckets for testing purposes (default: `false`).
 
 # Returns
 - `Xsorted::Vector{SVector{8,Float64}}`: Sorted data points partitioned by key.
@@ -73,7 +74,8 @@ function sort_by_key(
     weights::Vector{Int64},
     params::Vector{Float64},
     conf = get_empty_config();
-    key_dims = get_ml_key_dims(conf)
+    key_dims = get_ml_key_dims(conf),
+    test_resort = false
 )
     n = length(X)
     @assert length(weights) == n "weights must have one entry per element of X"
@@ -142,7 +144,7 @@ function sort_by_key(
         r = key_ranges[key]
         length(r) <= 1 && continue
         perm = sortperm(view(orig_idx, r))
-        if !issorted(view(orig_idx, r))
+        if !issorted(view(orig_idx, r)) || test_resort
             Xsorted[r] = Xsorted[r][perm]
             weights_sorted[r] = weights_sorted[r][perm]
             params_sorted[r] = params_sorted[r][perm]
@@ -174,15 +176,22 @@ Verifies consistency between data points, parameters, and key ranges.
 """
 function check_consistency(data_points, params; key_ranges=nothing, verbose=true)
     ok = true
+    issues = String[]
 
     # 1. Basic length match
     if length(data_points) != length(params)
         ok = false
-        verbose && @warn "data_points/params length mismatch" len_dp=length(data_points) len_params=length(params)
+        push!(issues, "data_points/params length mismatch: len_dp=$(length(data_points)) len_params=$(length(params))")
     end
 
     if key_ranges === nothing
-        verbose && ok && println("Consistency OK: $(length(data_points)) points, $(length(params)) params, lengths match.")
+        if verbose
+            if ok
+                println("Consistency OK: $(length(data_points)) points, $(length(params)) params, lengths match.")
+            else
+                @warn "Consistency check failed:\n" * join(issues, "\n")
+            end
+        end
         return ok
     end
 
@@ -190,11 +199,11 @@ function check_consistency(data_points, params; key_ranges=nothing, verbose=true
     total_range_len = sum(length(r) for r in values(key_ranges); init=0)
     if total_range_len != length(data_points)
         ok = false
-        verbose && @warn "key_ranges total length doesn't match data_points" total_range_len=total_range_len len_dp=length(data_points)
+        push!(issues, "key_ranges total length doesn't match data_points: total_range_len=$total_range_len len_dp=$(length(data_points))")
     end
     if total_range_len != length(params)
         ok = false
-        verbose && @warn "key_ranges total length doesn't match params" total_range_len=total_range_len len_params=length(params)
+        push!(issues, "key_ranges total length doesn't match params: total_range_len=$total_range_len len_params=$(length(params))")
     end
 
     # 3. Ranges partition [1:n] cleanly (no gaps/overlaps)
@@ -203,26 +212,31 @@ function check_consistency(data_points, params; key_ranges=nothing, verbose=true
     for r in all_ranges
         if first(r) != expected_start
             ok = false
-            verbose && @warn "gap or overlap in key_ranges" range=r expected_start=expected_start
-            expected_start = last(r) + 1
-            continue
+            push!(issues, "gap or overlap in key_ranges: range=$r expected_start=$expected_start")
         end
         expected_start = last(r) + 1
     end
     n = length(data_points)
     if expected_start - 1 != n
         ok = false
-        verbose && @warn "key_ranges don't cover full data_points length" covered=(expected_start - 1) total=n
+        push!(issues, "key_ranges don't cover full data_points length: covered=$(expected_start - 1) total=$n")
     end
 
-    # 4. Per-key: data_points[range] and params[range] have matching length (always true by construction, but check max index validity)
+    # 4. Per-key: max index validity
     max_idx = maximum(last(r) for r in values(key_ranges); init=0)
     if max_idx > n
         ok = false
-        verbose && @warn "key_ranges index out of bounds for data_points/params" max_idx=max_idx n=n
+        push!(issues, "key_ranges index out of bounds for data_points/params: max_idx=$max_idx n=$n")
     end
 
-    verbose && ok && println("Consistency OK: $(length(key_ranges)) keys, $n points, ranges partition cleanly.")
+    if verbose
+        if ok
+            println("Consistency OK: $(length(key_ranges)) keys, $n points, ranges partition cleanly.")
+        else
+            @warn "Consistency check failed ($(length(issues)) issue(s)):\n" * join(issues, "\n")
+        end
+    end
+
     return ok
 end
 """
