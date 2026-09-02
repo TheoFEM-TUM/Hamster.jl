@@ -12,6 +12,7 @@
 	@test_throws AssertionError Hamster.sort_by_key(data_points, Int64[10, 20], params, get_empty_config(); key_dims=Int64[1, 2])
 	@test_throws AssertionError Hamster.sort_by_key(data_points, Int64[10, 20], params, get_empty_config(); key_dims=Int64[1, 2], test_resort=true)
 
+	sorted, sorted_weights, sorted_params, ranges = Hamster.sort_by_key(data_points, weights, params, get_empty_config(); key_dims=Int64[1, 2], test_resort=true)
 	sorted, sorted_weights, sorted_params, ranges = Hamster.sort_by_key(data_points, weights, params, get_empty_config(); key_dims=Int64[1, 2])
 
 	@test sorted == data_points[[2, 1, 3]]
@@ -103,4 +104,10 @@ end
 	@test !Hamster.check_consistency(points, [1.0, 2.0], verbose=false)
 	@test Hamster.check_consistency(points, [1.0], key_ranges=Dict((0,) => 1:1), verbose=false)
 	@test !Hamster.check_consistency(points, [1.0], key_ranges=Dict((0,) => 2:2), verbose=false)
+	with_logger(NullLogger()) do
+		@test Hamster.check_consistency(points, [1.0], verbose=true)
+		@test !Hamster.check_consistency(points, [1.0, 2.0], verbose=true)
+		@test Hamster.check_consistency(points, [1.0], key_ranges=Dict((0,) => 1:1), verbose=true)
+		@test !Hamster.check_consistency(points, [1.0], key_ranges=Dict((0,) => 2:2), verbose=true)
+	end
 end
