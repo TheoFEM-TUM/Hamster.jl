@@ -377,7 +377,6 @@ Map a global index to a specific system and configuration index.
 # Returns
 - `(system, config_index)`: A tuple where `system` is the key corresponding to the system, and `config_index` is the local index within that system.
 """
-
 function get_system_and_config_index(index, local_inds)
     running_ind = 0
     for (system, indices) in local_inds, config_index in indices
