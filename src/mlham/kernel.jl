@@ -59,9 +59,10 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             sim_params=get_ml_sim_params(conf), 
                             update_ml=get_ml_update(conf),
                             mode=get_ml_mode(conf),
+                            sim_mat = get_ml_sim_mat(conf),
                             rank=0,
                             nranks=1)
-    
+    systems = [strc.system for strc in strcs]
     structure_descriptors = map(eachindex(strcs)) do n
         get_tb_descriptor(model.hs[n], model.params, strcs[n], bases[n], conf)
     end
@@ -91,7 +92,11 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         data_points = nothing
     end
     params, data_points = init_ml_params!(data_points, conf, mode=mode, update_ml=update_ml)
-    return HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml)
+    if sim_mat 
+        return HamiltonianKernelPrecalced(HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml),rank, systems, conf)
+    else
+        return HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml)
+    end
 end
 
 exp_sim(x₁, x₂; σ=√0.05)::Float64 = exp(-normdiff(x₁, x₂)^2 / (2σ^2))
