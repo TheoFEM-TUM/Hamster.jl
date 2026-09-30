@@ -10,12 +10,12 @@ A precalculated kernel structure for efficient Hamiltonian parameterization with
 - `update :: Bool`: Flag indicating whether parameters should be updated during optimization.
 - `sm :: SimMat`: Precomputed similarity matrix containing feature vectors and shapes.
 """
-mutable struct HamiltonianKernelPrecalced{}
+mutable struct HamiltonianKernelPrecalced{T1, T2}
     params :: Vector{Float64}
-    kp :: Kernelpoints
+    kp :: T1
     sim_params :: Float64
     update :: Bool
-    sm :: SimMat
+    sm :: T2
 end
 
 
