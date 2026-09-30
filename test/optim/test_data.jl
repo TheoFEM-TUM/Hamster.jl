@@ -1,3 +1,30 @@
+@testset "Band index selection" begin
+
+    @test Hamster.get_band_indices(17, 5, Int[], 1) ==
+            [17, 18, 19, 20, 21]
+
+    @test Hamster.get_band_indices(17, 5, Int[], 4) ==
+                [17, 18, 19, 20, 21]
+
+    @test Hamster.get_band_indices(17, 5, [13], 1) ==
+            [13, 17, 18, 19, 20]
+
+    @test Hamster.get_band_indices(17, 32, [13], 8, mode="md") ==
+            vcat(collect(97:104), collect(129:152))
+
+    @test Hamster.get_band_indices(10, 12, [2, 5], 2, mode="md") ==
+            vcat(collect(3:4), collect(9:10), collect(19:26))
+
+    @test Hamster.get_band_indices(5, 2, [3], 2, mode="md") == [5, 6]
+
+
+    @test Hamster.get_band_indices(17, 4, [16], 2, mode="md") ==
+            [31, 32, 33, 34]
+
+    @test_throws ArgumentError Hamster.get_band_indices(17, 5, [18], 1)
+    @test_throws ArgumentError Hamster.get_band_indices(5, 6, [6], 2, mode="md")
+end
+
 @testset "DataLoader PC Eigs" begin
     path = joinpath(@__DIR__, "test_files")
     conf = get_empty_config()

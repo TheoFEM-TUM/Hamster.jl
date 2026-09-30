@@ -117,9 +117,9 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
         for (iion1, iion2, R) in indices
             ion_label = IonLabel(ion_types[iion1], ion_types[iion2], sorted=false)
             r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
-            r⃗₂ = strc.ions[iion2].pos - strc.ions[iion2].dist - Ts[:, R]
+            r⃗₂ = apply_pbc(strc.ions[iion2].pos, Ts[:, R]) - strc.ions[iion2].dist
             
-            r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos .- Ts[:, R])
+            r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, Ts[:, R])
             r = normdiff(r⃗₁, r⃗₂)
             if r_nd ≤ rcut && r-abs(rcut_tol) < rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
                 Û = get_sk_transform_matrix(r⃗₁, r⃗₂, basis.orbitals[iion1][1].axis, tmethod)
@@ -334,9 +334,9 @@ function get_bonds(strc, basis, conf=get_empty_config();
     Threads.@threads for (chunk_id, indices) in enumerate(chunks(nn_grid_points, n=npar))
         @views for (iion1, iion2, R) in indices
             r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
-            r⃗₂ = strc.ions[iion2].pos - strc.ions[iion2].dist - Ts[:, R]
+            r⃗₂ = apply_pbc(strc.ions[iion2].pos, Ts[:, R]) - strc.ions[iion2].dist
 
-            r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos .- Ts[:, R])
+            r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, Ts[:, R])
             r = normdiff(r⃗₁, r⃗₂)
             bond = SVector{3, Float64}(r⃗₂ .- r⃗₁)
 

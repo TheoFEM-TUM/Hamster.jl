@@ -36,25 +36,51 @@ function get_ions(positions, types, distortions=zeros(3, size(positions, 2)))
 end
 
 """
-    get_ion_types(ions::Vector{Ion}; uniq=false, sorted=false)
+    get_ion_types(ions::Vector{Ion}, conf=get_empty_config(); uniq=false, sorted=false, withorbitals=false)
 
-Return an array containing the types of all ions in the vector `ions`.
+Return the type identifiers of the ions in `ions`.
+
+By default, the returned vector contains one type identifier for every ion,
+in the same order as the input vector. The result can optionally be restricted
+to unique types, sorted by type identifier, or filtered to retain only ion
+types that carry contributing orbitals.
 
 # Arguments
-- `ions::Vector{Ion}`: A vector of `Ion` instances, each containing information about an ion's type, position, and distortion.
-- `uniq::Bool=false`: If `true`, the returned array contains only unique ion types.
-- `sorted::Bool=false`: If `true`, the returned array is sorted in alphabetical order.
+- `ions::Vector{Ion}`: Ions whose type identifiers are returned.
+- `conf=get_empty_config()`: Configuration used to determine whether orbitals
+  are defined for each ion type. This argument is only used when
+  `withorbitals=true`.
+
+# Keywords
+- `uniq::Bool=false`: Return each ion type only once.
+- `sorted::Bool=false`: Sort the returned type identifiers in ascending order.
+- `withorbitals::Bool=false`: Retain only ion types that carry contributing orbitals.
 
 # Returns
-- `Vector{String}`: An array of ion types. The array will contain all ion types present in the input vector `ions`. If `uniq` is set to `true`, only unique types will be included. If `sorted` is set to `true`, the types will be sorted alphabetically.
+- `Vector{UInt8}`: Ion type identifiers satisfying the requested filtering,
+  uniqueness, and sorting options.
 """
-function get_ion_types(ions::Vector{Ion}; uniq=false, sorted=false)
+function get_ion_types(ions::Vector{Ion}, conf=get_empty_config(); uniq=false, sorted=false, withorbitals=false)
     ion_types = Vector{UInt8}(undef, length(ions))
+
     for (iion, ion) in enumerate(ions)
         ion_types[iion] = ion.type
     end
-    if uniq; ion_types = unique(ion_types); end
-    if sorted; sort!(ion_types); end
+
+    if uniq
+        ion_types = unique(ion_types)
+    end
+
+    if sorted
+        sort!(ion_types)
+    end
+
+    if withorbitals
+        filter!(type -> conf("orbitals", number_to_element(type)) ≠ "default",
+            ion_types,
+        )
+    end
+
     return ion_types
 end
 

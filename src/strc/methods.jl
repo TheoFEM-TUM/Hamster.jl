@@ -35,7 +35,7 @@ function get_nearest_neighbors(r0, rs, Ts, point_grid::PointGrid; kNN=1)
     r_NN = Vector{SVector{3, Float64}}(undef, kNN)
     @views for k in 1:kNN
         iion, t = inds[sorted_inds][k+1]
-        r_NN[k] = SVector{3}(@. rs[iion] - Ts[:, t])
+        r_NN[k] = SVector{3}(apply_pbc(rs[iion], Ts[:, t]))
     end
     return r_NN
 end

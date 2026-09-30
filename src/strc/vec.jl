@@ -99,7 +99,7 @@ end
 function normdiff(v⃗::V, w⃗::W, t⃗::T) where {V,W,T<:AbstractVector}
     out = zero(promote_type(eltype(v⃗), eltype(w⃗), eltype(t⃗)))
     @inbounds for (vi, wi, ti) in zip(v⃗, w⃗, t⃗)
-        @views out += (vi - (wi - ti))^2
+        @views out += (vi - apply_pbc(wi, ti))^2
     end
     return √out
 end
@@ -107,10 +107,24 @@ end
 function normdiff(v⃗::V, w⃗::W, δv⃗::DV, δw⃗::DW, t⃗::T) where {V,W,DV,DW,T<:AbstractVector}
     out = zero(promote_type(eltype(v⃗), eltype(w⃗), eltype(δv⃗), eltype(δw⃗), eltype(t⃗)))
     @inbounds for (vi, wi, δvi, δwi, ti) in zip(v⃗, w⃗, δv⃗, δw⃗, t⃗)
-        @views out += (vi - δvi - (wi - δwi - ti))^2
+        @views out += (vi - δvi - (apply_pbc(wi, ti) - δwi))^2
     end
     return √out
 end
+
+"""
+    apply_pbc(r⃗, R⃗)
+
+Translate a position vector `r⃗` by a translation vector `R⃗` (periodic-boundary conditions).
+
+# Arguments
+- `r⃗`: Position vector.
+- `R⃗`: Translation vector.
+
+# Returns
+- Translated vector `r⃗ - R⃗`
+"""
+apply_pbc(r⃗, R⃗) = r⃗ - R⃗
 
 """
     proj(u⃗, v⃗)
