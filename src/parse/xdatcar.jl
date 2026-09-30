@@ -31,7 +31,7 @@ function read_xdatcar(xdatcar="XDATCAR"; frac=true, verbosity=1)
         seekstart(io)
         for (i, line) in enumerate(eachline(io))
             if i == 2
-                a = parse(Int64, split(line, ' ', keepempty=false)[1])
+                a = parse(Float64, split(line, ' ', keepempty=false)[1])
             elseif i ∈ [3, 4, 5]
                 lattice[:, i-2] = a .* parse.(Float64, split(line, ' ', keepempty=false))
             elseif i == 7
