@@ -33,6 +33,8 @@ include("mlham/simmat.jl"); include("mlham/descriptor.jl"); include("mlham/kerne
 
 include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hyperopt.jl")
 
+include("auto_bandmin/hamster_subshells.jl"); include("auto_bandmin/POTCAR_subshells.jl"); include("auto_bandmin/get_bandmin.jl")
+
 include("main.jl")
 
 export write_to_file, read_from_file, clear_hamster_output

@@ -103,6 +103,12 @@ get_val_data(conf::Config)::String = conf("val_data", "Optimizer") == "default" 
 The `bandmin` tag sets the index of the lowest band that is included in the fitting.
 """
 get_bandmin(conf::Config)::Int64 = conf("bandmin", "Optimizer") == "default" ? 1 : conf("bandmin", "Optimizer")
+"""
+    auto_bandmin=true
+    The `auto_bandmin` tag determines whether the lowest band index is automatically determined based on the number of electrons in nonchemical orbitals.
+"""
+
+get_auto_bandmin(conf::Config)::Bool = conf("auto_bandmin", "Optimizer") == "default" ? true : conf("auto_bandmin", "Optimizer")
 
 """
     val_bandmin=1
