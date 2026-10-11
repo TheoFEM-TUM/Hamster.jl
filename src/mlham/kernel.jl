@@ -261,20 +261,25 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
             sort!(local_keys; by = key -> Np_Nc_dict[key][1])
             data_points_local = SVector{dim - 1, Float64}[]
 
-            for (finished, key) in enumerate(local_keys)
+            sampled_by_key = Vector{Vector{SVector{dim - 1, Float64}}}(undef, length(local_keys))
+            N_key_finished = Threads.Atomic{Int}(0)
+            tmap!(sampled_by_key, eachindex(local_keys); scheduler=GreedyScheduler()) do n
+                key = local_keys[n]
                 Np, Nc = Np_Nc_dict[key]
-                result = nothing
-                elapsed = @elapsed begin
-                    result = sample_structure_descriptors(
-                        sub_descr[key],
-                        Ncluster=Nc,
-                        Npoints=Np,
-                        ml_sampling=get_ml_sampling(conf),
-                        dim_weights=get_dim_weights(conf)
-                    )
-                end
-                append!(data_points_local, result)
-                @info "Rank $rank finished key $key with Nc=$Nc in $(round(elapsed, digits=2)) s. ($finished / $(length(local_keys)) local keys)"
+                elapsed = @elapsed result = sample_structure_descriptors(
+                    sub_descr[key],
+                    Ncluster=Nc,
+                    Npoints=Np,
+                    ml_sampling=get_ml_sampling(conf),
+                    dim_weights=get_dim_weights(conf)
+                )
+                finished = Threads.atomic_add!(N_key_finished, 1) + 1
+                @info "Rank $rank thread $(Threads.threadid()) finished key $key with Np=$Np, Nc=$Nc in $(round(elapsed, digits=2)) s. ($finished / $(length(local_keys)) local keys)"
+                result
+            end
+
+            for sampled_key in sampled_by_key
+                append!(data_points_local, sampled_key)
             end
 
             MPI.Barrier(comm)
