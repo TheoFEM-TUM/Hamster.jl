@@ -244,17 +244,21 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                 keys_list = collect(keys(sub_descr))
                 Np_Nc_dict = calc_npoint_ncluster(sub_descr, Npoints, Ncluster, conf)
 
-                sort!(keys_list; by = k -> begin
-                    Np, Nc = Np_Nc_dict[k]
-                    N_descr = size(sub_descr[k])[2]
-                    Nc * N_descr
-                end, rev = true)
+                sort!(keys_list; by = k -> Np_Nc_dict[k][1], rev = true)
+                keys_by_rank = [eltype(keys_list)[] for _ in 1:nranks]
+                Np_by_rank = zeros(Int, nranks)
+                for key in keys_list
+                    target_rank = argmin(Np_by_rank)
+                    push!(keys_by_rank[target_rank], key)
+                    Np_by_rank[target_rank] += Np_Nc_dict[key][1]
+                end
 
-                sampling_data = (sub_descr, keys_list, Np_Nc_dict)
+                sampling_data = (sub_descr, keys_by_rank, Np_Nc_dict)
             end
 
-            sub_descr, keys_list, Np_Nc_dict = MPI.bcast(sampling_data, comm)
-            local_keys = keys_list[rank + 1:nranks:end]
+            sub_descr, keys_by_rank, Np_Nc_dict = MPI.bcast(sampling_data, comm)
+            local_keys = keys_by_rank[rank + 1]
+            sort!(local_keys; by = key -> Np_Nc_dict[key][1])
             data_points_local = SVector{dim - 1, Float64}[]
 
             for (finished, key) in enumerate(local_keys)
