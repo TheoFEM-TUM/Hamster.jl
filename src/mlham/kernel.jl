@@ -234,58 +234,49 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
             # gather structure counts
             #Np_per_strc_per_rank = MPI.Gather(Np_per_strc, 0, comm)
 
+            sampling_start_time = MPI.Wtime()
+            sampling_data = nothing
             if rank == 0
-                time = @elapsed begin
-                    total_cols = sum(counts_1)
+                total_cols = sum(counts_1)
+                reshaped_descr = reshape(data_points_buf.data, dim, total_cols)
 
-                    reshaped_descr = reshape(data_points_buf.data, dim, total_cols)
+                sub_descr = build_submatrices(reshaped_descr, conf)
+                keys_list = collect(keys(sub_descr))
+                Np_Nc_dict = calc_npoint_ncluster(sub_descr, Npoints, Ncluster, conf)
 
-                    println("size reshaped_descr: ", size(reshaped_descr))
+                sort!(keys_list; by = k -> begin
+                    Np, Nc = Np_Nc_dict[k]
+                    N_descr = size(sub_descr[k])[2]
+                    Nc * N_descr
+                end, rev = true)
 
+                sampling_data = (sub_descr, keys_list, Np_Nc_dict)
+            end
 
-                    # build local descriptor matrix
+            sub_descr, keys_list, Np_Nc_dict = MPI.bcast(sampling_data, comm)
+            local_keys = keys_list[rank + 1:nranks:end]
+            data_points_local = SVector{dim - 1, Float64}[]
 
-                    sub_descr = build_submatrices(reshaped_descr, conf)
-                    keys_list = []
-                    for key in keys(sub_descr)
-                        push!(keys_list, key)
-                        #println(keys_list[end])
-                    end
-
-                    N_key = length(keys_list)
-
-                    Np_Nc_dict = calc_npoint_ncluster(sub_descr, Npoints, Ncluster, conf)
-
-                    sort!(keys_list; by = k -> begin
-                        Np, Nc = Np_Nc_dict[k]
-                        N_descr = size(sub_descr[k])[2]
-                        Nc * N_descr      # or Nc^2, or whatever best predicts runtime
-                    end, rev = true)
-
-                    data_points_local = Vector{Any}(undef, N_key)
-                    N_key_finished = Threads.Atomic{Int}(0)
-                    tmap!(data_points_local, 1:N_key; scheduler = GreedyScheduler()) do n
-                        Np, Nc = Np_Nc_dict[keys_list[n]]
-                        result = nothing
-                        elapsed = @elapsed begin
-                            result = sample_structure_descriptors(
-                                sub_descr[keys_list[n]],
-                                Ncluster=Nc,
-                                Npoints=Np,
-                                ml_sampling=get_ml_sampling(conf),
-                                dim_weights=get_dim_weights(conf)
-                            )
-                        end
-                        finished = Threads.atomic_add!(N_key_finished, 1) + 1
-                        @info "Thread $(Threads.threadid()) finished key $(keys_list[n]) with Nc=$Nc in $(round(elapsed, digits=2)) s. ($finished / $N_key)"
-                        result
-                    end
-                                        
-                    data_points_local = reduce(vcat, data_points_local)
+            for (finished, key) in enumerate(local_keys)
+                Np, Nc = Np_Nc_dict[key]
+                result = nothing
+                elapsed = @elapsed begin
+                    result = sample_structure_descriptors(
+                        sub_descr[key],
+                        Ncluster=Nc,
+                        Npoints=Np,
+                        ml_sampling=get_ml_sampling(conf),
+                        dim_weights=get_dim_weights(conf)
+                    )
                 end
-                println("Sampling data points using split strategy finished in $time s.")
-            else
-                data_points_local = Matrix{Float64}(undef, dim - 1, 0)
+                append!(data_points_local, result)
+                @info "Rank $rank finished key $key with Nc=$Nc in $(round(elapsed, digits=2)) s. ($finished / $(length(local_keys)) local keys)"
+            end
+
+            MPI.Barrier(comm)
+            sampling_time = MPI.Allreduce(MPI.Wtime() - sampling_start_time, max, comm)
+            if rank == 0
+                println("Sampling data points using split strategy finished in $sampling_time s.")
             end
         end
         local_counts::Int32 = length(data_points_local)

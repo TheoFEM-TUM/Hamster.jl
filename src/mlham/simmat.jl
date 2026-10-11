@@ -29,9 +29,9 @@ function sort_by_key(
     nthreads_total = Threads.maxthreadid()
 
     keyfun(p) = (
-        round(Int, p[1] / overlap_scale),
-        round(Int, p[2] / Z_scale),
-        round(Int, p[3] / Z_scale)
+        round(Int, p[1] ),
+        round(Int, p[2] ),
+        round(Int, p[3] )
     )
 
     # Pass 1: count rows per key, per thread (order-independent merge)
@@ -332,9 +332,9 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 1e-8; 
             N_test_temp = zeros(N_total_temp)
             tforeach(1:length(touples)) do n
                 i_mat, j_mat, hin = touples[n]
-                overlap_id = floor(Int, hin[1] / overlap_scale)
-                Z_1_id = floor(Int, hin[2] / Z_scale)
-                Z_2_id = floor(Int, hin[3] / Z_scale)
+                overlap_id = floor(Int, hin[1])
+                Z_1_id = floor(Int, hin[2])
+                Z_2_id = floor(Int, hin[3])
                 key = (overlap_id, Z_1_id, Z_2_id)
                 #data_points_mat = reduce(hcat, @view data_points[key_ranges[key]])
                 data_points_vector = @view data_points[key_ranges[key]]

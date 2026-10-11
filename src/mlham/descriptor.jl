@@ -160,9 +160,9 @@ function build_submatrices(
     Threads.@threads for i in 1:n
         tid = Threads.threadid()
         key = (
-            round(Int, X[1,i] / overlap_scale),
-            round(Int, X[2,i] / Z_scale),
-            round(Int, X[3,i] / Z_scale)
+            round(Int, X[1,i]),
+            round(Int, X[2,i]),
+            round(Int, X[3,i])
         )
         local_counts[tid][key] = get(local_counts[tid], key, 0) + 1
     end
@@ -188,9 +188,9 @@ function build_submatrices(
 
     Threads.@threads for i in 1:n
         key = (
-            round(Int, X[1,i] / overlap_scale),
-            round(Int, X[2,i] / Z_scale),
-            round(Int, X[3,i] / Z_scale)
+            round(Int, X[1,i]),
+            round(Int, X[2,i]),
+            round(Int, X[3,i])
         )
 
         col = Threads.atomic_add!(cursors[key], 1)
