@@ -431,7 +431,7 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
     return np_nc_dict
 end
 
-function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random", dim_weights=nothing)
+function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random", dim_weights=nothing, kernel_strat = "Sampling")
     #d × n
     Random.seed!(1234)
     weights = descriptors_w[end, :]
@@ -441,10 +441,52 @@ function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alph
     w_strc = weights[valid]
     Np = size(unique_descriptors, 2)
     dw = dim_weights === nothing ? ones(9) : dim_weights
+    X_scaled = unique_descriptors .* dw
+    nthreads = kernel_strat != "Sampling" ? Threads.nthreads() : 1
     if Npoints < Np
         #w_strc = descriptors_w[end, :]
         result = Logging.with_logger(NullLogger()) do
-            kmeans(unique_descriptors, Ncluster; weights=w_strc, distance=WeightedSqEuclidean(dw.^2), maxiter=50, init=:kmpp)
+            if kernel_strat == "Sampling"
+                Clustering.kmeans(unique_descriptors, Ncluster; weights=w_strc, distance=WeightedSqEuclidean(dw.^2), maxiter=50, init=:kmpp)
+            elseif kernel_strat == "Coreset"
+                ParallelKMeans.kmeans(
+                    Coreset(),
+                    X_scaled,
+                    Ncluster;
+                    n_threads=nthreads,
+                    max_iters=50,
+                    verbose=false
+                )
+            elseif kernel_strat == "Lloyd"
+                ParallelKMeans.kmeans(
+                    Lloyd(),
+                    X_scaled,
+                    Ncluster;
+                    n_threads=nthreads,
+                    max_iters=50,
+                    verbose=false
+                )
+            elseif kernel_strat == "Elkan"
+                ParallelKMeans.kmeans(
+                    Elkan(),
+                    X_scaled,
+                    Ncluster;
+                    n_threads=nthreads,
+                    max_iters=50,
+                    verbose=false
+                )
+            elseif kernel_strat == "Hamerly"
+                ParallelKMeans.kmeans(
+                    Hamerly(),
+                    X_scaled,
+                    Ncluster;
+                    n_threads=nthreads,
+                    max_iters=50,
+                    verbose=false
+                )
+            else
+                error("Unknown kernel_strat: $kernel_strat")
+            end
         end
         indices = result.assignments
         centroids = result.centers

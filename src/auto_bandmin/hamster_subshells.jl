@@ -122,10 +122,10 @@ function chemical_valence_orbitals(Z::Integer)
         end
     end
 
-    if element.number in (1, 6, 7, 8, 15, 16)
+"""    if element.number in (1, 6, 7, 8, 15, 16)
         orbitals = orbitals = NTuple{3,Int}[]
         valence_subshells = []
-    end
+    end"""
     return orbitals, valence_subshells
 end
 

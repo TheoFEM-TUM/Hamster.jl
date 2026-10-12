@@ -77,6 +77,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             sample_strat = get_sample_strat(conf),
                             only_sample = get_only_sample(conf),
                             kernel_chunck_size = get_kernel_chunk_size(conf),
+                            kernel_strat = get_kernel_strat(conf),
                             rank=0,
                             nranks=1)
     Nstrc = length(strcs)
@@ -263,19 +264,43 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
 
             sampled_by_key = Vector{Vector{SVector{dim - 1, Float64}}}(undef, length(local_keys))
             N_key_finished = Threads.Atomic{Int}(0)
-            tmap!(sampled_by_key, eachindex(local_keys); scheduler=GreedyScheduler()) do n
-                key = local_keys[n]
-                Np, Nc = Np_Nc_dict[key]
-                elapsed = @elapsed result = sample_structure_descriptors(
-                    sub_descr[key],
-                    Ncluster=Nc,
-                    Npoints=Np,
-                    ml_sampling=get_ml_sampling(conf),
-                    dim_weights=get_dim_weights(conf)
-                )
-                finished = Threads.atomic_add!(N_key_finished, 1) + 1
-                @info "Rank $rank thread $(Threads.threadid()) finished key $key with Np=$Np, Nc=$Nc in $(round(elapsed, digits=2)) s. ($finished / $(length(local_keys)) local keys)"
-                result
+            if kernel_strat == "Sample"
+                tmap!(sampled_by_key, eachindex(local_keys); scheduler=GreedyScheduler()) do n
+                    key = local_keys[n]
+                    Np, Nc = Np_Nc_dict[key]
+                    elapsed = @elapsed result = sample_structure_descriptors(
+                        sub_descr[key],
+                        Ncluster=Nc,
+                        Npoints=Np,
+                        ml_sampling=get_ml_sampling(conf),
+                        dim_weights=get_dim_weights(conf),
+                        kernel_strat = kernel_strat
+                    )
+                    finished = Threads.atomic_add!(N_key_finished, 1) + 1
+                    
+                    @info "Rank $rank thread $(Threads.threadid()) finished key $key with Np=$Np, Nc=$Nc in $(round(elapsed, digits=2)) s. ($finished / $(length(local_keys)) local keys)"
+                    result
+                end
+            else
+
+                sampled_by_key = map(eachindex(local_keys)) do n
+                    key = local_keys[n]
+                    Np, Nc = Np_Nc_dict[key]
+
+                    elapsed = @elapsed result = sample_structure_descriptors(
+                        sub_descr[key],
+                        Ncluster=Nc,
+                        Npoints=Np,
+                        ml_sampling=get_ml_sampling(conf),
+                        dim_weights=get_dim_weights(conf),
+                        kernel_strat=kernel_strat
+                    )
+
+                    finished = Threads.atomic_add!(N_key_finished, 1) + 1
+                    @info "Rank $rank finished key $key with Np=$Np, Nc=$Nc in $(round(elapsed, digits=2)) s. ($finished / $(length(local_keys)) local keys)"
+
+                    result
+                end
             end
 
             for sampled_key in sampled_by_key

@@ -113,3 +113,10 @@ get_nc_max(conf::Config)::Float64 = conf("nc_max", "ML") == "default" ? -1 : con
 get_ml_apply_orthogonality(conf::Config)::Bool = conf("apply_orthogonality", "ML") =="default" ? false : conf("apply_orthogonality", "ML")
 
 get_ml_zero_params(conf::Config)::Bool = conf("zero_params", "ML") == "default" ? false : conf("zero_params", "ML")
+
+
+"""
+    kernel_strat=Sampling
+    currently implement Sampling, Lloyd, ELkan, Hamerly, Coreset
+"""
+get_kernel_strat(conf::Config)::String = conf("kernel_strat", "ML") == "default" ? "Sampling" : conf("kernel_strat", "ML")
