@@ -168,6 +168,10 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       N_VBM_train_vec = mapreduce(vcat, local_train_inds, init=[]) do (system, train_inds)
             fill(N_VBM_train[system], length(train_inds))
       end
+      N_core_train = get_core_band_min_per_structure(local_train_inds, path = get_train_data(conf), soc=get_soc(conf))
+      N_core_train_vec = mapreduce(vcat, local_train_inds, init=[]) do (system, train_inds)
+            fill(N_core_train[system], length(train_inds))
+      end
       N_weight_train = get_weight_per_structure(local_train_inds, pc_weight = get_pc_weight(conf))
       N_weight_train_vec = mapreduce(vcat, local_train_inds, init=[]) do (system, train_inds)
             fill(N_weight_train[system], length(train_inds))
@@ -181,6 +185,10 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       N_VBM_val = get_VBM_per_structure(local_val_inds, path = get_val_data(conf), soc=get_soc(conf))
       N_VBM_val_vec = mapreduce(vcat, local_val_inds, init=[]) do (system, train_inds)
          fill(N_VBM_val[system], length(train_inds))
+      end
+      N_core_val = get_core_band_min_per_structure(local_val_inds, path = get_val_data(conf), soc=get_soc(conf))
+      N_core_val_vec = mapreduce(vcat, local_val_inds, init=[]) do (system, train_inds)
+            fill(N_core_val[system], length(train_inds))
       end
       N_weight_val = get_weight_per_structure(local_val_inds, pc_weight = get_pc_weight_val(conf))
       N_weight_val_vec = mapreduce(vcat, local_val_inds, init=[]) do (system, train_inds)
@@ -225,7 +233,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
 
       
 
-      optim = GDOptimizer(Nε_all_train, Nk_all_train, N_eig_avg_train, Nε_all_val, Nk_all_val, N_eig_avg_val, N_VBM_train_vec, N_VBM_val_vec, N_weight_train_vec, N_weight_val_vec, N_systems_train, N_systems_val, conf)
+      optim = GDOptimizer(Nε_all_train, Nk_all_train, N_eig_avg_train, Nε_all_val, Nk_all_val, N_eig_avg_val, N_VBM_train_vec, N_VBM_val_vec, N_core_train_vec, N_core_val_vec, N_weight_train_vec, N_weight_val_vec, N_systems_train, N_systems_val, conf)
 
       prof = HamsterProfiler(3, conf)
       

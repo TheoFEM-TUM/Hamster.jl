@@ -280,7 +280,7 @@ Compute the gradient of the regularization penalty with respect to the input (pa
 backward(R::Regularization, x) = R.λ .* map(y -> abs(y) > R.b ? R.n * (y-R.b)^(R.n-1) : 0., x)
 
 
-function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, conf=get_empty_config();weights = false, loss=get_loss(conf), offset_flag = get_offset(conf), offset_mode = get_offset_mode(conf), min_delta = get_min_delta(conf), gap_weight = get_gap_weight(conf), pc_weight_conf = get_pc_weight(conf))
+function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_core_all, N_weight_all, systems, conf=get_empty_config();weights = false, loss=get_loss(conf), offset_flag = get_offset(conf), offset_mode = get_offset_mode(conf), min_delta = get_min_delta(conf), gap_weight = get_gap_weight(conf), pc_weight_conf = get_pc_weight(conf))
     N_strc = length(Nk_all)
     n = loss_to_n[loss]
     #n = 2
@@ -294,6 +294,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, co
         pc_weight = pc_weight_conf > 100000 ? 1 : N_weight_all[i]
         system = decide_system(systems[i], offset_mode)
         N_VBM = N_VBM_all[i]
+        N_core = N_core_all[i]
         #gap_width = ceil(Int, 0.05 * Nε)
         gap_width = ceil(Int, N_VBM/10)
         SC_size = ceil(Int, N_VBM/10)
@@ -309,7 +310,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_weight_all, systems, co
         #wE[N_VBM - gap_width + 1 : min(N_VBM + gap_width, Nε)] .= 2
         wE[N_VBM - gap_width : min(N_VBM + 1 + gap_width, Nε)] .= 2 
         wE[N_VBM:N_VBM+1] .= min(sum(wE) * 0.25, 5  )    # valence band maximum
-
+        wE[1:N_core] .= 0.1
         #println("gapwidth $gap_width       wE    (   $wE  )")
 
         wE = get_auto_band_weights(conf) ? wE : ones(Nε) 

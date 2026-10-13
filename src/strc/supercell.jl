@@ -474,6 +474,26 @@ function get_VBM_per_structure(indices; path = "eigenval.h5", soc=false)
     return N_VBM_all
 end
 
+function get_core_band_min_per_structure(indices; path = "eigenval.h5", soc=false)
+    N_core_min_all = Dict{String, Int64}()
+    i = 0
+    for (system, index_list) in indices
+        N_core_min_system = Int64[]
+        N_core_min = h5open(path, "r") do file
+            haskey(file, "$system/N_core_min") ? read(file["$system/N_core_min"]) : 1
+        end
+        for index in index_list
+            i += 1
+            #N_core_min = count(x -> x.type ∈ element_to_number.(["Br", "I", "Cl", "F"]), structures[i].ions) * 3
+            N_core_min_final = soc ? 2*N_core_min : N_core_min
+            push!(N_core_min_system, N_core_min_final)
+        end
+        @assert length(unique(N_core_min_system)) == 1
+        N_core_min_all[system] = N_core_min_system[1]
+    end
+    return N_core_min_all
+end
+
 function get_weight_per_structure(indices; pc_weight = 1)
     N_weight_all = Dict{String, Float64}()
     for (system, index_list) in indices
