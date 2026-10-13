@@ -149,26 +149,31 @@ function build_submatrices(
     X::AbstractMatrix,
     conf;
     Z_scale=get_Z_scale(conf),
-    overlap_scale=get_overlap_scale(conf)
+    overlap_scale=get_overlap_scale(conf),
+    key_dims =get_key_dims(conf)
 )
     d, n = size(X)
+    nkeys = max(length(key_dims), 1)
+    KeyT = NTuple{nkeys,Int}
+    
 
+    keyfun = if isempty(key_dims)
+        p -> (0,)
+    else
+        p -> ntuple(j -> round(Int, p[key_dims[j]]), nkeys)
+    end
     # Pass 1: count rows per (k1,k2)
     nthreads_total = Threads.maxthreadid() 
-    local_counts = [Dict{Tuple{Int,Int,Int},Int}() for _ in 1:nthreads_total]
+    local_counts = [Dict{KeyT,Int}() for _ in 1:nthreads_total]
 
     Threads.@threads for i in 1:n
         tid = Threads.threadid()
-        key = (
-            round(Int, X[1,i]),
-            round(Int, X[2,i]),
-            round(Int, X[3,i])
-        )
+        key = keyfun(X[:, i])
         local_counts[tid][key] = get(local_counts[tid], key, 0) + 1
     end
 
     # Merge counts
-    counts = Dict{Tuple{Int,Int,Int},Int}()
+    counts = Dict{KeyT,Int}()
 
     for lc in local_counts
         for (key, c) in lc
@@ -177,7 +182,7 @@ function build_submatrices(
     end
 
     # Preallocate submatrices
-    submatrices = Dict{Tuple{Int,Int,Int},Matrix{eltype(X)}}()
+    submatrices = Dict{KeyT,Matrix{eltype(X)}}()
 
     for (key, c) in counts
         submatrices[key] = Matrix{eltype(X)}(undef, d, c)
@@ -187,11 +192,7 @@ function build_submatrices(
     cursors = Dict(key => Threads.Atomic{Int}(1) for key in keys(counts))
 
     Threads.@threads for i in 1:n
-        key = (
-            round(Int, X[1,i]),
-            round(Int, X[2,i]),
-            round(Int, X[3,i])
-        )
+        key = keyfun(X[:, i])
 
         col = Threads.atomic_add!(cursors[key], 1)
         submatrices[key][:, col] = X[:, i]
@@ -382,6 +383,15 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
     verbosity = get_verbosity(conf)
     keys_list = collect(keys(descr_dict))
     N_key = length(keys_list)
+    key_dims = get_key_dims(conf)
+    nkeys = max(length(key_dims), 1)
+    KeyT = NTuple{nkeys,Int}
+
+    keyfun = if isempty(key_dims)
+        p -> (0,)
+    else
+        p -> ntuple(j -> round(Int, p[key_dims[j]]), nkeys)
+    end
 
     descr_weights = zeros(Float64, N_key)
     tforeach(eachindex(keys_list)) do n
@@ -403,29 +413,39 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
     #Np_vec .= ceil.(Int, water_fill(Float64(Npoints), descr_weights, Np_caps))
     Np_vec .=  ceil.(Int, Nc_vec .* N_ratio)
 
-    np_nc_dict = Dict{Tuple{Int, Int, Int}, Tuple{Int, Int}}()
+    np_nc_dict = Dict{KeyT, Tuple{Int, Int}}()
     Np_total = 0
     Ncluster_total = 0
     for n in eachindex(keys_list)
         key_tuple = keys_list[n]
-        key_overlap, key_Z1, key_Z2 = key_tuple[1], key_tuple[2], key_tuple[3]
-        N_overlap_ids = length(orbital_pairs)
-        same_ion = key_overlap > N_overlap_ids
-        true_key_overlap = same_ion ? key_overlap - N_overlap_ids - 1 : key_overlap
-        element_label_1 = elements[key_Z1].symbol
-        element_label_2 = elements[key_Z2].symbol
-        overlap_label = orbital_id_to_pairs[true_key_overlap]
-        same_ion_label = same_ion ? "DI" : "NN"
-        label = "$element_label_1-$element_label_2-$(overlap_label[1])-$(overlap_label[2])-$same_ion_label"
+        if key_dims == [1, 2, 3]
+            key_overlap, key_Z1, key_Z2 = key_tuple[1], key_tuple[2], key_tuple[3]
+            N_overlap_ids = length(orbital_pairs)
+            same_ion = key_overlap > N_overlap_ids
+            true_key_overlap = same_ion ? key_overlap - N_overlap_ids - 1 : key_overlap
+            element_label_1 = elements[key_Z1].symbol
+            element_label_2 = elements[key_Z2].symbol
+            overlap_label = orbital_id_to_pairs[true_key_overlap]
+            same_ion_label = same_ion ? "DI" : "NN"
+            label = "$element_label_1-$element_label_2-$(overlap_label[1])-$(overlap_label[2])-$same_ion_label"
+        else
+            label = "key: $(key_tuple)"
+        end
 
         Nc = Nc_vec[n]
         Np = Np_vec[n]
         N_descr = size(descr_dict[keys_list[n]], 2)
         if verbosity>1; @info "Overlap: $label, N_descr: $N_descr, Nc : $Nc" ; end
         @assert Np >= Nc
-        Np_total += Np
-        Ncluster_total += Nc
-        np_nc_dict[keys_list[n]] = (Np, Nc)
+        if keys_list[n] == (0,)
+            Np_total += Npoints
+            Ncluster_total += Ncluster
+            np_nc_dict[keys_list[n]] = (Npoints, Ncluster)
+        else
+            Np_total += Np
+            Ncluster_total += Nc
+            np_nc_dict[keys_list[n]] = (Np, Nc)
+        end
     end
     @info "Total Np requested: $Np_total, Total Ncluster requested: $Ncluster_total, Total number of keys: $N_key"
     return np_nc_dict

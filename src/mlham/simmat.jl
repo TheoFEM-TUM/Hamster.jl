@@ -1,12 +1,43 @@
 
-struct Kernelpoints
+"""
+    mutable struct Kernelpoints{K<:Tuple}
+
+A structure containing sorted kernel points and associated metadata for efficient parameter organization.
+
+# Fields
+- `datapoints :: Vector{SVector{9, Float64}}`: Sorted vector of 9-dimensional data points representing kernel sampling points.
+- `weights :: Vector{Int64}`: Weight associated with each data point.
+- `keys :: Vector{K}`: List of unique keys (tuples) representing buckets of similar parameters.
+- `key_ranges :: Dict{K, UnitRange{Int}}`: Mapping from keys to index ranges in the sorted datapoints array.
+- `key_sizes :: Dict{K, Int64}`: Number of data points in each key bucket.
+"""
+mutable struct Kernelpoints{K<:Tuple}
     datapoints :: Vector{SVector{9, Float64}}
     weights :: Vector{Int64}
-    keys :: Vector{Tuple{Int64,Int64,Int64}}
-    key_ranges :: Dict{Tuple{Int64,Int64,Int64}, UnitRange{Int}}
-    key_sizes  :: Dict{Tuple{Int64,Int64,Int64}, Int64}
+    keys :: Vector{K}
+    key_ranges :: Dict{K, UnitRange{Int}}
+    key_sizes  :: Dict{K, Int64}
 end
 
+"""
+    get_sorted_Kernelpoints(data_points, weights, params, conf)
+
+Creates a `Kernelpoints` structure by sorting data points into buckets based on their keys.
+
+# Arguments
+- `data_points::Vector{SVector{9, Float64}}`: Input data points to sort.
+- `weights::Vector{Int64}`: Weights for each data point (default: `ones(Int64, length(data_points))`).
+- `params::Vector{Float64}`: Parameters associated with data points (default: `zeros(Float64, length(data_points))`).
+- `conf`: Configuration object containing key dimension specifications (default: `get_empty_config()`).
+
+# Returns
+- `kp::Kernelpoints`: Sorted kernel points structure with organized buckets.
+- `params_sorted::Vector{Float64}`: Parameters reordered to match sorted data points.
+
+# Notes
+- Data points are partitioned into buckets using key dimensions from configuration.
+- The sorting ensures deterministic ordering independent of thread scheduling.
+"""
 function get_sorted_Kernelpoints(data_points::Vector{SVector{9, Float64}}, weights = ones(Int64, length(data_points)), params = zeros(Float64, length(data_points)), conf = get_empty_config())
     Xsorted, weights_sorted, params_sorted, key_ranges = sort_by_key(data_points, weights, params, conf)
     ks = sort(collect(keys(key_ranges)))
@@ -15,34 +46,59 @@ function get_sorted_Kernelpoints(data_points::Vector{SVector{9, Float64}}, weigh
     return Kernelpoints(Xsorted, weights_sorted, ks, key_ranges, key_sizes), params_sorted
 end
 
+"""
+    sort_by_key(X, weights, params, conf; key_dims)
+
+Sorts data points, weights, and parameters into buckets based on key dimensions using a thread-safe algorithm.
+
+# Arguments
+- `X::Vector{SVector{9,Float64}}`: Input data points to sort.
+- `weights::Vector{Int64}`: Weights corresponding to each data point.
+- `params::Vector{Float64}`: Parameters corresponding to each data point.
+- `conf`: Configuration object (default: `get_empty_config()`).
+- `key_dims`: Indices of dimensions to use for key computation (from configuration).
+- `test_resort`: Boolean flag to force re-sorting within buckets for testing purposes (default: `false`).
+
+# Returns
+- `Xsorted::Vector{SVector{9,Float64}}`: Sorted data points partitioned by key.
+- `weights_sorted::Vector{Int64}`: Weights reordered to match sorted data points.
+- `params_sorted::Vector{Float64}`: Parameters reordered to match sorted data points.
+- `key_ranges::Dict`: Mapping from keys to index ranges in sorted arrays.
+
+# Notes
+- Uses a three-pass algorithm: count rows per key, scatter into buckets using atomics, then deterministically reorder within buckets.
+- This approach is thread-safe and produces deterministic results independent of thread scheduling.
+"""
 function sort_by_key(
     X::Vector{SVector{9,Float64}},
     weights::Vector{Int64},
     params::Vector{Float64},
     conf = get_empty_config();
-    Z_scale=get_Z_scale(conf),
-    overlap_scale=get_overlap_scale(conf)
+    key_dims = get_key_dims(conf)
 )
     n = length(X)
     @assert length(weights) == n "weights must have one entry per element of X"
 
     nthreads_total = Threads.maxthreadid()
 
-    keyfun(p) = (
-        round(Int, p[1] ),
-        round(Int, p[2] ),
-        round(Int, p[3] )
-    )
+    nkeys = max(length(key_dims), 1)
+    KeyT = NTuple{nkeys,Int}
+
+    keyfun = if isempty(key_dims)
+        p -> (0,)
+    else
+        p -> ntuple(j -> round(Int, p[key_dims[j]]), nkeys)
+    end
 
     # Pass 1: count rows per key, per thread (order-independent merge)
-    local_counts = [Dict{Tuple{Int,Int,Int},Int}() for _ in 1:nthreads_total]
+    local_counts = [Dict{KeyT,Int}() for _ in 1:nthreads_total]
     Threads.@threads for i in 1:n
         tid = Threads.threadid()
         key = keyfun(X[i])
         local_counts[tid][key] = get(local_counts[tid], key, 0) + 1
     end
 
-    counts = Dict{Tuple{Int,Int,Int},Int}()
+    counts = Dict{KeyT,Int}()
     for lc in local_counts
         for (key, c) in lc
             counts[key] = get(counts, key, 0) + c
@@ -51,8 +107,8 @@ function sort_by_key(
 
     # Canonical key ordering -> fixed, nthreads-independent bucket ranges
     keys_sorted = sort(collect(keys(counts)))
-    offsets = Dict{Tuple{Int,Int,Int},Int}()
-    key_ranges = Dict{Tuple{Int,Int,Int},UnitRange{Int}}()
+    offsets = Dict{KeyT,Int}()
+    key_ranges = Dict{KeyT,UnitRange{Int}}()
     let pos = 1
         for key in keys_sorted
             c = counts[key]
@@ -87,27 +143,54 @@ function sort_by_key(
         r = key_ranges[key]
         length(r) <= 1 && continue
         perm = sortperm(view(orig_idx, r))
-        if !issorted(view(orig_idx, r))
-            Xsorted[r] = Xsorted[r][perm]
-            weights_sorted[r] = weights_sorted[r][perm]
-            params_sorted[r] = params_sorted[r][perm]
-        end
+
+        Xsorted[r] = Xsorted[r][perm]
+        weights_sorted[r] = weights_sorted[r][perm]
+        params_sorted[r] = params_sorted[r][perm]
+
     end
 
     return Xsorted, weights_sorted, params_sorted, key_ranges
 end
 
+"""
+    check_consistency(data_points, params; key_ranges, verbose)
+
+Verifies consistency between data points, parameters, and key ranges.
+
+# Arguments
+- `data_points`: Collection of data points.
+- `params::Vector{Float64}`: Parameter vector to check.
+- `key_ranges::Dict`: Optional mapping of keys to index ranges (default: `nothing`).
+- `verbose::Bool`: Enable detailed console output (default: `true`).
+
+# Returns
+- `ok::Bool`: `true` if all consistency checks pass, `false` otherwise.
+
+# Checks
+1. Data points and parameters have matching length.
+2. Key ranges total coverage matches actual lengths.
+3. Key ranges partition indices with no gaps or overlaps.
+4. All range indices are within bounds.
+"""
 function check_consistency(data_points, params; key_ranges=nothing, verbose=true)
     ok = true
+    issues = String[]
 
     # 1. Basic length match
     if length(data_points) != length(params)
         ok = false
-        verbose && @warn "data_points/params length mismatch" len_dp=length(data_points) len_params=length(params)
+        push!(issues, "data_points/params length mismatch: len_dp=$(length(data_points)) len_params=$(length(params))")
     end
 
     if key_ranges === nothing
-        verbose && ok && println("Consistency OK: $(length(data_points)) points, $(length(params)) params, lengths match.")
+        if verbose
+            if ok
+                println("Consistency OK: $(length(data_points)) points, $(length(params)) params, lengths match.")
+            else
+                @warn "Consistency check failed:\n" * join(issues, "\n")
+            end
+        end
         return ok
     end
 
@@ -115,11 +198,11 @@ function check_consistency(data_points, params; key_ranges=nothing, verbose=true
     total_range_len = sum(length(r) for r in values(key_ranges); init=0)
     if total_range_len != length(data_points)
         ok = false
-        verbose && @warn "key_ranges total length doesn't match data_points" total_range_len=total_range_len len_dp=length(data_points)
+        push!(issues, "key_ranges total length doesn't match data_points: total_range_len=$total_range_len len_dp=$(length(data_points))")
     end
     if total_range_len != length(params)
         ok = false
-        verbose && @warn "key_ranges total length doesn't match params" total_range_len=total_range_len len_params=length(params)
+        push!(issues, "key_ranges total length doesn't match params: total_range_len=$total_range_len len_params=$(length(params))")
     end
 
     # 3. Ranges partition [1:n] cleanly (no gaps/overlaps)
@@ -128,35 +211,65 @@ function check_consistency(data_points, params; key_ranges=nothing, verbose=true
     for r in all_ranges
         if first(r) != expected_start
             ok = false
-            verbose && @warn "gap or overlap in key_ranges" range=r expected_start=expected_start
-            expected_start = last(r) + 1
-            continue
+            push!(issues, "gap or overlap in key_ranges: range=$r expected_start=$expected_start")
         end
         expected_start = last(r) + 1
     end
     n = length(data_points)
     if expected_start - 1 != n
         ok = false
-        verbose && @warn "key_ranges don't cover full data_points length" covered=(expected_start - 1) total=n
+        push!(issues, "key_ranges don't cover full data_points length: covered=$(expected_start - 1) total=$n")
     end
 
-    # 4. Per-key: data_points[range] and params[range] have matching length (always true by construction, but check max index validity)
+    # 4. Per-key: max index validity
     max_idx = maximum(last(r) for r in values(key_ranges); init=0)
     if max_idx > n
         ok = false
-        verbose && @warn "key_ranges index out of bounds for data_points/params" max_idx=max_idx n=n
+        push!(issues, "key_ranges index out of bounds for data_points/params: max_idx=$max_idx n=$n")
     end
 
-    verbose && ok && println("Consistency OK: $(length(key_ranges)) keys, $n points, ranges partition cleanly.")
+    if verbose
+        if ok
+            println("Consistency OK: $(length(key_ranges)) keys, $n points, ranges partition cleanly.")
+        else
+            @warn "Consistency check failed ($(length(issues)) issue(s)):\n" * join(issues, "\n")
+        end
+    end
+
     return ok
 end
+"""
+    verify_kernelpoints(kp::Kernelpoints, conf; key_dims)
 
+Performs comprehensive validation of a `Kernelpoints` structure for internal consistency.
+
+# Arguments
+- `kp::Kernelpoints`: The kernel points structure to verify.
+- `conf`: Configuration object (default: `get_empty_config()`).
+- `key_dims`: Indices of dimensions used for key computation (from configuration).
+
+# Returns
+- `ok::Bool`: `true` if all validation checks pass, `false` if any issue is found.
+
+# Checks
+1. All keys in the `keys` field are present in `key_ranges` and vice versa.
+2. Key ranges partition the index space [1:n] exactly with no gaps or overlaps.
+3. Each datapoint's recomputed key matches the key bucket assigned to its index.
+4. No index is assigned to multiple keys.
+"""
 function verify_kernelpoints(kp::Kernelpoints, conf = get_empty_config();
-                              Z_scale = get_Z_scale(conf),
-                              overlap_scale = get_overlap_scale(conf))
+                              key_dims = get_key_dims(conf))
     n = length(kp.datapoints)
     ok = true
 
+    nkeys = max(length(key_dims), 1)
+    KeyT = NTuple{nkeys,Int}
+
+    keyfun = if isempty(key_dims)
+        p -> (0,)
+    else
+        p -> ntuple(j -> round(Int, p[key_dims[j]]), nkeys)
+    end
 
     # --- Check 2: every key in key_ranges is in keys, and vice versa ---
     keyset_from_keys = Set(kp.keys)
@@ -190,7 +303,7 @@ function verify_kernelpoints(kp::Kernelpoints, conf = get_empty_config();
 
     # --- Check 4: every datapoint's recomputed key matches the key owning its index ---
     # Build index -> key lookup from key_ranges
-    idx_to_key = Vector{Union{Nothing,Tuple{Int,Int,Int}}}(undef, n)
+    idx_to_key = Vector{Union{Nothing,KeyT}}(undef, n)
     fill!(idx_to_key, nothing)
     for (k, r) in kp.key_ranges
         for i in r
@@ -204,11 +317,7 @@ function verify_kernelpoints(kp::Kernelpoints, conf = get_empty_config();
 
     for i in 1:n
         p = kp.datapoints[i]
-        true_key = (
-            round(Int, p[1] / overlap_scale),
-            round(Int, p[2] / Z_scale),
-            round(Int, p[3] / Z_scale),
-        )
+        true_key = keyfun(p)
         assigned_key = idx_to_key[i]
         if assigned_key === nothing
             @warn "datapoint index not covered by any key_range" index=i
@@ -222,6 +331,20 @@ function verify_kernelpoints(kp::Kernelpoints, conf = get_empty_config();
     return ok
 end
 
+"""
+    struct SimMat{T1, T2}
+
+A structure storing precomputed similarity matrix features for efficient Hamiltonian evaluation.
+
+# Fields
+- `feature_vec :: Vector{T1}`: Feature vectors organized by structure and real-space lattice vectors.
+- `feature_shape :: Tuple{Vector{T2}, Int64}`: Tuple containing (descriptor_sizes, number_of_datapoints).
+- `sim_params :: Float64}`: Similarity function parameter (e.g., Gaussian width σ).
+
+# Notes
+- Feature vectors contain sparse vectors computed as exponential similarities between data points and structure descriptors.
+- The feature vectors are filtered by a tolerance to eliminate small contributions.
+"""
 struct SimMat{T1, T2}
     feature_vec :: Vector{T1}
     feature_shape :: Tuple{Vector{T2}, Int64}
@@ -231,145 +354,121 @@ end
 
 
 """
-    get_kernel_features(structure_descriptors, data_points, sim_params, tol = 1e-8) -> Vector{T3}, Tuple{Vector{T2}, Int64}
-Generates kernel feature vectors based on structure descriptors and data points.
+    get_kernel_features(structure_descriptors, kp, sim_params, tol; conf, rank, systems, key_dims)
+
+Generates precomputed kernel feature vectors based on structure descriptors and sorted kernel points.
+
 # Arguments
-- `structure_descriptors`: A collection of structure descriptors.
-- `data_points`: A collection of data points.
-- `sim_params`: Parameters for the similarity function.
-- `tol`: Tolerance for filtering small values (default = 1e-8).
+- `structure_descriptors`: Vector of structure descriptor matrices (one per structure).
+- `kp::Kernelpoints`: Sorted kernel points containing data points and key ranges.
+- `sim_params::Float64`: Gaussian width parameter σ for exponential similarity function.
+- `tol::Float64`: Tolerance threshold for filtering small feature values (default: 0.1).
+- `conf`: Configuration object (default: `get_empty_config()`).
+- `rank`: MPI rank for distributed computation and logging (default: 0).
+- `systems`: Labels for each structure (default: auto-generated strings).
+- `key_dims`: Key dimensions from configuration.
+
+# Returns
+- `SimMat{T1, T2}`: Similarity matrix containing feature vectors, descriptor shapes, and parameters.
+
+# Notes
+- Computes exponential similarities between each structural descriptor element and all data points in its key bucket.
+- Filters features below tolerance to maintain sparsity.
+- Provides detailed logging of coverage statistics (number of non-zero features vs. total elements).
 """
-
-function get_kernel_features_old(structure_descriptors, data_points, sim_params, tol = 1e-8; conf = get_empty_config(), rank = 0, systems = nothing)
-    #verbosity = get_verbosity(conf)
-    tol = 0.1
-    #println(tol)
-    #println("NTHREADS",Threads.nthreads())
-    N_mats = size(structure_descriptors)[1]
-    systems = systems === nothing ? [string("system_", i) for i in 1:N_mats] : systems
-    N_dp = size(data_points)[1]
-    descr_sizes = [(size(structure_descriptors[i])[1], size(structure_descriptors[i][1])[1]) for i in 1:N_mats]
-    Desc_Vec = [ [[ spzeros(Float64, descr_sizes[i][2], descr_sizes[i][2]) for _ in 1:descr_sizes[i][1] ] for d in 1:N_dp]
-      for i in 1:N_mats ]
-    N_test = zeros(Int, N_mats)
-    N_max = 0
-    for i in 1:N_mats
-    #for i in 1:N_mats
-        @views h_env = structure_descriptors[i]
-        #for d in 1:N_dp
-        tforeach(1:N_dp) do d
-            @views data_point = data_points[d]
-            N_R, Ne = descr_sizes[i]
-            for R in 1:N_R
-                is = Vector{Int32}() 
-                js = Vector{Int32}() 
-                vals = Vector{Float64}() 
-                for (i_mat, j_mat, hin) in zip(findnz(h_env[R])...)
-                    val = exp_sim(data_point, hin, σ=sim_params)
-                    #N_max += 1
-                    if abs(val) > tol
-                        push!(is, i_mat)
-                        push!(js, j_mat)
-                        push!(vals, val)
-                        N_test[i]+= 1
-                    end
-                end
-                if size(is)[1] > 0
-                    Desc_Vec[i][d][R] = sparse(is, js, vals, Ne, Ne)
-                end
-            end
-        end
-        @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Npoints = $(N_test[i])"
-    end
-    structure_descriptors = nothing
-    GC.gc()
-    #println("N_test",N_test)
-    #return Desc_Vec, (descr_sizes, N_dp)
-    return SimMat(Desc_Vec, (descr_sizes, N_dp), sim_params)
-end
-
-
-function get_kernel_features(structure_descriptors, kp, sim_params, tol = 1e-8; conf = get_empty_config(), rank = 0, systems = nothing)
-    dim_weights = get_dim_weights(conf)
-    verbosity = get_verbosity(conf)
+function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; conf = get_empty_config(), rank = 0, systems = nothing, key_dims = get_key_dims(conf), hyperopt_iter = get_hyperopt_niter(conf), verbosity = get_verbosity(conf), sim_tol = get_sim_tol(conf))
+    #dim_weights = get_dim_weights(conf)
     data_points = kp.datapoints
     key_ranges = kp.key_ranges
-    key_sizes = kp.key_sizes
-    #verbosity = get_verbosity(conf)
-    #data_points_dict = build_submatrices(data_points, conf)
-    Z_scale=get_Z_scale(conf)
-    overlap_scale=get_overlap_scale(conf)
-    tol = 0.5
-    #println(tol)
-    #println("NTHREADS",Threads.nthreads())
+
+    nkeys = max(length(key_dims), 1)
+    KeyT = NTuple{nkeys,Int64}
+
+    keyfun = if isempty(key_dims)
+        hin -> (0,)
+    else
+        hin -> ntuple(j -> Int64(hin[key_dims[j]]), nkeys)
+    end
+
     N_mats = size(structure_descriptors)[1]
     systems = systems === nothing ? [string("system_", i) for i in 1:N_mats] : systems
     N_dp = size(data_points)[1]
-    #dim = size(data_points[1])[1]
     descr_sizes = [(size(structure_descriptors[i])[1], size(structure_descriptors[i][1])[1]) for i in 1:N_mats]
-    #cum_sim = Dict()
-    #for (key, size) in key_sizes
-        #cum_sim[key] = zeros(size)
-    #end
     Desc_Vec = [
         [ begin
             n = nnz(structure_descriptors[i][R])
-            (Vector{Tuple{SparseVector{Float64, Int64}, Tuple{Int64, Int64, Tuple{Int64,Int64,Int64}}}}(undef, n), n)
+            (Vector{Tuple{SparseVector{Float64, Int64}, Tuple{Int64, Int64, KeyT}}}(undef, n), n)
         end
         for R in 1:descr_sizes[i][1] ]
         for i in 1:N_mats
-    ]
+        ]
     N_test = zeros(Int64, N_mats)
     N_total = zeros(Int64, N_mats)
     for i in 1:N_mats
         N_R, Ne = descr_sizes[i]
         for R in 1:N_R
             h_env_R = structure_descriptors[i][R]
-            #Nnz = Desc_Vec[i][R][2]
             touples = collect(zip(findnz(h_env_R)...))
             N_total_temp  = length(touples)
-            #@assert N_total_temp == Desc_Vec[i][R][2]
             N_test_temp = zeros(N_total_temp)
             tforeach(1:length(touples)) do n
                 i_mat, j_mat, hin = touples[n]
-                overlap_id = floor(Int, hin[1])
-                Z_1_id = floor(Int, hin[2])
-                Z_2_id = floor(Int, hin[3])
-                key = (overlap_id, Z_1_id, Z_2_id)
-                #data_points_mat = reduce(hcat, @view data_points[key_ranges[key]])
+                key = keyfun(hin)
                 data_points_vector = @view data_points[key_ranges[key]]
-                #N_dp = size(data_points_mat)[2]
-                val_vec = exp_sim_all(data_points_vector, hin, σ=sim_params, dim_weights = dim_weights)
-                val_vec[abs.(val_vec) .<= tol] .= 0
+                #val_vec = exp_sim_all(data_points_vector, hin, σ=sim_params, dim_weights = dim_weights)
+                val_vec = exp_sim_all(data_points_vector, hin, σ=sim_params)
+                val_vec[abs.(val_vec) .<= sim_tol] .= 0
                 val_vec = sparse(val_vec)
                 covered = nnz(val_vec) > 0 ? 1 : 0
                 N_test_temp[n] = covered
-                #N_total[i] += 1
-                #println(nnz(val_vec))
                 Desc_Vec[i][R][1][n] = (val_vec,(i_mat,j_mat, key))
-                #@assert size(Desc_Vec[i][R][1][n][1])[1] == key_sizes[key]
-                #cum_sim[key] += val_vec
             end
             N_test[i] += sum(N_test_temp)
             N_total[i] += N_total_temp
         end
-        if get_hyperopt_niter(conf) < 2; @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Ncovered = ( $(N_test[i]) / $(N_total[i]) ) || $(ceil(Int, N_test[i] / N_total[i] * 100 )) %"; end
+        if hyperopt_iter < 2 && verbosity > 0; @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Ncovered = ( $(N_test[i]) / $(N_total[i]) ) || $(ceil(Int, N_test[i] / N_total[i] * 100 )) %"; end
     end
-    #for (key, vec) in cum_sim
-        #zero_positions = length(findall(==(0.0), vec))
-        #if zero_positions > 0
-            #println("$key: $zero_positions")
-        #end
-    #end
     structure_descriptors = nothing
     GC.gc()
-    #println("N_test",N_test)
-    #return Desc_Vec, (descr_sizes, N_dp)
     return SimMat(Desc_Vec, (descr_sizes, N_dp), sim_params)
 end
 
 
+"""
+    exp_sim2(x1::SVector{9,Float64}, x2::SVector{9,Float64}; σ, dim_weights)
+
+Computes the exponential similarity (Gaussian RBF kernel) between two 9-dimensional vectors.
+
+# Arguments
+- `x1::SVector{9,Float64}`: First input vector.
+- `x2::SVector{9,Float64}`: Second input vector.
+- `σ`: Gaussian width parameter (default: `√0.05`).
+- `dim_weights`: Per-dimension scaling weights (default: `ones(9)`).
+
+# Returns
+- `similarity::Float64`: Exponential similarity value in range [0, 1].
+
+# Formula
+Computes: `exp(-||x1 ⊙ w - x2 ⊙ w||² / (2σ²))` where ⊙ denotes element-wise multiplication.
+"""
 exp_sim2(x1::SVector{9,Float64}, x2::SVector{9,Float64}; σ=√0.05, dim_weights = ones(9)) =
     exp(-normdiff(x1.*dim_weights, x2.*dim_weights)^2 / (2σ^2))
 
+"""
+    exp_sim_all(x1, x2::SVector{9,Float64}; σ, dim_weights)
+
+Broadcasts the exponential similarity function over a vector of points x1 against a single point x2.
+
+# Arguments
+- `x1`: Vector of 9-dimensional points.
+- `x2::SVector{9,Float64}`: Reference point for comparison.
+- `σ`: Gaussian width parameter (default: `√0.05`).
+- `dim_weights`: Per-dimension scaling weights (default: `ones(9)`).
+
+# Returns
+- `similarities::Vector`: Exponential similarities between each point in x1 and x2.
+
+# Notes
+- Vectorized version of `exp_sim2` for efficient computation against a reference point.
+"""
 exp_sim_all(x1, x2::SVector{9,Float64}; σ=√0.05, dim_weights = ones(9)) = exp_sim2.(x1, Ref(x2); σ=σ, dim_weights=dim_weights)
