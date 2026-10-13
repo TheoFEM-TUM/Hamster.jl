@@ -127,13 +127,16 @@ get_kernel_strat(conf::Config)::String = conf("kernel_strat", "ML") == "default"
 get_sim_tol(conf::Config)::Float64 = conf("sim_tol", "ML") == "default" ? 0.01 : conf("sim_tol", "ML")
 
 function get_key_dims(conf::Config)::Vector{Int64}
-    key_dims = conf("key_dims", "ML") == Int64[] ? conf("key_dims", "ML") : [conf("key_dims", "ML")]
+    #key_dims = conf("key_dims", "ML") == Int64[] ? conf("key_dims", "ML") : [conf("key_dims", "ML")]
+    key_dims = conf("key_dims", "ML")
     if key_dims == "default"
         return Int64[1, 2, 3]
-    elseif key_dims == [0]
+    elseif key_dims == 0 || key_dims == "0"
         return Int64[]
-    else
+    elseif key_dims isa Vector
         return key_dims
+    else
+        return [Int64(key_dims)]
     end
 end
 #get_key_dims(conf::Config)::Vector{Int64} = conf("key_dims", "ML") == "default" ? Int64[] : conf("key_dims", "ML")
