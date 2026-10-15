@@ -12,21 +12,29 @@ end
 
 const CuDeviceHk = DeviceHk{<:CuVector}
 
-# heevjBatched is limited to matrices up to 32 × 32
-const MAX_BATCHED_EIGEN_SIZE = 32
+# Below this size, LAPACK on the host (threaded over k-points, including the transfers) is faster than cuSOLVER.
+# Measured on an RTX 4500 Ada: the host is 17× faster at Nε = 64 and 2× at 256, equal at 512, and cuSOLVER is 4× faster
+# at 1024 and 10× at 2048. Batched Jacobi (heevjBatched, Nε ≤ 32) is slower than the host for all sizes.
+const MIN_GPU_EIGEN_SIZE = 512
 
 function Hamster.device_eigen(Hk::CuDeviceHk, ::Dense; kwargs...)
     H = densify(Hk)
-    if Hk.Nε ≤ MAX_BATCHED_EIGEN_SIZE
-        Es, vs = cuSOLVER.heevjBatched!('V', 'U', H)
+    if Hk.Nε < MIN_GPU_EIGEN_SIZE
+        Hh = Array(H)
+        Es = zeros(Hk.Nε, nkpoints(Hk))
+        Threads.@threads for k in axes(Hh, 3)
+            eig = eigen!(Hermitian(Hh[:, :, k]))
+            Es[:, k] = eig.values
+            Hh[:, :, k] = eig.vectors
+        end
+        return Es, copyto!(H, Hh)
     else
         Es = CuMatrix{Float64}(undef, Hk.Nε, nkpoints(Hk))
         for k in axes(H, 3)
             Es[:, k], _ = cuSOLVER.Xsyevd!('V', 'U', view(H, :, :, k))
         end
-        vs = H
+        return Array(Es), H
     end
-    return Array(Es), vs
 end
 
 function Hamster.device_eigen(Hk::CuDeviceHk, ::Sparse; Neig=6, target=0.0, method="shift-invert")

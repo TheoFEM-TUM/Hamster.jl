@@ -1,8 +1,9 @@
 """
     DeviceContext
 
-Device-specific data of an `EffectiveHamiltonian`: the device, the `DeviceLinearMap` of each structure and the settings of the
-sparse eigensolver used during training.
+Device-specific data of an `EffectiveHamiltonian`: the device, the `DeviceLinearMap` of each structure, the settings of the
+sparse eigensolver used during training, and caches of the device copies of the phase factors and model parameters
+(host-device transfers have a large latency compared to the kernels for small structures).
 """
 struct DeviceContext{D, L}
     device :: D
@@ -10,6 +11,8 @@ struct DeviceContext{D, L}
     neig :: Int64
     target :: Float64
     method :: String
+    phase_cache :: Dict{Tuple{Int64, UInt64}, Any}
+    param_cache :: Dict{Int64, Tuple{Vector{Float64}, Any}}
 end
 
 function DeviceContext(device, models, strcs, bases, conf=get_empty_config(); soc=get_soc(conf))
@@ -17,7 +20,8 @@ function DeviceContext(device, models, strcs, bases, conf=get_empty_config(); so
         Nε = soc ? 2 * length(bases[index]) : length(bases[index])
         DeviceLinearMap(models, index, Nε, size(strcs[index].Rs, 2), device, soc=soc)
     end
-    return DeviceContext(device, maps, get_neig(conf), get_eig_target(conf), get_diag_method(conf))
+    return DeviceContext(device, maps, get_neig(conf), get_eig_target(conf), get_diag_method(conf),
+        Dict{Tuple{Int64, UInt64}, Any}(), Dict{Int64, Tuple{Vector{Float64}, Any}}())
 end
 
 """
@@ -87,14 +91,39 @@ function get_device_hamiltonian(lmap::DeviceLinearMap, hr, phase, sp_diag)
     return DeviceHk(lmap.Nε, lmap.hk_rowptr, lmap.hk_colval, lmap.hk_rowval, lmap.diag_pos, hk, sp_diag)
 end
 
-device_params(ham, ctx) = map(model -> to_device(ctx.device, ComplexF64.(get_params(model))), ham.models)
+"""
+    device_params(ham, ctx)
+
+Device copies of the parameters of all models. They are only uploaded again if the parameters changed.
+"""
+function device_params(ham, ctx)
+    return map(enumerate(ham.models)) do (m, model)
+        params = get_params(model)
+        cached = get(ctx.param_cache, m, nothing)
+        if isnothing(cached) || cached[1] ≠ params
+            cached = (copy(params), to_device(ctx.device, ComplexF64.(params)))
+            ctx.param_cache[m] = cached
+        end
+        cached[2]
+    end
+end
+
 device_phase(ctx, Rs, ks) = to_device(ctx.device, exp_2πi(Rs, ks))
+
+"""
+    device_phase(ctx, index, Rs, ks)
+
+Device copy of the phase factors of structure `index`, cached for the k-points `ks` (fixed during training).
+"""
+function device_phase(ctx, index, Rs, ks)
+    return get!(() -> device_phase(ctx, Rs, ks), ctx.phase_cache, (index, hash(ks)))
+end
 
 function get_device_hamiltonian(ham, index, ks)
     ctx = ham.device_ctx
     lmap = ctx.maps[index]
     hr = get_device_hr(lmap, device_params(ham, ctx))
-    phase = device_phase(ctx, ham.Rs[index], ks)
+    phase = device_phase(ctx, index, ham.Rs[index], ks)
     return get_device_hamiltonian(lmap, hr, phase, ham.sp_diag), phase
 end
 
