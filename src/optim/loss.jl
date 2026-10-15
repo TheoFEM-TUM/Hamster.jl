@@ -124,8 +124,8 @@ function forward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_flag
     L_E_avg = vec(mean(y_mod, dims = 2))
     w =  y_mod ./L_E_avg
     #w[l.N_VBM:l.N_VBM+1,k_min] .*= gap_weight
-    w[l.N_VBM,k_VBM] .*= gap_weight
-    w[l.N_VBM+1,k_CBM] .*= gap_weight
+    w[l.N_VBM,k_VBM] *= gap_weight
+    w[l.N_VBM+1,k_CBM] *= gap_weight
     #println(maximum(w))
     if isempty(l.wE) && isempty(l.wk)
         return mean(@. abs(Δy)^l.n)^2
@@ -195,8 +195,8 @@ function backward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_fla
     w =  y_mod ./L_E_avg
     k_VBM = argmax(ŷ[l.N_VBM, :])
     k_CBM = argmin(ŷ[l.N_VBM+1, :])
-    w[l.N_VBM,k_VBM] .*= l.gap_weight
-    w[l.N_VBM+1,k_CBM] .*= l.gap_weight
+    w[l.N_VBM,k_VBM] *= l.gap_weight
+    w[l.N_VBM+1,k_CBM] *= l.gap_weight
 
 """    if isempty(l.wE) && isempty(l.wk)
         L_n = mean(@. abs(Δy)^l.n)
