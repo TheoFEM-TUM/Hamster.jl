@@ -155,9 +155,11 @@ function forward_MAE(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_
 end
 
 function forward_BG(l::Loss, y, ŷ)
-    k_min = argmin(abs.( ŷ[l.N_VBM+1,:] - ŷ[l.N_VBM, :]))
-    bg_hat = ŷ[l.N_VBM+1,k_min] - ŷ[l.N_VBM, k_min]
-    bg = y[l.N_VBM+1,k_min] - y[l.N_VBM, k_min]
+    #k_min = argmin(abs.( ŷ[l.N_VBM+1,:] - ŷ[l.N_VBM, :]))
+    k_VBM = argmax(ŷ[l.N_VBM, :])
+    k_CBM = argmin(ŷ[l.N_VBM+1, :])
+    bg_hat = ŷ[l.N_VBM+1,k_CBM] - ŷ[l.N_VBM, k_VBM]
+    bg = y[l.N_VBM+1,k_CBM] - y[l.N_VBM, k_VBM]
     Δbg = abs(bg - bg_hat)
     return Δbg
 end
