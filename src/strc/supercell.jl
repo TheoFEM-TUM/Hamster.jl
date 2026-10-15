@@ -480,7 +480,7 @@ function get_core_band_min_per_structure(indices; path = "eigenval.h5", soc=fals
     for (system, index_list) in indices
         N_core_min_system = Int64[]
         N_core_min = h5open(path, "r") do file
-            haskey(file, "$system/N_core_min") ? read(file["$system/N_core_min"]) : 1
+            haskey(file, "$system/N_core_min") ? read(file["$system/N_core_min"]) : 0
         end
         for index in index_list
             i += 1
