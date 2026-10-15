@@ -15,6 +15,7 @@ FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 FiniteDiff = "6a86dc24-6348-571c-b903-95158fe2bd41"
 HCubature = "19dc6840-f33b-545b-b366-655c7e3ffd49"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
@@ -31,13 +32,26 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TreeParzen = "eb66a70c-a255-11e9-03ea-7ba6b2f22006"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 
+[weakdeps]
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+CUDSS = "45b445bb-4962-46a0-9369-b4df9d0f772e"
+cuSOLVER = "887afef0-6a32-4de5-add4-7827692ba8fc"
+cuSPARSE = "b26da814-b3bc-49ef-b0ee-c816305aa060"
+
+[extensions]
+HamsterCUDAExt = ["CUDA", "cuSPARSE", "cuSOLVER"]
+HamsterCUDSSExt = ["CUDA", "cuSPARSE", "CUDSS"]
+
 [compat]
 Arpack = "0.5.4"
 BlockDiagonals = "0.2.0"
+CUDA = "6"
+CUDSS = "0.4, 0.5, 0.6, 0.7, 0.8"
 Clustering = "0.15.8"
 DataStructures = "0.18.22"
 FFTW = "1.10.0"
 HDF5 = "0.17.2"
+KernelAbstractions = "0.9.45"
 MPI = "0.20.22"
 OhMyThreads = "0.7.0"
 Printf = "1.11.0"
@@ -45,3 +59,5 @@ Random = "1.11.0"
 SpecialFunctions = "2.7.2"
 TreeParzen = "0.3.4"
 UnPack = "1.0.2"
+cuSOLVER = "6"
+cuSPARSE = "6"

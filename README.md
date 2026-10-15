@@ -17,7 +17,7 @@
 
 ## Hardware requirements
 
-The hardware requirements for running `Hamster.jl` are moderate, but they strongly depend on the system size. Small systems with only a few atoms typically finish in under 10 minutes on a standard personal computer. Larger calculations involving thousands of atoms are best run on dedicated workstations or clusters, where they may take several hours. Note that GPUs are currently not supported.
+The hardware requirements for running `Hamster.jl` are moderate, but they strongly depend on the system size. Small systems with only a few atoms typically finish in under 10 minutes on a standard personal computer. Larger calculations involving thousands of atoms are best run on dedicated workstations or clusters, where they may take several hours. NVIDIA GPUs are supported via a CUDA.jl package extension (set `device = gpu`, see the [documentation](https://theofem-tum.github.io/Hamster.jl/dev/calc/gpu/)).
 
 ## Installation & Dependencies
 
