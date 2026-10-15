@@ -4,11 +4,16 @@ Hamster can build, diagonalize and differentiate Hamiltonians on NVIDIA GPUs. Th
 
 ## Installation
 
-The GPU support is implemented as a package extension that is loaded together with [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl). Install CUDA.jl (and optionally [CUDSS.jl](https://github.com/exanauts/CUDSS.jl) for the shift-invert eigensolver) into your default Julia environment:
+The GPU support is implemented as a package extension that is loaded together with [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl). CUDA.jl is a weak dependency of Hamster: it is never installed or loaded on CPU-only machines. To use a GPU, install CUDA.jl (and optionally [CUDSS.jl](https://github.com/exanauts/CUDSS.jl) for the shift-invert eigensolver) into your default Julia environment:
 
 ```bash
 julia -e 'using Pkg; Pkg.add(["CUDA", "CUDSS"])'
+julia -e 'using CUDA; CUDA.versioninfo()'   # should list your GPU
 ```
+
+If Hamster was installed before GPU support was added, update its environment once (e.g., with `hamster_update.jl` or `julia --project=/path/to/Hamster.jl -e 'using Pkg; Pkg.update()'`). Otherwise, an outdated version of a package shared with CUDA.jl (GPUArraysCore) may be loaded, which results in errors such as ``UndefVarError: `neutral_element` not defined``.
+
+CUDA.jl downloads the CUDA runtime (several GB) into `~/.julia` when it is first used. On systems with a small home quota, move the Julia depot to a larger disk, or use a CUDA toolkit installed on the system by adding `[CUDA_Runtime_jll]` with `local = "true"` to the `LocalPreferences.toml` of your default environment.
 
 ## Usage
 
