@@ -90,19 +90,22 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     norb_per_strc = Vector{Int64}[]
     potentials = Vector{Float64}[]
     Rs_info = zeros(Int64, 2, length(strcs))
-    charge_types = UInt8[]
+    grid_rebuilt = false
 
     for (n, strc) in enumerate(strcs)
         pos = get_ion_positions(strc.ions, apply_distortion=true)
 
         ion_types = get_ion_types(strc.ions)
         charges = [get_qeff(conf, type) for type in number_to_element.(ion_types)]
-        union!(charge_types, ion_types)
 
+        # The neighbor grid and translation vectors of the structure only cover pairs up to the TB cutoff and the
+        # grid size. For a larger Ewald cutoff, they are rebuilt for the real-space sum.
+        reuse_grid = rcut ≤ min(strc.point_grid.grid_size, get_rcut(conf))
+        grid_rebuilt |= !reuse_grid
         if method == "ewald"
             ewald = ewald_sum(pos, charges, strc.lattice, 
-                                Rs              = strc.Rs, 
-                                point_grid      = strc.point_grid, 
+                                Rs              = reuse_grid ? strc.Rs : nothing, 
+                                point_grid      = reuse_grid ? strc.point_grid : nothing, 
                                 rcut            = rcut,
                                 mesh_spacing    = mesh_spacing,
                                 method          = method, 
@@ -180,7 +183,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
 
     model = EwaldOnsites(params, param_labels, potentials, types_per_strc, norb_per_strc, Rs_info, update)
     write_summary && write_model_summary(model, comm, conf, rank=rank, label=label, species_mean=species_mean, structure_means=structure_means,
-                        charge_types=charge_types, method=method, rcut=rcut, alpha=alpha, mesh_spacing=mesh_spacing)
+                                         rcut=rcut, alpha=alpha, grid_rebuilt=grid_rebuilt && method == "ewald")
     return model
 end
 

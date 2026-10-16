@@ -1,3 +1,11 @@
+# Model summaries appended to hamster.out when a model is built. Only information that is not already part of the
+# config listing in hamster.out is written. All functions are collective over `comm`; rank 0 writes, and only if
+# hamster.out exists (so that tests and library use do not create output files).
+
+summary_title(model_name, label) = "  $model_name Model Summary" * (isempty(label) ? "" : " ($label)")
+write_summary_line(io, key, value) = @printf(io, "      %-28s %s\n", "$key:", value)
+range_string(a, b) = a == b ? string(a) : "$a - $b"
+
 """
     correction_statistics(Δε)
 
@@ -11,10 +19,13 @@ function correction_statistics(Δε::AbstractVector)
             tail=σ > 0 ? maximum(abs, Δε) / σ : 0.0, frac3σ=σ > 0 ? count(x -> abs(x) > 3σ, Δε) / length(Δε) : 0.0)
 end
 
+# ====================
+# Ewald
+# ====================
 """
     write_model_summary(ewald::EwaldOnsites, comm, conf; kwargs...)
 
-Append a summary of the Ewald onsite model to `hamster.out` (only if the file exists, rank 0 writes).
+Append a summary of the Ewald onsite model to `hamster.out`.
 
 For every species, the onsite corrections `Δε = -γ (φ - φ̄)` of all sites of all structures (gathered over the MPI
 ranks) are summarized: subtracted species mean `φ̄`, width, extrema, percentiles, tail ratio and the spread of the
@@ -26,11 +37,9 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         label="",
         species_mean,
         structure_means,
-        charge_types,
-        method=get_ewald_method(conf),
         rcut=get_ewald_rcut(conf),
         alpha=get_ewald_alpha(conf),
-        mesh_spacing=get_ewald_mesh_spacing(conf),
+        grid_rebuilt=false,
         filename="hamster.out")
 
     nspecies = length(ewald.param_labels)
@@ -42,48 +51,189 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
 
     all_Δε = MPI.gather(local_Δε, comm, root=0)
     all_structure_means = MPI.gather(structure_means, comm, root=0)
-    all_charge_types = MPI.gather(charge_types, comm, root=0)
     nstrc = MPI.Reduce(length(ewald.potentials), +, comm, root=0)
     (rank ≠ 0 || !isfile(filename)) && return nothing
 
     Δε = [reduce(vcat, (Δε_rank[p] for Δε_rank in all_Δε), init=Float64[]) for p in 1:nspecies]
     structure_means = reduce(vcat, all_structure_means)
-    charge_types = sort(unique(reduce(vcat, all_charge_types)))
-    α = alpha == 0 ? 4.0 / rcut : alpha
 
     open(filename, "a") do io
+        println(io)
         write_separator(io)
-        println(io, "  Ewald Model Summary" * (isempty(label) ? "" : " ($label)"))
+        println(io, summary_title("Ewald", label))
         write_separator(io, char='-')
-        @printf(io, "      %-28s %s\n", "method:", method)
-        @printf(io, "      %-28s %.4f 1/Å%s\n", "alpha:", α, alpha == 0 ? " (4 / rcut)" : "")
-        @printf(io, "      %-28s %.2f Å\n", "rcut:", rcut)
-        method == "ewald" && @printf(io, "      %-28s %.2f Å\n", "mesh_spacing:", mesh_spacing)
-        @printf(io, "      %-28s %d\n", "structures:", nstrc)
-        @printf(io, "      %-28s %s\n", "update:", ewald.update)
-        @printf(io, "      %-28s %s\n", "qeff:", join(["$(number_to_element(t)) $(get_qeff(conf, number_to_element(t)))" for t in charge_types], ", "))
-        if method == "ewald" && rcut > get_grid_size(conf)
-            @printf(io, "      WARNING: Ewald rcut (%.2f Å) > grid_size (%.2f Å): real-space pairs beyond the\n", rcut, get_grid_size(conf))
-            println(io, "               neighbor grid are dropped; increase grid_size or reduce the Ewald rcut.")
-        end
+        write_summary_line(io, "structures", nstrc)
+        alpha == 0 && write_summary_line(io, "alpha (4 / rcut)", @sprintf("%.4f 1/Å", 4.0 / rcut))
+        grid_rebuilt && write_summary_line(io, "real-space neighbor grid", "rebuilt (Ewald rcut > TB rcut or grid_size)")
         println(io)
         println(io, "  Onsite corrections Δε = -γ (φ - φ̄) per species (energies in meV):")
-        @printf(io, "    %-7s %7s %7s %6s %9s %7s %8s %8s %8s %8s %6s %6s %7s\n",
-                "species", "sites", "qeff", "γ", "φ̄ [V]", "σ", "min", "p1", "p99", "max", "max/σ", ">3σ %", "σ_strc")
+        @printf(io, "    %-7s %7s %9s %7s %8s %8s %8s %8s %6s %6s %7s\n",
+                "species", "sites", "φ̄ [V]", "σ", "min", "p1", "p99", "max", "max/σ", ">3σ %", "σ_strc")
         for (p, type) in enumerate(ewald.param_labels)
             s = correction_statistics(Δε[p])
             means = [m for (t, m) in structure_means if t == type]
             σ_strc = length(means) > 1 ? 1000 * ewald.params[p] * std(means, corrected=false) : NaN
-            element = number_to_element(type)
-            @printf(io, "    %-7s %7d %7.3f %6.3f %9.4f %7.1f %8.1f %8.1f %8.1f %8.1f %6.2f %6.2f %7s\n",
-                    element, s.n, get_qeff(conf, element), ewald.params[p], species_mean[p], s.σ, s.min, s.p1, s.p99, s.max,
-                    s.tail, 100 * s.frac3σ, isnan(σ_strc) ? "-" : @sprintf("%.1f", σ_strc))
+            @printf(io, "    %-7s %7d %9.4f %7.1f %8.1f %8.1f %8.1f %8.1f %6.2f %6.2f %7s\n",
+                    number_to_element(type), s.n, species_mean[p], s.σ, s.min, s.p1, s.p99, s.max, s.tail, 100 * s.frac3σ,
+                    isnan(σ_strc) ? "-" : @sprintf("%.1f", σ_strc))
         end
         println(io)
         println(io, "    φ̄: species mean of the site potentials over all structures of this run (subtracted).")
         println(io, "    σ: width of Δε; max/σ: largest |Δε| relative to σ; >3σ %: fraction of sites with |Δε| > 3σ.")
         println(io, "    σ_strc: spread of the per-structure species means, i.e. the part of Δε that is lost if the")
         println(io, "            model is built for a single structure.")
+        write_separator(io)
+    end
+    return nothing
+end
+
+# ====================
+# TB
+# ====================
+"""
+    write_model_summary(model::TBModel, strcs, bases, comm; kwargs...)
+
+Append a summary of the TB model to `hamster.out`: structure and basis sizes, number of parameters (onsite, per
+neighbor shell and per ion pair) and the size of the geometry tensor. Parameter values are not included, since the
+summary is written when the model is initialized.
+"""
+function write_model_summary(model::TBModel, strcs, bases, comm; rank=0, label="", filename="hamster.out")
+    natoms = isempty(strcs) ? [0] : [length(strc.ions) for strc in strcs]
+    norbs = isempty(bases) ? [0] : [length(basis) for basis in bases]
+    nRs = isempty(strcs) ? [0] : [size(strc.Rs, 2) for strc in strcs]
+    entries = sum((nnz(hvR) for h in model.hs for hvR in h), init=0)
+
+    nstrc = MPI.Reduce(length(strcs), +, comm, root=0)
+    natoms_min, natoms_max = MPI.Reduce(minimum(natoms), min, comm, root=0), MPI.Reduce(maximum(natoms), max, comm, root=0)
+    norbs_min, norbs_max = MPI.Reduce(minimum(norbs), min, comm, root=0), MPI.Reduce(maximum(norbs), max, comm, root=0)
+    norbs_total = MPI.Reduce(sum(norbs), +, comm, root=0)
+    nRs_min, nRs_max = MPI.Reduce(minimum(nRs), min, comm, root=0), MPI.Reduce(maximum(nRs), max, comm, root=0)
+    entries = MPI.Reduce(entries, +, comm, root=0)
+    (rank ≠ 0 || !isfile(filename)) && return nothing
+
+    shells = sort(unique(Int64(p.nnlabel) for p in model.param_labels))
+    shell_counts = ["$(shell == 0 ? "onsite" : "NN$shell") $(count(p -> p.nnlabel == shell, model.param_labels))" for shell in shells]
+    pairs = sort(unique(string(p.ion_label) for p in model.param_labels))
+    pair_counts = ["$pair $(count(p -> string(p.ion_label) == pair, model.param_labels))" for pair in pairs]
+
+    open(filename, "a") do io
+        println(io)
+        write_separator(io)
+        println(io, summary_title("TB", label))
+        write_separator(io, char='-')
+        write_summary_line(io, "structures", nstrc)
+        write_summary_line(io, "atoms per structure", range_string(natoms_min, natoms_max))
+        write_summary_line(io, "orbitals per structure", range_string(norbs_min, norbs_max) * " (total $norbs_total)")
+        write_summary_line(io, "R vectors per structure", range_string(nRs_min, nRs_max))
+        write_summary_line(io, "parameters", length(model.param_labels))
+        write_summary_line(io, "  per shell", join(shell_counts, ", "))
+        write_summary_line(io, "  per ion pair", join(pair_counts, ", "))
+        write_summary_line(io, "geometry tensor entries", @sprintf("%d (%.1f MB)", entries, entries * 16 / 1024^2))
+        write_separator(io)
+    end
+    return nothing
+end
+
+# ====================
+# ML
+# ====================
+"""
+    descriptor_groups(strc, basis)
+
+Label of every matrix element of the ML descriptor of a structure: the ion pair, e.g. `"Br+Pb"`, or the element for
+onsite terms (same ion, `R = 0`), e.g. `"Pb onsite"`.
+"""
+function descriptor_groups(strc, basis)
+    ion_of_orbital = [iion for iion in eachindex(basis.orbitals) for _ in basis.orbitals[iion]]
+    elements = number_to_element.(get_ion_types(strc.ions))
+    R0 = findR0(strc.Rs)
+    return (i, j, R) -> begin
+        a, b = ion_of_orbital[i], ion_of_orbital[j]
+        a == b && R == R0 ? "$(elements[a]) onsite" : join(sort([elements[a], elements[b]]), "+")
+    end
+end
+
+"""
+    max_similarities(descriptors, data_points, σ)
+
+Similarity of every descriptor to its most similar data point, `max_k exp(-|x - d_k|² / 2σ²)`.
+"""
+function max_similarities(descriptors, data_points, σ)
+    isempty(data_points) && return zeros(length(descriptors))
+    return tmap(descriptors) do x
+        d2 = minimum(d -> sum(abs2, x - d), data_points)
+        exp(-d2 / (2σ^2))
+    end
+end
+
+const NBINS_COVERAGE = 1000
+
+function histogram_quantile(counts, q)
+    target = q * sum(counts)
+    cumulative = 0
+    for (b, c) in enumerate(counts)
+        cumulative += c
+        cumulative ≥ target && c > 0 && return b / length(counts)
+    end
+    return 1.0
+end
+
+"""
+    write_model_summary(kernel::HamiltonianKernel, strcs, bases, comm, conf; kwargs...)
+
+Append a summary of the ML model to `hamster.out`: the number of descriptor vectors (matrix elements of all
+structures) and the coverage of the descriptors by the data points of the kernel, i.e. the similarity of every
+descriptor to its most similar data point, per ion pair and onsite term. Descriptors with a small similarity to all
+data points are outside the training data; there, the ML correction is close to zero and the model falls back to TB.
+"""
+function write_model_summary(kernel::HamiltonianKernel, strcs, bases, comm, conf=get_empty_config();
+        rank=0, label="", sim_tol=get_ml_sim_tol(conf), filename="hamster.out")
+
+    histograms = Dict{String, Vector{Int64}}()
+    minima = Dict{String, Float64}()
+    for n in eachindex(strcs)
+        group = descriptor_groups(strcs[n], bases[n])
+        for R in eachindex(kernel.structure_descriptors[n])
+            is, js, xs = findnz(kernel.structure_descriptors[n][R])
+            sims = max_similarities(xs, kernel.data_points, kernel.sim_params)
+            for (i, j, s) in zip(is, js, sims)
+                g = group(i, j, R)
+                histogram = get!(() -> zeros(Int64, NBINS_COVERAGE), histograms, g)
+                histogram[clamp(ceil(Int64, s * NBINS_COVERAGE), 1, NBINS_COVERAGE)] += 1
+                minima[g] = min(get(minima, g, 1.0), s)
+            end
+        end
+    end
+
+    all_histograms = MPI.gather(histograms, comm, root=0)
+    all_minima = MPI.gather(minima, comm, root=0)
+    (rank ≠ 0 || !isfile(filename)) && return nothing
+
+    histograms = mergewith(+, all_histograms...)
+    minima = mergewith(min, all_minima...)
+    groups = sort(collect(keys(histograms)), by=g -> (!endswith(g, "onsite"), g))
+    total = sum(sum, values(histograms), init=0)
+
+    open(filename, "a") do io
+        println(io)
+        write_separator(io)
+        println(io, summary_title("ML", label))
+        write_separator(io, char='-')
+        write_summary_line(io, "descriptor vectors", total)
+        println(io)
+        println(io, "  Coverage: similarity of every descriptor to its most similar data point")
+        @printf(io, "    %-12s %10s %7s %7s %7s %7s %9s %7s\n", "group", "descriptors", "min", "p1", "p5", "median", "<sim_tol %", "<0.5 %")
+        for g in groups
+            h = histograms[g]
+            below_tol = sum(h[1:clamp(floor(Int64, sim_tol * NBINS_COVERAGE), 0, NBINS_COVERAGE)], init=0)
+            below_half = sum(h[1:NBINS_COVERAGE ÷ 2])
+            @printf(io, "    %-12s %10d %7.3f %7.3f %7.3f %7.3f %9.2f %7.2f\n", g, sum(h), minima[g], histogram_quantile(h, 0.01),
+                    histogram_quantile(h, 0.05), histogram_quantile(h, 0.5), 100 * below_tol / sum(h), 100 * below_half / sum(h))
+        end
+        println(io)
+        println(io, "    Similarities are exp(-|x - d|² / 2σ²) with σ = sim_params (percentiles with a resolution of 0.001).")
+        println(io, "    Descriptors with a small similarity to all data points are outside the training data; there,")
+        println(io, "    the ML correction is close to zero and the model falls back to TB.")
         write_separator(io)
     end
     return nothing

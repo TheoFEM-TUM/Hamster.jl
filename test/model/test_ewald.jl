@@ -130,11 +130,10 @@ end
             out = read("hamster.out", String)
             @test occursin("Ewald Model Summary (test set)", out)
             @test !occursin("skipped", out)
-            @test occursin("qeff:                        Br -1.0, Cs 1.0, Pb 2.0", out)
             for element in ["Cs", "Pb", "Br"]
                 @test occursin(Regex("\\n    $element\\s+\\d+ "), out)
             end
-            @test count("WARNING: Ewald rcut", out) == 1                 # rcut 8 > grid_size 5.5
+            @test count("real-space neighbor grid:    rebuilt", out) == 1   # rcut 8 > grid_size 5.5
         end
     end
 end
