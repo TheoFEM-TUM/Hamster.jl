@@ -231,7 +231,6 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 # Returns
 - `dparams`: A vector containing the computed gradients of the model parameters.
 """
-
 function get_model_gradient(kernel::HamiltonianKernelPrecalced, indices, reg, dL_dHr; soc=false)
     dparams = zeros(length(kernel.params))
     nt = Threads.maxthreadid() 
