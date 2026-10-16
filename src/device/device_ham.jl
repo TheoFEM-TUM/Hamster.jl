@@ -124,7 +124,9 @@ function get_device_hamiltonian(ham, index, ks)
     lmap = ctx.maps[index]
     hr = get_device_hr(lmap, device_params(ham, ctx))
     phase = device_phase(ctx, index, ham.Rs[index], ks)
-    return get_device_hamiltonian(lmap, hr, phase, ham.sp_diag), phase
+    Hk = get_device_hamiltonian(lmap, hr, phase, ham.sp_diag)
+    device_synchronize(Hk.nzval)
+    return Hk, phase
 end
 
 """

@@ -38,6 +38,14 @@ Implemented by the `HamsterCUDAExt` extension, which is loaded with `using CUDA`
 function gpu_device end
 
 """
+    device_synchronize(x)
+
+Wait until all device operations on the array `x` have finished (no-op on the host). Used before timings are taken,
+since device kernels run asynchronously. Device-specific methods are provided by extensions.
+"""
+device_synchronize(x) = nothing
+
+"""
     shift_invert_operator(A)
 
 Factorize the sparse device matrix `A` and return a function `x -> A \\ x`.

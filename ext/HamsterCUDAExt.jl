@@ -10,6 +10,8 @@ function Hamster.gpu_device(local_rank::Integer)
     return ArrayDevice(CuArray)
 end
 
+Hamster.device_synchronize(::CuArray) = CUDA.synchronize()
+
 const CuDeviceHk = DeviceHk{<:CuVector}
 
 # Below this size, LAPACK on the host (threaded over k-points, including the transfers) is faster than cuSOLVER.
