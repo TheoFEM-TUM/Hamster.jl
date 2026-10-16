@@ -58,3 +58,13 @@ Pages = ["optim_defaults.jl"]
 Modules = [Hamster]
 Pages = ["hyperopt_defaults.jl"]
 ```
+
+## [DOS](@id dos-tags)
+
+Settings of the [DOS, PDOS and COHP](@ref dos-post-processing) post-processing, which is switched on by the `dos` tag
+in the `Options` block.
+
+```@autodocs
+Modules = [Hamster]
+Pages = ["dos_defaults.jl"]
+```
