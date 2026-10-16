@@ -72,3 +72,26 @@ end
     end
     @test all(same_as_old_2)
 end
+@testset "Direct loss gradient w.r.t. Hr" begin
+    Hr = [Matrix(sprand(6, 6, 0.5)) for _ in 1:5]
+    Rs = 2 .* rand(3, 5) .- 1
+    ks = rand(3, 4) .- 0.5
+    vs = nothing
+    with_logger(Base.NullLogger()) do
+        vs = diagonalize(get_hamiltonian(Hr, Rs, ks))[2]
+    end
+    dL_dE = rand(size(vs, 2), size(ks, 2))
+
+    # Dense: identical to the chain rule over dE_dHr
+    reference = Hamster.chain_rule(dL_dE, Hamster.get_eigenvalue_gradient(vs, Rs, ks, Hamster.Dense()), Hamster.Dense())
+    direct = Hamster.get_loss_gradient_hr(dL_dE, vs, Rs, ks, Hamster.Dense())
+    @test all(direct .≈ reference)
+    @test direct[1] isa Matrix{ComplexF64}
+
+    # Sparse: identical at the entries of the sparse iterator, zero elsewhere
+    sp_iterator = [[(i, j) for i in 1:6 for j in 1:6 if (i + j + R) % 3 ≠ 0] for R in axes(Rs, 2)]
+    reference = Hamster.chain_rule(dL_dE, Hamster.get_eigenvalue_gradient(vs, Rs, ks, Hamster.Sparse(), sp_iterator), Hamster.Sparse())
+    direct = Hamster.get_loss_gradient_hr(dL_dE, vs, Rs, ks, Hamster.Sparse(), sp_iterator)
+    @test all(Matrix.(direct) .≈ Matrix.(reference))
+    @test direct[1] isa SparseMatrixCSC{ComplexF64, Int64}
+end

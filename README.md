@@ -63,6 +63,10 @@ More details on hyperparameter optimization can be found [here](https://theofem-
 
 For the results shown in Ref. 2, please see the full dataset in Ref. 3 or [here](https://zenodo.org/records/18485403).
 
+## AI Assistance
+
+Parts of the code were developed with assistance from Claude (Anthropic) and ChatGPT (OpenAI). The authors are responsible for the code and its validation.
+
 ## License
 This project is licensed under the MIT License.
 
