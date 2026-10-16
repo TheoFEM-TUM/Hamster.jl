@@ -109,8 +109,14 @@ Construct the real-space Hamiltonian (`Hr`) by multiplying the geometry tensor `
 function get_hr(h::AbstractMatrix, V::AbstractVector, mode=Val{:dense}; apply_soc=false)
     Hr = get_empty_complex_hamiltonians(size(h[1, 1], 1), size(h, 2), mode)
     Threads.@threads for R in axes(h, 2)
-        for v in axes(h, 1)
-            @. Hr[R] += h[v, R] * V[v]
+        if Hr[R] isa SparseMatrixCSC
+            # Assemble the sum over parameters in one step instead of adding sparse matrices one by one
+            Is, Js, Vs, vidx = coo_entries(@view h[:, R])
+            Hr[R] = sparse(Is, Js, ComplexF64.(Vs .* V[vidx]), size(Hr[R])...)
+        else
+            for v in axes(h, 1)
+                add_scaled!(Hr[R], h[v, R], V[v])
+            end
         end
     end
     return apply_soc ? apply_spin_basis.(Hr) : Hr
@@ -152,16 +158,29 @@ the function assumes it contains gradients for multiple structures and returns t
 """
 function get_model_gradient(h, dL_dHr::Vector{<:AbstractMatrix}; soc=false)
     dV = zeros(size(h, 1))
+    # Real part (projected to the spin-free basis with SOC) of dL_dHr, computed once per R instead of once per parameter
+    G = [soc ? gradient_apply_spin_basis(real.(dL_dHr[R])) : real.(dL_dHr[R]) for R in eachindex(dL_dHr)]
     @tasks for v in axes(h, 1)
-        for R in eachindex(dL_dHr)
-            if !soc
-                dV[v] += sum(h[v, R] .* real.(dL_dHr[R]))
-            else
-                dV[v] += sum(h[v, R] .* gradient_apply_spin_basis(real.(dL_dHr[R])))
-            end
+        for R in eachindex(G)
+            dV[v] += sum_product(h[v, R], G[R])
         end
     end
     return dV
+end
+
+"""
+    sum_product(A, B)
+
+Return `sum(A .* B)`, visiting only the nonzeros of `A` if it is sparse.
+"""
+sum_product(A::AbstractMatrix, B::AbstractMatrix) = sum(A .* B)
+function sum_product(A::SparseMatrixCSC, B::AbstractMatrix)
+    rows = rowvals(A); vals = nonzeros(A)
+    s = zero(promote_type(eltype(A), eltype(B)))
+    @inbounds for col in axes(A, 2), n in nzrange(A, col)
+        s += vals[n] * B[rows[n], col]
+    end
+    return s
 end
 
 """
