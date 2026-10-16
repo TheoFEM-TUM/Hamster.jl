@@ -101,3 +101,34 @@ This ensures:
 - compatibility across different structures
 
 ---
+## Model Summary
+
+When the model is built in a Hamster run, a summary is appended to `hamster.out` (one block per model, e.g. for the
+training and the validation set):
+
+```
+================================================================================
+  Ewald Model Summary (training set)
+--------------------------------------------------------------------------------
+      method:                      ewald
+      alpha:                       0.7273 1/Å (4 / rcut)
+      rcut:                        5.50 Å
+      mesh_spacing:                0.50 Å
+      structures:                  24
+      update:                      false
+      qeff:                        H 0.239, C -0.255, N -0.718, Br -0.541, Pb 1.162
+
+  Onsite corrections Δε = -γ (φ - φ̄) per species (energies in meV):
+    species   sites    qeff      γ     φ̄ [V]       σ      min       p1      p99      max  max/σ  >3σ %  σ_strc
+    Br          576  -0.541  0.460    4.7436   191.7   -584.5   -430.3    417.0    515.7   3.05   0.17     6.4
+    Pb          192   1.162  0.460   -8.1110   123.8   -315.3   -260.6    278.3    351.3   2.84   0.00     5.6
+```
+
+- `φ̄` is the species mean that is subtracted (see [Mean Centering](#Mean-Centering)). It is taken over the structures
+  of the current run, so it can differ between training, validation and later runs.
+- `σ`, `min`, `max` and the 1% / 99% percentiles describe the distribution of the corrections. `max/σ` and `>3σ %`
+  show how pronounced the tails are, which is useful to compare large cells with the training cells.
+- `σ_strc` is the spread of the per-structure species means. This part of the correction is lost if the model is built
+  for a single structure.
+- A warning is printed if the Ewald `rcut` exceeds the `grid_size` of the neighbor grid, since real-space pairs beyond
+  the grid are then not included.

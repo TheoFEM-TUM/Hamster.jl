@@ -22,7 +22,9 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
                               rank=0, 
                               nranks=1,
                               systems=[strc.system for strc in strcs],
-                              verbosity=get_verbosity(conf))
+                              verbosity=get_verbosity(conf),
+                              label="",
+                              write_summary=true)
 
     if isempty(strcs) && isempty(bases)
         return EffectiveHamiltonian(0, Nothing[], String[], Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)])
@@ -74,7 +76,7 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
     if ewald
         if rank == 0 && verbosity > 1; println("   Getting Ewald model..."); end
         begin_time = MPI.Wtime()
-        ewald_model = EwaldOnsites(strcs, bases, comm, conf, rank=rank)
+        ewald_model = EwaldOnsites(strcs, bases, comm, conf, rank=rank, label=label, write_summary=write_summary)
         models = (models..., ewald_model)
         ewald_time = MPI.Wtime() - begin_time
         if rank == 0 && verbosity > 1; println("    Ewald time: $ewald_time s"); end

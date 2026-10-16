@@ -82,18 +82,22 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         rcut            = get_ewald_rcut(conf),
         alpha           = get_ewald_alpha(conf),
         mesh_spacing    = get_ewald_mesh_spacing(conf),
-        update          = get_ewald_update(conf))
+        update          = get_ewald_update(conf),
+        label           = "",
+        write_summary   = true)
 
     types_per_strc = Vector{UInt8}[]
     norb_per_strc = Vector{Int64}[]
     potentials = Vector{Float64}[]
     Rs_info = zeros(Int64, 2, length(strcs))
+    charge_types = UInt8[]
 
     for (n, strc) in enumerate(strcs)
         pos = get_ion_positions(strc.ions, apply_distortion=true)
 
         ion_types = get_ion_types(strc.ions)
         charges = [get_qeff(conf, type) for type in number_to_element.(ion_types)]
+        union!(charge_types, ion_types)
 
         if method == "ewald"
             ewald = ewald_sum(pos, charges, strc.lattice, 
@@ -160,6 +164,12 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     end
     MPI.Bcast!(species_mean, comm, root=0)
 
+    # Per-structure species means (before centering) for the model summary
+    structure_means = Tuple{UInt8, Float64}[]
+    for n in eachindex(potentials), type in unique(types_per_strc[n])
+        push!(structure_means, (type, mean(potentials[n][types_per_strc[n] .== type])))
+    end
+
     for n in eachindex(potentials)
         for i in eachindex(potentials[n])
             typ = types_per_strc[n][i]
@@ -168,7 +178,10 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         end
     end
 
-    return EwaldOnsites(params, param_labels, potentials, types_per_strc, norb_per_strc, Rs_info, update)
+    model = EwaldOnsites(params, param_labels, potentials, types_per_strc, norb_per_strc, Rs_info, update)
+    write_summary && write_model_summary(model, comm, conf, rank=rank, label=label, species_mean=species_mean, structure_means=structure_means,
+                        charge_types=charge_types, method=method, rcut=rcut, alpha=alpha, mesh_spacing=mesh_spacing)
+    return model
 end
 
 """

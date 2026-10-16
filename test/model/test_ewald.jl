@@ -111,4 +111,30 @@ end
     Hr = get_hr(ewald_model, Hamster.Dense(), 1, apply_soc=false)
 
     @test size(Hr[1])[1] == length(basis)
+
+    # Model summary in hamster.out
+    s = Hamster.correction_statistics([-2.0, -1.0, 0.0, 1.0, 2.0])
+    @test s.n == 5 && s.σ ≈ √2 && s.min == -2 && s.max == 2
+    @test s.tail ≈ 2 / √2 && s.frac3σ == 0
+    @test isnan(Hamster.correction_statistics(Float64[]).σ)
+
+    mktempdir() do dir
+        cd(dir) do
+            EwaldOnsites([strc], [basis], comm, conf, label="no file")
+            @test !isfile("hamster.out")                                 # only appended to an existing hamster.out
+
+            touch("hamster.out")
+            EwaldOnsites([strc], [basis], comm, conf, label="test set")
+            EwaldOnsites([strc], [basis], comm, conf, label="skipped", write_summary=false)
+            EwaldOnsites([strc], [basis], comm, conf, rcut=8.0, label="large rcut")
+            out = read("hamster.out", String)
+            @test occursin("Ewald Model Summary (test set)", out)
+            @test !occursin("skipped", out)
+            @test occursin("qeff:                        Br -1.0, Cs 1.0, Pb 2.0", out)
+            for element in ["Cs", "Pb", "Br"]
+                @test occursin(Regex("\\n    $element\\s+\\d+ "), out)
+            end
+            @test count("WARNING: Ewald rcut", out) == 1                 # rcut 8 > grid_size 5.5
+        end
+    end
 end
