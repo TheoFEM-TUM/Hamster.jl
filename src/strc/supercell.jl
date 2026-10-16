@@ -57,7 +57,7 @@ function get_structures(conf=get_empty_config();
             # Check if an atom has crossed the cell border. Distortions are otherwise not correct.
             @views for iion in axes(rs_0, 2)
                 Rmin = findmin([normdiff(rs_0[:, iion], rs_all[:, iion, index], Ts[:, R]) for R in axes(Ts, 2)])[2]
-                δrs_ion[:, iion] = rs_0[:, iion] - rs_all[:, iion, index] + Ts[:, Rmin]
+                δrs_ion[:, iion] = rs_0[:, iion] - apply_pbc(rs_all[:, iion, index], Ts[:, Rmin])
             end
 
             Structure(Rs, rs_0, δrs_ion, atom_types, lattice_i, conf, system=system)
@@ -377,7 +377,6 @@ Map a global index to a specific system and configuration index.
 # Returns
 - `(system, config_index)`: A tuple where `system` is the key corresponding to the system, and `config_index` is the local index within that system.
 """
-
 function get_system_and_config_index(index, local_inds)
     running_ind = 0
     for (system, indices) in local_inds, config_index in indices

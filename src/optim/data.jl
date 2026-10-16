@@ -44,7 +44,9 @@ function DataLoader(train_config_inds, val_config_inds, Nε_train, Nε_val, conf
                     train_path=get_train_data(conf), 
                     val_path=get_val_data(conf),
                     validate=get_validate(conf), 
-                    bandmin=get_bandmin(conf), 
+                    bandmin=get_bandmin(conf),
+                    bandinclude=get_bandinclude(conf),
+                    bandmultiplicity = get_bandmultiplicity(conf),
                     val_bandmin=get_val_bandmin(conf), 
                     train_mode=get_train_mode(conf), 
                     val_mode=get_val_mode(conf), 
@@ -58,7 +60,8 @@ function DataLoader(train_config_inds, val_config_inds, Nε_train, Nε_val, conf
         end
     else
         train_data = mapreduce(vcat, train_config_inds, init=EigData[]) do (system, train_inds)
-            get_eig_data(train_mode, train_path, Nε_train[system], inds=train_inds, bandmin=bandmin, system=system)
+            get_eig_data(train_mode, train_path, Nε_train[system], inds=train_inds, bandmin=bandmin,
+                        bandinclude=bandinclude, bandmultiplicity=bandmultiplicity, system=system)
         end
     end
 
@@ -68,7 +71,8 @@ function DataLoader(train_config_inds, val_config_inds, Nε_train, Nε_val, conf
         end
     else
         val_data = mapreduce(vcat, val_config_inds, init=EigData[]) do (system, val_inds)
-            get_eig_data(val_mode, val_path, Nε_val[system], inds=val_inds, bandmin=val_bandmin, empty=!validate, system=system)
+            get_eig_data(val_mode, val_path, Nε_val[system], inds=val_inds, bandmin=val_bandmin,
+            bandinclude=bandinclude, bandmultiplicity=bandmultiplicity,empty=!validate, system=system)
         end
     end
     return DataLoader(train_data, val_data)
@@ -95,17 +99,37 @@ function get_neig_and_nk(data::Vector{EigData})
 end
 get_neig_and_nk(data::Vector{<:HrData}) = (0, 0)
 
-function get_eig_data(mode, path, Nε; inds=Int64[], bandmin=1, empty=false, system="")
+function get_band_indices(bandmin, Nε, bandinclude, bandmultiplicity; mode="pc")
+    band_factor = mode == "pc" ? 1 : bandmultiplicity
+    included = reduce(
+        vcat,
+        ((band - 1) * band_factor + 1 : band * band_factor
+         for band in bandinclude);
+        init=Int[],
+    )
+
+    firstband = (bandmin - 1) * band_factor + 1
+    automatic = firstband : firstband + Nε - length(included) - 1
+
+    isempty(intersect(included, automatic)) ||
+        throw(ArgumentError("bandinclude overlaps with the automatic band range"))
+
+    return sort!(vcat(included, automatic))
+end
+
+function get_eig_data(mode, path, Nε; inds=Int64[], bandmin=1, bandinclude=Int64[], bandmultiplicity=1, empty=false, system="")
     data = EigData[]
+    band_indices = get_band_indices(bandmin, Nε, bandinclude, bandmultiplicity, mode=mode)
+
     if (mode == "pc" || mode == "mixed") && !empty
         kp, Es = read_eigenval(path)
-        push!(data, EigData(kp, Es[bandmin:bandmin+Nε-1, :]))
+        push!(data, EigData(kp, Es[band_indices, :]))
     end
     if (mode == "md" || mode == "mixed") && !empty
-        append!(data, read_eigenvalue_data_from_path(path, inds, bandmin, Nε))
+        append!(data, read_eigenvalue_data_from_path(path, inds, band_indices, Nε))
     end
     if (mode == "universal") && !empty
-        append!(data, read_eigenvalue_data_from_path(path, inds, bandmin, Nε, system=system))
+        append!(data, read_eigenvalue_data_from_path(path, inds, band_indices, Nε, system=system))
     end
     return data
 end
@@ -122,7 +146,7 @@ function get_hr_data(mode, path; inds=Int64[], empty=false)
     return data
 end
 
-function read_eigenvalue_data_from_path(path, inds, bandmin, Nε; system="")
+function read_eigenvalue_data_from_path(path, inds, band_indices, Nε; system="")
     if occursin(".h5", path)
         h5open(path, "r") do file
             g = system == "" ? file : file[system]
@@ -130,14 +154,14 @@ function read_eigenvalue_data_from_path(path, inds, bandmin, Nε; system="")
             Es = read(g["eigenvalues"])
             inds_ = length(inds) ≤ size(Es, 3) ? inds : collect(1:size(Es, 3))
             if kp isa Matrix{Float64}
-                return [EigData(kp, Es[bandmin:bandmin+Nε-1, :, n]) for n in inds_]
+                return [EigData(kp, Es[band_indices, :, n]) for n in inds_]
             elseif kp isa Array{Float64, 3}
-                return [EigData(kp[:, :, n], Es[bandmin:bandmin+Nε-1, :, n]) for n in inds_]
+                return [EigData(kp[:, :, n], Es[band_indices, :, n]) for n in inds_]
             end
         end
     else
         kp, Es = read_eigenval(path)
-        return [EigData(kp, Es[bandmin:bandmin+Nε-1, :])]
+        return [EigData(kp, Es[band_indices, :])]
     end
 end
 

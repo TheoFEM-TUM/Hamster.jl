@@ -1,4 +1,4 @@
-using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Statistics, 
+using Hamster, Test, LinearAlgebra, SparseArrays, StaticArrays, HCubature, Statistics, Ewalder,
 FiniteDiff, HDF5, TensorOperations, Suppressor, MPI, Logging, BlockDiagonals, DataStructures
 
 MPI.Init()
@@ -60,6 +60,7 @@ if test_all || test_only == "Model"
         include("model/test_ham.jl")
         include("model/test_ham_grad.jl")
         include("model/test_model.jl")
+        include("model/test_ewald.jl")
         include("model/test_eff_ham.jl")
         include("model/test_ham_write.jl")
     end
@@ -78,6 +79,8 @@ if test_all || test_only == "ML"
     @testset "ML" begin
         include("mlham/test_descriptor.jl")
         include("mlham/test_kernel.jl")
+        include("mlham/test_simmat.jl")
+        include("mlham/test_kernel_precalced.jl")
     end
 end
 

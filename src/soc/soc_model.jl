@@ -33,7 +33,7 @@ function SOCModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=g
     Rs_info = zeros(Int64, 2, length(strcs))
     
     for n in eachindex(strcs)
-        types_for_strc = filter(type->haskey(conf.blocks, number_to_element(type)), [ion.type for ion in strcs[n].ions])
+        types_for_strc = get_ion_types(strcs[n].ions, conf, withorbitals=true)
         push!(types_per_strc, types_for_strc)
 
         soc_matrices = get_soc_matrices(strcs[n], bases[n], conf)
