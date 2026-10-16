@@ -255,7 +255,7 @@ are not included, since the summary is written at initialization):
       parameters:                  15
         per shell:                 onsite 6, NN1 9
         per ion pair:              Br+Br 4, Br+Pb 3, Pb+Pb 8
-      geometry tensor entries:     35060 (0.5 MB)
+      geometry tensor entries:     35056 (0.5 MB)
 ================================================================================
 ```
 

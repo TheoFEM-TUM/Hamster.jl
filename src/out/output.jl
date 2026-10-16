@@ -159,7 +159,7 @@ function write_config_tags(conf::Config; blocks=nothing, show_desc=false, filena
                 tagval_padded = rpad(tagval_str, desc_col_start)
 
                 if show_desc && !isempty(tag.description)
-                    wrap_width = 80 - desc_col_start
+                    wrap_width = max(80 - desc_col_start - 2, 20)   # "# " in front of the description
                     desc_lines = wrap_text(tag.description, wrap_width)
                     # First line appended to tag=value
                     println(io, tagval_padded, "# ", desc_lines[1])
@@ -184,7 +184,7 @@ function wrap_text(text::AbstractString, width::Int)
     lines = String[]
     line = ""
     for w in words
-        if length(line) + (isempty(line) ? 0 : 1) + length(w) > width
+        if !isempty(line) && textwidth(line) + 1 + textwidth(w) > width
             push!(lines, line)
             line = w
         else

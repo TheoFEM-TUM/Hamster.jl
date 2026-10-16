@@ -3,8 +3,34 @@
 # hamster.out exists (so that tests and library use do not create output files).
 
 summary_title(model_name, label) = "  $model_name Model Summary" * (isempty(label) ? "" : " ($label)")
-write_summary_line(io, key, value) = @printf(io, "      %-28s %s\n", "$key:", value)
 range_string(a, b) = a == b ? string(a) : "$a - $b"
+
+const SUMMARY_WIDTH = 80
+
+# Key-value line; long values are wrapped and aligned under the first value line
+function write_summary_line(io, key, value)
+    prefix = rpad("      $key:", 34) * " "
+    lines = wrap_text(string(value), SUMMARY_WIDTH - textwidth(prefix))
+    isempty(lines) && (lines = [""])
+    println(io, prefix, lines[1])
+    foreach(line -> println(io, " "^textwidth(prefix), line), lines[2:end])
+end
+
+# Table row: first column left-aligned, all others right-aligned (padding by display width, so that e.g. σ and φ̄ align)
+function write_table_row(io, cells, widths)
+    padded = [i == 1 ? rpad(cell, width) : lpad(cell, width) for (i, (cell, width)) in enumerate(zip(cells, widths))]
+    println(io, "    ", join(padded, " "))
+end
+
+# Explanation below a table, wrapped with a hanging indent
+function write_legend(io, text; indent=4)
+    lines = wrap_text(text, SUMMARY_WIDTH - indent - 2)
+    isempty(lines) && return nothing
+    println(io, " "^indent, lines[1])
+    foreach(line -> println(io, " "^(indent + 2), line), lines[2:end])
+end
+
+format_number(x, digits) = isnan(x) ? "-" : Printf.format(Printf.Format("%.$(digits)f"), x)
 
 """
     correction_statistics(Δε)
@@ -62,26 +88,28 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         write_separator(io)
         println(io, summary_title("Ewald", label))
         write_separator(io, char='-')
+        elements = number_to_element.(ewald.param_labels)
         write_summary_line(io, "structures", nstrc)
         alpha == 0 && write_summary_line(io, "alpha (4 / rcut)", @sprintf("%.4f 1/Å", 4.0 / rcut))
         grid_rebuilt && write_summary_line(io, "real-space neighbor grid", "rebuilt (Ewald rcut > TB rcut or grid_size)")
+        write_summary_line(io, "subtracted species mean φ̄", join(["$e $(@sprintf("%.4f", m)) V" for (e, m) in zip(elements, species_mean)], ", "))
         println(io)
-        println(io, "  Onsite corrections Δε = -γ (φ - φ̄) per species (energies in meV):")
-        @printf(io, "    %-7s %7s %9s %7s %8s %8s %8s %8s %6s %6s %7s\n",
-                "species", "sites", "φ̄ [V]", "σ", "min", "p1", "p99", "max", "max/σ", ">3σ %", "σ_strc")
+        println(io, "  Onsite corrections Δε = -γ (φ - φ̄) per species (meV):")
+        widths = [7, 6, 6, 7, 7, 7, 7, 6, 6, 6]
+        write_table_row(io, ["species", "sites", "σ", "min", "p1", "p99", "max", "max/σ", ">3σ %", "σ_strc"], widths)
         for (p, type) in enumerate(ewald.param_labels)
             s = correction_statistics(Δε[p])
             means = [m for (t, m) in structure_means if t == type]
             σ_strc = length(means) > 1 ? 1000 * ewald.params[p] * std(means, corrected=false) : NaN
-            @printf(io, "    %-7s %7d %9.4f %7.1f %8.1f %8.1f %8.1f %8.1f %6.2f %6.2f %7s\n",
-                    number_to_element(type), s.n, species_mean[p], s.σ, s.min, s.p1, s.p99, s.max, s.tail, 100 * s.frac3σ,
-                    isnan(σ_strc) ? "-" : @sprintf("%.1f", σ_strc))
+            write_table_row(io, [elements[p], string(s.n), format_number(s.σ, 1), format_number(s.min, 1), format_number(s.p1, 1),
+                                 format_number(s.p99, 1), format_number(s.max, 1), format_number(s.tail, 2),
+                                 format_number(100 * s.frac3σ, 2), format_number(σ_strc, 1)], widths)
         end
         println(io)
-        println(io, "    φ̄: species mean of the site potentials over all structures of this run (subtracted).")
-        println(io, "    σ: width of Δε; max/σ: largest |Δε| relative to σ; >3σ %: fraction of sites with |Δε| > 3σ.")
-        println(io, "    σ_strc: spread of the per-structure species means, i.e. the part of Δε that is lost if the")
-        println(io, "            model is built for a single structure.")
+        write_legend(io, "φ̄: species mean of the site potentials over all structures of this run.")
+        write_legend(io, "σ: width of Δε; max/σ: largest |Δε| relative to σ; >3σ %: fraction of sites with |Δε| > 3σ.")
+        write_legend(io, "σ_strc: spread of the per-structure species means, i.e. the part of Δε that is lost if the " *
+                         "model is built for a single structure.")
         write_separator(io)
     end
     return nothing
@@ -222,18 +250,21 @@ function write_model_summary(kernel::HamiltonianKernel, strcs, bases, comm, conf
         write_summary_line(io, "descriptor vectors", total)
         println(io)
         println(io, "  Coverage: similarity of every descriptor to its most similar data point")
-        @printf(io, "    %-12s %10s %7s %7s %7s %7s %9s %7s\n", "group", "descriptors", "min", "p1", "p5", "median", "<sim_tol %", "<0.5 %")
+        widths = [12, 11, 6, 6, 6, 6, 7, 7]
+        write_table_row(io, ["group", "descriptors", "min", "p1", "p5", "median", "<tol %", "<0.5 %"], widths)
         for g in groups
             h = histograms[g]
             below_tol = sum(h[1:clamp(floor(Int64, sim_tol * NBINS_COVERAGE), 0, NBINS_COVERAGE)], init=0)
             below_half = sum(h[1:NBINS_COVERAGE ÷ 2])
-            @printf(io, "    %-12s %10d %7.3f %7.3f %7.3f %7.3f %9.2f %7.2f\n", g, sum(h), minima[g], histogram_quantile(h, 0.01),
-                    histogram_quantile(h, 0.05), histogram_quantile(h, 0.5), 100 * below_tol / sum(h), 100 * below_half / sum(h))
+            write_table_row(io, [g, string(sum(h)), @sprintf("%.3f", minima[g]), @sprintf("%.3f", histogram_quantile(h, 0.01)),
+                                 @sprintf("%.3f", histogram_quantile(h, 0.05)), @sprintf("%.3f", histogram_quantile(h, 0.5)),
+                                 @sprintf("%.2f", 100 * below_tol / sum(h)), @sprintf("%.2f", 100 * below_half / sum(h))], widths)
         end
         println(io)
-        println(io, "    Similarities are exp(-|x - d|² / 2σ²) with σ = sim_params (percentiles with a resolution of 0.001).")
-        println(io, "    Descriptors with a small similarity to all data points are outside the training data; there,")
-        println(io, "    the ML correction is close to zero and the model falls back to TB.")
+        write_legend(io, "Similarity exp(-|x - d|² / 2σ²) with σ = sim_params; percentiles with a resolution of 0.001.")
+        write_legend(io, "<tol %: fraction of descriptors with a similarity below sim_tol; <0.5 %: below 0.5.")
+        write_legend(io, "Descriptors with a small similarity to all data points are outside the training data; " *
+                         "there, the ML correction is close to zero and the model falls back to TB.")
         write_separator(io)
     end
     return nothing

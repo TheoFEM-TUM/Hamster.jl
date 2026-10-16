@@ -112,11 +112,19 @@ training and the validation set). Settings from the config file are not repeated
 --------------------------------------------------------------------------------
       structures:                  6
       alpha (4 / rcut):            0.7273 1/Å
+      subtracted species mean φ̄:   Br 4.7532 V, Pb -8.1202 V
 
-  Onsite corrections Δε = -γ (φ - φ̄) per species (energies in meV):
-    species   sites     φ̄ [V]       σ      min       p1      p99      max  max/σ  >3σ %  σ_strc
-    Br          144    4.7392   185.0   -466.3   -420.2    361.1    513.7   2.78   0.00     5.5
-    Pb           48   -8.1130   132.7   -316.3   -268.0    315.5    350.3   2.64   0.00     6.6
+  Onsite corrections Δε = -γ (φ - φ̄) per species (meV):
+    species  sites      σ     min      p1     p99     max  max/σ  >3σ % σ_strc
+    Br         144  193.8  -459.9  -398.3   409.8   520.1   2.68   0.00    5.3
+    Pb          48  143.1  -319.6  -296.8   299.4   347.0   2.43   0.00    6.2
+
+    φ̄: species mean of the site potentials over all structures of this run.
+    σ: width of Δε; max/σ: largest |Δε| relative to σ; >3σ %: fraction of
+      sites with |Δε| > 3σ.
+    σ_strc: spread of the per-structure species means, i.e. the part of Δε
+      that is lost if the model is built for a single structure.
+================================================================================
 ```
 
 - `φ̄` is the species mean that is subtracted (see [Mean Centering](#Mean-Centering)). It is taken over the structures
