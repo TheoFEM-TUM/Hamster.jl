@@ -113,40 +113,65 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
     nn_grid_points = iterate_nn_grid_points(strc.point_grid)
 
     rllm_dict = get_rllm_from_file(basis.overlaps, conf, comm = comm, file=file)
+    # Distance dependence and label of every overlap, looked up once instead of for every matrix element
+    rllms = [rllm_dict[string(Cllm, apply_oc=true)] for Cllm in basis.overlaps]
+    overlap_labels = [me_to_overlap_label(Cllm.type) for Cllm in basis.overlaps]
+    # Whether an overlap contributes to a matrix element depends only on the ion types and the angular momenta
+    # of the two orbitals, so the contributing overlaps are determined once per combination
+    representative_orbitals = Dict{Tuple{Int64, Int64}, eltype(eltype(basis.orbitals))}()
+    for iion in eachindex(basis.orbitals), orb in basis.orbitals[iion]
+        get!(representative_orbitals, (Int64(ion_types[iion]), orb.type.l), orb)
+    end
+    # For neighbors (nnlabel ≠ 0), the parameter index depends only on the overlap and the nearest-neighbor label
+    param_indices = Dict{Tuple{Int64, Int64}, Int64}()
+    for k in eachindex(basis.overlaps), nnlabel in unique(Int64(param.nnlabel) for param in basis.parameters)
+        nnlabel == 0 && continue
+        param_indices[(k, nnlabel)] = get_param_index(basis.overlaps[k], nnlabel, basis.parameters, nothing, nothing, 0, 0, overlap_label=overlap_labels[k])
+    end
+    contributing_overlaps = Dict{NTuple{4, Int64}, Vector{Int64}}()
+    for ((type1, l1), orb1) in representative_orbitals, ((type2, l2), orb2) in representative_orbitals
+        ion_label = IonLabel(type1, type2, sorted=false)
+        contributing_overlaps[(type1, type2, l1, l2)] = [k for k in eachindex(basis.overlaps) if overlap_contributes_to_matrix_element(basis.overlaps[k], orb1, orb2, ion_label)]
+    end
     Threads.@threads for (chunk_id, indices) in enumerate(chunks(nn_grid_points, n=npar))
+        h_chunk = hs[chunk_id]
+        radial = zeros(length(basis.overlaps))
         for (iion1, iion2, R) in indices
             ion_label = IonLabel(ion_types[iion1], ion_types[iion2], sorted=false)
+            T⃗ = SVector{3, Float64}(Ts[1, R], Ts[2, R], Ts[3, R])
             r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
-            r⃗₂ = apply_pbc(strc.ions[iion2].pos, Ts[:, R]) - strc.ions[iion2].dist
+            r⃗₂ = apply_pbc(strc.ions[iion2].pos, T⃗) - strc.ions[iion2].dist
             
-            r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, Ts[:, R])
+            r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, T⃗)
             r = normdiff(r⃗₁, r⃗₂)
             if r_nd ≤ rcut && r-abs(rcut_tol) < rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
-                Û = get_sk_transform_matrix(r⃗₁, r⃗₂, basis.orbitals[iion1][1].axis, tmethod)
+                Û = get_sk_transform_matrix(r⃗₁, r⃗₂, basis.orbitals[iion1][1].axis, tmethod)
                 nnlabel = get_nn_label(r, nn_dict[ion_label], conf)
+                # The radial part depends only on the overlap and the distance, not on the orbitals
+                f = fcut(r, rcut, rcut_tol)
+                for k in eachindex(basis.overlaps)
+                    radial[k] = same_ion_label(basis.overlaps[k], ion_label) ? rllms[k](r) * f : 0.0
+                end
                 for jorb1 in eachindex(basis.orbitals[iion1]), jorb2 in eachindex(basis.orbitals[iion2])
                     orb1 = basis.orbitals[iion1][jorb1]
                     orb2 = basis.orbitals[iion2][jorb2]
                     i = ij_map[(iion1, jorb1)]
                     j = ij_map[(iion2, jorb2)]
-                    θ₁, φ₁ = get_rotated_angles(Û, orb1.axis)
-                    θ₂, φ₂ = get_rotated_angles(Û, orb2.axis)
+                    θ₁, φ₁ = get_rotated_angles(Û, orb1.axis)
+                    θ₂, φ₂ = get_rotated_angles(Û, orb2.axis)
 
-                    for k in eachindex(basis.overlaps)
+                    for k in contributing_overlaps[(Int64(ion_types[iion1]), Int64(ion_types[iion2]), orb1.type.l, orb2.type.l)]
                         Cllm = basis.overlaps[k]
-                        Rllm = rllm_dict[string(Cllm, apply_oc=true)]
                         mode = get_mode(mode_dicts, k, ion_label, jorb1, jorb2)
                         orbconfig = get_orbconfig(oc_dicts, k, ion_label, jorb1, jorb2)
-                        if overlap_contributes_to_matrix_element(Cllm, orb1, orb2, ion_label)
-                            v = get_param_index(Cllm, nnlabel, basis.parameters, orb1, orb2, i, j)
+                        v = nnlabel ≠ 0 ? get(param_indices, (k, nnlabel), 0) :
+                            get_param_index(Cllm, nnlabel, basis.parameters, orb1, orb2, i, j, overlap_label=overlap_labels[k])
 
-                            hval = Cllm(orbconfig, mode, θ₁, φ₁, θ₂, φ₂) * Rllm(r) * fcut(r, rcut, rcut_tol)
+                        hval = Cllm(orbconfig, mode, θ₁, φ₁, θ₂, φ₂) * radial[k]
 
-                            if haskey(hs[chunk_id], (v, i, j, R)) && abs(hval) ≥ sp_tol
-                                hs[chunk_id][(v, i, j, R)] += hval
-                            elseif abs(hval) ≥ sp_tol
-                                hs[chunk_id][(v, i, j, R)] = hval
-                            end
+                        if abs(hval) ≥ sp_tol
+                            key = (v, i, j, R)
+                            h_chunk[key] = get(h_chunk, key, 0.0) + hval
                         end
                     end
                 end
@@ -191,21 +216,24 @@ orbital types, and ion labels.
 - `orb2`: The second orbital involved in the overlap.
 - `i::Int`: The index of the first orbital.
 - `j::Int`: The index of the second orbital.
+- `overlap_label`: (Optional) The overlap label of `overlap`, if already known (avoids recomputing it).
 
 # Returns
 - `Int64`: The index `v` of the parameter in the `parameters` vector that matches the conditions. If no match is found, the function returns `0`.
 """
-function get_param_index(overlap, nnlabel, parameters, orb1, orb2, i, j)::Int64
+function get_param_index(overlap, nnlabel, parameters, orb1, orb2, i, j; overlap_label=nnlabel ≠ 0 ? me_to_overlap_label(overlap.type) : nothing)::Int64
     if nnlabel ≠ 0
         for (v, param) in enumerate(parameters)
-            if param.nnlabel == nnlabel && me_to_overlap_label(overlap.type) == param.overlap_label && same_ion_label(overlap, param.ion_label)
+            if param.nnlabel == nnlabel && overlap_label == param.overlap_label && same_ion_label(overlap, param.ion_label)
                 return v
             end
         end
     else
         m = i == j ? 0 : 1
+        label₁ = SVector{3, Int64}(orb1.type.l, orb2.type.l, m)
+        label₂ = SVector{3, Int64}(orb2.type.l, orb1.type.l, m)
         for (v, param) in enumerate(parameters)
-            same_overlap = [orb1.type.l, orb2.type.l, m] == param.overlap_label || [orb2.type.l, orb1.type.l, m] == param.overlap_label
+            same_overlap = label₁ == param.overlap_label || label₂ == param.overlap_label
             if param.nnlabel == nnlabel && same_overlap && same_ion_label(overlap, param.ion_label)
                 return v
             end
@@ -267,14 +295,21 @@ Reshapes the geometry tensor from a dictionary `h_dict` into a matrix of sparse 
   indices and values from the input dictionary `h_dict`.
 """
 function reshape_geometry_tensor(h_dict, NV, NR, Nε)
-    is = [Vector{Int64}() for _ in 1:NV, _ in 1:NR]
-    js = [Vector{Int64}() for _ in 1:NV, _ in 1:NR]
-    vals = [Vector{Float64}() for _ in 1:NV, _ in 1:NR]
+    # Count the entries first, such that the index vectors can be allocated with their final size
+    counts = zeros(Int64, NV, NR)
+    for (v, _, _, R) in keys(h_dict)
+        counts[v, R] += 1
+    end
+    is = [Vector{Int64}(undef, counts[v, R]) for v in 1:NV, R in 1:NR]
+    js = [Vector{Int64}(undef, counts[v, R]) for v in 1:NV, R in 1:NR]
+    vals = [Vector{Float64}(undef, counts[v, R]) for v in 1:NV, R in 1:NR]
+    fill!(counts, 0)
     for (key, val) in h_dict
         v, i, j, R = key
-        push!(is[v, R], i)
-        push!(js[v, R], j)
-        push!(vals[v, R], val)
+        n = counts[v, R] += 1
+        is[v, R][n] = i
+        js[v, R][n] = j
+        vals[v, R][n] = val
     end
     h_out = Matrix{SparseMatrixCSC{Float64, Int64}}(undef, NV, NR)
     for R in axes(h_out, 2), v in axes(h_out, 1)

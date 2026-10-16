@@ -123,8 +123,10 @@ function get_hr(kernel::HamiltonianKernel, mode::Dense, index; apply_soc=false)
     h_env = kernel.structure_descriptors[index]
     Hr = get_empty_complex_hamiltonians(size(h_env[1], 1), length(h_env), mode)
     for R in eachindex(h_env)
-        for (i, j, hin) in zip(findnz(h_env[R])...)
-            Hr[R][i, j] = kernel(hin)
+        is, js, hins = findnz(h_env[R])
+        vals = evaluate_kernel(kernel, hins)
+        for t in eachindex(vals)
+            Hr[R][is[t], js[t]] = vals[t]
         end
     end
     return apply_soc ? apply_spin_basis.(Hr) : Hr
@@ -135,15 +137,23 @@ function get_hr(kernel::HamiltonianKernel, mode::Sparse, index; apply_soc=false)
     Nε = size(h_env[1], 1)
     Hr = get_empty_complex_hamiltonians(Nε, length(h_env), mode)
     for R in eachindex(h_env)
-        is = Int64[]
-        js = Int64[]
-        vals = Float64[]
-        for (i, j, hin) in zip(findnz(h_env[R])...)
-            push!(is, i); push!(js, j); push!(vals, kernel(hin))
-        end
-        Hr[R] = sparse(is, js, vals, Nε, Nε)
+        is, js, hins = findnz(h_env[R])
+        Hr[R] = sparse(is, js, evaluate_kernel(kernel, hins), Nε, Nε)
     end
     return apply_soc ? apply_spin_basis.(Hr) : Hr
+end
+
+"""
+    evaluate_kernel(kernel::HamiltonianKernel, hins) -> Vector{Float64}
+
+Evaluate the kernel model for every descriptor in `hins` (in parallel).
+"""
+function evaluate_kernel(kernel::HamiltonianKernel, hins)
+    vals = Vector{Float64}(undef, length(hins))
+    tforeach(eachindex(hins)) do t
+        vals[t] = kernel(hins[t])
+    end
+    return vals
 end
 
 """
@@ -361,21 +371,28 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
     dparams = zeros(length(kernel.params))
     if kernel.update
-        for n in eachindex(dparams)
-            for (bi, index) in enumerate(indices)
-                h_env = kernel.structure_descriptors[index]
-                for R in eachindex(dL_dHr[bi])
-                    for (i, j, hin) in zip(findnz(h_env[R])...)
-                        if !soc
-                            dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) .* real(dL_dHr[bi][R][i, j])
-                        else
-                            i1 = 2*i-1; j1 = 2*j-1
-                            i2 = 2*i; j2 = 2*j
-                            dparams[n] += exp_sim(kernel.data_points[n], hin, σ=kernel.sim_params) .* real(dL_dHr[bi][R][i1, j1] + dL_dHr[bi][R][i2, j2])
-                        end
+        # Collect the descriptors and the gradient w.r.t. their matrix elements once (instead of once per parameter)
+        hins = eltype(eltype(kernel.structure_descriptors[first(indices)]))[]
+        gs = Float64[]
+        for (bi, index) in enumerate(indices)
+            h_env = kernel.structure_descriptors[index]
+            for R in eachindex(dL_dHr[bi])
+                for (i, j, hin) in zip(findnz(h_env[R])...)
+                    push!(hins, hin)
+                    if !soc
+                        push!(gs, real(dL_dHr[bi][R][i, j]))
+                    else
+                        push!(gs, real(dL_dHr[bi][R][2i-1, 2j-1] + dL_dHr[bi][R][2i, 2j]))
                     end
                 end
             end
+        end
+        tforeach(eachindex(dparams)) do n
+            acc = 0.0
+            for t in eachindex(hins)
+                acc += exp_sim(kernel.data_points[n], hins[t], σ=kernel.sim_params) * gs[t]
+            end
+            dparams[n] = acc
         end
         dparams_penal = backward(reg, kernel.params)
         return dparams .+ dparams_penal
