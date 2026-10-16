@@ -31,11 +31,63 @@ function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Dense(); wei
     exp_2πiRk = exp_2πi(Rs, ks)
 
     @tasks for k in eachindex(Hk)
-        @views @inbounds for R in eachindex(Hr)
-            @. Hk[k] += Hr[R] * exp_2πiRk[R, k] * weights[R]
+        @inbounds for R in eachindex(Hr)
+            add_scaled!(Hk[k], Hr[R], exp_2πiRk[R, k] * weights[R])
         end
     end
     return Hk
+end
+
+function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, ::Sparse; weights=ones(size(Rs, 2)))
+    Nε = size(Hr[1], 1)
+    exp_2πiRk = exp_2πi(Rs, ks)
+    # Nonzeros of all Hr[R], collected once; Hk[k] is then assembled in a single step per k-point
+    Is, Js, Vs, Ridx = coo_entries(Hr)
+    Hk = Vector{SparseMatrixCSC{ComplexF64, Int64}}(undef, size(ks, 2))
+    @tasks for k in eachindex(Hk)
+        vals = [Vs[n] * exp_2πiRk[Ridx[n], k] * weights[Ridx[n]] for n in eachindex(Vs)]
+        Hk[k] = sparse(Is, Js, vals, Nε, Nε)
+    end
+    return Hk
+end
+
+"""
+    add_scaled!(H::Matrix, A, c)
+
+Add `c * A` to the dense matrix `H` in place. For sparse `A`, only its nonzeros are visited.
+"""
+add_scaled!(H::Matrix, A::AbstractMatrix, c) = (H .+= c .* A; H)
+function add_scaled!(H::Matrix, A::SparseMatrixCSC, c)
+    rows = rowvals(A); vals = nonzeros(A)
+    @inbounds for col in axes(A, 2), n in nzrange(A, col)
+        H[rows[n], col] += c * vals[n]
+    end
+    return H
+end
+add_scaled!(H::SparseMatrixCSC, A::AbstractMatrix, c) = (H .+= c .* A; H)
+
+"""
+    coo_entries(Hs) -> (Is, Js, Vs, Ridx)
+
+Row and column indices, values and matrix index of the (structural) nonzeros of all matrices in `Hs`.
+"""
+function coo_entries(Hs::AbstractVector{<:AbstractMatrix})
+    return coo_entries([H isa SparseMatrixCSC ? H : sparse(H) for H in Hs])
+end
+
+function coo_entries(Hs::AbstractVector{<:SparseMatrixCSC})
+    N = sum(nnz, Hs; init=0)
+    Is = Vector{Int64}(undef, N); Js = Vector{Int64}(undef, N); Ridx = Vector{Int64}(undef, N)
+    Vs = Vector{promote_type(eltype.(Hs)...)}(undef, N)
+    n = 0
+    @inbounds for (R, H) in enumerate(Hs)
+        rows = rowvals(H); vals = nonzeros(H)
+        for col in axes(H, 2), p in nzrange(H, col)
+            n += 1
+            Is[n] = rows[p]; Js[n] = col; Vs[n] = vals[p]; Ridx[n] = R
+        end
+    end
+    return Is, Js, Vs, Ridx
 end
 
 """
@@ -82,12 +134,29 @@ Fully diagonalizes a Hermitian Hamiltonian matrix `Hk` and returns the eigenvalu
 - `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to an eigenvalue of `Hk`. The eigenvectors are computed in the standard basis and are complex-valued.
 """
 function diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0, method="shift-invert")
-    if abs(sum(Hk .- Hermitian(Hk))) > 1e-5
+    if abs(hermiticity_mismatch(Hk)) > 1e-5
         maxdiff, inds = findmax(abs.(Hk .- Hermitian(Hk)))
         @warn "Hamiltonian not hermitian! Maximum missmatch: $maxdiff at $inds."
     end
     eig = eigen(Hermitian(Hk))
     return real.(eig.values), eig.vectors
+end
+
+"""
+    hermiticity_mismatch(H)
+
+Return `sum(H .- Hermitian(H))` without allocating: `Hermitian(H)` differs from `H` only in the lower triangle
+(where it is the conjugate of the upper triangle) and on the diagonal (where it is real).
+"""
+function hermiticity_mismatch(H::AbstractMatrix)
+    s = zero(complex(eltype(H)))
+    @inbounds for j in axes(H, 2)
+        s += H[j, j] - real(H[j, j])
+        for i in j+1:size(H, 1)
+            s += H[i, j] - conj(H[j, i])
+        end
+    end
+    return s
 end
 
 """
