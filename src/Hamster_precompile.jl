@@ -1,3 +1,4 @@
+# COV_EXCL_START
 using PrecompileTools: @compile_workload, @setup_workload
 
 # The precompile workload runs small but complete Hamster calculations (as the `hamster` executable does via `main`),
@@ -100,3 +101,4 @@ end
         end
     end
 end
+# COV_EXCL_STOP
