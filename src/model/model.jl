@@ -109,12 +109,10 @@ Construct the real-space Hamiltonian (`Hr`) by multiplying the geometry tensor `
 function get_hr(h::AbstractMatrix, V::AbstractVector, mode=Val{:dense}; apply_soc=false)
     Hr = get_empty_complex_hamiltonians(size(h[1, 1], 1), size(h, 2), mode)
     Threads.@threads for R in axes(h, 2)
-        if Hr[R] isa SparseMatrixCSC
-            # Assemble the sum over parameters in one step instead of adding sparse matrices one by one
-            Is, Js, Vs, vidx = coo_entries(@view h[:, R])
-            Hr[R] = sparse(Is, Js, ComplexF64.(Vs .* V[vidx]), size(Hr[R])...)
-        else
-            for v in axes(h, 1)
+        for v in axes(h, 1)
+            if Hr[R] isa SparseMatrixCSC
+                @. Hr[R] += h[v, R] * V[v]
+            else
                 add_scaled!(Hr[R], h[v, R], V[v])
             end
         end

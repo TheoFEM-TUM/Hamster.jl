@@ -72,10 +72,20 @@ add_scaled!(H::SparseMatrixCSC, A::AbstractMatrix, c) = (H .+= c .* A; H)
 Row and column indices, values and matrix index of the (structural) nonzeros of all matrices in `Hs`.
 """
 function coo_entries(Hs::AbstractVector{<:AbstractMatrix})
-    Is = Int64[]; Js = Int64[]; Vs = promote_type(eltype.(Hs)...)[]; Ridx = Int64[]
-    for R in eachindex(Hs)
-        is, js, vs = findnz(sparse(Hs[R]))
-        append!(Is, is); append!(Js, js); append!(Vs, vs); append!(Ridx, fill(R, length(vs)))
+    return coo_entries([H isa SparseMatrixCSC ? H : sparse(H) for H in Hs])
+end
+
+function coo_entries(Hs::AbstractVector{<:SparseMatrixCSC})
+    N = sum(nnz, Hs; init=0)
+    Is = Vector{Int64}(undef, N); Js = Vector{Int64}(undef, N); Ridx = Vector{Int64}(undef, N)
+    Vs = Vector{promote_type(eltype.(Hs)...)}(undef, N)
+    n = 0
+    @inbounds for (R, H) in enumerate(Hs)
+        rows = rowvals(H); vals = nonzeros(H)
+        for col in axes(H, 2), p in nzrange(H, col)
+            n += 1
+            Is[n] = rows[p]; Js[n] = col; Vs[n] = vals[p]; Ridx[n] = R
+        end
     end
     return Is, Js, Vs, Ridx
 end
