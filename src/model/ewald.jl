@@ -63,10 +63,10 @@ function ewald_sum(pos, q, lattice;
 
     grid_time = @elapsed begin
         if isnothing(Rs)
-            Rs = get_translation_vectors(hcat(pos...), lattice; Rmax=get_Rmax(lattice, rcut=rcut), rcut=rcut)
+            Rs = ewald_translation_vectors(pos, lattice, rcut)
         end
         if isnothing(point_grid)
-            point_grid = PointGrid(hcat(pos...), frac_to_cart(Rs, lattice), grid_size=rcut)
+            point_grid = PointGrid(reduce(hcat, pos), frac_to_cart(Rs, lattice), grid_size=rcut)
         end
     end
 
@@ -98,6 +98,23 @@ function ewald_sum(pos, q, lattice;
         time_short = sr_time,
         time_long = lr_time
     )
+end
+
+"""
+    ewald_translation_vectors(pos, lattice, rcut)
+
+Lattice translations (fractional) of all periodic images that can contain atoms within `rcut` of an atom of the
+cell. Instead of checking all atom pairs (as `get_translation_vectors`, which is very slow for large cells and large
+cutoffs), images are discarded with a bounding-sphere estimate: the atoms lie within a sphere of radius ρ around their
+center, so an image translated by T can only contain neighbors if |T| ≤ rcut + 2ρ. The result can contain a few
+translations without neighbors, which do not change the sum.
+"""
+function ewald_translation_vectors(pos, lattice, rcut)
+    Rs = get_translation_vectors(get_Rmax(lattice, rcut=rcut))
+    center = sum(pos) / length(pos)
+    ρ = maximum(r -> norm(r - center), pos)
+    Ts = frac_to_cart(Rs, lattice)
+    return Rs[:, [norm(Ts[:, R]) ≤ rcut + 2ρ for R in axes(Rs, 2)]]
 end
 
 """
@@ -151,17 +168,18 @@ function ewald_real!(phi, pos, qs, Rs, lattice, point_grid, alpha, rcut; method=
     kernel = get_realspace_kernel(method)
     fill!(phi, 0.0)
 
-    Ts = frac_to_cart(Rs, lattice)
+    Ts = [SVector{3, Float64}(T) for T in eachcol(frac_to_cart(Rs, lattice))]
+    R0 = [iszero(R) for R in eachcol(Rs)]
 
-    @views for (i, j, R) in iterate_nn_grid_points(point_grid)
-        if i == j && iszero(Rs[:, R])
-            continue
-        end
-
-        r = normdiff(pos[i], pos[j], Ts[:, R])
-
-        if r < rcut && r > 1e-14
-            phi[i] += qs[j] * kernel(r, alpha, rcut)
+    # Pairs are visited grid cell by grid cell (neighbor cells and periodic images are unique, so every pair is
+    # visited once). Every atom belongs to exactly one cell, so the cells can be processed in parallel.
+    tforeach(collect(point_grid.dict0)) do (grid_point, inds)
+        for nn_grid_point in nn_grid_points(grid_point, point_grid.dictR), (j, R) in point_grid.dictR[nn_grid_point], i in inds
+            (i == j && R0[R]) && continue
+            r = normdiff(pos[i], pos[j], Ts[R])
+            if r < rcut && r > 1e-14
+                phi[i] += qs[j] * kernel(r, alpha, rcut)
+            end
         end
     end
 
