@@ -172,13 +172,23 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
 end
 
 """
-    init_ewald_params(param_labels, conf)
+    init_ewald_params(param_labels, conf; initas=get_ewald_init_params(conf))
 
-Initialize Ewald onsite parameters for each species in `param_labels`.
-
-Returns a vector filled with the global charge scaling factor from `conf`.
+Initialize the Ewald coupling γ of each species in `param_labels`: from the `ewald_<element>` lines of the parameter
+file `initas` (e.g. the `params.dat` of a fit) if given, otherwise (and for species missing in the file) with the
+`charge_scale` of the atom block, which defaults to the `charge_scale` of the `Ewald` block.
 """
-init_ewald_params(param_labels, conf) = ones(length(param_labels)) * get_ewald_charge_scale(conf)
+function init_ewald_params(param_labels, conf; initas=get_ewald_init_params(conf))
+    params = [get_charge_scale(conf, number_to_element(label)) for label in param_labels]
+    if initas ≠ "default"
+        _, _, _, _, _, ewald_types, ewald_parameters = read_params(initas)
+        γ = Dict(zip(ewald_types, ewald_parameters))
+        for (p, label) in enumerate(param_labels)
+            params[p] = get(γ, number_to_element(label), params[p])
+        end
+    end
+    return params
+end
 
 get_params(ewald::EwaldOnsites) = ewald.params
 
@@ -261,25 +271,37 @@ end
 """
     get_model_gradient(ewald::EwaldOnsites, indices, reg, dL_dHr; soc=true)
 
-Compute the gradient of the loss with respect to the Ewald onsite parameters.
-
-Currently returns a zero vector (no gradient implemented).
+Gradient of the loss with respect to the Ewald coupling γ of each species. The onsite shifts are
+`Δε = -γ_s φ_i` on all orbitals of atom `i` (species `s`), so `dL/dγ_s = -Σ_i Σ_o Re(dL/dHr[R=0]_oo) φ_i`.
 """
 function get_model_gradient(ewald::EwaldOnsites, indices, reg, dL_dHr; soc=true)
     dparams = zeros(length(ewald.params))
-    #if ewald.update
-    #    
-    #end
-    return dparams
+    if ewald.update
+        for (n, index) in enumerate(indices)
+            G = dL_dHr[n][ewald.Rs_info[2, index]]
+            Norb = soc ? 2 .* ewald.norb_per_strc[index] : ewald.norb_per_strc[index]
+            offset = 0
+            for (iion, ϕ) in enumerate(ewald.potentials[index])
+                p = findfirst(==(ewald.types_per_strc[index][iion]), ewald.param_labels)
+                for o in offset + 1:offset + Norb[iion]
+                    dparams[p] -= real(G[o, o]) * ϕ
+                end
+                offset += Norb[iion]
+            end
+        end
+    end
+    return dparams + backward(reg, ewald.params)
 end
 
 """
-    write_params(ewald::EwaldOnsites, conf=get_empty_config())
+    write_params(ewald::EwaldOnsites, conf=get_empty_config(); filename="params.dat")
 
-Write the Ewald onsite parameters to a file.
-
-Currently not implemented.
+Add the Ewald coupling per species as `ewald_<element>` lines to the parameter file `filename` (written by the TB and
+SOC models before), where it is read with `init_params = params.dat` in the `Ewald` block.
 """
-function write_params(ewald::EwaldOnsites, conf=get_empty_config())
-    #currently does nothing
+function write_params(ewald::EwaldOnsites, conf=get_empty_config(); filename="params.dat")
+    isfile(filename) || return nothing
+    parameters, parameter_values, ion_types, soc_parameters, _ = read_params(filename)
+    write_params(parameters, parameter_values, ion_types, soc_parameters, conf, filename=replace(filename, r"\.dat$" => ""),
+                 ewald_types=number_to_element.(ewald.param_labels), ewald_parameters=ewald.params)
 end
