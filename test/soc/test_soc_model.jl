@@ -103,11 +103,12 @@ end
     dL_dHr = Hamster.backward(ham, 1, loss, data, cache)
     tb = ham.models[findfirst(m -> m isa TBModel, ham.models)]
     grad = Hamster.get_model_gradient(tb.hs[1], dL_dHr; soc=true)
-    for (v, p) in enumerate(tb.params_per_strc[1])
+    fd = map(tb.params_per_strc[1]) do p
         p0 = tb.params[p]; δ = 1e-5
         tb.params[p] = p0 + δ; L_plus = Hamster.forward(ham, 1, loss, data)[1]
         tb.params[p] = p0 - δ; L_minus = Hamster.forward(ham, 1, loss, data)[1]
         tb.params[p] = p0
-        @test grad[v] ≈ (L_plus - L_minus) / 2δ atol=1e-7
+        (L_plus - L_minus) / 2δ
     end
+    @test maximum(abs.(grad .- fd)) < 1e-7
 end
