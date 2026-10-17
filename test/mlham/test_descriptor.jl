@@ -154,3 +154,57 @@ end
     end
     @test all(correct_permutation)
 end
+@testset "Descriptor with apply_distortion" begin
+    path = joinpath(@__DIR__, "test_files")
+    conf = get_config(filename = joinpath(path, "hconf"))
+    set_value!(conf, "poscar", joinpath(path, "POSCAR_gaas"))
+    set_value!(conf, "rllm_file", joinpath(path, "rllm.dat"))
+    set_value!(conf, "verbosity", 0)
+    rcut = Hamster.get_ml_rcut(conf); s = 2.0
+
+    # Same reference positions, ion 1 displaced: actual position = pos - dist
+    strc_0 = Structure(conf)
+    rs = reduce(hcat, [ion.pos for ion in strc_0.ions]); types = [ion.type for ion in strc_0.ions]
+    δ = zeros(3, length(types)); δ[:, 1] = [0.10, -0.05, 0.08]
+    strc_d = Structure(strc_0.Rs, rs, δ, types, strc_0.lattice, conf)
+    function descriptor(strc; kwargs...)
+        basis = Basis(strc, conf); model = TBModel(strc, basis, conf)
+        return Hamster.get_tb_descriptor(model.hs, model.params, strc, basis, conf; kwargs...)
+    end
+    same_pattern(A, B) = all(findnz(A[R])[1:2] == findnz(B[R])[1:2] for R in eachindex(A))
+
+    # Without distortion, apply_distortion only rescales distances (Δr / rcut) and angles (θ / 2π)
+    off = descriptor(strc_0)
+    on = descriptor(strc_0, apply_distortion=true, strc_scale=s)
+    @test same_pattern(off, on)
+    for R in eachindex(off), (x, y) in zip(nonzeros(off[R]), nonzeros(on[R]))
+        @test y[[1, 2, 7, 8]] == x[[1, 2, 7, 8]]
+        @test y[3] ≈ x[3] / rcut * s
+        @test y[4:6] ≈ x[4:6] ./ 2π .* s
+    end
+
+    # Without apply_distortion, distances and angles are those of the reference positions
+    off_d = descriptor(strc_d)
+    @test same_pattern(off, off_d)
+    @test all(x[1:6] == y[1:6] for R in eachindex(off) for (x, y) in zip(nonzeros(off[R]), nonzeros(off_d[R])))
+
+    # With apply_distortion, they are those of the displaced positions
+    on_d = descriptor(strc_d, apply_distortion=true, strc_scale=s)
+    R0 = Hamster.findR0(strc_d.Rs); n1 = length(Basis(strc_d, conf).orbitals[1])
+    r_actual = norm((strc_d.ions[1].pos - strc_d.ions[1].dist) - strc_d.ions[2].pos)
+    for i in 1:n1, j in n1+1:2n1
+        x = on_d[R0][i, j]
+        @test x[3] ≈ r_actual / rcut * s
+        @test x[4] ≈ on[R0][i, j][4]                 # angle between the orbital axes: independent of the positions
+        @test x[5:6] != on[R0][i, j][5:6]            # angles to the bond: change with the displacement
+    end
+
+    # With apply_distance_distortion, the distance is that of the displaced positions, the angles those of the reference
+    @test descriptor(strc_0, apply_distance_distortion=true, strc_scale=s) == on
+    dist_d = descriptor(strc_d, apply_distance_distortion=true, strc_scale=s)
+    for i in 1:n1, j in n1+1:2n1
+        x = dist_d[R0][i, j]
+        @test x[3] ≈ r_actual / rcut * s
+        @test x[4:6] == on[R0][i, j][4:6]
+    end
+end
