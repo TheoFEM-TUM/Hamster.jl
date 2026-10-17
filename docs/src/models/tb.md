@@ -238,3 +238,27 @@ TB parameters can be initialized from:
 
 When parameters are read from a file, they are matched by their parameter
 labels before being inserted into the model.
+
+## Model Summary
+
+When the model is built in a Hamster run, a summary of the model size is appended to `hamster.out` (parameter values
+are not included, since the summary is written at initialization):
+
+```
+================================================================================
+  TB Model Summary (training set)
+--------------------------------------------------------------------------------
+      structures:                  6
+      atoms per structure:         96
+      orbitals per structure:      104 (total 624)
+      R vectors per structure:     23
+      parameters:                  15
+        per shell:                 onsite 6, NN1 9
+        per ion pair:              Br+Br 4, Br+Pb 3, Pb+Pb 8
+      geometry tensor entries:     35056 (0.5 MB)
+================================================================================
+```
+
+Ranges (`min - max`) are given if the structures differ in size. The geometry tensor entries are the stored non-zero
+elements of ``h_{vR}`` of all structures, which dominate the memory of the TB model.
+

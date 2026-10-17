@@ -92,6 +92,12 @@ if test_all || test_only == "SOC"
     end
 end
 
+if test_all || test_only == "out"
+    @testset "out" begin
+        include("out/test_model_summary.jl")
+    end
+end
+
 if test_all || test_only == "DOS"
     @testset "DOS" begin
         include("out/test_dos.jl")
