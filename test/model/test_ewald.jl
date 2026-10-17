@@ -86,6 +86,24 @@ end
 
     @test isapprox(zahn.energy, wolf.energy, rtol=1e-3)
     @test all(@. isapprox(zahn.potentials, wolf.potentials, rtol=1e-2))
+
+    # Test 5: real-space sum (translation vectors from the bounding-sphere estimate, threaded loop over grid cells)
+    # versus a direct double sum over atoms and the translation vectors of the pair search
+    for (method, rc, α) in [("ewald", 5.5, 0.0), ("wolf", 12.0, 0.2), ("zahn", 12.0, 0.2)]
+        Rs_pairs = Hamster.get_translation_vectors(hcat(pos...), box; Rmax=Hamster.get_Rmax(box, rcut=rc), rcut=rc)
+        Rs = Hamster.ewald_translation_vectors(pos, box, rc)
+        @test all(R -> R in eachcol(Rs), eachcol(Rs_pairs))           # superset of the translations with neighbors
+
+        res = Hamster.ewald_sum(pos, q, box, rcut=rc, method=method, alpha=α, include_long=false, subtract_self=false)
+        kernel = Hamster.get_realspace_kernel(method)
+        Ts = Hamster.frac_to_cart(Rs_pairs, box)
+        φ_direct = zeros(length(pos))
+        for i in eachindex(pos), j in eachindex(pos), R in axes(Ts, 2)
+            r = norm(pos[i] - pos[j] - Ts[:, R])
+            1e-14 < r < rc && (φ_direct[i] += q[j] * kernel(r, res.alpha, rc))
+        end
+        @test res.potentials ≈ Hamster.ke .* φ_direct atol=1e-10
+    end
 end
 
 @testset "Ewald Onsites" begin
