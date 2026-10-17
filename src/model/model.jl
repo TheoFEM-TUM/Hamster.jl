@@ -205,7 +205,7 @@ function get_model_gradient(model::TBModel, indices, reg, dL_dHr; soc=false)
         end
         dV_ = zeros(length(model.params), length(indices))
         for (n, index) in enumerate(indices)
-            dV_[model.params_per_strc[index], n] = dVs[index]
+            dV_[model.params_per_strc[index], n] = dVs[n]
         end
 
         dV_grad = dropdims(sum(dV_, dims=2), dims=2)
