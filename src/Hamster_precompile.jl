@@ -82,6 +82,13 @@ end
 @setup_workload begin
     data = joinpath(@__DIR__, "precompile")
     @compile_workload begin
+        # Precompilation can be started from an MPI rank (e.g. after an update), and the precompile process inherits
+        # the environment of the MPI launcher. It has to initialize MPI on its own (singleton) instead of joining the
+        # running job, where MPI.Init hangs.
+        for key in collect(keys(ENV))
+            any(startswith(key, prefix) for prefix in ("PMI_", "PMIX_", "OMPI_", "HYDRA_", "MPI_LOCALRANKID", "MPI_LOCALNRANKS")) &&
+                delete!(ENV, key)
+        end
         MPI.Initialized() || MPI.Init()
         comm = MPI.COMM_WORLD
         mktempdir() do dir

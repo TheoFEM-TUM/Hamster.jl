@@ -1,9 +1,16 @@
-using MPI, Hamster, Printf
+using MPI, Printf
 
 MPI.Init()
 comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
+
+# Hamster is loaded on rank 0 first. If it has to be precompiled (e.g. after an update or on a node with another CPU
+# type), only rank 0 does so, and the other ranks load the finished cache instead of all compiling at the same time.
+rank == 0 && @eval using Hamster
+MPI.Barrier(comm)
+rank ≠ 0 && @eval using Hamster
+
 num_nodes = parse(Int64, get(ENV, "SLURM_JOB_NUM_NODES", "1"))
 
 args = Hamster.parse_commandline(ARGS)
