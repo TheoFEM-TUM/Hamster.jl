@@ -86,7 +86,7 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1,
 
         if rank == 0 && verbosity > 1; println("Getting Hamiltonian models..."); end
         begin_time = MPI.Wtime()
-        ham = EffectiveHamiltonian(strcs, bases, comm_active, conf, rank=active_rank, nranks=active_size)
+        ham = EffectiveHamiltonian(strcs, bases, comm_active, conf, rank=active_rank, nranks=active_size, sparse_iterators=false)
         ham_time = MPI.Wtime() - begin_time
         if rank == 0 && verbosity > 1; println(" Model time: $ham_time s"); end
 
