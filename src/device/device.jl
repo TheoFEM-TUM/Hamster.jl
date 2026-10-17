@@ -54,6 +54,14 @@ Implemented by the `HamsterCUDSSExt` extension, which is loaded with `using CUDA
 function shift_invert_operator end
 
 """
+    release_operator!(op)
+
+Free the device memory of an operator from `shift_invert_operator` (e.g. the cuDSS factorization) right away instead
+of waiting for the garbage collector.
+"""
+release_operator!(op) = nothing
+
+"""
     init_device(conf, comm=nothing; device=get_device(conf))
 
 Create the compute device requested by the `device` tag. For `gpu`, each MPI rank is bound to a GPU

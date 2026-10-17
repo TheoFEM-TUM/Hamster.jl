@@ -1,7 +1,7 @@
 module HamsterCUDAExt
 
 using Hamster, CUDA, cuSPARSE, cuSOLVER, LinearAlgebra
-using Hamster: DeviceHk, Dense, Sparse, densify, nkpoints, shift_invert_operator
+using Hamster: DeviceHk, Dense, Sparse, densify, nkpoints, shift_invert_operator, release_operator!
 using Hamster.KrylovKit: eigsolve, EigSorter
 
 function Hamster.gpu_device(local_rank::Integer)
@@ -50,7 +50,9 @@ function Hamster.device_eigen(Hk::CuDeviceHk, ::Sparse; Neig=6, target=0.0, meth
             if isempty(methods(shift_invert_operator))
                 error("diag_method = shift-invert on the GPU requires the CUDSS extension. Load it with `using CUDSS`.")
             end
-            μs, xs = eigsolve(shift_invert_operator(A), CuArray(rand(ComplexF64, Hk.Nε)), Neig, :LM, ishermitian=true, maxiter=500)
+            op = shift_invert_operator(A)
+            μs, xs = eigsolve(op, CuArray(rand(ComplexF64, Hk.Nε)), Neig, :LM, ishermitian=true, maxiter=500)
+            release_operator!(op)
             λs = target .+ 1 ./ real.(μs)
         elseif method == "krylov-schur"
             A = CuSparseMatrixCSR{ComplexF64, Int32}(Hk.rowptr, Hk.colval, nzval, (Hk.Nε, Hk.Nε))
