@@ -76,3 +76,11 @@ Pages = ["conf/read_config.jl", "conf/config.jl"]
 Modules = [Hamster]
 Pages = ["output.jl"]
 ```
+
+# DOS, PDOS and COHP
+
+```@autodocs
+Modules = [Hamster]
+Pages = ["out/dos.jl"]
+Filter = x -> !(x in [Hamster.compute_dos, Hamster.orbital_labels, Hamster.DOSSettings])
+```

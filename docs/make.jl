@@ -22,6 +22,7 @@ makedocs(
             "calc/standard.md",
             "calc/optim.md",
             "calc/hyperopt.md",
+            "calc/dos.md",
             "calc/helper_functions.md"
         ],
         "Hamiltonian Models" => [

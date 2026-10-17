@@ -65,9 +65,10 @@ function precompile_configs(dir, data)
     optimizer(train, lines...) = block("Optimizer", "niter = 2", "lr = 0.01", "loss = MAE", "train_data = $train", lines...)
     ml(lines...) = block("ML", "ncluster = 3", "npoints = 10", lines...)
     return [
-        # Standard runs: dense, sparse with shift-invert, MD snapshots with ML
-        options(poscar, params, "kpoints = $eigenval") * PRECOMPILE_ATOMS,
-        options(poscar, params, "sp_mode = true", "sp_diag = true", "neig = 2", "eig_target = 3.0") * PRECOMPILE_ATOMS,
+        # Standard runs: dense (with DOS, exact), sparse with shift-invert (with DOS, KPM), MD snapshots with ML
+        options(poscar, params, "kpoints = $eigenval", "dos = all") * block("DOS", "ne = 200", "nelec = 8") * PRECOMPILE_ATOMS,
+        options(poscar, params, "sp_mode = true", "sp_diag = true", "neig = 2", "eig_target = 3.0", "dos = all") *
+            block("DOS", "method = kpm", "ne = 200", "nelec = 8", "kpm_moments = 64", "kpm_vectors = 4") * PRECOMPILE_ATOMS,
         options(poscar, params, "sp_mode = true", "kpoints = $(joinpath(dir, "eigenval.h5"))") * md * ml("init_params = rand") * PRECOMPILE_ATOMS,
         # Optimization: TB (dense, with validation), TB (sparse), ML with and without sim_mat (MD data), SOC
         options(poscar, params) * optimizer(eigenval, "val_data = $eigenval") * PRECOMPILE_ATOMS,
