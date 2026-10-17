@@ -35,11 +35,16 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config;
             ri = rs_ion[iion]
             rj = apply_pbc(rs_ion[jion], TRs[R])
             Δr = normdiff(ri, rj)
-            if apply_distortion
-                ri -= strc.ions[iion].dist
-                rj -= strc.ions[jion].dist
+            Δr_dist = Δr
+            # Displaced positions: for the distance with either tag, for the angles only with apply_distortion
+            if apply_distortion || apply_distance_distortion
+                ri_d = ri - strc.ions[iion].dist
+                rj_d = rj - strc.ions[jion].dist
+                Δr_dist = normdiff(ri_d, rj_d)
+                if apply_distortion
+                    ri, rj = ri_d, rj_d
+                end
             end
-            Δr_dist = normdiff(ri, rj)
             # The cutoff only depends on the pair of ions
             (Δr ≤ rcut && fcut(Δr_dist, rcut + rcut_tol) > 0) || continue
             Δr_in = (apply_distance_distortion || apply_distortion) ? Δr_dist : Δr
@@ -48,8 +53,9 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config;
             end
             itype = types[iion]; jtype = types[jion]
             # Bond directions (see get_angular_descriptors)
-            Δrij = Δr_dist > 0 ? normalize(rj - ri) : nothing
-            Δrji = Δr_dist > 0 ? normalize(ri - rj) : nothing
+            Δr_ang = apply_distortion ? Δr_dist : Δr
+            Δrij = Δr_ang > 0 ? normalize(rj - ri) : nothing
+            Δrji = Δr_ang > 0 ? normalize(ri - rj) : nothing
             for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
                 i = offset[iion] + iorb
                 j = offset[jion] + jorb
