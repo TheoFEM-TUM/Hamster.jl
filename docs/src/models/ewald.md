@@ -103,8 +103,10 @@ end
 
 With `update = true` in the `Ewald` block, the couplings are fitted together with the other models, using the gradient
 ``\partial L / \partial \gamma_s = -\sum_{i \in s} \sum_{o \in i} \mathrm{Re}\,(\partial L / \partial H_{R=0})_{oo}\, \phi_i``.
-The fitted couplings are written to `ewald_params.dat` (tag `filename`) and read with `init_params = ewald_params.dat`
-in the `Ewald` block, which takes precedence over the atom blocks. The effective charges `qeff` and thus the
+The couplings are written to `params.dat` at the end of a fit, as `ewald_<element>` lines after the TB and SOC
+parameters, and read with `init_params = params.dat` in the `Ewald` block, which takes precedence over the atom blocks.
+Without `init_params`, the `ewald_` lines of a parameter file are ignored, so that an explicitly set `charge_scale`
+(e.g. in a hyperparameter search) is not overwritten. The effective charges `qeff` and thus the
 electrostatic potential (and its neutrality) are not changed by the coupling.
 
 ## Mean Centering

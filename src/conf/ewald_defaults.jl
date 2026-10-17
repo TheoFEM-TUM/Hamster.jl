@@ -10,8 +10,7 @@ get_ewald(conf::Config)::Bool = haskey(conf.blocks, "Ewald") || (conf("ewald") â
 push!(CONFIG_TAGS, ConfigTag{Bool}("ewald", conf->get_ewald(conf), "activates ewald model."))
 
 @configtag update Bool false "fit the Ewald coupling of each species (starting from charge_scale or init_params)." "Ewald"
-@configtag init_params String "default" "file with the Ewald coupling per species (written by a fit), default: charge_scale for all species." "Ewald"
-@configtag filename String "ewald_params.dat" "file to which the fitted Ewald coupling per species is written." "Ewald"
+@configtag init_params String "default" "parameter file with the Ewald coupling per species (ewald_<element> lines, e.g. params.dat of a fit), default: charge_scale." "Ewald"
 @configtag method String "ewald" "method to compute the Ewald sum" "Ewald"
 @configtag rcut Float64 get_rcut(conf) "cut-off radius for real-space ewald" "Ewald"
 @configtag charge_scale Float64 1.0 "scaling factor for charge values" "Ewald"

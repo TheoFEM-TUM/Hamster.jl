@@ -227,7 +227,8 @@ Writes the parameters of a spin-orbit coupling (SOC) model to a file.
 - `conf`: Configuration settings (default: an empty configuration from `get_empty_config()`).
 """
 function write_params(soc_model::SOCModel, conf=get_empty_config())
-    parameters, parameter_values, _, _, conf_values = read_params("params.dat")
+    parameters, parameter_values, _, _, conf_values, ewald_types, ewald_parameters = read_params("params.dat")
     check_consistency(conf_values, conf)
-    write_params(parameters, parameter_values, number_to_element.(soc_model.param_labels), soc_model.params, conf)
+    write_params(parameters, parameter_values, number_to_element.(soc_model.param_labels), soc_model.params, conf,
+                 ewald_types=ewald_types, ewald_parameters=ewald_parameters)
 end
