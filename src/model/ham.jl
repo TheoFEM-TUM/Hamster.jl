@@ -178,10 +178,6 @@ Diagonalizes a sparse Hermitian matrix `Hk` to find a specified number of eigenv
 - `eigenvalues::Vector{Float64}`: A vector of the real parts of the computed eigenvalues, focusing on those closest to the target. The number of eigenvalues returned is equal to `Neig`.
 - `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to one of the computed eigenvalues.
 """
-# Arpack keeps internal state between its reverse-communication calls and is not thread-safe, so concurrent calls
-# (e.g. from the threaded loop over k-points) are serialized.
-const ARPACK_LOCK = ReentrantLock()
-
 function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert")
     if method == "shift-invert"
         Es, vs, _, _, _, _ = lock(() -> eigs(Hk, nev=Neig, sigma=target), ARPACK_LOCK)
