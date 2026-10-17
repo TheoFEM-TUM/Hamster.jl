@@ -248,47 +248,34 @@ function ewald_recip!(phi, pos, q, box, box_inv, alpha, mesh_spacing)
     rho_k = fft(rho)
     phi_k = similar(rho_k)
 
-    # reciprocal lattice matrix: columns are reciprocal lattice vectors
-    Gmat = 2π * transpose(box_inv)
-
-    # approximate grid spacings along reciprocal directions for spline deconvolution
-    # uses the norms of the direct lattice vectors divided by grid counts
-    a1 = box[:, 1]
-    a2 = box[:, 2]
-    a3 = box[:, 3]
-    h1 = norm(a1) / Nx
-    h2 = norm(a2) / Ny
-    h3 = norm(a3) / Nz
+    # reciprocal lattice vectors (columns of 2π box⁻ᵀ)
+    Gmat = SMatrix{3, 3}(2π * transpose(box_inv))
+    g1, g2, g3 = Gmat[:, 1], Gmat[:, 2], Gmat[:, 3]
 
     p = 4  # cubic B-spline order
+    freq(i, N) = (i - 1 <= N ÷ 2) ? (i - 1) : (i - 1 - N)
+    # spline deconvolution factors, separable in the three directions
+    bx = [_sinc(π * freq(i, Nx) / Nx)^p for i in 1:Nx]
+    by = [_sinc(π * freq(j, Ny) / Ny)^p for j in 1:Ny]
+    bz = [_sinc(π * freq(k, Nz) / Nz)^p for k in 1:Nz]
+    inv_4α² = 1 / (4 * alpha^2)
 
-    for i in 1:Nx, j in 1:Ny, k in 1:Nz
-        ni = (i - 1 <= Nx ÷ 2) ? (i - 1) : (i - 1 - Nx)
-        nj = (j - 1 <= Ny ÷ 2) ? (j - 1) : (j - 1 - Ny)
-        nk = (k - 1 <= Nz ÷ 2) ? (k - 1) : (k - 1 - Nz)
-
-        nvec = SVector{3}(ni, nj, nk)
-        G = Gmat * nvec
-        G2 = dot(G, G)
-
-        if G2 < 1e-30
-            phi_k[i, j, k] = 0.0 + 0.0im
-            continue
+    # Column-major loop order, threaded over the planes k (each task writes its own planes)
+    tforeach(1:Nz) do k
+        Gk = freq(k, Nz) * g3
+        for j in 1:Ny
+            Gjk = Gk + freq(j, Ny) * g2
+            for i in 1:Nx
+                G = Gjk + freq(i, Nx) * g1
+                G2 = dot(G, G)
+                b2 = (bx[i] * by[j] * bz[k])^2
+                if G2 < 1e-30 || b2 < 1e-28
+                    phi_k[i, j, k] = 0.0 + 0.0im
+                else
+                    phi_k[i, j, k] = 4π * exp(-G2 * inv_4α²) / G2 * rho_k[i, j, k] / b2
+                end
+            end
         end
-
-        # spline deconvolution factor
-        bx = _sinc(0.5 * (2π * ni / Nx))^p
-        by = _sinc(0.5 * (2π * nj / Ny))^p
-        bz = _sinc(0.5 * (2π * nk / Nz))^p
-        b2 = (bx * by * bz)^2
-
-        if b2 < 1e-28
-            phi_k[i, j, k] = 0.0 + 0.0im
-            continue
-        end
-
-        green = 4π * exp(-G2 / (4 * alpha^2)) / G2
-        phi_k[i, j, k] = green * rho_k[i, j, k] / b2
     end
 
     phi_grid = real(ifft(phi_k))
