@@ -14,66 +14,71 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config;
 
     Nε = length(basis); Norb_per_ion = size(basis); NR = size(strc.Rs, 2)
 
-    h_env = SparseMatrixCSC{SVector{8, Float64}, Int64}[spzeros(SVector{8, Float64}, Nε, Nε) for _ in 1:NR]
-
     env = get_environmental_descriptor(h, V, strc, basis, conf)
 
     rs_ion = get_ion_positions(strc.ions)
     Ts = frac_to_cart(strc.Rs, strc.lattice)
+    TRs = [Ts[:, R] for R in 1:NR]
 
-    ij_map = get_ion_orb_to_index_map(Norb_per_ion)
+    offset = cumsum(vcat(0, Norb_per_ion[1:end-1]))          # basis index of the orbitals of an ion: offset + iorb
     l_map = [basis.orbitals[iion][iorb].type.l for iion in 1:length(Norb_per_ion) for iorb in 1:Norb_per_ion[iion]]
+    types = [ion.type for ion in strc.ions]
 
-    is = [Int64[] for R in 1:NR]
-    js = [Int64[] for R in 1:NR]
-    vals = [SVector{8, Float64}[] for R in 1:NR]
-    for (iion, jion, R) in iterate_nn_grid_points(strc.point_grid)
-        ri = rs_ion[iion]
-        rj = apply_pbc(rs_ion[jion], Ts[:, R])
-        Δr = normdiff(ri, rj)
-        if apply_distortion
-            ri -= strc.ions[iion].dist
-            rj -= strc.ions[jion].dist
-        end
-        Δr_dist = normdiff(ri, rj)
-        Δr_in = (apply_distance_distortion || apply_distortion) ? Δr_dist : Δr
-        if apply_distortion || apply_distance_distortion
-            Δr_in = Δr_in / rcut * strc_scale
-        end
-        for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
-            i = ij_map[(iion, iorb)]
-            j = ij_map[(jion, jorb)]
-            itype = strc.ions[iion].type; l_i = l_map[i]
-            jtype = strc.ions[jion].type; l_j = l_map[j]
-            
-            Zs = [strc.ions[iion].type, strc.ions[jion].type]
-            iaxis = basis.orbitals[iion][iorb].axis
-            jaxis = basis.orbitals[jion][jorb].axis
-            φ, θs = get_angular_descriptors(ri, rj, iaxis, jaxis)
-
-            orbswap = decide_orbswap(itype, jtype, l_i, env[i], l_j, env[j])
-            angleswap = (θs[1] > θs[2] && itype == jtype) || (orbswap && itype ≠ jtype)
-
-            Zs = orbswap ? reverse(Zs) : Zs
-            θs = angleswap ? reverse(θs) : θs
-
+    # Pairs are visited grid cell by grid cell (neighbor cells and periodic images are unique, so every pair is visited
+    # once); the cells are distributed over tasks, each collecting its own matrix entries.
+    cells = collect(strc.point_grid.dict0)
+    parts = tmap(chunks(cells, n=4 * Threads.nthreads())) do chunk
+        is = [Int64[] for _ in 1:NR]; js = [Int64[] for _ in 1:NR]; vals = [SVector{8, Float64}[] for _ in 1:NR]
+        for (grid_point, inds) in chunk, nn_grid_point in nn_grid_points(grid_point, strc.point_grid.dictR),
+            (jion, R) in strc.point_grid.dictR[nn_grid_point], iion in inds
+            (Norb_per_ion[iion] == 0 || Norb_per_ion[jion] == 0) && continue
+            ri = rs_ion[iion]
+            rj = apply_pbc(rs_ion[jion], TRs[R])
+            Δr = normdiff(ri, rj)
+            if apply_distortion
+                ri -= strc.ions[iion].dist
+                rj -= strc.ions[jion].dist
+            end
+            Δr_dist = normdiff(ri, rj)
+            # The cutoff only depends on the pair of ions
+            (Δr ≤ rcut && fcut(Δr_dist, rcut + rcut_tol) > 0) || continue
+            Δr_in = (apply_distance_distortion || apply_distortion) ? Δr_dist : Δr
             if apply_distortion || apply_distance_distortion
-                φ = φ / 2π * strc_scale
-                θs = @. θs / 2π * strc_scale
+                Δr_in = Δr_in / rcut * strc_scale
             end
+            itype = types[iion]; jtype = types[jion]
+            # Bond directions (see get_angular_descriptors)
+            Δrij = Δr_dist > 0 ? normalize(rj - ri) : nothing
+            Δrji = Δr_dist > 0 ? normalize(ri - rj) : nothing
+            for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
+                i = offset[iion] + iorb
+                j = offset[jion] + jorb
+                l_i = l_map[i]; l_j = l_map[j]
+                decide_orthogonal(Δr, i, j, l_i, l_j; apply_orthogonality=apply_orthogonality) && continue
+                iaxis = basis.orbitals[iion][iorb].axis
+                jaxis = basis.orbitals[jion][jorb].axis
+                φ = calc_angle(iaxis, jaxis)
+                θ1 = calc_angle(iaxis, isnothing(Δrij) ? normalize(iaxis) : Δrij)
+                θ2 = calc_angle(jaxis, isnothing(Δrji) ? normalize(jaxis) : Δrji)
 
-            isorthogonal = decide_orthogonal(Δr, i, j, l_i, l_j; apply_orthogonality=apply_orthogonality)
-
-            if Δr ≤ rcut && fcut(Δr_dist, rcut+rcut_tol) > 0 && !isorthogonal
+                orbswap = decide_orbswap(itype, jtype, l_i, env[i], l_j, env[j])
+                angleswap = (θ1 > θ2 && itype == jtype) || (orbswap && itype ≠ jtype)
+                Z1, Z2 = orbswap ? (jtype, itype) : (itype, jtype)
+                θ1, θ2 = angleswap ? (θ2, θ1) : (θ1, θ2)
+                if apply_distortion || apply_distance_distortion
+                    φ = φ / 2π * strc_scale
+                    θ1 = θ1 / 2π * strc_scale
+                    θ2 = θ2 / 2π * strc_scale
+                end
                 ii, jj = orbswap ? (j, i) : (i, j)
-                push!(is[R], i); push!(js[R], j); push!(vals[R], SVector{8, Float64}([Zs[1], Zs[2], Δr_in, φ, θs[1], θs[2], env[ii] * env_scale, env[jj] * env_scale]))
+                push!(is[R], i); push!(js[R], j)
+                push!(vals[R], SVector{8, Float64}(Z1, Z2, Δr_in, φ, θ1, θ2, env[ii] * env_scale, env[jj] * env_scale))
             end
         end
+        (is, js, vals)
     end
-    @views for R in 1:NR
-        h_env[R] = sparse(is[R], js[R], copy(vals[R]), Nε, Nε)
-    end
-    return h_env
+    return SparseMatrixCSC{SVector{8, Float64}, Int64}[sparse(reduce(vcat, [p[1][R] for p in parts]), reduce(vcat, [p[2][R] for p in parts]),
+                                                               reduce(vcat, [p[3][R] for p in parts]), Nε, Nε) for R in 1:NR]
 end
 
 """
