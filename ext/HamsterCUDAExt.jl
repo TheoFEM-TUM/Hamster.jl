@@ -42,6 +42,7 @@ end
 function Hamster.device_eigen(Hk::CuDeviceHk, ::Sparse; Neig=6, target=0.0, method="shift-invert")
     Es = zeros(Neig, nkpoints(Hk))
     vs = CuArray{ComplexF64}(undef, Hk.Nε, Neig, nkpoints(Hk))
+    krylovdim = max(30, 2Neig + 10)      # the KrylovKit default (30) is too small for more than about 25 eigenvalues
     for k in axes(Hk.nzval, 2)
         nzval = Hk.nzval[:, k]
         if method == "shift-invert"
@@ -51,12 +52,13 @@ function Hamster.device_eigen(Hk::CuDeviceHk, ::Sparse; Neig=6, target=0.0, meth
                 error("diag_method = shift-invert on the GPU requires the CUDSS extension. Load it with `using CUDSS`.")
             end
             op = shift_invert_operator(A)
-            μs, xs = eigsolve(op, CuArray(rand(ComplexF64, Hk.Nε)), Neig, :LM, ishermitian=true, maxiter=500)
+            μs, xs = eigsolve(op, CuArray(rand(ComplexF64, Hk.Nε)), Neig, :LM, ishermitian=true, maxiter=500, krylovdim=krylovdim)
             release_operator!(op)
             λs = target .+ 1 ./ real.(μs)
         elseif method == "krylov-schur"
             A = CuSparseMatrixCSR{ComplexF64, Int32}(Hk.rowptr, Hk.colval, nzval, (Hk.Nε, Hk.Nε))
-            λs, xs = eigsolve(x -> A * x, CuArray(rand(ComplexF64, Hk.Nε)), Neig, EigSorter(λ -> abs(target - λ), rev=false), ishermitian=true, maxiter=500)
+            λs, xs = eigsolve(x -> A * x, CuArray(rand(ComplexF64, Hk.Nε)), Neig, EigSorter(λ -> abs(target - λ), rev=false), ishermitian=true,
+                              maxiter=500, krylovdim=krylovdim)
             λs = real.(λs)
         else
             error("Unknown diag_method '$method'. Valid options are shift-invert and krylov-schur.")
