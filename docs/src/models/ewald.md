@@ -85,6 +85,30 @@ where K(r) is the chosen kernel.
 
 ---
 
+## Coupling per Species
+
+The coupling ``\gamma_s`` is a parameter per species. All species start from `charge_scale` of the `Ewald` block,
+which can be set per species in the atom blocks, e.g. for a hyperparameter search over `Pb_charge_scale`:
+
+```bash
+begin Ewald
+    charge_scale = 0.6
+end
+
+begin atom Pb
+    qeff = 1.248
+    charge_scale = 0.4      # γ_Pb, the other species use 0.6
+end
+```
+
+With `update = true` in the `Ewald` block, the couplings are fitted together with the other models, using the gradient
+``\partial L / \partial \gamma_s = -\sum_{i \in s} \sum_{o \in i} \mathrm{Re}\,(\partial L / \partial H_{R=0})_{oo}\, \phi_i``.
+The couplings are written to `params.dat` at the end of a fit, as `ewald_<element>` lines after the TB and SOC
+parameters, and read with `init_params = params.dat` in the `Ewald` block, which takes precedence over the atom blocks.
+Without `init_params`, the `ewald_` lines of a parameter file are ignored, so that an explicitly set `charge_scale`
+(e.g. in a hyperparameter search) is not overwritten. The effective charges `qeff` and thus the
+electrostatic potential (and its neutrality) are not changed by the coupling.
+
 ## Mean Centering
 
 The electrostatic potential is only defined up to a constant.

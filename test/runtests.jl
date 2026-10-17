@@ -98,6 +98,12 @@ if test_all || test_only == "out"
     end
 end
 
+if test_all || test_only == "DOS"
+    @testset "DOS" begin
+        include("out/test_dos.jl")
+    end
+end
+
 if test_all || test_only == "calc"
     @testset "calc" begin
         include("calc/test_optimization.jl")

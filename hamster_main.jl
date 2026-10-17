@@ -1,9 +1,15 @@
-using MPI, Hamster, Printf
+using MPI, Printf
 
 MPI.Init()
 comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
+
+# Only rank 0 precompiles
+rank == 0 && @eval using Hamster
+MPI.Barrier(comm)
+rank ≠ 0 && @eval using Hamster
+
 num_nodes = parse(Int64, get(ENV, "SLURM_JOB_NUM_NODES", "1"))
 
 args = Hamster.parse_commandline(ARGS)
