@@ -103,8 +103,8 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     end
 
     update_begin = MPI.Wtime()
-    for model in ham_train.models
-        model_grad_local = get_model_gradient(model, indices, optim.reg, dL_dHr; soc=ham_train.soc)
+    for (model_index, model) in enumerate(ham_train.models)
+        model_grad_local = get_model_gradient(model, indices, optim.reg, model_gradient_input(dL_dHr, model_index); soc=ham_train.soc)
         model_grad = MPI.Reduce(model_grad_local, +, comm, root=0)
         if rank == 0; update!(model, optim.adam, model_grad ./ Nstrc_tot); end
         params = get_params(model)
@@ -196,6 +196,7 @@ The behavior of the function depends on the type of `data`, which can be either 
 - `cache`: A preliminary result that is needed to compute the gradient.
 """
 function forward(ham::EffectiveHamiltonian, index, loss, data::EigData)
+    if uses_device_path(ham); return device_forward(ham, index, loss, data); end
     Hk = get_hamiltonian(ham, index, data.kp)
     Es, vs = diagonalize(Hk)
     L_train = loss(Es, data.Es)
@@ -225,6 +226,7 @@ The function behavior varies depending on the type of `data`, which can be eithe
 - `gradient`: The computed gradient of the loss with respect to the parameters of `ham`.
 """
 function backward(ham::EffectiveHamiltonian, index, loss, data::EigData, cache, conf=get_empty_config(); nthreads_kpoints=get_nthreads_kpoints(conf), nthreads_bands=get_nthreads_bands(conf))
+    if uses_device_path(ham); return device_backward(ham, index, loss, data, cache); end
     Es_tb, vs = cache
     dL_dE = backward(loss, Es_tb, data.Es)
     return get_loss_gradient_hr(dL_dE, vs, ham.Rs[index], data.kp, ham.sp_mode, ham.sp_iterators[index], sp_tol=ham.sp_tol)

@@ -92,6 +92,12 @@ if test_all || test_only == "SOC"
     end
 end
 
+if test_all || test_only == "Device"
+    @testset "Device" begin
+        include("device/test_device.jl")
+    end
+end
+
 if test_all || test_only == "calc"
     @testset "calc" begin
         include("calc/test_optimization.jl")

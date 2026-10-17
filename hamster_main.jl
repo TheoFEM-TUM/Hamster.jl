@@ -14,6 +14,16 @@ for (key, value) in args
 end
 if rank ≠ 0; set_value!(conf, "verbosity", 0); end
 
+# Load the GPU extensions (CUDA.jl and CUDSS.jl must be installed, e.g., in the default environment)
+if lowercase(Hamster.get_device(conf)) == "gpu"
+    @eval using CUDA
+    try
+        @eval using CUDSS
+    catch
+        rank == 0 && @warn "CUDSS.jl could not be loaded. The shift-invert eigensolver is not available on the GPU."
+    end
+end
+
 begin_time = MPI.Wtime()
 Hamster.main(comm, conf, rank=rank, nranks=nranks, num_nodes=num_nodes)
 total_runtime = MPI.Wtime() - begin_time

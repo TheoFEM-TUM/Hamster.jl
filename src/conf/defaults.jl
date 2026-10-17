@@ -67,3 +67,8 @@ function set_seed!(conf::Config; rank=0)
         Random.seed!(conf("seed") + rank)
     end
 end
+
+# ====================
+# Device
+# ====================
+@configtag device String "cpu" "Compute device for building, diagonalizing and differentiating Hamiltonians (cpu, gpu). `gpu` requires `using CUDA` (and `using CUDSS` for the shift-invert eigensolver); each MPI rank binds to one GPU of its node."
