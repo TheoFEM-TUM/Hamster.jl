@@ -81,6 +81,11 @@ end
 @setup_workload begin
     data = joinpath(@__DIR__, "precompile")
     @compile_workload begin
+        # Do not join the job of the MPI launcher
+        for key in collect(keys(ENV))
+            any(startswith(key, prefix) for prefix in ("PMI_", "PMIX_", "OMPI_", "HYDRA_", "MPI_LOCALRANKID", "MPI_LOCALNRANKS")) &&
+                delete!(ENV, key)
+        end
         MPI.Initialized() || MPI.Init()
         comm = MPI.COMM_WORLD
         mktempdir() do dir
