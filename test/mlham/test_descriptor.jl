@@ -177,11 +177,10 @@ end
     off = descriptor(strc_0)
     on = descriptor(strc_0, apply_distortion=true, strc_scale=s)
     @test same_pattern(off, on)
-    for R in eachindex(off), (x, y) in zip(nonzeros(off[R]), nonzeros(on[R]))
-        @test y[[1, 2, 7, 8]] == x[[1, 2, 7, 8]]
-        @test y[3] ≈ x[3] / rcut * s
-        @test y[4:6] ≈ x[4:6] ./ 2π .* s
-    end
+    pairs = [(x, y) for R in eachindex(off) for (x, y) in zip(nonzeros(off[R]), nonzeros(on[R]))]
+    @test all(y[[1, 2, 7, 8]] == x[[1, 2, 7, 8]] for (x, y) in pairs)
+    @test all(y[3] ≈ x[3] / rcut * s for (x, y) in pairs)
+    @test all(y[4:6] ≈ x[4:6] ./ 2π .* s for (x, y) in pairs)
 
     # Without apply_distortion, distances and angles are those of the reference positions
     off_d = descriptor(strc_d)
@@ -192,19 +191,14 @@ end
     on_d = descriptor(strc_d, apply_distortion=true, strc_scale=s)
     R0 = Hamster.findR0(strc_d.Rs); n1 = length(Basis(strc_d, conf).orbitals[1])
     r_actual = norm((strc_d.ions[1].pos - strc_d.ions[1].dist) - strc_d.ions[2].pos)
-    for i in 1:n1, j in n1+1:2n1
-        x = on_d[R0][i, j]
-        @test x[3] ≈ r_actual / rcut * s
-        @test x[4] ≈ on[R0][i, j][4]                 # angle between the orbital axes: independent of the positions
-        @test x[5:6] != on[R0][i, j][5:6]            # angles to the bond: change with the displacement
-    end
+    ij = [(i, j) for i in 1:n1 for j in n1+1:2n1]
+    @test all(on_d[R0][i, j][3] ≈ r_actual / rcut * s for (i, j) in ij)
+    @test all(on_d[R0][i, j][4] ≈ on[R0][i, j][4] for (i, j) in ij)       # angle between the orbital axes: independent of the positions
+    @test all(on_d[R0][i, j][5:6] != on[R0][i, j][5:6] for (i, j) in ij)  # angles to the bond: change with the displacement
 
     # With apply_distance_distortion, the distance is that of the displaced positions, the angles those of the reference
     @test descriptor(strc_0, apply_distance_distortion=true, strc_scale=s) == on
     dist_d = descriptor(strc_d, apply_distance_distortion=true, strc_scale=s)
-    for i in 1:n1, j in n1+1:2n1
-        x = dist_d[R0][i, j]
-        @test x[3] ≈ r_actual / rcut * s
-        @test x[4:6] == on[R0][i, j][4:6]
-    end
+    @test all(dist_d[R0][i, j][3] ≈ r_actual / rcut * s for (i, j) in ij)
+    @test all(dist_d[R0][i, j][4:6] == on[R0][i, j][4:6] for (i, j) in ij)
 end
