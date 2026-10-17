@@ -174,25 +174,20 @@ end
 """
     init_ewald_params(param_labels, conf; initas=get_ewald_init_params(conf))
 
-Initialize the Ewald coupling γ of each species in `param_labels`: from the file `initas` (written by `write_params`
-after a fit) if given, otherwise (and for species missing in the file) with the `charge_scale` of the atom block, which
-defaults to the `charge_scale` of the `Ewald` block.
+Initialize the Ewald coupling γ of each species in `param_labels`: from the `ewald_<element>` lines of the parameter
+file `initas` (e.g. the `params.dat` of a fit) if given, otherwise (and for species missing in the file) with the
+`charge_scale` of the atom block, which defaults to the `charge_scale` of the `Ewald` block.
 """
 function init_ewald_params(param_labels, conf; initas=get_ewald_init_params(conf))
     params = [get_charge_scale(conf, number_to_element(label)) for label in param_labels]
     if initas ≠ "default"
-        γ = read_ewald_params(initas)
+        _, _, _, _, _, ewald_types, ewald_parameters = read_params(initas)
+        γ = Dict(zip(ewald_types, ewald_parameters))
         for (p, label) in enumerate(param_labels)
             params[p] = get(γ, number_to_element(label), params[p])
         end
     end
     return params
-end
-
-"""Read the Ewald coupling per species (lines `element value`) from `filename`."""
-function read_ewald_params(filename)
-    lines = filter(l -> !isempty(strip(l)) && !startswith(strip(l), "#"), readlines(filename))
-    return Dict(String(split(l)[1]) => parse(Float64, split(l)[2]) for l in lines)
 end
 
 get_params(ewald::EwaldOnsites) = ewald.params
@@ -299,17 +294,14 @@ function get_model_gradient(ewald::EwaldOnsites, indices, reg, dL_dHr; soc=true)
 end
 
 """
-    write_params(ewald::EwaldOnsites, conf=get_empty_config(); filename=get_ewald_filename(conf))
+    write_params(ewald::EwaldOnsites, conf=get_empty_config(); filename="params.dat")
 
-Write the Ewald coupling per species to `filename` (only if it is fitted, `update = true`), in the format read by
-`init_params` of the `Ewald` block.
+Add the Ewald coupling per species as `ewald_<element>` lines to the parameter file `filename` (written by the TB and
+SOC models before), where it is read with `init_params = params.dat` in the `Ewald` block.
 """
-function write_params(ewald::EwaldOnsites, conf=get_empty_config(); filename=get_ewald_filename(conf))
-    ewald.update || return nothing
-    open(filename, "w") do io
-        println(io, "# Ewald coupling per species")
-        for (label, γ) in zip(ewald.param_labels, ewald.params)
-            println(io, number_to_element(label), " ", γ)
-        end
-    end
+function write_params(ewald::EwaldOnsites, conf=get_empty_config(); filename="params.dat")
+    isfile(filename) || return nothing
+    parameters, parameter_values, ion_types, soc_parameters, _ = read_params(filename)
+    write_params(parameters, parameter_values, ion_types, soc_parameters, conf, filename=replace(filename, r"\.dat$" => ""),
+                 ewald_types=number_to_element.(ewald.param_labels), ewald_parameters=ewald.params)
 end

@@ -173,13 +173,18 @@ end
         @test γ ≈ (Hamster.number_to_element(label) == "Pb" ? 0.3 : 0.5)
     end
 
-    # Fitted coupling written to and read from the parameter file (takes precedence over the atom blocks)
+    # Fitted coupling written to params.dat (after the TB and SOC parameters, which are kept) and read with init_params
     mktempdir() do dir
-        file = joinpath(dir, "ewald_params.dat")
-        Hamster.write_params(model, conf, filename=file)
-        set_value!(conf, "init_params", "Ewald", file)
-        loaded = EwaldOnsites([strc], [basis], comm, conf)
-        @test loaded.params ≈ model.params
-        @test loaded.param_labels == model.param_labels
+        cd(dir) do
+            Hamster.write_params(Hamster.ParameterLabel[], Float64[], ["Pb"], [0.25], conf)   # params.dat as from TB and SOC
+            Hamster.write_params(model, conf)
+            _, _, soc_types, soc_params, _, ewald_types, ewald_params = Hamster.read_params("params.dat")
+            @test soc_types == ["Pb"] && soc_params == [0.25]
+            @test ewald_params ≈ model.params
+            set_value!(conf, "init_params", "Ewald", joinpath(dir, "params.dat"))
+            loaded = EwaldOnsites([strc], [basis], comm, conf)
+            @test loaded.params ≈ model.params
+            @test loaded.param_labels == model.param_labels
+        end
     end
 end
