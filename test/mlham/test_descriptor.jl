@@ -198,4 +198,13 @@ end
         @test x[4] ≈ on[R0][i, j][4]                 # angle between the orbital axes: independent of the positions
         @test x[5:6] != on[R0][i, j][5:6]            # angles to the bond: change with the displacement
     end
+
+    # With apply_distance_distortion, the distance is that of the displaced positions, the angles those of the reference
+    @test descriptor(strc_0, apply_distance_distortion=true, strc_scale=s) == on
+    dist_d = descriptor(strc_d, apply_distance_distortion=true, strc_scale=s)
+    for i in 1:n1, j in n1+1:2n1
+        x = dist_d[R0][i, j]
+        @test x[3] ≈ r_actual / rcut * s
+        @test x[4:6] == on[R0][i, j][4:6]
+    end
 end
