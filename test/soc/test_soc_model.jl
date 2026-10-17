@@ -82,3 +82,33 @@ end
 
     @test mean(abs.(Es_1 .- Es_2)) < 1e-10
 end
+@testset "TB gradient with SOC matches finite differences" begin
+    path = joinpath(@__DIR__, "test_files/")
+    conf = get_config(filename=joinpath(path, "hconf_cspbbr3"))
+    set_value!(conf, "rllm_file", joinpath(path, "rllm_cspbbr3.dat"))
+    set_value!(conf, "poscar", joinpath(path, "POSCAR_CsPbBr3"))
+    set_value!(conf, "init_params", joinpath(path, "params_cspbbr3.dat"))
+    set_value!(conf, "init_params", "ML", joinpath(path, "ml_params.dat"))
+    set_value!(conf, "init_params", "SOC", joinpath(path, "params_cspbbr3.dat"))
+    set_value!(conf, "verbosity", 0)
+    strc = Structure(conf); basis = Basis(strc, conf)
+    ham = EffectiveHamiltonian([strc], [basis], comm, conf, rank=rank, nranks=nranks)
+    ks = Hamster.read_eigenval(joinpath(path, "EIGENVAL_cspbbr3"))[1][:, 1:4]
+
+    # Different target shifts for the two states of a Kramers pair (the spin-off-diagonal blocks of dL/dHr do not cancel)
+    Es, _ = diagonalize(get_hamiltonian(ham, 1, ks))
+    data = Hamster.EigData(ks, Es .+ 0.1 .* sin.(reshape(1:length(Es), size(Es))))
+    loss = Loss(2)
+    _, cache = Hamster.forward(ham, 1, loss, data)
+    dL_dHr = Hamster.backward(ham, 1, loss, data, cache)
+    tb = ham.models[findfirst(m -> m isa TBModel, ham.models)]
+    grad = Hamster.get_model_gradient(tb.hs[1], dL_dHr; soc=true)
+    fd = map(tb.params_per_strc[1]) do p
+        p0 = tb.params[p]; δ = 1e-5
+        tb.params[p] = p0 + δ; L_plus = Hamster.forward(ham, 1, loss, data)[1]
+        tb.params[p] = p0 - δ; L_minus = Hamster.forward(ham, 1, loss, data)[1]
+        tb.params[p] = p0
+        (L_plus - L_minus) / 2δ
+    end
+    @test maximum(abs.(grad .- fd)) < 1e-7
+end
