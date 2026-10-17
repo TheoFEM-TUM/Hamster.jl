@@ -45,6 +45,7 @@ Performs a standard calculation for an effective Hamiltonian model, computing ei
   - Loss values (for iterative calculations, if applicable)  
   - Timings and profiling data
 - `Es.dat` — Plain text file containing computed eigenvalues for each structure (written only if `skip_diag` is `true`; default).
+- `dos.h5` — DOS, PDOS and COHP of every structure, generated if the `dos` tag is set (see [DOS, PDOS and COHP](@ref dos-post-processing)).
 """
 function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1, verbosity=get_verbosity(conf), write_output=true)
     
@@ -96,7 +97,7 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1,
 
         if rank == 0 && verbosity > 1; println("Post processing..."); end
         begin_time = MPI.Wtime()
-        run_post_processing(strcs, bases, local_inds, comm_active, conf, rank=active_rank, nranks=active_size)
+        run_post_processing(strcs, bases, local_inds, comm_active, conf, rank=active_rank, nranks=active_size, ham=ham)
         post_time = MPI.Wtime() - begin_time
         if rank == 0 && verbosity > 1; println(" Post-processing time: $post_time s"); end
     else
@@ -226,7 +227,13 @@ function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_conf
             write_current_file=get_write_current(conf), 
             current_file=get_current_file(conf), 
             ham_file=get_ham_file(conf),
-            current_components=get_current_components(conf))
+            current_components=get_current_components(conf),
+            ham=nothing)
+
+    if !isempty(dos_quantities(conf))
+        isnothing(ham) && error("The DOS post-processing requires the Hamiltonian model (ham keyword).")
+        run_dos(ham, strcs, bases, local_inds, comm, conf, rank=rank, nranks=nranks)
+    end
 
     if write_current_file
         Nstrc_max = MPI.Reduce(length(strcs), MPI.MAX, comm, root=0)
@@ -248,4 +255,5 @@ function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_conf
             write_orbital_basis(strcs[index], bases[index], conf, system=system, ham_file=ham_file)
         end
     end
+    
 end

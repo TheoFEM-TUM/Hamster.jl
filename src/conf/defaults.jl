@@ -72,3 +72,8 @@ end
 # Device
 # ====================
 @configtag device String "cpu" "Compute device for building, diagonalizing and differentiating Hamiltonians (cpu, gpu). `gpu` requires `using CUDA` (and `using CUDSS` for the shift-invert eigensolver); each MPI rank binds to one GPU of its node."
+
+# ====================
+# Post-processing
+# ====================
+@configtag dos Vector{String} String[] "post-processing of a standard run: any combination of dos (total DOS), pdos (projected DOS) and cohp (crystal orbital Hamilton populations), or all, e.g. `dos = pdos cohp`. Results are written to dos.h5; further settings in the DOS block."
