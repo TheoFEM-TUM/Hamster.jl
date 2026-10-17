@@ -155,3 +155,57 @@ end
         end
     end
 end
+
+@testset "Ewald coupling gradient and parameter file" begin
+    conf = get_empty_config()
+    set_value!(conf, "orbitals", "Cs", "s")
+    set_value!(conf, "orbitals", "Pb", "s px py pz")
+    set_value!(conf, "orbitals", "Br", "px py pz")
+    set_value!(conf, "qeff", "Cs", 1)
+    set_value!(conf, "qeff", "Pb", 2)
+    set_value!(conf, "qeff", "Br", -1)
+    set_value!(conf, "poscar", joinpath(@__DIR__, "test_files/POSCAR_cspbbr3_distorted"))
+    set_value!(conf, "load_rllm", true)
+    set_value!(conf, "rllm_file", joinpath(@__DIR__, "test_files/rllm_cspbbr3.dat"))
+    set_value!(conf, "rcut", 5.5)
+    set_value!(conf, "verbosity", 0)
+    strc = Structure(conf)
+    basis = Basis(strc, conf)
+    model = EwaldOnsites([strc], [basis], comm, conf, update=true)
+    model.params .= [0.4, 0.6, 0.8][1:length(model.params)]
+    reg = Hamster.Regularization(conf, lambda=0.0)
+
+    # dL/dγ for the linear loss L = Re Σ_R Σ_ij G_R,ij Hr_R,ij versus central finite differences
+    for soc in (false, true)
+        Hr = get_hr(model, Hamster.Dense(), 1, apply_soc=soc)
+        G = [randn(ComplexF64, size(H)) for H in Hr]
+        loss(γ) = (model.params .= γ; real(sum(sum(G[R] .* get_hr(model, Hamster.Dense(), 1, apply_soc=soc)[R]) for R in eachindex(G))))
+        γ0 = copy(model.params)
+        grad = Hamster.get_model_gradient(model, [1], reg, [G]; soc=soc)
+        fd = [(loss(γ0 .+ 1e-4 .* (1:length(γ0) .== p)) - loss(γ0 .- 1e-4 .* (1:length(γ0) .== p))) / 2e-4 for p in eachindex(γ0)]
+        model.params .= γ0
+        @test grad ≈ fd rtol=1e-6
+    end
+
+    # Without update, no gradient
+    model_fixed = EwaldOnsites([strc], [basis], comm, conf)
+    @test all(iszero, Hamster.get_model_gradient(model_fixed, [1], reg, [get_hr(model_fixed, Hamster.Dense(), 1)]; soc=false))
+
+    # Coupling per species from the atom blocks (e.g. for a hyperparameter search over Pb_charge_scale)
+    set_value!(conf, "charge_scale", "Ewald", 0.5)
+    set_value!(conf, "charge_scale", "Pb", 0.3)
+    per_species = EwaldOnsites([strc], [basis], comm, conf)
+    for (label, γ) in zip(per_species.param_labels, per_species.params)
+        @test γ ≈ (Hamster.number_to_element(label) == "Pb" ? 0.3 : 0.5)
+    end
+
+    # Fitted coupling written to and read from the parameter file (takes precedence over the atom blocks)
+    mktempdir() do dir
+        file = joinpath(dir, "ewald_params.dat")
+        Hamster.write_params(model, conf, filename=file)
+        set_value!(conf, "init_params", "Ewald", file)
+        loaded = EwaldOnsites([strc], [basis], comm, conf)
+        @test loaded.params ≈ model.params
+        @test loaded.param_labels == model.param_labels
+    end
+end
