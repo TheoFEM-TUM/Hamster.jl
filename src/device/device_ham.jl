@@ -262,4 +262,7 @@ function get_model_gradient(soc_model::SOCModel, indices, reg, g::RawModelGradie
     return dparams + backward(reg, soc_model.params)
 end
 
-get_model_gradient(ewald::EwaldOnsites, indices, reg, g::RawModelGradient; soc=true) = zeros(length(ewald.params))
+function get_model_gradient(ewald::EwaldOnsites, indices, reg, g::RawModelGradient; soc=true)
+    dparams = ewald.update ? g.grad : zeros(length(ewald.params))
+    return dparams + backward(reg, ewald.params)
+end
