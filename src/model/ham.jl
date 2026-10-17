@@ -159,6 +159,10 @@ function hermiticity_mismatch(H::AbstractMatrix)
     return s
 end
 
+# Arpack keeps internal state between its reverse-communication calls and is not thread-safe, so concurrent calls
+# (e.g. from the threaded loop over k-points) are serialized.
+const ARPACK_LOCK = ReentrantLock()
+
 """
     diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert")
 
