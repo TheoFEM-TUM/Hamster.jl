@@ -107,7 +107,11 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         end
         println(io)
         write_legend(io, "φ̄: species mean of the site potentials over all structures of this run.")
-        write_legend(io, "σ: width of Δε; max/σ: largest |Δε| relative to σ; >3σ %: fraction of sites with |Δε| > 3σ.")
+        write_legend(io, "sites: number of sites of the species in all structures.")
+        write_legend(io, "σ: standard deviation of Δε; min, max: smallest and largest Δε.")
+        write_legend(io, "p1, p99: 1st and 99th percentiles, i.e. 1% of the sites have a Δε below p1 and 1% above p99.")
+        write_legend(io, "max/σ: largest |Δε| relative to σ; large values indicate a heavy tail.")
+        write_legend(io, ">3σ %: percentage of sites with |Δε| > 3σ (0.27% for a Gaussian distribution).")
         write_legend(io, "σ_strc: spread of the per-structure species means, i.e. the part of Δε that is lost if the " *
                          "model is built for a single structure.")
         write_separator(io)
@@ -261,8 +265,13 @@ function write_model_summary(kernel::HamiltonianKernel, strcs, bases, comm, conf
                                  @sprintf("%.2f", 100 * below_tol / sum(h)), @sprintf("%.2f", 100 * below_half / sum(h))], widths)
         end
         println(io)
-        write_legend(io, "Similarity exp(-|x - d|² / 2σ²) with σ = sim_params; percentiles with a resolution of 0.001.")
-        write_legend(io, "<tol %: fraction of descriptors with a similarity below sim_tol; <0.5 %: below 0.5.")
+        write_legend(io, "Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x equal to a data " *
+                         "point d, close to 0 far from all data points.")
+        write_legend(io, "group: ion pair of the matrix elements, or onsite terms of an element.")
+        write_legend(io, "descriptors: number of descriptor vectors (matrix elements) of the group.")
+        write_legend(io, "min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles, i.e. 1%, 5% and " *
+                         "50% of the descriptors have a smaller similarity (resolution 0.001).")
+        write_legend(io, "<tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %: below 0.5.")
         write_legend(io, "Descriptors with a small similarity to all data points are outside the training data; " *
                          "there, the ML correction is close to zero and the model falls back to TB.")
         write_separator(io)
