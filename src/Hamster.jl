@@ -33,6 +33,7 @@ include("optim/optimize.jl")
 include("mlham/descriptor.jl"); include("mlham/simmat.jl"); include("mlham/kernel.jl") ; include("mlham/kernel_precalced.jl")
 
 include("device/device.jl"); include("device/kernels.jl"); include("device/linear_map.jl"); include("device/device_ham.jl")
+include("out/model_summary.jl")
 include("out/dos.jl")
 
 include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hyperopt.jl")

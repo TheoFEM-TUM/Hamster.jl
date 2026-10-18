@@ -25,6 +25,8 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
                               systems=[strc.system for strc in strcs],
                               device=nothing,
                               verbosity=get_verbosity(conf),
+                              label="",
+                              write_summary=true,
                               sparse_iterators=true)
 
     if isempty(strcs) && isempty(bases)
@@ -48,21 +50,15 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
     if tb_model
         if rank == 0 && verbosity > 1; println("   Getting TB model..."); end
         begin_time = MPI.Wtime()
-        models = (models..., TBModel(strcs, bases, comm, conf, rank=rank, nranks=nranks))
+        models = (models..., TBModel(strcs, bases, comm, conf, rank=rank, nranks=nranks, label=label, write_summary=write_summary))
         tb_time = MPI.Wtime() - begin_time
         if rank == 0 && verbosity > 1; println("    TB time: $tb_time s"); end
     end
     if ml_model && tb_model
         if rank == 0 && verbosity > 1; println("   Getting ML model..."); end
         begin_time = MPI.Wtime()
-        kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, rank=rank, nranks=nranks)
-        if ml_data_points ≠ nothing
-            if kernel isa HamiltonianKernel
-                kernel.data_points = ml_data_points
-            elseif kernel isa HamiltonianKernelPrecalced
-                kernel.kp.datapoints = ml_data_points
-            end
-        end
+        kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, rank=rank, nranks=nranks, data_points=ml_data_points,
+                                   label=label, write_summary=write_summary)
         models = (models..., kernel)
         ml_time = MPI.Wtime() - begin_time
         if rank == 0 && verbosity > 1; println("    ML time: $ml_time s"); end
@@ -78,7 +74,7 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
     if ewald
         if rank == 0 && verbosity > 1; println("   Getting Ewald model..."); end
         begin_time = MPI.Wtime()
-        ewald_model = EwaldOnsites(strcs, bases, comm, conf, rank=rank)
+        ewald_model = EwaldOnsites(strcs, bases, comm, conf, rank=rank, label=label, write_summary=write_summary)
         models = (models..., ewald_model)
         ewald_time = MPI.Wtime() - begin_time
         if rank == 0 && verbosity > 1; println("    Ewald time: $ewald_time s"); end

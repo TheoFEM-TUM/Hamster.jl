@@ -109,6 +109,34 @@ end
     end
 end
 
+@testset "Device gradient of the Ewald coupling matches CPU" begin
+    # Distorted CsPbBr3 cell (inequivalent Br sites, so that the centered potentials do not vanish), TB + Ewald
+    path = joinpath(@__DIR__, "..", "model", "test_files")
+    conf = get_empty_config()
+    for (key, value) in ["poscar" => joinpath(path, "POSCAR_cspbbr3_distorted"), "load_rllm" => true, "rcut" => 5.5,
+                         "rllm_file" => joinpath(path, "rllm_cspbbr3.dat"), "sp_mode" => true, "verbosity" => 0, "ewald" => true]
+        set_value!(conf, key, value)
+    end
+    for (element, orbitals, q) in [("Cs", "s", 1), ("Pb", "s px py pz", 2), ("Br", "px py pz", -1)]
+        set_value!(conf, "orbitals", element, orbitals); set_value!(conf, "qeff", element, q)
+    end
+    set_value!(conf, "update", "Ewald", true)
+    set_value!(conf, "charge_scale", "Br", 0.7)
+    ham_cpu, ham_dev = get_device_test_hams(conf, ArrayDevice(JLArray))
+    loss = Loss(2); reg = Regularization(conf)
+    Es, _ = diagonalize(get_hamiltonian(ham_cpu, 1, ks_device_test))
+    data = Hamster.EigData(ks_device_test, Es .+ 0.1 .* randn(size(Es)))
+    _, cache_cpu = Hamster.forward(ham_cpu, 1, loss, data)
+    _, cache_dev = Hamster.forward(ham_dev, 1, loss, data)
+    dL_dHr = Hamster.backward(ham_cpu, 1, loss, data, cache_cpu, conf)
+    g_dev = Hamster.backward(ham_dev, 1, loss, data, cache_dev, conf)
+    i = findfirst(m -> m isa EwaldOnsites, ham_cpu.models)
+    grad_cpu = Hamster.get_model_gradient(ham_cpu.models[i], [1], reg, [dL_dHr]; soc=ham_cpu.soc)
+    grad_dev = Hamster.get_model_gradient(ham_dev.models[i], [1], reg, Hamster.model_gradient_input([g_dev], i); soc=ham_dev.soc)
+    @test any(!iszero, grad_cpu)
+    @test grad_cpu ≈ grad_dev atol=1e-8
+end
+
 @testset "Device gradients with SOC match finite differences" begin
     conf = get_soc_device_test_config()
     ham_cpu, ham_dev = get_device_test_hams(conf, ArrayDevice(JLArray))

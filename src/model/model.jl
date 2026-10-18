@@ -45,7 +45,9 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
                 nranks=1,
                 update_tb=get_update_tb(conf, nparams(bases[1])), 
                 filename = get_rllm_file(conf),
-                initas=get_init_params(conf))
+                initas=get_init_params(conf),
+                label="",
+                write_summary=true)
                 
     if get_load_rllm(conf) == false
         rllm_file = get_rllm_file(conf)
@@ -88,6 +90,7 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
     params_per_strc = [[findfirst(p->p==param, param_labels) for param in basis.parameters] for basis in bases]
     model = TBModel(hs, ones(nparams), param_labels, params_per_strc, update_tb)
     init_params!(model, conf, initas=initas)
+    write_summary && write_model_summary(model, strcs, bases, comm, rank=rank, label=label)
     return model
 end
 
