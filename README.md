@@ -28,7 +28,7 @@ Since `Hamster.jl` is not (yet) a registered Julia package, it comes with the `h
 ```bash
 git clone https://github.com/TheoFEM-TUM/Hamster.jl.git
 cd Hamster.jl
-./hamster --install [--add_path yes/no] [--bashrc FILE] [--add_test_exec] [--test]
+./hamster --install [--add_path yes/no] [--bashrc FILE] [--add_test_exec] [--test] [--gpu]
 ```
 
 The installation accepts the following optional keywords:
@@ -36,6 +36,7 @@ The installation accepts the following optional keywords:
 - `--bashrc`: Path to the `.bashrc` (or an alias file). Defaults to `$HOME/.bashrc`.
 - `--add_test_exec`: Also create a `hamster_test` executable for running the test suite.
 - `--test`: Run the test suite after the installation.
+- `--gpu`: Also install [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl) and [CUDSS.jl](https://github.com/exanauts/CUDSS.jl) for GPU runs. The GPU code is precompiled only if a GPU is available; otherwise (e.g., on the login node of a cluster), precompile it once on a GPU node with `julia -e 'using Hamster, CUDA, CUDSS'`.
 
 Installing the dependencies takes a few minutes, running the test suite up to 10 minutes. A detailed list of dependencies can be found in the `Project.toml` file. `julia hamster_install.jl [options]` does the same as `hamster --install`.
 

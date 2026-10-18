@@ -25,6 +25,7 @@ Install options:
   --bashrc FILE       File to add PATH to (default: ~/.bashrc)
   --add_test_exec     Create a hamster_test executable to run the test suite
   --test              Run the test suite after the installation
+  --gpu               Also install CUDA.jl and CUDSS.jl for GPU runs
 
 With MPI, start Hamster with mpiexecjl or srun, e.g. mpiexecjl -n 4 hamster -t 8.
 Documentation: https://theofem-tum.github.io/Hamster.jl/dev/

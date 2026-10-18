@@ -11,10 +11,10 @@ Since `Hamster.jl` is not (yet) a registered Julia package, it comes with the `h
 ```bash
 git clone https://github.com/TheoFEM-TUM/Hamster.jl.git
 cd Hamster.jl
-./hamster --install [--add_path yes/no] [--bashrc FILE] [--add_test_exec] [--test]
+./hamster --install [--add_path yes/no] [--bashrc FILE] [--add_test_exec] [--test] [--gpu]
 ```
 
-By default, the `Hamster.jl` folder is added to `PATH` in your `.bashrc`. `--add_test_exec` creates a `hamster_test` executable for the test suite, `--test` runs the test suite after the installation.
+By default, the `Hamster.jl` folder is added to `PATH` in your `.bashrc`. `--add_test_exec` creates a `hamster_test` executable for the test suite, `--test` runs the test suite after the installation. `--gpu` also installs CUDA.jl and CUDSS.jl for GPU runs; the GPU code is precompiled only if a GPU is available, otherwise precompile it once on a GPU node with `julia -e 'using Hamster, CUDA, CUDSS'`.
 
 ## Command-line interface
 
