@@ -116,8 +116,7 @@ end
 """
     grid_cell_chunks(point_grid::PointGrid; n=4 * Threads.nthreads())
 
-The grid cells of the unit cell (`dict0`) in `n` chunks, for distributing the loop over ion pairs (cell by cell, see
-`iterate_nn_grid_points`) over tasks.
+The grid cells of the unit cell in `n` chunks.
 """
 grid_cell_chunks(point_grid::PointGrid; n=4 * Threads.nthreads()) = chunks(collect(point_grid.dict0), n=max(1, min(n, length(point_grid.dict0))))
 

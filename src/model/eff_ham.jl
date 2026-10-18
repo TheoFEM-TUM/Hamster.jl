@@ -35,7 +35,6 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
     Rs = [strc.Rs for strc in strcs]
     if rank == 0 && verbosity > 1; println("   Getting sparse iterators..."); end
     begin_time = MPI.Wtime()
-    # Only needed for the gradient in sparse mode (training)
     sp_iterators = map(zip(strcs, bases)) do (strc, basis)
         sparse_iterators ? get_sparse_iterator(strc, basis, conf, soc=soc) : [Tuple{Int64, Int64}[] for _ in axes(strc.Rs, 2)]
     end
@@ -218,7 +217,6 @@ function get_sparse_iterator(strc, basis, conf=get_empty_config(), rcut=get_rcut
     offset = cumsum(vcat(0, Norb_per_ion[1:end-1]))
     TRs = [SVector{3, Float64}(T) for T in eachcol(frac_to_cart(strc.Rs, strc.lattice))]
     NR = size(strc.Rs, 2)
-    # Ion pairs grid cell by grid cell (every pair is visited once), cells distributed over tasks
     parts = tmap(grid_cell_chunks(strc.point_grid)) do chunk
         indices = [Tuple{Int64, Int64}[] for _ in 1:NR]
         for (grid_point, inds) in chunk, nn_grid_point in nn_grid_points(grid_point, strc.point_grid.dictR),
