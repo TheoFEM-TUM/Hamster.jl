@@ -23,8 +23,7 @@ docs/site/
 # environment.
 Manifest.toml
 
-# Exclude Hamster executable
-hamster
+# Exclude the generated test executable
 hamster_test
 
 # Exclude playground

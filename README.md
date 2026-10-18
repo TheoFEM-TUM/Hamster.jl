@@ -23,24 +23,39 @@ The hardware requirements for running `Hamster.jl` are moderate, but they strong
 
 To get started, you need a working [Julia](https://julialang.org/install/) installation. `Hamster.jl` is tested with Julia **v1.12.5** on **Ubuntu 24.04 LTS (Noble Numbat)**. If you are using a different Julia version or operating system, please verify on your own that everything works as expected (e.g., by running the test suite or one of the [examples](https://theofem-tum.github.io/Hamster.jl/dev/examples/examples/)).
 
-Since `Hamster.jl` is not (yet) a registered Julia package, we provide an installation script that sets up all dependencies, updates your `PATH`, and creates the `hamster` executable.
-
-The script accepts the following optional keywords:
-- `add_path`: `yes` or `no` (default: `yes`). If enabled, the location of the `Hamster.jl` folder is added to your `.bashrc`.  
-- `bashrc`: Path to the `.bashrc` (or an alias file). Defaults to `$HOME/.bashrc`.  
-- `exec_name`: Name of the executable (default: `hamster`).  
-- `add_test_exec`: Boolean (default: `false`). If `true`, also creates a `hamster_test` executable for running the test suite.
+Since `Hamster.jl` is not (yet) a registered Julia package, it comes with the `hamster` executable, which installs the dependencies and runs calculations. Clone the repository and install Hamster:
 
 ```bash
-julia hamster_install.jl [--add_path yes/no] [--bashrc default] [--exec_name hamster] [--add_test_exec]
+git clone https://github.com/TheoFEM-TUM/Hamster.jl.git
+cd Hamster.jl
+./hamster --install [--add_path yes/no] [--bashrc FILE] [--add_test_exec] [--test]
 ```
 
-Installing dependencies and running the test suite may take up to 10 minutes. A detailed list of dependencies can be found in the 
-`Project.toml` file.
+The installation accepts the following optional keywords:
+- `--add_path`: `yes` or `no` (default: `yes`). If enabled, the `Hamster.jl` folder is added to `PATH` in your `.bashrc`.
+- `--bashrc`: Path to the `.bashrc` (or an alias file). Defaults to `$HOME/.bashrc`.
+- `--add_test_exec`: Also create a `hamster_test` executable for running the test suite.
+- `--test`: Run the test suite after the installation.
+
+Installing the dependencies takes a few minutes, running the test suite up to 10 minutes. A detailed list of dependencies can be found in the `Project.toml` file. `julia hamster_install.jl [options]` does the same as `hamster --install`.
+
+If you installed Hamster before the `hamster` executable became part of the repository, delete the generated `hamster` file in the `Hamster.jl` folder before pulling the new version (git refuses to overwrite it).
+
+## Command-line interface
+
+```bash
+hamster [-t THREADS] [--conf FILE] [--TAG VALUE ...]   # run a calculation
+hamster --install [options]                           # install the dependencies and precompile Hamster
+hamster --update [--no-pull]                          # pull the latest code (git pull --ff-only), update the dependencies and precompile
+hamster --version                                     # version of Hamster (and the git commit) and Julia
+hamster --help                                        # overview of all commands and options
+```
+
+`hamster --update --no-pull` only updates the dependencies, e.g., if you manage the code with git yourself.
 
 ## Quickstart
 
-You can run start Hamster by calling the `hamster` executable. To make use of MPI parallelization you need add `mpiexecjl` or `srun` in front.
+You can start Hamster by calling the `hamster` executable. To make use of MPI parallelization, add `mpiexecjl` or `srun` in front.
 
 ```bash
 [mpiexecjl -n NRANKS / srun] hamster [-t NUMBER_OF_THREADS] [kwargs]
