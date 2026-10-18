@@ -63,10 +63,10 @@ function ewald_sum(pos, q, lattice;
 
     grid_time = @elapsed begin
         if isnothing(Rs)
-            Rs = get_translation_vectors(hcat(pos...), lattice; Rmax=get_Rmax(lattice, rcut=rcut), rcut=rcut)
+            Rs = ewald_translation_vectors(pos, lattice, rcut)
         end
         if isnothing(point_grid)
-            point_grid = PointGrid(hcat(pos...), frac_to_cart(Rs, lattice), grid_size=rcut)
+            point_grid = PointGrid(reduce(hcat, pos), frac_to_cart(Rs, lattice), grid_size=rcut)
         end
     end
 
@@ -98,6 +98,23 @@ function ewald_sum(pos, q, lattice;
         time_short = sr_time,
         time_long = lr_time
     )
+end
+
+"""
+    ewald_translation_vectors(pos, lattice, rcut)
+
+Lattice translations (fractional) of all periodic images that can contain atoms within `rcut` of an atom of the
+cell. Instead of checking all atom pairs (as `get_translation_vectors`, which is very slow for large cells and large
+cutoffs), images are discarded with a bounding-sphere estimate: the atoms lie within a sphere of radius ρ around their
+center, so an image translated by T can only contain neighbors if |T| ≤ rcut + 2ρ. The result can contain a few
+translations without neighbors, which do not change the sum.
+"""
+function ewald_translation_vectors(pos, lattice, rcut)
+    Rs = get_translation_vectors(get_Rmax(lattice, rcut=rcut))
+    center = sum(pos) / length(pos)
+    ρ = maximum(r -> norm(r - center), pos)
+    Ts = frac_to_cart(Rs, lattice)
+    return Rs[:, [norm(Ts[:, R]) ≤ rcut + 2ρ for R in axes(Rs, 2)]]
 end
 
 """
@@ -151,17 +168,18 @@ function ewald_real!(phi, pos, qs, Rs, lattice, point_grid, alpha, rcut; method=
     kernel = get_realspace_kernel(method)
     fill!(phi, 0.0)
 
-    Ts = frac_to_cart(Rs, lattice)
+    Ts = [SVector{3, Float64}(T) for T in eachcol(frac_to_cart(Rs, lattice))]
+    R0 = [iszero(R) for R in eachcol(Rs)]
 
-    @views for (i, j, R) in iterate_nn_grid_points(point_grid)
-        if i == j && iszero(Rs[:, R])
-            continue
-        end
-
-        r = normdiff(pos[i], pos[j], Ts[:, R])
-
-        if r < rcut && r > 1e-14
-            phi[i] += qs[j] * kernel(r, alpha, rcut)
+    # Pairs are visited grid cell by grid cell (neighbor cells and periodic images are unique, so every pair is
+    # visited once). Every atom belongs to exactly one cell, so the cells can be processed in parallel.
+    tforeach(collect(point_grid.dict0)) do (grid_point, inds)
+        for nn_grid_point in nn_grid_points(grid_point, point_grid.dictR), (j, R) in point_grid.dictR[nn_grid_point], i in inds
+            (i == j && R0[R]) && continue
+            r = normdiff(pos[i], pos[j], Ts[R])
+            if r < rcut && r > 1e-14
+                phi[i] += qs[j] * kernel(r, alpha, rcut)
+            end
         end
     end
 
@@ -230,47 +248,34 @@ function ewald_recip!(phi, pos, q, box, box_inv, alpha, mesh_spacing)
     rho_k = fft(rho)
     phi_k = similar(rho_k)
 
-    # reciprocal lattice matrix: columns are reciprocal lattice vectors
-    Gmat = 2π * transpose(box_inv)
-
-    # approximate grid spacings along reciprocal directions for spline deconvolution
-    # uses the norms of the direct lattice vectors divided by grid counts
-    a1 = box[:, 1]
-    a2 = box[:, 2]
-    a3 = box[:, 3]
-    h1 = norm(a1) / Nx
-    h2 = norm(a2) / Ny
-    h3 = norm(a3) / Nz
+    # reciprocal lattice vectors (columns of 2π box⁻ᵀ)
+    Gmat = SMatrix{3, 3}(2π * transpose(box_inv))
+    g1, g2, g3 = Gmat[:, 1], Gmat[:, 2], Gmat[:, 3]
 
     p = 4  # cubic B-spline order
+    freq(i, N) = (i - 1 <= N ÷ 2) ? (i - 1) : (i - 1 - N)
+    # spline deconvolution factors, separable in the three directions
+    bx = [_sinc(π * freq(i, Nx) / Nx)^p for i in 1:Nx]
+    by = [_sinc(π * freq(j, Ny) / Ny)^p for j in 1:Ny]
+    bz = [_sinc(π * freq(k, Nz) / Nz)^p for k in 1:Nz]
+    inv_4α² = 1 / (4 * alpha^2)
 
-    for i in 1:Nx, j in 1:Ny, k in 1:Nz
-        ni = (i - 1 <= Nx ÷ 2) ? (i - 1) : (i - 1 - Nx)
-        nj = (j - 1 <= Ny ÷ 2) ? (j - 1) : (j - 1 - Ny)
-        nk = (k - 1 <= Nz ÷ 2) ? (k - 1) : (k - 1 - Nz)
-
-        nvec = SVector{3}(ni, nj, nk)
-        G = Gmat * nvec
-        G2 = dot(G, G)
-
-        if G2 < 1e-30
-            phi_k[i, j, k] = 0.0 + 0.0im
-            continue
+    # Column-major loop order, threaded over the planes k (each task writes its own planes)
+    tforeach(1:Nz) do k
+        Gk = freq(k, Nz) * g3
+        for j in 1:Ny
+            Gjk = Gk + freq(j, Ny) * g2
+            for i in 1:Nx
+                G = Gjk + freq(i, Nx) * g1
+                G2 = dot(G, G)
+                b2 = (bx[i] * by[j] * bz[k])^2
+                if G2 < 1e-30 || b2 < 1e-28
+                    phi_k[i, j, k] = 0.0 + 0.0im
+                else
+                    phi_k[i, j, k] = 4π * exp(-G2 * inv_4α²) / G2 * rho_k[i, j, k] / b2
+                end
+            end
         end
-
-        # spline deconvolution factor
-        bx = _sinc(0.5 * (2π * ni / Nx))^p
-        by = _sinc(0.5 * (2π * nj / Ny))^p
-        bz = _sinc(0.5 * (2π * nk / Nz))^p
-        b2 = (bx * by * bz)^2
-
-        if b2 < 1e-28
-            phi_k[i, j, k] = 0.0 + 0.0im
-            continue
-        end
-
-        green = 4π * exp(-G2 / (4 * alpha^2)) / G2
-        phi_k[i, j, k] = green * rho_k[i, j, k] / b2
     end
 
     phi_grid = real(ifft(phi_k))

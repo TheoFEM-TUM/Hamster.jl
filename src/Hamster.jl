@@ -10,7 +10,7 @@ include("parse/commandline.jl")
 include("conf/config.jl"); include("conf/read_config.jl")
 include("conf/defaults.jl"); include("conf/strc_defaults.jl"); include("conf/atom_defaults.jl"); include("conf/basis_defaults.jl")
 include("conf/model_defaults.jl"); include("conf/optim_defaults.jl"); include("conf/supercell_defaults.jl") 
-include("conf/ml_defaults.jl"); include("conf/soc_defaults.jl"); include("conf/hyperopt_defaults.jl"); include("conf/ewald_defaults.jl")
+include("conf/ml_defaults.jl"); include("conf/soc_defaults.jl"); include("conf/hyperopt_defaults.jl"); include("conf/ewald_defaults.jl"); include("conf/dos_defaults.jl")
 
 include("out/output.jl")
 
@@ -33,6 +33,7 @@ include("optim/optimize.jl")
 include("mlham/descriptor.jl"); include("mlham/simmat.jl"); include("mlham/kernel.jl") ; include("mlham/kernel_precalced.jl")
 
 include("device/device.jl"); include("device/kernels.jl"); include("device/linear_map.jl"); include("device/device_ham.jl")
+include("out/dos.jl")
 
 include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hyperopt.jl")
 
@@ -59,6 +60,7 @@ export HamiltonianKernel, EwaldOnsites
 export run_calculation
 
 export CPUDevice, ArrayDevice
+export compute_dos, orbital_labels
 
 # Precompililation
 include("Hamster_precompile.jl")

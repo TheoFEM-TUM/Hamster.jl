@@ -20,6 +20,14 @@ The `qeff::Float` determines the effective charge of the ion for Ewald summation
 get_qeff(conf::Config, type)::Float64 = conf("qeff", type) == "default" ? 0. : conf("qeff", type)
 
 """
+**charge_scale**=charge_scale of the Ewald block
+
+The `charge_scale::Float` is the coupling of the onsite energies of the ion type to the electrostatic potential of the
+Ewald model. Defaults to the `charge_scale` of the `Ewald` block.
+"""
+get_charge_scale(conf::Config, type)::Float64 = conf("charge_scale", type) == "default" ? get_ewald_charge_scale(conf) : conf("charge_scale", type)
+
+"""
 **nnaxes**=false
 
 If `nnaxes::Bool=true`, the orbital axes are rotated along the connecting vectors with the nearest neighbors of the respective orbitals. The number of nearest neighbors depends on the number of orbitals.

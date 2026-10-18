@@ -47,16 +47,14 @@ fdxz(baseorb::prdr2, θ, φ) = √3*sin(θ)*cos(θ)*cos(φ)
 fdz2(baseorb::prdr2, θ, φ) = (3*cos(θ)^2-1)/2
 fdx2_y2(baseorb::prdr2, θ, φ) = √3/2*(sin(θ)^2*cos(φ)^2 - sin(θ)^2*sin(φ)^2)
 
-# Define normalization constants
-Nspd(baseorb::Angular) = Float64[1, 1, 1]
-Nspd(baseorb::s) = Float64[1, 0, 0]
-Nspd(baseorb::porb) = Float64[0, 3, 0]
-Nspd(baseorb::dorb) = Float64[0, 0, 5]
-const Nspd_sp3 = Float64[1, 3, 0]
-Nspd(baseorb::sp3) = Nspd_sp3
-const Nspd_sp3dr2 = Float64[1, 3, 5]
-Nspd(baseorb::sp3dr2) = Nspd_sp3dr2
-Nspd(baseorb::prdr2) = Float64[0, 3, 5]
+# Define normalization constants (tuples: called for every matrix element, so they must not allocate)
+Nspd(baseorb::Angular) = (1.0, 1.0, 1.0)
+Nspd(baseorb::s) = (1.0, 0.0, 0.0)
+Nspd(baseorb::porb) = (0.0, 3.0, 0.0)
+Nspd(baseorb::dorb) = (0.0, 0.0, 5.0)
+Nspd(baseorb::sp3) = (1.0, 3.0, 0.0)
+Nspd(baseorb::sp3dr2) = (1.0, 3.0, 5.0)
+Nspd(baseorb::prdr2) = (0.0, 3.0, 5.0)
 
 
 

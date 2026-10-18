@@ -159,6 +159,10 @@ function hermiticity_mismatch(H::AbstractMatrix)
     return s
 end
 
+# Arpack keeps internal state between its reverse-communication calls and is not thread-safe, so concurrent calls
+# (e.g. from the threaded loop over k-points) are serialized.
+const ARPACK_LOCK = ReentrantLock()
+
 """
     diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert")
 
@@ -176,7 +180,7 @@ Diagonalizes a sparse Hermitian matrix `Hk` to find a specified number of eigenv
 """
 function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert")
     if method == "shift-invert"
-        Es, vs, _, _, _, _ = eigs(Hk, nev=Neig, sigma=target)
+        Es, vs, _, _, _, _ = lock(() -> eigs(Hk, nev=Neig, sigma=target), ARPACK_LOCK)
         if abs(Es[1] - target) > abs(Es[end] - target)
             return real.(Es[end-Neig:end]), vs[:, end-Neig:end]
         else
@@ -275,7 +279,8 @@ end
 
 Calculate the gradient of the spin basis applied to a given matrix `dHr`. The output matrix is of size `(Nε/2, Nε/2)`.
 
-This function reshapes the input matrix `dHr`, which is expected to represent a gradient in a spin system, into a form suitable for applying the spin basis transformation. The transformation is performed using the Kronecker product, and the output is computed depending on the specified order of application.
+Since `apply_spin_basis` places `H` in the two spin-diagonal blocks, the gradient is the sum of the spin-diagonal blocks of
+`dHr`; the spin-off-diagonal blocks do not depend on `H`.
 
 # Arguments
 - `dHr::AbstractMatrix`: An abstract matrix containing the gradient data to be transformed. It should have a shape that is compatible with the spin basis operations.
@@ -285,12 +290,10 @@ function gradient_apply_spin_basis(dHr::AbstractMatrix; alternating_order=false)
     Nε = size(dHr, 1) ÷ 2
     if !alternating_order
         # Case 1: kron(H, I_spin)
-        dHr_out = sum(reshape(dHr, 2, Nε, 2, Nε), dims=(1, 3))
-        return dropdims(dHr_out, dims=(1, 3))
+        return Matrix(dHr[1:2:end, 1:2:end] + dHr[2:2:end, 2:2:end])
     else
         # Case 2: kron(I_spin, H)
-        dHr_out = sum(reshape(dHr, Nε, 2, Nε, 2), dims=(2, 4))
-        return dropdims(dHr_out, dims=(2, 4))
+        return Matrix(dHr[1:Nε, 1:Nε] + dHr[Nε+1:end, Nε+1:end])
     end
 end
 

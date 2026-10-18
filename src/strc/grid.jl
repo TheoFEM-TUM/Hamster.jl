@@ -114,6 +114,14 @@ function iterate_nn_grid_points(point_grid::PointGrid)
 end
 
 """
+    grid_cell_chunks(point_grid::PointGrid; n=4 * Threads.nthreads())
+
+The grid cells of the unit cell (`dict0`) in `n` chunks, for distributing the loop over ion pairs (cell by cell, see
+`iterate_nn_grid_points`) over tasks.
+"""
+grid_cell_chunks(point_grid::PointGrid; n=4 * Threads.nthreads()) = chunks(collect(point_grid.dict0), n=max(1, min(n, length(point_grid.dict0))))
+
+"""
     iterate_nn_grid_points(grid_point, point_grid::PointGrid)
 
 Find and return all neighboring grid points of a given `grid_point` within the specified point grid and gather the associated ion indices and translation vectors.

@@ -141,4 +141,23 @@ end
     rm("hamster.out"); rm("params.dat"); rm("ml_params.dat")
 end
 
+@testset "TB optimization with several batches" begin
+    path = joinpath(@__DIR__, "test_files")
+    conf = get_config(filename = joinpath(path, "hconf_md"))
+    set_value!(conf, "poscar", joinpath(path, "POSCAR_md"))
+    set_value!(conf, "poscar", "Supercell", joinpath(path, "POSCAR_md"))
+    set_value!(conf, "xdatcar", "Supercell", joinpath(path, "XDATCAR"))
+    set_value!(conf, "rllm_file", joinpath(path, "rllm.dat"))
+    set_value!(conf, "train_data", "Optimizer", joinpath(path, "eigenval.h5"))
+    set_value!(conf, "init_params", joinpath(path, "params.dat"))
+    set_value!(conf, "Nconf", "Supercell", 4)
+    set_value!(conf, "nbatch", "Supercell", 2)
+    set_value!(conf, "niter", "Optimizer", 2)
+
+    prof = Hamster.main(comm, conf, rank=rank)
+    @test size(prof.L_train) == (2, 2)
+    @test all(isfinite, prof.L_train)
+    rm("hamster.out"); rm("params.dat"); rm("ml_params.dat")
+end
+
 rm("hamster_out.h5")

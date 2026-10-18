@@ -207,14 +207,17 @@ Writes the tight-binding (TB) parameters, system configuration, and optional spi
 
 # Keyword Arguments
 - `filename`: The name of the file (excluding the extension) to which the data will be written (default: `"params"`).
+- `ewald_types`, `ewald_parameters`: Ewald coupling per ion type (optional), written as `ewald_<type>` lines.
 
 # File Format
 The file written contains the following:
 1. **System configuration block**: Includes details like `rcut`, `onsite`, `sepNN`, and alpha/n values for each unique ion type.
 2. **Tight-binding parameters**: Parameters and corresponding values, formatted to align in a readable manner.
 3. **SOC parameters** (optional): SOC values for each ion type, if provided.
+4. **Ewald coupling** (optional): coupling for each ion type, if provided.
 """
-function write_params(parameters::Vector, parameter_values::Vector, ion_types::Vector=[], soc_parameters::Vector=[], conf::Config=get_empty_config(); filename="params")
+function write_params(parameters::Vector, parameter_values::Vector, ion_types::Vector=[], soc_parameters::Vector=[], conf::Config=get_empty_config();
+                      filename="params", ewald_types::Vector=[], ewald_parameters::Vector=[])
     
     file = open(filename*".dat", "w")
 
@@ -241,6 +244,11 @@ function write_params(parameters::Vector, parameter_values::Vector, ion_types::V
     for (ion_type, soc_parameter) in zip(ion_types, soc_parameters)
         L_type = length("γ_$ion_type")
         println(file, "γ_$ion_type", " "^(25-L_type), soc_parameter)
+    end
+
+    # Write Ewald coupling to file
+    for (ion_type, ewald_parameter) in zip(ewald_types, ewald_parameters)
+        println(file, rpad("ewald_$ion_type", 25), ewald_parameter)
     end
     close(file)
 end
@@ -283,8 +291,13 @@ function read_params(filename="params.dat")
     parameter_values = Float64[]
     ion_types = String[]
     soc_parameters = Float64[]
+    ewald_types = String[]
+    ewald_parameters = Float64[]
     for line in lines[first_param_line:end]
-        if !occursin("γ", line[1])
+        if startswith(line[1], "ewald_")
+            push!(ewald_types, line[1][7:end])
+            push!(ewald_parameters, parse(Float64, line[2]))
+        elseif !occursin("γ", line[1])
             push!(parameters, string_to_param_label(line[1]))
             push!(parameter_values, parse(Float64, line[2]))
         else
@@ -292,7 +305,7 @@ function read_params(filename="params.dat")
             push!(soc_parameters, parse(Float64, line[2]))
         end
     end
-    return parameters, parameter_values, ion_types, soc_parameters, conf_values
+    return parameters, parameter_values, ion_types, soc_parameters, conf_values, ewald_types, ewald_parameters
 end
 
 """
