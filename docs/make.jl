@@ -13,6 +13,7 @@ makedocs(
     ),
     pages = [
         "Home" => "index.md",
+        "Command-Line Interface" => "cli.md",
         "Config File" => [
             "conf/config.md",
             "conf/general_tags.md",

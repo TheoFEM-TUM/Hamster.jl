@@ -53,7 +53,12 @@ hamster --version                                     # version of Hamster (and 
 hamster --help                                        # overview of all commands and options
 ```
 
-`hamster --update --no-pull` only updates the dependencies, e.g., if you manage the code with git yourself. Only one command can be given per call; all other arguments are its options.
+- `-t` defaults to `SLURM_CPUS_PER_TASK` or `JULIA_NUM_THREADS`, if set.
+- `--install` installs into the environment `JULIA_PROJECT` points to, if set (e.g., by the Julia modules on JSC systems), else into the default Julia environment.
+- `--update` stops if `git pull` fails (e.g., local changes); `hamster --update --no-pull` only updates the dependencies.
+- Only one command can be given per call; all other arguments are its options. `hamster --install --help` and `hamster --update --help` show the options of these commands.
+
+All commands and options are described [here](https://theofem-tum.github.io/Hamster.jl/dev/cli/).
 
 ## Quickstart
 

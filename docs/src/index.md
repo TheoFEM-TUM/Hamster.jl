@@ -27,6 +27,8 @@ hamster --version                                     # version of Hamster (and 
 hamster --help                                        # overview of all commands and options
 ```
 
+See [Command-Line Interface](@ref man-cli) for all commands and options.
+
 ## Quickstart
 
 You can start Hamster by calling the `hamster` executable. To make use of MPI parallelization, add `mpiexecjl` or `srun` in front.
