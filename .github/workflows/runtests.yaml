@@ -35,6 +35,9 @@ jobs:
 
     - name: Process coverage
       uses: julia-actions/julia-processcoverage@v1
+      with:
+        # The CUDA extensions in ext/ need a GPU and cannot run in CI; the device code in src/ is tested with JLArrays
+        directories: src
     
     - name: Upload coverage to codecov
       uses: codecov/codecov-action@v4
