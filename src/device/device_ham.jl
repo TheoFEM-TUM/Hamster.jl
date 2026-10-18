@@ -158,12 +158,12 @@ Diagonalize a batch of device Hamiltonians. Returns the eigenvalues as a host ma
 and the eigenvectors as a device array `(Nε, Neig, Nk)`. This generic fallback diagonalizes on the host; device-specific
 methods are provided by extensions.
 """
-function device_eigen(Hk::DeviceHk, ::Dense; kwargs...)
-    Es, vs = diagonalize(host_hamiltonians(Hk))
+function device_eigen(Hk::DeviceHk, ::Dense; vectors=true, kwargs...)
+    Es, vs = diagonalize(host_hamiltonians(Hk), vectors=vectors)
     return Es, copyto!(similar(Hk.nzval, ComplexF64, size(vs)), vs)
 end
 
-function device_eigen(Hk::DeviceHk, ::Sparse; Neig=6, target=0.0, method="shift-invert")
+function device_eigen(Hk::DeviceHk, ::Sparse; Neig=6, target=0.0, method="shift-invert", vectors=true)
     Es, vs = diagonalize(host_hamiltonians(Hk), Neig=Neig, target=target, method=method)
     for k in axes(Es, 2)
         perm = sortperm(Es[:, k])
@@ -172,8 +172,8 @@ function device_eigen(Hk::DeviceHk, ::Sparse; Neig=6, target=0.0, method="shift-
     return Es, copyto!(similar(Hk.nzval, ComplexF64, size(vs)), vs)
 end
 
-function diagonalize(Hk::DeviceHk; Neig=Hk.Nε, target=0, method="shift-invert")
-    Es, vs = device_eigen(Hk, Hk.sp_diag, Neig=Neig, target=target, method=method)
+function diagonalize(Hk::DeviceHk; Neig=Hk.Nε, target=0, method="shift-invert", vectors=true)
+    Es, vs = device_eigen(Hk, Hk.sp_diag, Neig=Neig, target=target, method=method, vectors=vectors)
     return Es, Array(vs)
 end
 

@@ -19,27 +19,32 @@ const CuDeviceHk = DeviceHk{<:CuVector}
 # at 1024 and 10× at 2048. Batched Jacobi (heevjBatched, Nε ≤ 32) is slower than the host for all sizes.
 const MIN_GPU_EIGEN_SIZE = 512
 
-function Hamster.device_eigen(Hk::CuDeviceHk, ::Dense; kwargs...)
+function Hamster.device_eigen(Hk::CuDeviceHk, ::Dense; vectors=true, kwargs...)
     H = densify(Hk)
     if Hk.Nε < MIN_GPU_EIGEN_SIZE
         Hh = Array(H)
         Es = zeros(Hk.Nε, nkpoints(Hk))
         Threads.@threads for k in axes(Hh, 3)
-            eig = eigen!(Hermitian(Hh[:, :, k]))
-            Es[:, k] = eig.values
-            Hh[:, :, k] = eig.vectors
+            if vectors
+                eig = eigen!(Hermitian(Hh[:, :, k]))
+                Es[:, k] = eig.values
+                Hh[:, :, k] = eig.vectors
+            else
+                Es[:, k] = eigvals!(Hermitian(Hh[:, :, k]))
+            end
         end
-        return Es, copyto!(H, Hh)
+        return Es, vectors ? copyto!(H, Hh) : similar(H, 0, Hk.Nε, nkpoints(Hk))
     else
+        # Eigenvalues only ('N') skip the back-transformation of the eigenvectors
         Es = CuMatrix{Float64}(undef, Hk.Nε, nkpoints(Hk))
         for k in axes(H, 3)
-            Es[:, k], _ = cuSOLVER.Xsyevd!('V', 'U', view(H, :, :, k))
+            Es[:, k] = vectors ? first(cuSOLVER.Xsyevd!('V', 'U', view(H, :, :, k))) : cuSOLVER.Xsyevd!('N', 'U', view(H, :, :, k))
         end
-        return Array(Es), H
+        return Array(Es), vectors ? H : similar(H, 0, Hk.Nε, nkpoints(Hk))
     end
 end
 
-function Hamster.device_eigen(Hk::CuDeviceHk, ::Sparse; Neig=6, target=0.0, method="shift-invert")
+function Hamster.device_eigen(Hk::CuDeviceHk, ::Sparse; Neig=6, target=0.0, method="shift-invert", vectors=true)
     Es = zeros(Neig, nkpoints(Hk))
     vs = CuArray{ComplexF64}(undef, Hk.Nε, Neig, nkpoints(Hk))
     krylovdim = max(30, 2Neig + 10)      # the KrylovKit default (30) is too small for more than about 25 eigenvalues
