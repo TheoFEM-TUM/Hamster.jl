@@ -1,13 +1,8 @@
-# Model summaries appended to hamster.out when a model is built. Only information that is not already part of the
-# config listing in hamster.out is written. All functions are collective over `comm`; rank 0 writes, and only if
-# hamster.out exists (so that tests and library use do not create output files).
-
 summary_title(model_name, label) = "  $model_name Model Summary" * (isempty(label) ? "" : " ($label)")
 range_string(a, b) = a == b ? string(a) : "$a - $b"
 
 const SUMMARY_WIDTH = 80
 
-# Key-value line; long values are wrapped and aligned under the first value line
 function write_summary_line(io, key, value)
     prefix = rpad("      $key:", 34) * " "
     lines = wrap_text(string(value), SUMMARY_WIDTH - textwidth(prefix))
@@ -16,13 +11,11 @@ function write_summary_line(io, key, value)
     foreach(line -> println(io, " "^textwidth(prefix), line), lines[2:end])
 end
 
-# Table row: first column left-aligned, all others right-aligned (padding by display width, so that e.g. σ and φ̄ align)
 function write_table_row(io, cells, widths)
     padded = [i == 1 ? rpad(cell, width) : lpad(cell, width) for (i, (cell, width)) in enumerate(zip(cells, widths))]
     println(io, "    ", join(padded, " "))
 end
 
-# Explanation below a table, wrapped with a hanging indent
 function write_legend(io, text; indent=4)
     lines = wrap_text(text, SUMMARY_WIDTH - indent - 2)
     isempty(lines) && return nothing
@@ -35,8 +28,7 @@ format_number(x, digits) = isnan(x) ? "-" : Printf.format(Printf.Format("%.$(dig
 """
     correction_statistics(Δε)
 
-Summary statistics of a set of onsite corrections `Δε`: number of sites, width `σ`, extrema, 1% and 99% percentiles,
-the tail ratio `max|Δε| / σ` and the fraction of sites with `|Δε| > 3σ`.
+Summary statistics of the onsite corrections `Δε`.
 """
 function correction_statistics(Δε::AbstractVector)
     isempty(Δε) && return (n=0, σ=NaN, min=NaN, p1=NaN, p99=NaN, max=NaN, tail=NaN, frac3σ=NaN)
@@ -45,18 +37,10 @@ function correction_statistics(Δε::AbstractVector)
             tail=σ > 0 ? maximum(abs, Δε) / σ : 0.0, frac3σ=σ > 0 ? count(x -> abs(x) > 3σ, Δε) / length(Δε) : 0.0)
 end
 
-# ====================
-# Ewald
-# ====================
 """
     write_model_summary(ewald::EwaldOnsites, comm, conf; kwargs...)
 
 Append a summary of the Ewald onsite model to `hamster.out`.
-
-For every species, the onsite corrections `Δε = -γ (φ - φ̄)` of all sites of all structures (gathered over the MPI
-ranks) are summarized: subtracted species mean `φ̄`, width, extrema, percentiles, tail ratio and the spread of the
-per-structure species means. The latter is the part of the correction that is removed if the model is built for a
-single structure, since the species means are taken over the structures of the current run.
 """
 function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         rank=0,
@@ -119,15 +103,10 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
     return nothing
 end
 
-# ====================
-# TB
-# ====================
 """
     write_model_summary(model::TBModel, strcs, bases, comm; kwargs...)
 
-Append a summary of the TB model to `hamster.out`: structure and basis sizes, number of parameters (onsite, per
-neighbor shell and per ion pair) and the size of the geometry tensor. Parameter values are not included, since the
-summary is written when the model is initialized.
+Append a summary of the TB model to `hamster.out`.
 """
 function write_model_summary(model::TBModel, strcs, bases, comm; rank=0, label="", filename="hamster.out")
     natoms = isempty(strcs) ? [0] : [length(strc.ions) for strc in strcs]
@@ -166,14 +145,10 @@ function write_model_summary(model::TBModel, strcs, bases, comm; rank=0, label="
     return nothing
 end
 
-# ====================
-# ML
-# ====================
 """
     descriptor_groups(strc, basis)
 
-Label of every matrix element of the ML descriptor of a structure: the ion pair, e.g. `"Br+Pb"`, or the element for
-onsite terms (same ion, `R = 0`), e.g. `"Pb onsite"`.
+Ion pair (e.g. `"Br+Pb"`) or onsite label (e.g. `"Pb onsite"`) of every matrix element of the ML descriptor.
 """
 function descriptor_groups(strc, basis)
     ion_of_orbital = [iion for iion in eachindex(basis.orbitals) for _ in basis.orbitals[iion]]
@@ -213,10 +188,7 @@ end
 """
     write_model_summary(kernel::HamiltonianKernel, strcs, bases, comm, conf; kwargs...)
 
-Append a summary of the ML model to `hamster.out`: the number of descriptor vectors (matrix elements of all
-structures) and the coverage of the descriptors by the data points of the kernel, i.e. the similarity of every
-descriptor to its most similar data point, per ion pair and onsite term. Descriptors with a small similarity to all
-data points are outside the training data; there, the ML correction is close to zero and the model falls back to TB.
+Append a summary of the ML model to `hamster.out`.
 """
 function write_model_summary(kernel::HamiltonianKernel, strcs, bases, comm, conf=get_empty_config();
         rank=0, label="", sim_tol=get_ml_sim_tol(conf), filename="hamster.out")

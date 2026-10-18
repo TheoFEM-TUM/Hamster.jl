@@ -47,7 +47,6 @@ end
             out = read("hamster.out", String)
             @test !occursin("skipped", out)
 
-            # TB: sizes and parameter counts, no parameter values
             tb = summary_block(out, "TB Model Summary (training set)")
             tb_model = ham.models[1]
             @test occursin("atoms per structure:         $(length(strc.ions))", tb)
@@ -56,7 +55,6 @@ end
             @test occursin("onsite $(count(p -> p.nnlabel == 0, tb_model.param_labels))", tb)
             @test occursin("Br+Pb", tb)
 
-            # ML: all descriptors are counted, coverage of the training descriptors by their own data points is high
             ml = summary_block(out, "ML Model Summary (training set)")
             ndescriptors = sum(nnz, ham.models[2].structure_descriptors[1])
             @test occursin("descriptor vectors:          $ndescriptors", ml)
@@ -66,7 +64,6 @@ end
             @test occursin("ML Model Summary (validation set)", out)
             @test ham_val.models[2].data_points == ham.models[2].data_points
 
-            # Ewald: no config values are repeated
             ewald = summary_block(out, "Ewald Model Summary (training set)")
             @test occursin("structures:                  1", ewald)
             @test !occursin("qeff", ewald) && !occursin("rebuilt", ewald)
@@ -87,7 +84,6 @@ end
             model = EwaldOnsites([strc], [basis], comm, conf, rcut=9.0, label="large rcut")
             @test occursin("real-space neighbor grid:    rebuilt", read("hamster.out", String))
 
-            # The potentials agree with an Ewald sum on a grid built for the Ewald cutoff
             pos = Hamster.get_ion_positions(strc.ions, apply_distortion=true)
             q = [Hamster.get_qeff(conf, Hamster.number_to_element(t)) for t in Hamster.get_ion_types(strc.ions)]
             φ = Hamster.ewald_sum(pos, q, strc.lattice, rcut=9.0).potentials
@@ -97,7 +93,6 @@ end
 end
 
 @testset "Validation kernel with training data points" begin
-    # With a precalculated similarity matrix, the validation kernel must use the data points of the training kernel
     conf = get_summary_test_config()
     strc = Structure(conf)
     basis = Basis(strc, conf)
@@ -110,8 +105,6 @@ end
                                 write_summary=false)
     Hamster.copy_params!(val, kernel)
     Hamster.copy_params!(val_pre, kernel_pre)
-    # Same structure: the validation kernels reproduce the training kernels (before, the precalculated validation
-    # kernel used similarities to its own data points and was off by up to 1 eV here)
     Δ(A, B) = maximum(maximum(abs.(A[R] .- B[R])) for R in eachindex(A))
     @test val.data_points == kernel.data_points
     @test Δ(get_hr(val, Hamster.Dense(), 1), get_hr(kernel, Hamster.Dense(), 1)) < 1e-12

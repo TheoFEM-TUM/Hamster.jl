@@ -98,8 +98,6 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         ion_types = get_ion_types(strc.ions)
         charges = [get_qeff(conf, type) for type in number_to_element.(ion_types)]
 
-        # The neighbor grid and translation vectors of the structure only cover pairs up to the TB cutoff and the
-        # grid size. For a larger Ewald cutoff, they are rebuilt for the real-space sum.
         reuse_grid = rcut ≤ min(strc.point_grid.grid_size, get_rcut(conf))
         grid_rebuilt |= !reuse_grid
         if method == "ewald"
@@ -167,7 +165,6 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     end
     MPI.Bcast!(species_mean, comm, root=0)
 
-    # Per-structure species means (before centering) for the model summary
     structure_means = Tuple{UInt8, Float64}[]
     for n in eachindex(potentials), type in unique(types_per_strc[n])
         push!(structure_means, (type, mean(potentials[n][types_per_strc[n] .== type])))

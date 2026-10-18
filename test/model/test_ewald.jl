@@ -130,7 +130,6 @@ end
 
     @test size(Hr[1])[1] == length(basis)
 
-    # Model summary in hamster.out
     s = Hamster.correction_statistics([-2.0, -1.0, 0.0, 1.0, 2.0])
     @test s.n == 5 && s.σ ≈ √2 && s.min == -2 && s.max == 2
     @test s.tail ≈ 2 / √2 && s.frac3σ == 0
@@ -139,7 +138,7 @@ end
     mktempdir() do dir
         cd(dir) do
             EwaldOnsites([strc], [basis], comm, conf, label="no file")
-            @test !isfile("hamster.out")                                 # only appended to an existing hamster.out
+            @test !isfile("hamster.out")
 
             touch("hamster.out")
             EwaldOnsites([strc], [basis], comm, conf, label="test set")
@@ -151,7 +150,7 @@ end
             for element in ["Cs", "Pb", "Br"]
                 @test occursin(Regex("\\n    $element\\s+\\d+ "), out)
             end
-            @test count("real-space neighbor grid:    rebuilt", out) == 1   # rcut 8 > grid_size 5.5
+            @test count("real-space neighbor grid:    rebuilt", out) == 1
         end
     end
 end
