@@ -97,7 +97,7 @@ function precompile_gpu_configs(dir, data)
     ]
 end
 
-"""Run `main` for each config returned by `make_configs(dir, data)` in a temporary directory (precompile workloads)."""
+# Runs `main` for each config returned by `make_configs(dir, data)` in a temporary directory
 function run_precompile_workload(make_configs)
     data = joinpath(@__DIR__, "precompile")
     # Do not join the job of the MPI launcher
