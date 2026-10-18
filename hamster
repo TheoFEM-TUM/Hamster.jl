@@ -46,12 +46,15 @@ print_version() {
     echo "  julia: $(julia --version 2> /dev/null || echo "not found")"
 }
 
-# Commands can be given anywhere, all other arguments are options of the command (or of the calculation)
+# Commands can be given anywhere, all other arguments are options of the command (or of the calculation);
+# --help with a command shows the help of the command
 COMMAND=""
+HELP=false
 OPTIONS=()
 for arg in "$@"; do
     case $arg in
-        -h|--help|--version|--install|--update|--precompile)
+        -h|--help) HELP=true ;;
+        --version|--install|--update|--precompile)
             if [[ -n "$COMMAND" && "$COMMAND" != "$arg" ]]; then
                 echo "hamster: $COMMAND and $arg cannot be combined, see hamster --help." >&2
                 exit 1
@@ -61,8 +64,14 @@ for arg in "$@"; do
     esac
 done
 
+if $HELP; then
+    case "$COMMAND" in
+        --install|--update) OPTIONS=(--help) ;;
+        *) print_help; exit 0 ;;
+    esac
+fi
+
 case "$COMMAND" in
-    -h|--help) print_help; exit 0 ;;
     --version) print_version; exit 0 ;;
     --install) exec julia "$HAMSTER_DIR/hamster_install.jl" "${OPTIONS[@]}" ;;
     --update) exec julia "$HAMSTER_DIR/hamster_update.jl" "${OPTIONS[@]}" ;;
