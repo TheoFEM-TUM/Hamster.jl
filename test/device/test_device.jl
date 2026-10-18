@@ -208,3 +208,34 @@ end
         @test_throws ErrorException Hamster.init_device(conf)
     end
 end
+
+@testset "Device selection errors and helpers" begin
+    @test_throws ErrorException Hamster.init_device(device="tpu")
+    @test 0 ≤ Hamster.get_node_local_rank(comm) < MPI.Comm_size(comm)
+    H = [rand(ComplexF64, 2, 2)]
+    @test Hamster.host_hamiltonians(H) === H
+end
+
+@testset "Device SOC parameter gradient and Hr output" begin
+    conf = get_soc_device_test_config()
+    ham_cpu, ham_dev = get_device_test_hams(conf, ArrayDevice(JLArray))
+    loss = Loss(2); reg = Regularization(conf)
+    Es, _ = diagonalize(get_hamiltonian(ham_cpu, 1, ks_device_test))
+    data = Hamster.EigData(ks_device_test, Es .+ 0.1 .* randn(size(Es)))
+    _, cache = Hamster.forward(ham_dev, 1, loss, data)
+    g_dev = Hamster.backward(ham_dev, 1, loss, data, cache, conf)
+    i = findfirst(m -> m isa Hamster.SOCModel, ham_dev.models)
+    grad = Hamster.get_model_gradient(ham_dev.models[i], [1], reg, Hamster.model_gradient_input([g_dev], i))
+    @test grad ≈ g_dev.grads[i] .+ Hamster.backward(reg, ham_dev.models[i].params)
+
+    # Real-space Hamiltonian written from the device path
+    mktempdir() do dir
+        cd(dir) do
+            mkdir("tmp")
+            Hamster.get_hamiltonian(ham_dev, 1, ks_device_test, comm, write_hr=true, rank=0, nranks=1)
+            @test isfile(joinpath("tmp", "ham_0.h5"))
+            Hr, _ = Hamster.read_ham(nothing, 1, filename=joinpath("tmp", "ham_0.h5"), space="r")
+            @test maximum(maximum(abs.(Matrix(a) .- Matrix(b))) for (a, b) in zip(Hr, get_hr(ham_cpu, 1))) < 1e-10
+        end
+    end
+end

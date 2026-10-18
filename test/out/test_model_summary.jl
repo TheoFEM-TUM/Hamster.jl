@@ -29,6 +29,7 @@ summary_block(out, title) = (i = findfirst(title, out); isnothing(i) ? "" : out[
     counts = zeros(Int64, 1000); counts[100] = 1; counts[900] = 3
     @test Hamster.histogram_quantile(counts, 0.25) == 0.1
     @test Hamster.histogram_quantile(counts, 0.5) == 0.9
+    @test Hamster.histogram_quantile(zeros(Int64, 10), 0.5) == 1.0
     @test Hamster.range_string(3, 3) == "3" && Hamster.range_string(3, 5) == "3 - 5"
 end
 
