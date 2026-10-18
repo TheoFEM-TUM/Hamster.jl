@@ -45,7 +45,7 @@ try
     Pkg.activate(hamster_path)
     Pkg.update()
     println("Precompiling Hamster.jl...")
-    Pkg.precompile()
+    run(`$(joinpath(hamster_path, "hamster")) --precompile`)
 catch e
     println("There was an error while updating Hamster.")
     rethrow(e)

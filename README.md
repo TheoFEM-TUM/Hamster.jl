@@ -36,7 +36,7 @@ The installation accepts the following optional keywords:
 - `--bashrc`: Path to the `.bashrc` (or an alias file). Defaults to `$HOME/.bashrc`.
 - `--add_test_exec`: Also create a `hamster_test` executable for running the test suite.
 - `--test`: Run the test suite after the installation.
-- `--gpu`: Also install [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl) and [CUDSS.jl](https://github.com/exanauts/CUDSS.jl) for GPU runs. The GPU code is precompiled only if a GPU is available; otherwise (e.g., on the login node of a cluster), precompile it once on a GPU node with `julia -e 'using Hamster, CUDA, CUDSS'`.
+- `--gpu`: Also install [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl) and [CUDSS.jl](https://github.com/exanauts/CUDSS.jl) for GPU runs. The GPU code is precompiled only if a GPU is available; otherwise (e.g., on the login node of a cluster), run `hamster --precompile` once on a GPU node.
 
 Installing the dependencies takes a few minutes, running the test suite up to 10 minutes. A detailed list of dependencies can be found in the `Project.toml` file. `julia hamster_install.jl [options]` does the same as `hamster --install`.
 
@@ -48,6 +48,7 @@ If you installed Hamster before the `hamster` executable became part of the repo
 hamster [-t THREADS] [--conf FILE] [--TAG VALUE ...]   # run a calculation
 hamster --install [options]                           # install the dependencies and precompile Hamster
 hamster --update [--no-pull]                          # pull the latest code (git pull --ff-only), update the dependencies and precompile
+hamster --precompile                                  # precompile Hamster (and its GPU code on a GPU node)
 hamster --version                                     # version of Hamster (and the git commit) and Julia
 hamster --help                                        # overview of all commands and options
 ```

@@ -12,6 +12,7 @@ Usage:
   hamster [-t THREADS] [--conf FILE] [--TAG VALUE ...]   Run a calculation
   hamster --install [OPTIONS]                           Install the dependencies and precompile Hamster
   hamster --update [--no-pull]                          Pull the latest code, update the dependencies, precompile
+  hamster --precompile                                  Precompile Hamster (and its GPU code on a GPU node)
   hamster --version                                     Show the version of Hamster and Julia
   hamster --help                                        Show this help
 
@@ -50,6 +51,7 @@ case "$1" in
     --version) print_version; exit 0 ;;
     --install) shift; exec julia "$HAMSTER_DIR/hamster_install.jl" "$@" ;;
     --update) shift; exec julia "$HAMSTER_DIR/hamster_update.jl" "$@" ;;
+    --precompile) exec julia --project="$HAMSTER_DIR" "$HAMSTER_DIR/hamster_precompile.jl" ;;
 esac
 
 # Default: use SLURM_CPUS_PER_TASK or JULIA_NUM_THREADS if set, else leave unspecified

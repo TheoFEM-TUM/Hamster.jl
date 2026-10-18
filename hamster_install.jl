@@ -19,6 +19,9 @@ using Pkg
 
 const hamster_path = @__DIR__
 
+# Precompiled at the end with `hamster --precompile` (see hamster_precompile.jl)
+ENV["JULIA_PKG_PRECOMPILE_AUTO"] = "0"
+
 const usage = """
 Usage: hamster --install [--add_path yes|no] [--bashrc FILE] [--add_test_exec] [--test] [--gpu]
        (or: julia hamster_install.jl [options])
@@ -67,32 +70,20 @@ println("Installing the dependencies of Hamster.jl...")
 Pkg.activate(hamster_path)
 Pkg.instantiate()
 
-println("Precompiling Hamster.jl...")
-try
-    @eval using Hamster
-catch e
-    println("Hamster was not installed successfully.")
-    rethrow(e)
-end
-
 chmod(joinpath(hamster_path, "hamster"), 0o755)
 
 if options["gpu"]
     println("Installing the GPU dependencies (CUDA.jl, CUDSS.jl) into the default environment...")
-    # The GPU code is precompiled below only if a GPU is available; precompiled without one, GPU runs compile it at
-    # every start.
-    ENV["JULIA_PKG_PRECOMPILE_AUTO"] = "0"
     Pkg.activate()
     Pkg.add(["CUDA", "CUDSS"])
-    @eval using CUDA
-    if Base.invokelatest(CUDA.functional)
-        println("Precompiling the GPU code of Hamster.jl...")
-        @eval using CUDSS
-    else
-        println("No functional GPU found. Precompile the GPU code on a GPU node (e.g., in a short job) with\n" *
-                "    julia -e 'using Hamster, CUDA, CUDSS'\n" *
-                "Otherwise, GPU runs compile it at every start.")
-    end
+end
+
+println("Precompiling Hamster.jl...")
+try
+    run(`$(joinpath(hamster_path, "hamster")) --precompile`)
+catch e
+    println("Hamster was not installed successfully.")
+    rethrow(e)
 end
 
 if options["add_test_exec"]
