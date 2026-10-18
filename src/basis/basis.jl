@@ -104,7 +104,7 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
                                 rcut_tol=get_rcut_tol(conf))
 
     norbs = length.(basis.orbitals)
-    offset = cumsum(vcat(0, norbs[1:end-1]))          # basis index of the orbitals of an ion: offset + orbital
+    offset = cumsum(vcat(0, norbs[1:end-1]))
     ion_types = get_ion_types(strc.ions)
     nn_dict = get_nn_thresholds(strc.ions, frac_to_cart(strc.Rs, strc.lattice), strc.point_grid, conf)
     oc_dicts, mode_dicts = get_oc_and_mode_dicts(basis.overlaps, strc.ions)
@@ -132,9 +132,6 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
         ion_label = IonLabel(type1, type2, sorted=false)
         contributing_overlaps[(type1, type2, l1, l2)] = [k for k in eachindex(basis.overlaps) if overlap_contributes_to_matrix_element(basis.overlaps[k], orb1, orb2, ion_label)]
     end
-    # Ion pairs grid cell by grid cell (every pair is visited once), cells distributed over tasks; every task collects
-    # its entries (parameter, i, j, R, value). An entry can only get contributions from the overlaps of one ion pair.
-    # Concretely typed copies of what the loop needs (the orbitals and overlaps of a basis have different types)
     orbital_axes = [SVector{3, Float64}[orb.axis for orb in orbs] for orbs in basis.orbitals]
     orbital_ls = [Int64[orb.type.l for orb in orbs] for orbs in basis.orbitals]
     overlap_types = SVector{2, UInt8}[sort(Cllm.ion_label.types) for Cllm in basis.overlaps]
@@ -143,7 +140,7 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
     parts = tmap(grid_cell_chunks(strc.point_grid, n=4 * npar)) do chunk
         entries = (v=Int64[], i=Int64[], j=Int64[], R=Int64[], val=Float64[])
         radial = zeros(length(basis.overlaps))
-        angles = zeros(5)          # θ₁, φ₁, θ₂, φ₂ and the value of the overlap (see evaluate_overlap!)
+        angles = zeros(5)
         for (grid_point, inds) in chunk, nn_grid_point in nn_grid_points(grid_point, strc.point_grid.dictR),
             (iion2, R) in strc.point_grid.dictR[nn_grid_point], iion1 in inds
             ion_label = IonLabel(ion_types[iion1], ion_types[iion2], sorted=false)
@@ -195,9 +192,7 @@ end
 """
     evaluate_overlap!(buffer, overlap, orbconfig, mode)
 
-Angular part of `overlap` for the angles `buffer[1:4]` (θ₁, φ₁, θ₂, φ₂), written to `buffer[5]`. The overlaps of a basis
-have different types, so the call is dynamically dispatched; passing the angles and the result through a buffer avoids
-allocating them for every matrix element.
+Writes the angular part of `overlap` for the angles `buffer[1:4]` (θ₁, φ₁, θ₂, φ₂) to `buffer[5]`.
 """
 function evaluate_overlap!(buffer, overlap, orbconfig, mode)
     @inbounds buffer[5] = overlap(orbconfig, mode, buffer[1], buffer[2], buffer[3], buffer[4])
@@ -207,8 +202,7 @@ end
 """
     assemble_geometry_tensor(parts, NV, NR, Nε)
 
-Sparse matrices `h[v, R]` from the entries (parameter `v`, `i`, `j`, `R`, value) collected by the tasks; contributions
-to the same matrix element are summed.
+Sparse matrices `h[v, R]` from the entries collected by the tasks.
 """
 function assemble_geometry_tensor(parts, NV, NR, Nε)
     counts = zeros(Int64, NV, NR)
