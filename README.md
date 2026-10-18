@@ -53,7 +53,7 @@ hamster --version                                     # version of Hamster (and 
 hamster --help                                        # overview of all commands and options
 ```
 
-`hamster --update --no-pull` only updates the dependencies, e.g., if you manage the code with git yourself.
+`hamster --update --no-pull` only updates the dependencies, e.g., if you manage the code with git yourself. Only one command can be given per call; all other arguments are its options.
 
 ## Quickstart
 

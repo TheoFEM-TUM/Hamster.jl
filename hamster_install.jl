@@ -62,8 +62,11 @@ end
 
 options = parse_install_args(ARGS)
 
+# The user's default environment: JULIA_PROJECT if set (e.g., by the Julia modules on JSC systems), else @v#.#
+const default_env = dirname(Base.active_project())
+
 # Make Hamster available in the default environment (e.g., `using Hamster` in the REPL)
-Pkg.activate()
+Pkg.activate(default_env)
 Pkg.develop(PackageSpec(path=hamster_path))
 
 println("Installing the dependencies of Hamster.jl...")
@@ -73,8 +76,8 @@ Pkg.instantiate()
 chmod(joinpath(hamster_path, "hamster"), 0o755)
 
 if options["gpu"]
-    println("Installing the GPU dependencies (CUDA.jl, CUDSS.jl) into the default environment...")
-    Pkg.activate()
+    println("Installing the GPU dependencies (CUDA.jl, CUDSS.jl) into $default_env...")
+    Pkg.activate(default_env)
     Pkg.add(["CUDA", "CUDSS"])
 end
 

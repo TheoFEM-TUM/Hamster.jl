@@ -12,5 +12,8 @@
 
         @test occursin("--no-pull", read(`$hamster --update --help`, String))
         @test occursin("--add_test_exec", read(`$hamster --install --help`, String))
+        @test occursin("Hamster.jl", read(`$hamster -t 2 --version`, String))
+        @test !success(pipeline(`$hamster --update --precompile`, stderr=devnull))
+        @test !success(pipeline(`$hamster --precompile --no-pull`, stderr=devnull))
     end
 end

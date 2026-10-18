@@ -46,12 +46,32 @@ print_version() {
     echo "  julia: $(julia --version 2> /dev/null || echo "not found")"
 }
 
-case "$1" in
+# Commands can be given anywhere, all other arguments are options of the command (or of the calculation)
+COMMAND=""
+OPTIONS=()
+for arg in "$@"; do
+    case $arg in
+        -h|--help|--version|--install|--update|--precompile)
+            if [[ -n "$COMMAND" && "$COMMAND" != "$arg" ]]; then
+                echo "hamster: $COMMAND and $arg cannot be combined, see hamster --help." >&2
+                exit 1
+            fi
+            COMMAND=$arg ;;
+        *) OPTIONS+=("$arg") ;;
+    esac
+done
+
+case "$COMMAND" in
     -h|--help) print_help; exit 0 ;;
     --version) print_version; exit 0 ;;
-    --install) shift; exec julia "$HAMSTER_DIR/hamster_install.jl" "$@" ;;
-    --update) shift; exec julia "$HAMSTER_DIR/hamster_update.jl" "$@" ;;
-    --precompile) exec julia --project="$HAMSTER_DIR" "$HAMSTER_DIR/hamster_precompile.jl" ;;
+    --install) exec julia "$HAMSTER_DIR/hamster_install.jl" "${OPTIONS[@]}" ;;
+    --update) exec julia "$HAMSTER_DIR/hamster_update.jl" "${OPTIONS[@]}" ;;
+    --precompile)
+        if [[ ${#OPTIONS[@]} -gt 0 ]]; then
+            echo "hamster: --precompile takes no options (got ${OPTIONS[*]})." >&2
+            exit 1
+        fi
+        exec julia --project="$HAMSTER_DIR" "$HAMSTER_DIR/hamster_precompile.jl" ;;
 esac
 
 # Default: use SLURM_CPUS_PER_TASK or JULIA_NUM_THREADS if set, else leave unspecified
