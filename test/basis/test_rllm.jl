@@ -66,11 +66,9 @@ end
 
     overlaps_gaas = Hamster.get_overlaps(strc_gaas.ions, orbitals_gaas, conf)
 
-    Hamster.Random.seed!(42)   # the adaptive interpolation samples its points randomly
+    Hamster.Random.seed!(42)
     rllm = Hamster.get_rllm(overlaps_gaas, conf)
     rllm_correct = Hamster.read_rllm(overlaps_gaas, comm, filename=string(@__DIR__)*"/test_files/rllm_true.dat")
-    # Fixed points instead of random ones, and all overlaps are checked (the mean interpolation error of the worst
-    # overlap is about 1e-3)
     xs = range(0.0, 5.0, length=200)
 
     @test all(mean(abs.(rllm[key].(xs) .- rllm_correct[key].(xs))) < 2e-3 for key in keys(rllm))

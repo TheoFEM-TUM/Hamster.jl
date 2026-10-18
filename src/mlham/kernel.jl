@@ -74,8 +74,6 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
     end
     external_data_points = !isnothing(data_points)
     if external_data_points
-        # Data points of another model (e.g. of the training set for the validation set); the parameters are
-        # copied from that model.
         params = zeros(length(data_points))
     elseif get_ml_init_params(conf)[1] ∈ ['r', 'z', 'o']
         Npoints_local = floor(Int64, Npoints / nranks)
