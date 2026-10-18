@@ -1,5 +1,5 @@
 # COV_EXCL_START
-using PrecompileTools: @compile_workload, @setup_workload
+using PrecompileTools: @compile_workload
 
 # The precompile workload runs small but complete Hamster calculations (as the `hamster` executable does via `main`),
 # such that the code paths of typical runs are compiled when the package is precompiled instead of at every start.
@@ -79,32 +79,53 @@ function precompile_configs(dir, data)
     ]
 end
 
-@setup_workload begin
+# Standard runs on the GPU, as in large MD-based calculations (SOC, ML, sparse): Hamiltonians only (written to file),
+# shift-invert and dense diagonalization. Run by the precompile workload of the CUDSS extension.
+function precompile_gpu_configs(dir, data)
+    options(lines...) = "begin Options\n    verbosity = 0\n    load_rllm = true\n    rcut = 7\n    device = gpu\n" *
+                        "    rllm_file = $(joinpath(data, "rllm.dat"))\n    poscar = $(joinpath(data, "POSCAR_gaas"))\n" *
+                        join("    " .* collect(lines), "\n") * "\nend\n"
+    block(name, lines...) = "\nbegin $name\n" * join("    " .* collect(lines), "\n") * "\nend\n"
+    md = block("Supercell", "Nconf = 2", "Nconf_min = 1", "Nconf_max = 2", "xdatcar = $(joinpath(dir, "structures.h5"))", "poscar = $(joinpath(data, "SC_POSCAR"))")
+    rest = md * block("ML", "ncluster = 3", "npoints = 10", "init_params = rand") * PRECOMPILE_ATOMS
+    soc = ("init_params = $(joinpath(data, "params_soc.dat"))", "soc = true")
+    return [
+        options(soc..., "sp_mode = true", "skip_diag = true", "write_hk = true") * rest,
+        options(soc..., "sp_mode = true", "sp_diag = true", "neig = 2", "eig_target = 3.0") * rest,
+        options("init_params = $(joinpath(data, "params.dat"))", "sp_mode = true", "sp_diag = true", "neig = 2", "eig_target = 3.0") * rest,
+        options(soc...) * rest,
+    ]
+end
+
+"""Run `main` for each config returned by `make_configs(dir, data)` in a temporary directory (precompile workloads)."""
+function run_precompile_workload(make_configs)
     data = joinpath(@__DIR__, "precompile")
-    @compile_workload begin
-        # Do not join the job of the MPI launcher
-        for key in collect(keys(ENV))
-            any(startswith(key, prefix) for prefix in ("PMI_", "PMIX_", "OMPI_", "HYDRA_", "MPI_LOCALRANKID", "MPI_LOCALNRANKS")) &&
-                delete!(ENV, key)
-        end
-        MPI.Initialized() || MPI.Init()
-        comm = MPI.COMM_WORLD
-        mktempdir() do dir
-            kpoints = [0.0 0.25 0.5; 0.0 0.0 0.5; 0.0 0.25 0.5]
-            write_precompile_eigenval(joinpath(dir, "EIGENVAL"), 8, kpoints)
-            write_precompile_eigenval(joinpath(dir, "EIGENVAL_soc"), 16, kpoints, seed=2)
-            write_precompile_md_data(dir, data)
-            for (n, text) in enumerate(precompile_configs(dir, data))
-                run_dir = mkpath(joinpath(dir, "run$n"))
-                hconf = joinpath(run_dir, "hconf")
-                write(hconf, text)
-                cd(run_dir) do
-                    redirect_stdout(devnull) do
-                        main(comm, get_config(filename=hconf))
-                    end
+    # Do not join the job of the MPI launcher
+    for key in collect(keys(ENV))
+        any(startswith(key, prefix) for prefix in ("PMI_", "PMIX_", "OMPI_", "HYDRA_", "MPI_LOCALRANKID", "MPI_LOCALNRANKS")) &&
+            delete!(ENV, key)
+    end
+    MPI.Initialized() || MPI.Init()
+    comm = MPI.COMM_WORLD
+    mktempdir() do dir
+        kpoints = [0.0 0.25 0.5; 0.0 0.0 0.5; 0.0 0.25 0.5]
+        write_precompile_eigenval(joinpath(dir, "EIGENVAL"), 8, kpoints)
+        write_precompile_eigenval(joinpath(dir, "EIGENVAL_soc"), 16, kpoints, seed=2)
+        write_precompile_md_data(dir, data)
+        for (n, text) in enumerate(make_configs(dir, data))
+            run_dir = mkpath(joinpath(dir, "run$n"))
+            hconf = joinpath(run_dir, "hconf")
+            write(hconf, text)
+            cd(run_dir) do
+                redirect_stdout(devnull) do
+                    main(comm, get_config(filename=hconf))
                 end
             end
         end
     end
+end
+
+@compile_workload begin
+    run_precompile_workload(precompile_configs)
 end
 # COV_EXCL_STOP

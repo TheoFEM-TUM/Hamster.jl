@@ -1,6 +1,7 @@
 module HamsterCUDSSExt
 
 using Hamster, CUDA, cuSPARSE, CUDSS, LinearAlgebra
+using PrecompileTools: @compile_workload
 
 # Shift-invert operator x -> (H - σI)⁻¹ x from the LDLᴴ factorization of the (indefinite) shifted Hamiltonian with cuDSS
 struct ShiftInvert{S}
@@ -21,6 +22,20 @@ function Hamster.release_operator!(op::ShiftInvert)
     GC.gc(false)
     CUDA.reclaim()
     return nothing
+end
+
+# Compiles the host code of GPU runs (otherwise 20-30 s at the start of every run). This extension is loaded last
+# (CUDA loads cuSOLVER and cuSPARSE, so HamsterCUDAExt is active). The workload needs a GPU: precompiled without one
+# (e.g., on a login node), the package image is valid but the GPU code paths are compiled again in every run.
+# A failing workload (e.g., GPU busy) must not prevent loading the extension, which provides shift-invert.
+@compile_workload begin
+    if CUDA.functional() && !isnothing(Base.get_extension(Hamster, :HamsterCUDAExt))
+        try
+            Hamster.run_precompile_workload(Hamster.precompile_gpu_configs)
+        catch err
+            @warn "The GPU precompile workload of Hamster failed; GPU runs compile on first use instead." exception = err
+        end
+    end
 end
 
 end
