@@ -198,3 +198,11 @@ end
     droptol!(Hs, 1e-5)
     @test Hamster.get_sparsity(Hs) == 0.5
 end
+@testset "Diagonalization without eigenvectors" begin
+    A = [rand(ComplexF64, 20, 20) for _ in 1:3]
+    Hk = [H + H' for H in A]
+    Es, vs = diagonalize(Hk)
+    Es_only, vs_only = diagonalize(Hk, vectors=false)
+    @test Es_only ≈ Es atol=1e-10
+    @test size(vs_only) == (0, 20, 3) && size(vs) == (20, 20, 3)
+end
