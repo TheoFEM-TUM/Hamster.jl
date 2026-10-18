@@ -103,14 +103,13 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
                                 sp_tol=get_sp_tol(conf), 
                                 rcut_tol=get_rcut_tol(conf))
 
-    ij_map = get_ion_orb_to_index_map(length.(basis.orbitals))
+    norbs = length.(basis.orbitals)
+    offset = cumsum(vcat(0, norbs[1:end-1]))
     ion_types = get_ion_types(strc.ions)
     nn_dict = get_nn_thresholds(strc.ions, frac_to_cart(strc.Rs, strc.lattice), strc.point_grid, conf)
-    hs = [Dict{Tuple{Int64, Int64, Int64, Int64}, Float64}() for _ in 1:npar]
     oc_dicts, mode_dicts = get_oc_and_mode_dicts(basis.overlaps, strc.ions)
 
     Ts = frac_to_cart(strc.Rs, strc.lattice)
-    nn_grid_points = iterate_nn_grid_points(strc.point_grid)
 
     rllm_dict = get_rllm_from_file(basis.overlaps, conf, comm = comm, file=file)
     # Distance dependence and label of every overlap, looked up once instead of for every matrix element
@@ -133,10 +132,17 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
         ion_label = IonLabel(type1, type2, sorted=false)
         contributing_overlaps[(type1, type2, l1, l2)] = [k for k in eachindex(basis.overlaps) if overlap_contributes_to_matrix_element(basis.overlaps[k], orb1, orb2, ion_label)]
     end
-    Threads.@threads for (chunk_id, indices) in enumerate(chunks(nn_grid_points, n=npar))
-        h_chunk = hs[chunk_id]
+    orbital_axes = [SVector{3, Float64}[orb.axis for orb in orbs] for orbs in basis.orbitals]
+    orbital_ls = [Int64[orb.type.l for orb in orbs] for orbs in basis.orbitals]
+    overlap_types = SVector{2, UInt8}[sort(Cllm.ion_label.types) for Cllm in basis.overlaps]
+    gram_schmidt = lowercase(tmethod)[1] == 'g'
+    onsite, sepNN = get_onsite(conf), get_sepNN(conf)
+    parts = tmap(grid_cell_chunks(strc.point_grid, n=4 * npar)) do chunk
+        entries = (v=Int64[], i=Int64[], j=Int64[], R=Int64[], val=Float64[])
         radial = zeros(length(basis.overlaps))
-        for (iion1, iion2, R) in indices
+        angles = zeros(5)
+        for (grid_point, inds) in chunk, nn_grid_point in nn_grid_points(grid_point, strc.point_grid.dictR),
+            (iion2, R) in strc.point_grid.dictR[nn_grid_point], iion1 in inds
             ion_label = IonLabel(ion_types[iion1], ion_types[iion2], sorted=false)
             T⃗ = SVector{3, Float64}(Ts[1, R], Ts[2, R], Ts[3, R])
             r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
@@ -145,41 +151,78 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
             r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, T⃗)
             r = normdiff(r⃗₁, r⃗₂)
             if r_nd ≤ rcut && r-abs(rcut_tol) < rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
-                Û = get_sk_transform_matrix(r⃗₁, r⃗₂, basis.orbitals[iion1][1].axis, tmethod)
-                nnlabel = get_nn_label(r, nn_dict[ion_label], conf)
+                Û = gram_schmidt ? get_transformed_system(r⃗₁, r⃗₂, orbital_axes[iion1][1]) : get_transformed_system(r⃗₁, r⃗₂)
+                nnlabel = get_nn_label(r, nn_dict[ion_label], conf, onsite=onsite, sepNN=sepNN)
                 # The radial part depends only on the overlap and the distance, not on the orbitals
                 f = fcut(r, rcut, rcut_tol)
+                types_sorted = sort(ion_label.types)
                 for k in eachindex(basis.overlaps)
-                    radial[k] = same_ion_label(basis.overlaps[k], ion_label) ? rllms[k](r) * f : 0.0
+                    radial[k] = overlap_types[k] == types_sorted ? rllms[k](r) * f : 0.0
                 end
-                for jorb1 in eachindex(basis.orbitals[iion1]), jorb2 in eachindex(basis.orbitals[iion2])
-                    orb1 = basis.orbitals[iion1][jorb1]
-                    orb2 = basis.orbitals[iion2][jorb2]
-                    i = ij_map[(iion1, jorb1)]
-                    j = ij_map[(iion2, jorb2)]
-                    θ₁, φ₁ = get_rotated_angles(Û, orb1.axis)
-                    θ₂, φ₂ = get_rotated_angles(Û, orb2.axis)
+                for jorb1 in eachindex(orbital_axes[iion1]), jorb2 in eachindex(orbital_axes[iion2])
+                    i = offset[iion1] + jorb1
+                    j = offset[iion2] + jorb2
+                    θ₁, φ₁ = get_rotated_angles(Û, orbital_axes[iion1][jorb1])
+                    θ₂, φ₂ = get_rotated_angles(Û, orbital_axes[iion2][jorb2])
 
-                    for k in contributing_overlaps[(Int64(ion_types[iion1]), Int64(ion_types[iion2]), orb1.type.l, orb2.type.l)]
+                    for k in contributing_overlaps[(Int64(ion_types[iion1]), Int64(ion_types[iion2]), orbital_ls[iion1][jorb1], orbital_ls[iion2][jorb2])]
                         Cllm = basis.overlaps[k]
                         mode = get_mode(mode_dicts, k, ion_label, jorb1, jorb2)
                         orbconfig = get_orbconfig(oc_dicts, k, ion_label, jorb1, jorb2)
-                        v = nnlabel ≠ 0 ? get(param_indices, (k, nnlabel), 0) :
-                            get_param_index(Cllm, nnlabel, basis.parameters, orb1, orb2, i, j, overlap_label=overlap_labels[k])
+                        v::Int64 = nnlabel ≠ 0 ? get(param_indices, (k, nnlabel), 0) :
+                            get_param_index(Cllm, nnlabel, basis.parameters, basis.orbitals[iion1][jorb1], basis.orbitals[iion2][jorb2], i, j,
+                                            overlap_label=overlap_labels[k])
 
-                        hval = Cllm(orbconfig, mode, θ₁, φ₁, θ₂, φ₂) * radial[k]
+                        angles[1] = θ₁; angles[2] = φ₁; angles[3] = θ₂; angles[4] = φ₂
+                        evaluate_overlap!(angles, Cllm, orbconfig, mode)
+                        hval = angles[5] * radial[k]
 
                         if abs(hval) ≥ sp_tol
-                            key = (v, i, j, R)
-                            h_chunk[key] = get(h_chunk, key, 0.0) + hval
+                            push!(entries.v, v); push!(entries.i, i); push!(entries.j, j); push!(entries.R, R); push!(entries.val, hval)
                         end
                     end
                 end
             end
         end
+        entries
     end
-    h = merge(hs...)
-    return reshape_geometry_tensor(h, length(basis.parameters), size(strc.Rs, 2), length(basis)[1])
+    return assemble_geometry_tensor(parts, length(basis.parameters), size(strc.Rs, 2), length(basis)[1])
+end
+
+"""
+    evaluate_overlap!(buffer, overlap, orbconfig, mode)
+
+Writes the angular part of `overlap` for the angles `buffer[1:4]` (θ₁, φ₁, θ₂, φ₂) to `buffer[5]`.
+"""
+function evaluate_overlap!(buffer, overlap, orbconfig, mode)
+    @inbounds buffer[5] = overlap(orbconfig, mode, buffer[1], buffer[2], buffer[3], buffer[4])
+    return nothing
+end
+
+"""
+    assemble_geometry_tensor(parts, NV, NR, Nε)
+
+Sparse matrices `h[v, R]` from the entries collected by the tasks.
+"""
+function assemble_geometry_tensor(parts, NV, NR, Nε)
+    counts = zeros(Int64, NV, NR)
+    for part in parts, (v, R) in zip(part.v, part.R)
+        counts[v, R] += 1
+    end
+    is = [Vector{Int64}(undef, counts[v, R]) for v in 1:NV, R in 1:NR]
+    js = [Vector{Int64}(undef, counts[v, R]) for v in 1:NV, R in 1:NR]
+    vals = [Vector{Float64}(undef, counts[v, R]) for v in 1:NV, R in 1:NR]
+    fill!(counts, 0)
+    for part in parts, n in eachindex(part.v)
+        v, R = part.v[n], part.R[n]
+        m = counts[v, R] += 1
+        is[v, R][m] = part.i[n]; js[v, R][m] = part.j[n]; vals[v, R][m] = part.val[n]
+    end
+    h_out = Matrix{SparseMatrixCSC{Float64, Int64}}(undef, NV, NR)
+    tforeach(CartesianIndices(h_out)) do I
+        h_out[I] = sparse(is[I], js[I], vals[I], Nε, Nε)
+    end
+    return h_out
 end
 
 """
