@@ -16,10 +16,12 @@ struct DeviceContext{D, L}
 end
 
 function DeviceContext(device, models, strcs, bases, conf=get_empty_config(); soc=get_soc(conf))
-    maps = map(eachindex(strcs)) do index
+    # The host arrays of the structures are built in parallel, the transfers to the device one after another
+    hosts = tmap(eachindex(strcs)) do index
         Nε = soc ? 2 * length(bases[index]) : length(bases[index])
-        DeviceLinearMap(models, index, Nε, size(strcs[index].Rs, 2), device, soc=soc)
+        host_linear_map(models, index, Nε, size(strcs[index].Rs, 2), soc=soc)
     end
+    maps = [DeviceLinearMap(host, device) for host in hosts]
     return DeviceContext(device, maps, get_neig(conf), get_eig_target(conf), get_diag_method(conf),
         Dict{Tuple{Int64, UInt64}, Any}(), Dict{Int64, Tuple{Vector{Float64}, Any}}())
 end

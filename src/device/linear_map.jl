@@ -61,17 +61,20 @@ end
 
 function linear_terms(kernel::HamiltonianKernel, index; soc=false)
     h_env = kernel.structure_descriptors[index]
-    keys = NTuple{3, Int64}[]
-    xs = Vector{Float64}[]
+    Ndim = length(first(kernel.data_points))
+    n = sum(nnz, h_env, init=0) * (soc ? 2 : 1)
+    keys = Vector{NTuple{3, Int64}}(undef, n)
+    X = Matrix{Float64}(undef, Ndim, n)
+    t = 0
     for R in eachindex(h_env)
         for (i, j, hin) in zip(findnz(h_env[R])...)
             for key in spin_keys(R, i, j, soc)
-                push!(keys, key); push!(xs, Vector{Float64}(hin))
+                t += 1
+                keys[t] = key
+                X[:, t] .= hin
             end
         end
     end
-    Ndim = length(first(kernel.data_points))
-    X = isempty(xs) ? zeros(Ndim, 0) : reduce(hcat, xs)
     D = reduce(hcat, Vector{Float64}.(kernel.data_points))
     return GaussianKernelTerms(keys, X, D, kernel.sim_params)
 end
@@ -197,12 +200,11 @@ end
 encode_entry(key, Nε) = ((key[1] - 1) * Nε + (key[2] - 1)) * Nε + (key[3] - 1)
 
 """
-    DeviceLinearMap(models, index, Nε, NR, device; soc=false)
+    host_linear_map(models, index, Nε, NR; soc=false)
 
-Build the `DeviceLinearMap` of structure `index` for the models of an `EffectiveHamiltonian` and move it to `device`.
+The arrays of the `DeviceLinearMap` of structure `index` on the host (see `DeviceLinearMap`).
 """
-function DeviceLinearMap(models, index, Nε, NR, device; soc=false)
-    Ti = Int32
+function host_linear_map(models, index, Nε, NR; soc=false)
     all_terms = [(m, linear_terms(model, index, soc=soc)) for (m, model) in enumerate(models)]
 
     # Union of all entries, sorted by (R, i, j)
@@ -214,35 +216,67 @@ function DeviceLinearMap(models, index, Nε, NR, device; soc=false)
     entry_index(key) = searchsortedfirst(codes, encode_entry(key, Nε))
 
     blocks = map(all_terms) do (m, terms)
-        rows = entry_index.(terms.keys)
+        rows = tmap(entry_index, terms.keys)
         if terms isa SparseTerms
-            T = eltype(terms.vals)
             A = sparse(rows, terms.cols, terms.vals, Nent, terms.nparams)
-            At = sparse(terms.cols, rows, terms.vals, terms.nparams, Nent)
-            # The CSC arrays of At (A) are the CSR arrays of A (At)
-            DeviceSparseBlock(m, terms.nparams,
-                to_device(device, Ti.(At.colptr)), to_device(device, Ti.(At.rowval)), to_device(device, T.(At.nzval)),
-                to_device(device, Ti.(A.colptr)), to_device(device, Ti.(A.rowval)), to_device(device, T.(A.nzval)))
+            At = copy(transpose(A))          # no duplicate (entry, parameter) pairs, so this equals sparse(cols, rows, vals)
+            (m=m, nparams=terms.nparams, A=A, At=At)
         else
             allunique(rows) || error("Kernel model contains duplicate matrix elements.")
-            DeviceKernelBlock(m, size(terms.D, 2), to_device(device, Ti.(rows)), to_device(device, terms.X),
-                to_device(device, terms.D), 1 / (2 * terms.σ^2))
+            (m=m, nparams=size(terms.D, 2), rows=rows, X=terms.X, D=terms.D, γ=1 / (2 * terms.σ^2))
         end
     end
 
     # Sparsity pattern of Hk in CSR format (row-major codes), always including the diagonal
-    hk_codes = unique!(sort!(vcat((I .- 1) .* Nε .+ (J .- 1), [(i - 1) * Nε + (i - 1) for i in 1:Nε])))
+    ij = (I .- 1) .* Nε .+ (J .- 1)
+    diag_codes = [(i - 1) * Nε + (i - 1) for i in 1:Nε]
+    hk_codes = unique!(sort!(vcat(ij, diag_codes)))
     hk_rowval = hk_codes .÷ Nε .+ 1
     hk_colval = mod.(hk_codes, Nε) .+ 1
     hk_rowptr = counts_to_ptr(hk_rowval, Nε)
-    hk_pos = [searchsortedfirst(hk_codes, (I[e] - 1) * Nε + (J[e] - 1)) for e in 1:Nent]
-    diag_pos = [searchsortedfirst(hk_codes, (i - 1) * Nε + (i - 1)) for i in 1:Nε]
 
-    # Group entries by their position in Hk
-    grp_ent = sortperm(hk_pos)
+    # Group entries by their position in Hk (the position is monotonic in ij, so sorting by ij groups them), and the
+    # positions of the entries and of the diagonal by walking through the sorted codes
+    grp_ent = sortperm(ij)
+    hk_pos = Vector{Int64}(undef, Nent)
+    pos = 1
+    for e in grp_ent
+        while hk_codes[pos] < ij[e]; pos += 1; end
+        hk_pos[e] = pos
+    end
+    diag_pos = Vector{Int64}(undef, Nε)
+    pos = 1
+    for i in 1:Nε
+        while hk_codes[pos] < diag_codes[i]; pos += 1; end
+        diag_pos[i] = pos
+    end
     grp_ptr = counts_to_ptr(hk_pos, length(hk_codes))
-
-    dev(x) = to_device(device, Ti.(x))
-    return DeviceLinearMap(Nε, NR, dev(I), dev(J), dev(Ridx), blocks, dev(hk_rowptr), dev(hk_colval), dev(hk_rowval),
-        dev(grp_ptr), dev(grp_ent), dev(diag_pos))
+    return (Nε=Nε, NR=NR, I=I, J=J, Ridx=Ridx, blocks=blocks, hk_rowptr=hk_rowptr, hk_colval=hk_colval, hk_rowval=hk_rowval,
+            grp_ptr=grp_ptr, grp_ent=grp_ent, diag_pos=diag_pos)
 end
+
+"""
+    DeviceLinearMap(host, device)
+    DeviceLinearMap(models, index, Nε, NR, device; soc=false)
+
+Move the host arrays of a linear map (`host_linear_map`) to `device`, or build the `DeviceLinearMap` of structure `index`
+for the models of an `EffectiveHamiltonian`.
+"""
+function DeviceLinearMap(host::NamedTuple, device)
+    Ti = Int32
+    dev(x) = to_device(device, Ti.(x))
+    blocks = map(host.blocks) do b
+        if haskey(b, :A)
+            T = eltype(b.A.nzval)
+            # The CSC arrays of At (A) are the CSR arrays of A (At)
+            DeviceSparseBlock(b.m, b.nparams, dev(b.At.colptr), dev(b.At.rowval), to_device(device, T.(b.At.nzval)),
+                dev(b.A.colptr), dev(b.A.rowval), to_device(device, T.(b.A.nzval)))
+        else
+            DeviceKernelBlock(b.m, b.nparams, dev(b.rows), to_device(device, b.X), to_device(device, b.D), b.γ)
+        end
+    end
+    return DeviceLinearMap(host.Nε, host.NR, dev(host.I), dev(host.J), dev(host.Ridx), blocks, dev(host.hk_rowptr),
+        dev(host.hk_colval), dev(host.hk_rowval), dev(host.grp_ptr), dev(host.grp_ent), dev(host.diag_pos))
+end
+
+DeviceLinearMap(models, index, Nε, NR, device; soc=false) = DeviceLinearMap(host_linear_map(models, index, Nε, NR, soc=soc), device)
