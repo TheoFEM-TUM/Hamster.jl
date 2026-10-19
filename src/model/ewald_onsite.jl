@@ -206,14 +206,54 @@ function ewald_settings(conf)
 end
 
 """
-    apply_ewald_settings!(conf; rank=0, verbosity=get_verbosity(conf))
+    cell_size(lattice)
 
-Use a fitted model with the Ewald settings it was fitted with: the settings in the header of the parameter file
-(`init_params` of the `Ewald` block, else `init_params`) that are not set in the config are taken from the file, e.g.,
-for larger cells. Settings set in the config that differ from the file raise an error, unless `check_params = false` in
-the `Ewald` block. For `method = ewald`, rcut and α only affect the numerics and are not taken from the file.
+Largest perpendicular width of the cell spanned by the columns of `lattice`, i.e., the longest wavelength of a
+periodic potential in the cell (the smallest reciprocal lattice vector is 2π / cell_size).
 """
-function apply_ewald_settings!(conf; rank=0, verbosity=get_verbosity(conf))
+cell_size(lattice) = maximum(abs(det(lattice)) / norm(cross(lattice[:, j], lattice[:, k])) for (j, k) in ((2, 3), (3, 1), (1, 2)))
+
+"""
+    apply_ewald_settings!(conf; strcs=Structure[], comm=nothing, training=false, rank=0, verbosity=get_verbosity(conf))
+
+Ewald settings of a model, before it is built:
+
+1. Use a fitted model with the settings it was fitted with: the settings in the header of the parameter file
+   (`init_params` of the `Ewald` block, else `init_params`) that are not set in the config are taken from the file,
+   e.g., for larger cells. Settings set in the config that differ from the file raise an error, unless
+   `check_params = false` in the `Ewald` block. For `method = ewald`, rcut and α only affect the numerics and are not
+   taken from the file.
+2. Wolf and Zahn, where α = 3 / rcut (`ewald_alpha`) unless `alpha` is set: in a fit (`training`) without `rcut` and
+   `alpha`, rcut = 1.5 L with the size L of the training cells (`cell_size`, largest over `strcs` and the ranks of `comm`),
+   i.e. α = 2 / L, so that the potential of the longest wavelength in the cells is kept to ≥ 90 % (1 - exp(-k²/4α²) at
+   k = 2π/L). With only `alpha` given, rcut = 3 / α. Both are written to the header of the parameter file at the end of
+   the fit. Without a fit, rcut or alpha have to come from the file or the config.
+"""
+function apply_ewald_settings!(conf; strcs=Structure[], comm=nothing, training=false, rank=0, verbosity=get_verbosity(conf))
+    adopt_ewald_settings!(conf, rank=rank, verbosity=verbosity)
+    lowercase(get_ewald_method(conf)) ∈ ("wolf", "zahn") || return nothing
+    set_rcut, set_alpha = conf("rcut", "Ewald") ≠ "default", conf("alpha", "Ewald") ≠ "default"
+    (set_alpha && set_rcut) && return nothing
+    if set_alpha
+        set_value!(conf, "rcut", "Ewald", 3 / get_ewald_alpha(conf))
+        return nothing
+    end
+    set_rcut && return nothing
+    if !training
+        error("Ewald method $(get_ewald_method(conf)) without rcut and alpha: they are set from the size of the training " *
+              "cells in a fit and written to its params.dat. Use the params.dat of a fit (init_params) or set rcut or alpha " *
+              "in the Ewald block.")
+    end
+    L = isempty(strcs) ? 0.0 : maximum(cell_size(strc.lattice) for strc in strcs)
+    isnothing(comm) || (L = MPI.Allreduce(L, max, comm))
+    set_value!(conf, "rcut", "Ewald", 1.5 * L)
+    if rank == 0 && verbosity > 0
+        @printf("Wolf range from the training cells (L = %.3f Å): rcut = 1.5 L = %.3f Å, alpha = 3 / rcut = %.4f 1/Å\n", L, 1.5 * L, 2 / L)
+    end
+    return nothing
+end
+
+function adopt_ewald_settings!(conf; rank=0, verbosity=get_verbosity(conf))
     get_ewald_check_params(conf) || return nothing
     file = get_ewald_init_params(conf) ≠ "default" ? get_ewald_init_params(conf) : string(get_init_params(conf))
     isfile(file) || return nothing

@@ -93,8 +93,15 @@ With `alpha = 0` (default), α is computed from the Ewald `rcut`:
   is screened by a Gaussian charge cloud of radius ≈ 1/α, so potential fluctuations with wavelengths longer than
   ≈ π/α are suppressed. Smaller α (larger rcut) comes closer to Ewald. The cost grows with rcut³.
 
-The default Ewald `rcut` is the TB cutoff. For Wolf, this is usually far too short (α = 3 / 5.5 Å ≈ 0.55 1/Å keeps only
-a small part of the potential), so set `rcut` (or `alpha`) explicitly, e.g., `rcut = 18` for α ≈ 0.17 1/Å.
+For `method = ewald`, the default `rcut` is the TB cutoff. For Wolf and Zahn, `rcut` sets the range of the
+electrostatics, and α = 3 / rcut follows from it (unless `alpha` is set, then rcut = 3 / α). In a fit without `rcut` and
+`alpha`, the range follows from the training cells: rcut = 1.5 L, i.e. α = 2 / L, where L is the largest perpendicular
+width of the training cells (the longest wavelength in them). Wolf then keeps at least 90 % of the potential of every wavelength
+that occurs in the training data (the fraction 1 - exp(-k²/4α²) at k = 2π/L), while longer wavelengths, which only occur
+in larger cells and are not tested by the training data, are screened. For 2×2×2 CsPbBr3 (L = 11.87 Å), α = 0.168 1/Å
+and rcut = 17.8 Å. α and rcut are written to the parameter file at the end of the fit (see below), so that the model
+uses the same screening in larger cells. Without a fit, `rcut` or `alpha` have to come from the parameter file or the
+config.
 
 ---
 

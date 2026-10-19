@@ -87,7 +87,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
          return system_strcs
       end
       train_bases = Basis[Basis(strc, conf, comm=comm_active) for strc in train_strcs]
-      ham_train = EffectiveHamiltonian(train_strcs, train_bases, comm_active, conf, rank=active_rank, nranks=active_size, label="training set", write_summary=write_output)
+      ham_train = EffectiveHamiltonian(train_strcs, train_bases, comm_active, conf, rank=active_rank, nranks=active_size, label="training set", write_summary=write_output, training=true)
       
       # EffectiveHamiltonian model for validation set
       val_strcs = mapreduce(vcat, local_val_inds, init=Structure[]) do (system, val_inds)

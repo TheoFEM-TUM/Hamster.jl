@@ -288,4 +288,30 @@ end
             @test Hamster.get_ewald_rcut(other) == 8.0
         end
     end
+
+    # Wolf without rcut and alpha: from the size of the training cells in a fit, error otherwise
+    @test Hamster.cell_size([2.0 0 0; 0 3.0 0; 0 0 4.0]) ≈ 4.0
+    @test Hamster.cell_size([1.0 0.5 0; 0 1.0 0; 0 0 1.0]) ≈ 1.0     # widths 1/norm([1, -0.5]), 1 and 1
+    default = cspbbr3_conf()
+    set_value!(default, "method", "Ewald", "wolf")
+    @test_throws ErrorException Hamster.apply_ewald_settings!(default, strcs=[strc])
+    Hamster.apply_ewald_settings!(default, strcs=[strc], comm=comm, training=true)
+    L = Hamster.cell_size(strc.lattice)
+    @test Hamster.get_ewald_rcut(default) ≈ 1.5 * L
+    @test Hamster.ewald_alpha("wolf", Hamster.get_ewald_rcut(default), Hamster.get_ewald_alpha(default)) ≈ 2 / L
+    explicit = cspbbr3_conf()
+    set_value!(explicit, "method", "Ewald", "wolf")
+    set_value!(explicit, "rcut", "Ewald", 12.0)
+    Hamster.apply_ewald_settings!(explicit, strcs=[strc], training=true)
+    @test Hamster.get_ewald_rcut(explicit) == 12.0 && Hamster.ewald_alpha("wolf", 12.0, Hamster.get_ewald_alpha(explicit)) ≈ 0.25
+    explicit_alpha = cspbbr3_conf()
+    set_value!(explicit_alpha, "method", "Ewald", "wolf")
+    set_value!(explicit_alpha, "alpha", "Ewald", 0.25)
+    Hamster.apply_ewald_settings!(explicit_alpha, strcs=[strc], training=true)
+    @test Hamster.get_ewald_alpha(explicit_alpha) == 0.25 && Hamster.get_ewald_rcut(explicit_alpha) ≈ 12.0
+    only_rcut = cspbbr3_conf()
+    set_value!(only_rcut, "method", "Ewald", "wolf")
+    set_value!(only_rcut, "rcut", "Ewald", 15.0)
+    Hamster.apply_ewald_settings!(only_rcut, strcs=[strc])                    # no fit: alpha = 3 / rcut when the model is built
+    @test Hamster.ewald_alpha("wolf", Hamster.get_ewald_rcut(only_rcut), Hamster.get_ewald_alpha(only_rcut)) ≈ 0.2
 end
