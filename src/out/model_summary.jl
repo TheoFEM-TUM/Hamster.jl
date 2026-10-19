@@ -38,6 +38,21 @@ function correction_statistics(Δε::AbstractVector)
 end
 
 """
+    mean_uncertainty(σ_strc, nstrc, σ, nsites)
+
+Uncertainty (in meV of Δε) of the subtracted species mean φ̄: the standard error σ_strc / √nstrc of the per-structure
+means, or for a single structure the conservative estimate σ / √nsites from the site corrections.
+"""
+function mean_uncertainty(σ_strc, nstrc, σ, nsites)
+    nstrc > 1 && return σ_strc / sqrt(nstrc)
+    return nsites > 1 ? σ / sqrt(nsites) : NaN
+end
+
+# Above this uncertainty of φ̄ (meV), the Ewald summary warns that the onsite corrections depend on the structures
+# of the run
+const EWALD_MEAN_TOL = 10.0
+
+"""
     write_model_summary(ewald::EwaldOnsites, comm, conf; kwargs...)
 
 Append a summary of the Ewald onsite model to `hamster.out`.
@@ -82,15 +97,17 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         write_summary_line(io, "subtracted species mean φ̄", join(["$e $(@sprintf("%.4f", m)) V" for (e, m) in zip(elements, species_mean)], ", "))
         println(io)
         println(io, "  Onsite corrections Δε = -γ (φ - φ̄) per species (meV):")
-        widths = [7, 6, 6, 7, 7, 7, 7, 6, 6, 6]
-        write_table_row(io, ["species", "sites", "σ", "min", "p1", "p99", "max", "max/σ", ">3σ %", "σ_strc"], widths)
+        widths = [7, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6]
+        write_table_row(io, ["species", "sites", "σ", "min", "p1", "p99", "max", "max/σ", ">3σ %", "σ_strc", "δφ̄"], widths)
+        δφ̄ = zeros(nspecies)
         for (p, type) in enumerate(ewald.param_labels)
             s = correction_statistics(Δε[p])
             means = [m for (t, m) in structure_means if t == type]
-            σ_strc = length(means) > 1 ? 1000 * ewald.params[p] * std(means, corrected=false) : NaN
+            σ_strc = length(means) > 1 ? 1000 * abs(ewald.params[p]) * std(means, corrected=false) : NaN
+            δφ̄[p] = mean_uncertainty(σ_strc, length(means), s.σ, s.n)
             write_table_row(io, [elements[p], string(s.n), format_number(s.σ, 1), format_number(s.min, 1), format_number(s.p1, 1),
                                  format_number(s.p99, 1), format_number(s.max, 1), format_number(s.tail, 2),
-                                 format_number(100 * s.frac3σ, 2), format_number(σ_strc, 1)], widths)
+                                 format_number(100 * s.frac3σ, 2), format_number(σ_strc, 1), format_number(δφ̄[p], 1)], widths)
         end
         println(io)
         write_legend(io, "φ̄: species mean of the site potentials over all structures of this run.")
@@ -101,6 +118,18 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         write_legend(io, ">3σ %: percentage of sites with |Δε| > 3σ (0.27% for a Gaussian distribution).")
         write_legend(io, "σ_strc: spread of the per-structure species means, i.e. the part of Δε that is lost if the " *
                          "model is built for a single structure.")
+        write_legend(io, "δφ̄: uncertainty of φ̄ in meV of Δε, σ_strc / √(number of structures) (single structure: " *
+                         "σ / √sites). The onsite corrections shift by about δφ̄ if other structures are computed " *
+                         "together.")
+        worst = maximum(x -> isnan(x) ? 0.0 : x, δφ̄, init=0.0)
+        if worst > EWALD_MEAN_TOL
+            warning = "The species means φ̄ subtracted from the Ewald potentials are uncertain by up to " *
+                      "$(@sprintf("%.1f", worst)) meV (δφ̄), so the onsite corrections depend on the structures computed " *
+                      "together. Compute more structures in one run (or larger cells)."
+            println(io)
+            write_legend(io, "Warning: " * warning)
+            @warn warning
+        end
         write_separator(io)
     end
     return nothing

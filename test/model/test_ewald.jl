@@ -134,6 +134,9 @@ end
     @test s.n == 5 && s.σ ≈ √2 && s.min == -2 && s.max == 2
     @test s.tail ≈ 2 / √2 && s.frac3σ == 0
     @test isnan(Hamster.correction_statistics(Float64[]).σ)
+    @test Hamster.mean_uncertainty(30.0, 9, 80.0, 72) ≈ 10
+    @test Hamster.mean_uncertainty(NaN, 1, 80.0, 16) ≈ 20
+    @test isnan(Hamster.mean_uncertainty(NaN, 1, 80.0, 1))
 
     mktempdir() do dir
         cd(dir) do
@@ -151,6 +154,7 @@ end
                 @test occursin(Regex("\\n    $element\\s+\\d+ "), out)
             end
             @test count("real-space neighbor grid:    rebuilt", out) == 1
+            @test occursin(r"σ_strc\s+δφ̄", out)
         end
     end
 end
