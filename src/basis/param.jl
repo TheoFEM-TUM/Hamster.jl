@@ -208,6 +208,7 @@ Writes the tight-binding (TB) parameters, system configuration, and optional spi
 # Keyword Arguments
 - `filename`: The name of the file (excluding the extension) to which the data will be written (default: `"params"`).
 - `ewald_types`, `ewald_parameters`: Ewald coupling per ion type (optional), written as `ewald_<type>` lines.
+- `ewald_settings`: Ewald method, rcut, α and charges (optional, see `ewald_settings`), written to the header.
 
 # File Format
 The file written contains the following:
@@ -217,7 +218,7 @@ The file written contains the following:
 4. **Ewald coupling** (optional): coupling for each ion type, if provided.
 """
 function write_params(parameters::Vector, parameter_values::Vector, ion_types::Vector=[], soc_parameters::Vector=[], conf::Config=get_empty_config();
-                      filename="params", ewald_types::Vector=[], ewald_parameters::Vector=[])
+                      filename="params", ewald_types::Vector=[], ewald_parameters::Vector=[], ewald_settings=nothing)
     
     file = open(filename*".dat", "w")
 
@@ -230,6 +231,14 @@ function write_params(parameters::Vector, parameter_values::Vector, ion_types::V
     for ion_type in unique_ion_types
         println(file, "  $ion_type"*"_alpha = ", get_alpha(conf, ion_type))
         println(file, "  $ion_type"*"_n = ", get_n(conf, ion_type))
+    end
+    if !isnothing(ewald_settings)
+        println(file, "  ewald_method = ", ewald_settings.method)
+        println(file, "  ewald_rcut = ", ewald_settings.rcut)
+        println(file, "  ewald_alpha = ", ewald_settings.alpha)
+        for (type, q) in ewald_settings.qeff
+            println(file, "  ewald_qeff_$type = ", q)
+        end
     end
     println(file, "end")
     println(file, "")
@@ -326,6 +335,7 @@ function check_consistency(conf_values, conf::Config)
     if haskey(conf_values, "onsite"); push!(consistent, conf_values["onsite"] == string(get_onsite(conf))); end
     if haskey(conf_values, "sepNN"); push!(consistent, conf_values["sepNN"] == string(get_sepNN(conf))); end
     for (key, value) in conf_values
+        startswith(key, "ewald_") && continue
         if occursin("_n", key)
             ion_type = string(split(key, "_")[1])
             push!(consistent, value == string(get_n(conf, ion_type)))

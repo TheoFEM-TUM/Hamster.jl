@@ -47,8 +47,10 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         label="",
         species_mean,
         structure_means,
+        method=get_ewald_method(conf),
         rcut=get_ewald_rcut(conf),
-        alpha=get_ewald_alpha(conf),
+        alpha=ewald_alpha(method, rcut, get_ewald_alpha(conf)),
+        alpha_auto=get_ewald_alpha(conf) == 0,
         grid_rebuilt=false,
         filename="hamster.out")
 
@@ -74,7 +76,8 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         write_separator(io, char='-')
         elements = number_to_element.(ewald.param_labels)
         write_summary_line(io, "structures", nstrc)
-        alpha == 0 && write_summary_line(io, "alpha (4 / rcut)", @sprintf("%.4f 1/Å", 4.0 / rcut))
+        write_summary_line(io, "method, rcut", @sprintf("%s, %.2f Å", method, rcut))
+        write_summary_line(io, "alpha", @sprintf("%.4f 1/Å", alpha) * (alpha_auto ? " ($(lowercase(method) ∈ ("wolf", "zahn") ? 3 : 4) / rcut)" : ""))
         grid_rebuilt && write_summary_line(io, "real-space neighbor grid", "rebuilt (Ewald rcut > TB rcut or grid_size)")
         write_summary_line(io, "subtracted species mean φ̄", join(["$e $(@sprintf("%.4f", m)) V" for (e, m) in zip(elements, species_mean)], ", "))
         println(io)
