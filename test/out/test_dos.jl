@@ -143,3 +143,40 @@ end
         end
     end
 end
+
+@testset "KPM moments" begin
+    rng = Hamster.Random.MersenneTwister(5)
+    N, M, Nvec = 40, 12, 3
+    A = sprandn(rng, ComplexF64, N, N, 0.2)
+    H = (A + A') / 2
+    H̃ = H ./ (1.01 * maximum(sum(abs.(H), dims=2)))
+    Hoff = Hamster.offsite(H, repeat(1:10, inner=4))
+    X = randn(rng, ComplexF64, 3, N)
+    @test Hamster.hermitian_mul!(similar(X), H, X) ≈ transpose(H * transpose(X))
+
+    members = [collect(1:2:N), collect(2:2:N)]
+    pairs = [(1, 1), (1, 2)]
+    μ_dos, μ_pdos, μ_cohp = Hamster.kpm_moments(H̃, Hoff, members, pairs, M, Nvec)
+    # Dense Chebyshev recursion with the same random-phase vectors
+    ref_dos, ref_pdos, ref_cohp = zeros(M), zeros(M, 2), zeros(M, 2)
+    for ivec in 1:Nvec
+        v = exp.(2π * im .* rand(Hamster.Random.MersenneTwister(1234 + ivec), N))
+        T = [v, Matrix(H̃) * v]
+        for m in 3:M
+            push!(T, 2 * Matrix(H̃) * T[end] - T[end-1])
+        end
+        for m in 1:M
+            ref_dos[m] += real(dot(v, T[m])) / Nvec
+            for (l, B) in enumerate(members)
+                ref_pdos[m, l] += real(dot(v[B], T[m][B])) / Nvec
+            end
+            for (p, (a, b)) in enumerate(pairs)
+                x = zeros(ComplexF64, N); x[members[a]] = v[members[a]]
+                ref_cohp[m, p] += (a == b ? 1 : 2) * real(dot((Matrix(Hoff) * x)[members[b]], T[m][members[b]])) / Nvec
+            end
+        end
+    end
+    @test μ_dos ≈ ref_dos
+    @test μ_pdos ≈ ref_pdos
+    @test μ_cohp ≈ ref_cohp
+end
