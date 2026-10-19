@@ -74,7 +74,7 @@ Pages = ["conf/read_config.jl", "conf/config.jl"]
 
 ```@autodocs
 Modules = [Hamster]
-Pages = ["output.jl"]
+Pages = ["output.jl", "out/model_summary.jl"]
 ```
 
 # DOS, PDOS and COHP

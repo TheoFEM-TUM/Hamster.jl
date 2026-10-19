@@ -41,8 +41,11 @@ Constructs a `HamiltonianKernel` model for machine learning-based Hamiltonian pa
 - `sim_params`: Kernel similarity measure.
 - `update_ml`: Boolean flag controlling whether ML parameters are updated .
 - `mode`: ML training mode, one of `"eval"`, `"refit"`, `"expand"`.
+- `data_points`: Data points of another kernel (e.g. of the training set for the validation set). If given, no
+  data points are sampled and the parameters are initialized as zeros (they are copied from that kernel).
 - `rank`: MPI rank of the current process (default: 0).
 - `nranks`: Total number of MPI ranks (default: 1).
+- `label`, `write_summary`: Label of the model summary in `hamster.out` and whether it is written.
 
 # Returns
 A `HamiltonianKernel` object.
@@ -60,13 +63,19 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             update_ml=get_ml_update(conf),
                             mode=get_ml_mode(conf),
                             sim_mat = get_ml_sim_mat(conf),
+                            data_points = nothing,
                             rank=0,
-                            nranks=1)
+                            nranks=1,
+                            label="",
+                            write_summary=true)
     systems = [strc.system for strc in strcs]
     structure_descriptors = map(eachindex(strcs)) do n
         get_tb_descriptor(model.hs[n], model.params, strcs[n], bases[n], conf)
     end
-    if get_ml_init_params(conf)[1] ∈ ['r', 'z', 'o']
+    external_data_points = !isnothing(data_points)
+    if external_data_points
+        params = zeros(length(data_points))
+    elseif get_ml_init_params(conf)[1] ∈ ['r', 'z', 'o']
         Npoints_local = floor(Int64, Npoints / nranks)
         data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
         local_counts::Int32 = length(data_points_local)
@@ -88,15 +97,13 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
             @info "Number of samples changed from $Npoints to $N_real"
         end
         # COV_EXCL_STOP
-    else
-        data_points = nothing
     end
-    params, data_points = init_ml_params!(data_points, conf, mode=mode, update_ml=update_ml)
-    if sim_mat 
-        return HamiltonianKernelPrecalced(HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml),rank, systems, conf)
-    else
-        return HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml)
+    if !external_data_points
+        params, data_points = init_ml_params!(data_points, conf, mode=mode, update_ml=update_ml)
     end
+    kernel = HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml)
+    write_summary && write_model_summary(kernel, strcs, bases, comm, conf, rank=rank, label=label)
+    return sim_mat ? HamiltonianKernelPrecalced(kernel, rank, systems, conf) : kernel
 end
 
 exp_sim(x₁, x₂; σ=√0.05)::Float64 = exp(-normdiff(x₁, x₂)^2 / (2σ^2))

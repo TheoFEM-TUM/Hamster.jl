@@ -82,12 +82,15 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         rcut            = get_ewald_rcut(conf),
         alpha           = get_ewald_alpha(conf),
         mesh_spacing    = get_ewald_mesh_spacing(conf),
-        update          = get_ewald_update(conf))
+        update          = get_ewald_update(conf),
+        label           = "",
+        write_summary   = true)
 
     types_per_strc = Vector{UInt8}[]
     norb_per_strc = Vector{Int64}[]
     potentials = Vector{Float64}[]
     Rs_info = zeros(Int64, 2, length(strcs))
+    grid_rebuilt = false
 
     for (n, strc) in enumerate(strcs)
         pos = get_ion_positions(strc.ions, apply_distortion=true)
@@ -95,10 +98,12 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         ion_types = get_ion_types(strc.ions)
         charges = [get_qeff(conf, type) for type in number_to_element.(ion_types)]
 
+        reuse_grid = rcut ≤ min(strc.point_grid.grid_size, get_rcut(conf))
+        grid_rebuilt |= !reuse_grid
         if method == "ewald"
             ewald = ewald_sum(pos, charges, strc.lattice, 
-                                Rs              = strc.Rs, 
-                                point_grid      = strc.point_grid, 
+                                Rs              = reuse_grid ? strc.Rs : nothing, 
+                                point_grid      = reuse_grid ? strc.point_grid : nothing, 
                                 rcut            = rcut,
                                 mesh_spacing    = mesh_spacing,
                                 method          = method, 
@@ -160,6 +165,11 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     end
     MPI.Bcast!(species_mean, comm, root=0)
 
+    structure_means = Tuple{UInt8, Float64}[]
+    for n in eachindex(potentials), type in unique(types_per_strc[n])
+        push!(structure_means, (type, mean(potentials[n][types_per_strc[n] .== type])))
+    end
+
     for n in eachindex(potentials)
         for i in eachindex(potentials[n])
             typ = types_per_strc[n][i]
@@ -168,7 +178,10 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         end
     end
 
-    return EwaldOnsites(params, param_labels, potentials, types_per_strc, norb_per_strc, Rs_info, update)
+    model = EwaldOnsites(params, param_labels, potentials, types_per_strc, norb_per_strc, Rs_info, update)
+    write_summary && write_model_summary(model, comm, conf, rank=rank, label=label, species_mean=species_mean, structure_means=structure_means,
+                                         rcut=rcut, alpha=alpha, grid_rebuilt=grid_rebuilt && method == "ewald")
+    return model
 end
 
 """

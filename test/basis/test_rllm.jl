@@ -66,29 +66,17 @@ end
 
     overlaps_gaas = Hamster.get_overlaps(strc_gaas.ions, orbitals_gaas, conf)
 
+    Hamster.Random.seed!(42)
     rllm = Hamster.get_rllm(overlaps_gaas, conf)
     rllm_correct = Hamster.read_rllm(overlaps_gaas, comm, filename=string(@__DIR__)*"/test_files/rllm_true.dat")
+    xs = range(0.0, 5.0, length=200)
 
-    is_correct = Bool[]
-    for key in keys(rllm)
-        f1 = rllm[key]
-        f2 = rllm_correct[key]
-        xs = rand(100) .* 5.
-        is_correct = mean(abs.(f1.(xs) .- f2.(xs) )) < 0.001
-    end
-    @test all(is_correct)
+    @test all(mean(abs.(rllm[key].(xs) .- rllm_correct[key].(xs))) < 2e-3 for key in keys(rllm))
     rm(string(@__DIR__)*"/test_files/rllm.dat")
 
     # Test with .h5 format
     Hamster.save_rllm(rllm, comm, filename="rllm.h5")
     rllm_2 = Hamster.read_rllm(overlaps_gaas, comm, filename="rllm.h5")
-    is_correct = Bool[]
-    for key in keys(rllm)
-        f1 = rllm[key]
-        f2 = rllm_correct[key]
-        xs = rand(100) .* 5.
-        is_correct = mean(abs.(f1.(xs) .- f2.(xs) )) < 0.001
-    end
-    @test all(is_correct)
+    @test all(mean(abs.(rllm_2[key].(xs) .- rllm_correct[key].(xs))) < 2e-3 for key in keys(rllm))
     rm("rllm.h5")
 end
