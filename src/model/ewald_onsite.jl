@@ -91,6 +91,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     potentials = Vector{Float64}[]
     Rs_info = zeros(Int64, 2, length(strcs))
     grid_rebuilt = false
+    α = ewald_alpha(method, rcut, alpha)
 
     for (n, strc) in enumerate(strcs)
         pos = get_ion_positions(strc.ions, apply_distortion=true)
@@ -107,10 +108,10 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
                                 rcut            = rcut,
                                 mesh_spacing    = mesh_spacing,
                                 method          = method, 
-                                alpha           = alpha
+                                alpha           = α
                             )
         else
-            ewald = ewald_sum(pos, charges, strc.lattice, rcut=rcut, method=method, alpha=alpha)
+            ewald = ewald_sum(pos, charges, strc.lattice, rcut=rcut, method=method, alpha=α)
         end
 
         ion_indices_with_orbs = collect(1:length(ion_types))
@@ -180,8 +181,74 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
 
     model = EwaldOnsites(params, param_labels, potentials, types_per_strc, norb_per_strc, Rs_info, update)
     write_summary && write_model_summary(model, comm, conf, rank=rank, label=label, species_mean=species_mean, structure_means=structure_means,
-                                         rcut=rcut, alpha=alpha, grid_rebuilt=grid_rebuilt && method == "ewald")
+                                         method=method, rcut=rcut, alpha=α, alpha_auto=alpha == 0, grid_rebuilt=grid_rebuilt && method == "ewald")
     return model
+end
+
+"""
+    ewald_alpha(method, rcut, alpha)
+
+Damping α of the Ewald sum: `alpha` if set (≠ 0), else 4 / rcut for `ewald`, where α only splits the sum into a real-
+and a reciprocal-space part, and 3 / rcut for `wolf` and `zahn`, where α sets the screening length (erfc(3) ≈ 2⋅10⁻⁵).
+"""
+ewald_alpha(method, rcut, alpha) = alpha ≠ 0 ? Float64(alpha) : (lowercase(method) ∈ ("wolf", "zahn") ? 3.0 : 4.0) / rcut
+
+"""
+    ewald_settings(conf)
+
+Settings that define the Ewald potentials: method, rcut, the damping α actually used and the charges `qeff`, written
+to the header of the parameter file of a fit (see `apply_ewald_settings!`).
+"""
+function ewald_settings(conf)
+    method, rcut = get_ewald_method(conf), get_ewald_rcut(conf)
+    qeff = sort([(type, get_qeff(conf, type)) for (type, block) in conf.blocks if haskey(block, "qeff")])
+    return (method=method, rcut=rcut, alpha=ewald_alpha(method, rcut, get_ewald_alpha(conf)), qeff=qeff)
+end
+
+"""
+    apply_ewald_settings!(conf; rank=0, verbosity=get_verbosity(conf))
+
+Use a fitted model with the Ewald settings it was fitted with: the settings in the header of the parameter file
+(`init_params` of the `Ewald` block, else `init_params`) that are not set in the config are taken from the file, e.g.,
+for larger cells. Settings set in the config that differ from the file raise an error, unless `check_params = false` in
+the `Ewald` block. For `method = ewald`, rcut and α only affect the numerics and are not taken from the file.
+"""
+function apply_ewald_settings!(conf; rank=0, verbosity=get_verbosity(conf))
+    get_ewald_check_params(conf) || return nothing
+    file = get_ewald_init_params(conf) ≠ "default" ? get_ewald_init_params(conf) : string(get_init_params(conf))
+    isfile(file) || return nothing
+    header = read_params(file)[5]
+    haskey(header, "ewald_method") || return nothing
+
+    settings = [("method", "Ewald", header["ewald_method"])]
+    if lowercase(header["ewald_method"]) ∈ ("wolf", "zahn")
+        append!(settings, [("rcut", "Ewald", header["ewald_rcut"]), ("alpha", "Ewald", header["ewald_alpha"])])
+    end
+    for (key, value) in header
+        startswith(key, "ewald_qeff_") && push!(settings, ("qeff", key[12:end], value))
+    end
+
+    same(a, b) = (x = tryparse(Float64, string(a)); y = tryparse(Float64, string(b));
+                  isnothing(x) || isnothing(y) ? lowercase(string(a)) == lowercase(string(b)) : isapprox(x, y, rtol=1e-10))
+    adopted, differences = String[], String[]
+    for (key, block, value) in settings
+        name = block == "Ewald" ? key : "$(key) ($block)"
+        if conf(key, block) == "default"
+            set_value!(conf, key, block, value)
+            push!(adopted, "$name = $value")
+        elseif !same(conf(key, block), value)
+            push!(differences, "$name: $(conf(key, block)) in the config, $value in $file")
+        end
+    end
+    if !isempty(differences)
+        error("The Ewald settings in the config differ from the parameter file $file, with which the model was fitted:\n  " *
+              join(differences, "\n  ") * "\nRemove them from the config to use the settings of the file, or set " *
+              "check_params = false in the Ewald block to use the config.")
+    end
+    if rank == 0 && verbosity > 0 && !isempty(adopted)
+        println("Ewald settings from $file: ", join(adopted, ", "))
+    end
+    return nothing
 end
 
 """
@@ -310,11 +377,12 @@ end
     write_params(ewald::EwaldOnsites, conf=get_empty_config(); filename="params.dat")
 
 Add the Ewald coupling per species as `ewald_<element>` lines to the parameter file `filename` (written by the TB and
-SOC models before), where it is read with `init_params = params.dat` in the `Ewald` block.
+SOC models before), where it is read with `init_params = params.dat` in the `Ewald` block, and the Ewald settings
+(`ewald_settings`) to its header.
 """
 function write_params(ewald::EwaldOnsites, conf=get_empty_config(); filename="params.dat")
     isfile(filename) || return nothing
     parameters, parameter_values, ion_types, soc_parameters, _ = read_params(filename)
     write_params(parameters, parameter_values, ion_types, soc_parameters, conf, filename=replace(filename, r"\.dat$" => ""),
-                 ewald_types=number_to_element.(ewald.param_labels), ewald_parameters=ewald.params)
+                 ewald_types=number_to_element.(ewald.param_labels), ewald_parameters=ewald.params, ewald_settings=ewald_settings(conf))
 end

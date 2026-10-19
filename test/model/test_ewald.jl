@@ -212,3 +212,80 @@ end
         end
     end
 end
+
+@testset "Ewald settings in the parameter file" begin
+    @test Hamster.ewald_alpha("ewald", 5.5, 0) ≈ 4 / 5.5
+    @test Hamster.ewald_alpha("wolf", 15.0, 0) ≈ 0.2
+    @test Hamster.ewald_alpha("zahn", 15.0, 0.3) == 0.3
+
+    function cspbbr3_conf()
+        conf = get_empty_config()
+        set_value!(conf, "orbitals", "Cs", "s")
+        set_value!(conf, "orbitals", "Pb", "s px py pz")
+        set_value!(conf, "orbitals", "Br", "px py pz")
+        set_value!(conf, "qeff", "Cs", 1)
+        set_value!(conf, "qeff", "Pb", 2)
+        set_value!(conf, "qeff", "Br", -1)
+        set_value!(conf, "poscar", joinpath(@__DIR__, "test_files/POSCAR_cspbbr3_distorted"))
+        set_value!(conf, "load_rllm", true)
+        set_value!(conf, "rllm_file", joinpath(@__DIR__, "test_files/rllm_cspbbr3.dat"))
+        set_value!(conf, "rcut", 5.5)
+        set_value!(conf, "verbosity", 0)
+        return conf
+    end
+    conf = cspbbr3_conf()
+    set_value!(conf, "method", "Ewald", "wolf")
+    set_value!(conf, "rcut", "Ewald", 18.0)
+    strc = Structure(conf)
+    basis = Basis(strc, conf)
+    model = EwaldOnsites([strc], [basis], comm, conf)
+
+    mktempdir() do dir
+        cd(dir) do
+            Hamster.write_params(Hamster.ParameterLabel[], Float64[], ["Pb"], [0.25], conf)
+            Hamster.write_params(model, conf)
+            header = Hamster.read_params("params.dat")[5]
+            @test header["ewald_method"] == "wolf"
+            @test parse(Float64, header["ewald_rcut"]) == 18.0
+            @test parse(Float64, header["ewald_alpha"]) ≈ 3 / 18
+            @test parse(Float64, header["ewald_qeff_Pb"]) == 2.0 && parse(Float64, header["ewald_qeff_Br"]) == -1.0
+            @test Hamster.check_consistency(header, conf)
+
+            # Not set in the config: taken from the file
+            new = cspbbr3_conf()
+            set_value!(new, "init_params", "Ewald", "params.dat")
+            Hamster.apply_ewald_settings!(new)
+            @test Hamster.get_ewald_method(new) == "wolf"
+            @test Hamster.get_ewald_rcut(new) == 18.0 && Hamster.get_ewald_alpha(new) ≈ 3 / 18
+            @test EwaldOnsites([strc], [basis], comm, new).potentials ≈ model.potentials
+
+            # Set in the config and different: error, unless check_params = false
+            different = cspbbr3_conf()
+            set_value!(different, "init_params", "Ewald", "params.dat")
+            set_value!(different, "rcut", "Ewald", 15.0)
+            @test_throws ErrorException Hamster.apply_ewald_settings!(different)
+            set_value!(different, "qeff", "Pb", 3)
+            set_value!(different, "check_params", "Ewald", false)
+            Hamster.apply_ewald_settings!(different)
+            @test Hamster.get_ewald_rcut(different) == 15.0 && Hamster.get_qeff(different, "Pb") == 3.0
+
+            # Same settings in the config: no error
+            same = cspbbr3_conf()
+            set_value!(same, "init_params", "Ewald", "params.dat")
+            set_value!(same, "method", "Ewald", "wolf")
+            set_value!(same, "rcut", "Ewald", 18)
+            Hamster.apply_ewald_settings!(same)
+            @test Hamster.get_ewald_alpha(same) ≈ 3 / 18
+
+            # Ewald: rcut and alpha only affect the numerics and are not taken from the file
+            ewald_conf = cspbbr3_conf()
+            ewald = EwaldOnsites([strc], [basis], comm, ewald_conf)
+            Hamster.write_params(ewald, ewald_conf)
+            other = cspbbr3_conf()
+            set_value!(other, "init_params", "Ewald", "params.dat")
+            set_value!(other, "rcut", "Ewald", 8.0)
+            Hamster.apply_ewald_settings!(other)
+            @test Hamster.get_ewald_rcut(other) == 8.0
+        end
+    end
+end

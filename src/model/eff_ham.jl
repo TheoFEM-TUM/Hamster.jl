@@ -73,6 +73,7 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
     if ewald
         if rank == 0 && verbosity > 1; println("   Getting Ewald model..."); end
         begin_time = MPI.Wtime()
+        apply_ewald_settings!(conf, rank=rank)
         ewald_model = EwaldOnsites(strcs, bases, comm, conf, rank=rank, label=label, write_summary=write_summary)
         models = (models..., ewald_model)
         ewald_time = MPI.Wtime() - begin_time

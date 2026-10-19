@@ -83,6 +83,19 @@ where K(r) is the chosen kernel.
 - No reciprocal-space contribution
 - Faster ``(O(N))``, but approximate
 
+### Damping α and cutoff
+
+With `alpha = 0` (default), α is computed from the Ewald `rcut`:
+
+- `method = ewald`: α = 4 / rcut. Here, α only splits the sum into a real- and a reciprocal-space part; the result
+  does not depend on it.
+- `method = wolf` / `zahn`: α = 3 / rcut (erfc(3) ≈ 2⋅10⁻⁵ at the cutoff). Here, α is a physical parameter: each charge
+  is screened by a Gaussian charge cloud of radius ≈ 1/α, so potential fluctuations with wavelengths longer than
+  ≈ π/α are suppressed. Smaller α (larger rcut) comes closer to Ewald. The cost grows with rcut³.
+
+The default Ewald `rcut` is the TB cutoff. For Wolf, this is usually far too short (α = 3 / 5.5 Å ≈ 0.55 1/Å keeps only
+a small part of the potential), so set `rcut` (or `alpha`) explicitly, e.g., `rcut = 18` for α ≈ 0.17 1/Å.
+
 ---
 
 ## Coupling per Species
@@ -108,6 +121,32 @@ parameters, and read with `init_params = params.dat` in the `Ewald` block, which
 Without `init_params`, the `ewald_` lines of a parameter file are ignored, so that an explicitly set `charge_scale`
 (e.g. in a hyperparameter search) is not overwritten. The effective charges `qeff` and thus the
 electrostatic potential (and its neutrality) are not changed by the coupling.
+
+## Settings in the Parameter File
+
+At the end of a fit, the settings that define the potentials are written to the header of `params.dat`, together
+with the couplings:
+
+```
+begin unknown_system
+  rcut = 5.5
+  ...
+  ewald_method = wolf
+  ewald_rcut = 18.0
+  ewald_alpha = 0.16666666666666666
+  ewald_qeff_Br = -0.756
+  ewald_qeff_Cs = 1.02
+  ewald_qeff_Pb = 1.248
+end
+```
+
+When a model is built from this file (`init_params` of the `Ewald` block, otherwise `init_params`), settings that are
+not set in the config are taken from the header, so that a fitted model is used with the settings it was fitted with,
+e.g., in larger cells. The adopted settings are printed and appear in the model summary. If a setting is set in the
+config and differs from the header, Hamster stops with an error, since the fitted couplings belong to the settings of
+the file. To change them deliberately (e.g., to refit with a different α), set `check_params = false` in the `Ewald`
+block. For `method = ewald`, `rcut` and `alpha` only affect the numerics and are not taken from the file; `method` and
+`qeff` are.
 
 ## Mean Centering
 
@@ -135,7 +174,8 @@ training and the validation set). Settings from the config file are not repeated
   Ewald Model Summary (training set)
 --------------------------------------------------------------------------------
       structures:                  6
-      alpha (4 / rcut):            0.7273 1/Å
+      method, rcut:                ewald, 5.50 Å
+      alpha:                       0.7273 1/Å (4 / rcut)
       subtracted species mean φ̄:   Br 4.7532 V, Pb -8.1202 V
 
   Onsite corrections Δε = -γ (φ - φ̄) per species (meV):
