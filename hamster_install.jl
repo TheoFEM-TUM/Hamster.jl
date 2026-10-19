@@ -1,3 +1,48 @@
+const hamster_path = @__DIR__
+
+# Precompiled at the end with `hamster --precompile` (see hamster_precompile.jl)
+ENV["JULIA_PKG_PRECOMPILE_AUTO"] = "0"
+
+const usage = """
+Usage: hamster --install [--add_path yes|no] [--bashrc FILE] [--add_test_exec] [--test] [--gpu]
+       (or: julia hamster_install.jl [options])
+  --add_path yes|no   Add the Hamster folder to PATH in the bashrc (default: yes)
+  --bashrc FILE       File to add PATH to (default: ~/.bashrc)
+  --add_test_exec     Create a hamster_test executable to run the test suite
+  --test              Run the test suite after the installation
+  --gpu               Also install CUDA.jl and CUDSS.jl for GPU runs
+"""
+
+function parse_install_args(args)
+    options = Dict{String, Any}("add_path" => "yes", "bashrc" => "default", "add_test_exec" => false, "test" => false, "gpu" => false)
+    i = 1
+    while i ≤ length(args)
+        arg = args[i]
+        if arg ∈ ("--add_path", "--bashrc", "--exec_name")
+            i < length(args) || error("$arg requires a value.\n$usage")
+            if arg == "--exec_name"
+                @warn "--exec_name is no longer supported: the executable is always called hamster."
+            else
+                options[arg[3:end]] = args[i+1]
+            end
+            i += 2
+        elseif arg ∈ ("--add_test_exec", "--test", "--gpu")
+            options[arg[3:end]] = true
+            i += 1
+        elseif arg ∈ ("-h", "--help")
+            print(usage)
+            exit(0)
+        else
+            error("Unknown option $arg.\n$usage")
+        end
+    end
+    options["add_path"] ∈ ("yes", "no") || error("--add_path must be yes or no.\n$usage")
+    options["bashrc"] == "default" && (options["bashrc"] = joinpath(homedir(), ".bashrc"))
+    return options
+end
+
+options = parse_install_args(ARGS)
+
 println("""
 
 Welcome to
@@ -9,132 +54,66 @@ Welcome to
 ||  |_| |_|  \\__,_| |_| |_| |_| |___/  \\__|  \\___| |_|    (_)  _/ | |_|  ||
 ||                                                            |__/       ||
 ===========================================================================
-Hamiltonian-learning 
-    Approach for Multiscale Simulations 
+Hamiltonian-learning
+    Approach for Multiscale Simulations
         using a Transferable and Efficient Representation.
 
 """)
 
+# Loaded after the options, so that --help also works without Pkg in the load path (e.g., in Pkg.test)
 using Pkg
 
-# Add and import the `ArgParse` package
-Pkg.add("ArgParse"); Pkg.add("MPI"); Pkg.add("Printf")
-using ArgParse
+# The user's default environment: JULIA_PROJECT if set (e.g., by the Julia modules on JSC systems), else @v#.#
+const default_env = dirname(Base.active_project())
 
-hamster_path = string(@__DIR__)
-
+# Make Hamster available in the default environment (e.g., `using Hamster` in the REPL)
+Pkg.activate(default_env)
 Pkg.develop(PackageSpec(path=hamster_path))
+
+println("Installing the dependencies of Hamster.jl...")
 Pkg.activate(hamster_path)
 Pkg.instantiate()
 
-# Parse command line arguments
-function parse_commandline()
-    s = ArgParseSettings()
+chmod(joinpath(hamster_path, "hamster"), 0o755)
 
-    @add_arg_table s begin
-        "--exec_name"
-            help = "defines the name of the Hamster executable alias"
-            arg_type = String
-            default = "hamster"
-        "--bashrc"
-            help = "sets the path where your executable is located"
-            arg_type = String
-            default = "default"
-        "--add_path"
-            help = "decides whether the Hamster package is added to path"
-            arg_type = String
-            default = "yes"
-        "--add_test_exec"
-            help = "if true, an executable to run individual test sets is created"
-            action = :store_true
-    end
-    args :: Dict{String, Union{String, Bool}} = parse_args(s)
-    return args
+if options["gpu"]
+    println("Installing the GPU dependencies (CUDA.jl, CUDSS.jl) into $default_env...")
+    Pkg.activate(default_env)
+    Pkg.add(["CUDA", "CUDSS"])
 end
 
-#Check if Hamster can be imported
+println("Precompiling Hamster.jl...")
 try
-    cd("..")
-    using Hamster
-    cd(hamster_path)
+    run(`$(joinpath(hamster_path, "hamster")) --precompile`)
 catch e
     println("Hamster was not installed successfully.")
     rethrow(e)
 end
 
-# Generate Hamster executable
-args = parse_commandline()
-exec_name = args["exec_name"]
-exec_file = joinpath(hamster_path, exec_name)
-if !isfile(exec_file)
-    println("Generating Hamster.jl executable...")
-    open(exec_file, "w+") do file
-        println(file, """
-        #!/bin/bash
-
-        # Default: use JULIA_NUM_THREADS (or SLURM_CPUS_PER_TASK) if set, else leave unspecified
-        THREADS=\${SLURM_CPUS_PER_TASK:-\$JULIA_NUM_THREADS}
-
-        # Parse command-line arguments for -t THREADS
-        ARGS=()
-        while [[ \$# -gt 0 ]]; do
-            key="\$1"
-            case \$key in
-                -t|--threads)
-                THREADS="\$2"
-                shift # past argument
-                shift # past value
-                ;;
-                *) # preserve other arguments
-                ARGS+=("\$1")
-                shift
-                ;;
-            esac
-        done
-
-        # Build julia command
-        JULIA_CMD=(julia)
-
-        # Only add -t if THREADS is set
-        if [[ -n "\$THREADS" ]]; then
-            JULIA_CMD+=(-t "\$THREADS")
-        fi
-
-        JULIA_CMD+=(--project=$hamster_path)
-        JULIA_CMD+=($(joinpath(hamster_path, "hamster_main.jl")))
-        JULIA_CMD+=("\${ARGS[@]}")
-
-        # Execute
-        "\${JULIA_CMD[@]}"
-        """)
-    end
-    println("")
-    run(`chmod +x $exec_file`)
+if options["add_test_exec"]
+    test_exec_file = joinpath(hamster_path, "hamster_test")
+    println("Generating the hamster_test executable...")
+    write(test_exec_file, """
+    #!/bin/bash
+    HAMSTER_DIR="\$(dirname "\$(readlink -f "\${BASH_SOURCE[0]}")")"
+    exec julia --project="\$HAMSTER_DIR" "\$HAMSTER_DIR/test/runtests.jl" "\$@"
+    """)
+    chmod(test_exec_file, 0o755)
 end
 
-# Generate Hamster test executable
-test_exec_file = joinpath(hamster_path, exec_name*"_test")
-if !isfile(test_exec_file) && args["add_test_exec"]
-    println("Generating Hamster.jl test executable...")
-    open(test_exec_file, "w+") do file
-        println(file, "#!/bin/bash")
-        println(file, "julia --project=$hamster_path $hamster_path/test/runtests.jl \"\$@\"")
+if options["add_path"] == "yes"
+    path_line = "export PATH=\"\$PATH:$hamster_path\""
+    bashrc = options["bashrc"]
+    if isfile(bashrc) && occursin(path_line, read(bashrc, String))
+        println("Hamster.jl is already in PATH ($bashrc).")
+    else
+        println("Adding Hamster.jl to PATH ($bashrc)...")
+        open(bashrc, "a") do io
+            println(io, "\n# Add Hamster.jl to PATH.")
+            println(io, path_line)
+        end
     end
-    println("")
-    run(`chmod +x $test_exec_file`)
 end
 
-# Add Hamster executable to path
-if args["add_path"] == "yes"
-    println("Adding Hamster.jl to PATH...")
-    bashrc_path = args["bashrc"] == "default" ? joinpath(ENV["HOME"], ".bashrc") : args["bashrc"]
-    open(bashrc_path, "a") do bashrc_file
-        println(bashrc_file, "")
-        println(bashrc_file, "# Add Hamster.jl to PATH.")
-        println(bashrc_file, "export PATH=\"\$PATH:$hamster_path\"")
-    end
-    println("")
-end
-
-Pkg.test("Hamster")
-println("Hamster was configured successfully.")
+options["test"] && Pkg.test("Hamster")
+println("Hamster was configured successfully. Run `hamster --help` to get started.")

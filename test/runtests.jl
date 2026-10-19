@@ -16,6 +16,7 @@ if test_all || test_only == "Parse"
         include("parse/test_poscar.jl")
         include("parse/test_wannier90.jl")
         include("parse/test_commandline.jl")
+        include("parse/test_executable.jl")
     end
 end
 

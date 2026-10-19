@@ -1,0 +1,103 @@
+#!/bin/bash
+# Command-line interface of Hamster.jl, see `hamster --help`
+
+HAMSTER_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+
+print_help() {
+    cat <<EOF
+Hamster.jl $(sed -n 's/^version = "\(.*\)"/\1/p' "$HAMSTER_DIR/Project.toml")
+Hamiltonian-learning Approach for Multiscale Simulations using a Transferable and Efficient Representation
+
+Usage:
+  hamster [-t THREADS] [--conf FILE] [--TAG VALUE ...]   Run a calculation
+  hamster --install [OPTIONS]                           Install the dependencies and precompile Hamster
+  hamster --update [--no-pull]                          Pull the latest code, update the dependencies, precompile
+  hamster --precompile                                  Precompile Hamster (and its GPU code on a GPU node)
+  hamster --version                                     Show the version of Hamster and Julia
+  hamster --help                                        Show this help
+
+Run options:
+  -t, --threads N     Number of Julia threads (default: SLURM_CPUS_PER_TASK or JULIA_NUM_THREADS)
+  --conf FILE         Config file (default: hconf in the current directory)
+  --TAG VALUE         Set any config tag, e.g. --verbosity 2
+
+Install options:
+  --add_path yes|no   Add the Hamster folder to PATH in the bashrc (default: yes)
+  --bashrc FILE       File to add PATH to (default: ~/.bashrc)
+  --add_test_exec     Create a hamster_test executable to run the test suite
+  --test              Run the test suite after the installation
+  --gpu               Also install CUDA.jl and CUDSS.jl for GPU runs
+
+With MPI, start Hamster with mpiexecjl or srun, e.g. mpiexecjl -n 4 hamster -t 8.
+Documentation: https://theofem-tum.github.io/Hamster.jl/dev/
+EOF
+}
+
+print_version() {
+    echo "Hamster.jl $(sed -n 's/^version = "\(.*\)"/\1/p' "$HAMSTER_DIR/Project.toml")"
+    if git -C "$HAMSTER_DIR" rev-parse --git-dir > /dev/null 2>&1; then
+        local commit branch modified
+        commit=$(git -C "$HAMSTER_DIR" rev-parse --short HEAD)
+        branch=$(git -C "$HAMSTER_DIR" rev-parse --abbrev-ref HEAD)
+        modified=$(git -C "$HAMSTER_DIR" status --porcelain --untracked-files=no | head -1)
+        echo "  git:   $branch @ $commit${modified:+ (modified)}"
+    fi
+    echo "  path:  $HAMSTER_DIR"
+    echo "  julia: $(julia --version 2> /dev/null || echo "not found")"
+}
+
+# Commands can be given anywhere, all other arguments are options of the command (or of the calculation);
+# --help with a command shows the help of the command
+COMMAND=""
+HELP=false
+OPTIONS=()
+for arg in "$@"; do
+    case $arg in
+        -h|--help) HELP=true ;;
+        --version|--install|--update|--precompile)
+            if [[ -n "$COMMAND" && "$COMMAND" != "$arg" ]]; then
+                echo "hamster: $COMMAND and $arg cannot be combined, see hamster --help." >&2
+                exit 1
+            fi
+            COMMAND=$arg ;;
+        *) OPTIONS+=("$arg") ;;
+    esac
+done
+
+if $HELP; then
+    case "$COMMAND" in
+        --install|--update) OPTIONS=(--help) ;;
+        *) print_help; exit 0 ;;
+    esac
+fi
+
+case "$COMMAND" in
+    --version) print_version; exit 0 ;;
+    --install) exec julia "$HAMSTER_DIR/hamster_install.jl" "${OPTIONS[@]}" ;;
+    --update) exec julia "$HAMSTER_DIR/hamster_update.jl" "${OPTIONS[@]}" ;;
+    --precompile)
+        if [[ ${#OPTIONS[@]} -gt 0 ]]; then
+            echo "hamster: --precompile takes no options (got ${OPTIONS[*]})." >&2
+            exit 1
+        fi
+        exec julia --project="$HAMSTER_DIR" "$HAMSTER_DIR/hamster_precompile.jl" ;;
+esac
+
+# Default: use SLURM_CPUS_PER_TASK or JULIA_NUM_THREADS if set, else leave unspecified
+THREADS=${SLURM_CPUS_PER_TASK:-$JULIA_NUM_THREADS}
+
+ARGS=()
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -t|--threads) THREADS="$2"; shift 2 ;;
+        *) ARGS+=("$1"); shift ;;
+    esac
+done
+
+JULIA_CMD=(julia)
+if [[ -n "$THREADS" ]]; then
+    JULIA_CMD+=(-t "$THREADS")
+fi
+JULIA_CMD+=(--project="$HAMSTER_DIR" "$HAMSTER_DIR/hamster_main.jl" "${ARGS[@]}")
+
+exec "${JULIA_CMD[@]}"
