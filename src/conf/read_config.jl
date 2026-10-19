@@ -36,7 +36,8 @@ end
 """
     split_blocks(lines)
 
-Splits a list of lines into blocks of text based on "begin" and "end" markers. Each block is encapsulated in a `ConfigBlock` struct.
+Splits a list of lines into blocks of text based on "begin" and "end" markers, i.e., lines whose first word (without
+comments) is `begin` or `end`. Each block is encapsulated in a `ConfigBlock` struct.
 
 # Arguments
 - `lines`: A list of strings, where each string is a line from the input text.
@@ -49,13 +50,15 @@ function split_blocks(lines)
     found_begin = false; found_end = false
     begin_line = 0; end_line = 0; unclosed_begins = 0
     for (k, line) in enumerate(lines)
-        if "begin" in split_line(line)
+        words = split_line(filter_comment(line))
+        first_word = isempty(words) ? "" : words[1]
+        if first_word == "begin"
             if unclosed_begins == 0
                 begin_line = k
                 found_begin = true
             end
             unclosed_begins += 1
-        elseif "end" in split_line(line)
+        elseif first_word == "end"
             if unclosed_begins == 1
                 end_line = k
                 found_end = true
@@ -66,7 +69,7 @@ function split_blocks(lines)
         end
         if found_begin && found_end
             block_content = lines[begin_line+1:end_line-1]
-            block_header = string.([el for el in split_line(lines[begin_line]) if el ≠ "begin"])
+            block_header = string.([el for el in split_line(filter_comment(lines[begin_line])) if el ≠ "begin"])
             block = ConfigBlock(block_header, block_content)
             push!(blocks, block)
             found_begin = false; found_end = false
@@ -149,15 +152,6 @@ Removes comments from a line of text based on predefined comment symbols. The fu
 - A `String` that contains the line without comments. If the entire line is a comment or becomes empty after removing the comment, an empty string is returned.
 """
 function filter_comment(line)
-    for comment_symbol in COMMENT_SYMBOLS
-        if occursin(comment_symbol, line)
-            line_no_comment = strip(split_line(line, char=comment_symbol)[1], ' ')
-            if length(strip(line_no_comment, ' ')) > 0 
-                return line_no_comment
-            else
-                return ""
-            end
-        end
-    end
-    return line
+    n = findfirst(c -> c ∈ COMMENT_SYMBOLS, line)
+    return isnothing(n) ? line : strip(line[1:prevind(line, n)], ' ')
 end
