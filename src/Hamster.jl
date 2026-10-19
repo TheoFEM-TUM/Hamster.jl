@@ -2,7 +2,7 @@ module Hamster
 
 using LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Dates, PeriodicTable, UnPack, MPI, Clustering, BlockDiagonals, DataStructures,
     CubicSplines, HCubature, Statistics, ChunkSplitters, FiniteDiff, StatsBase, HDF5, Printf, OhMyThreads, TreeParzen, Arpack, Random,
-    FFTW, SpecialFunctions
+    FFTW, SpecialFunctions, KernelAbstractions
 
 include("parse/utils.jl"); include("parse/poscar.jl"); include("parse/eigenval.jl"); include("parse/xdatcar.jl"); include("parse/wannier90.jl")
 include("parse/commandline.jl")
@@ -32,6 +32,7 @@ include("optim/optimize.jl")
 
 include("mlham/descriptor.jl"); include("mlham/simmat.jl"); include("mlham/kernel.jl") ; include("mlham/kernel_precalced.jl")
 
+include("device/device.jl"); include("device/kernels.jl"); include("device/linear_map.jl"); include("device/device_ham.jl")
 include("out/model_summary.jl")
 include("out/dos.jl")
 
@@ -59,6 +60,7 @@ export HamiltonianKernel, EwaldOnsites
 
 export run_calculation
 
+export CPUDevice, ArrayDevice
 export compute_dos, orbital_labels
 
 # Precompililation

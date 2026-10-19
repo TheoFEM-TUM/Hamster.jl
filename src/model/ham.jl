@@ -100,19 +100,31 @@ Diagonalizes a vector of Hamiltonian matrices `Hk` and returns the specified num
 - `Neig::Int=size(Hk[1], 1)`: The number of eigenvalues and corresponding eigenvectors to compute for each Hamiltonian matrix. Defaults to the full diagonalization (`size(Hk[1], 1)`).
 - `target::Real=0`: The target eigenvalue when computing eigenvalues of a sparse matrix.
 - `method::String`: The method to be used for calculating eigenvalues of a sparse matrix.
+- `vectors::Bool=true`: Whether the eigenvectors are computed (dense matrices); without them, `vs` is empty and the full
+  diagonalization is several times faster.
+
+With fewer k-points than threads, the dense diagonalizations use the remaining threads for BLAS.
 
 # Returns:
 - `Es::Matrix{Float64}`: A matrix where each column `Es[:, k]` contains the `Neig` eigenvalues of the `k`-th Hamiltonian matrix in `Hk`.
 - `vs::Array{ComplexF64, 3}`: A 3D array where each `vs[:, :, k]` contains the `Neig` eigenvectors corresponding to the `k`-th Hamiltonian matrix in `Hk`. The dimensions of `vs` are `(Nε, Neig, Nk)`, where `Nε` is the size of each Hamiltonian matrix, `Neig` is the number of eigenvectors, and `Nk` is the number of Hamiltonian matrices.
 """
-function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0, method="shift-invert")
+function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0, method="shift-invert", vectors=true)
     Nε = size(Hk[1], 1)
     Nk = length(Hk)
     Es = zeros(Neig, Nk)
-    vs = zeros(ComplexF64, Nε, Neig, Nk)
+    vs = zeros(ComplexF64, vectors ? Nε : 0, Neig, Nk)
 
-    Threads.@threads for k in eachindex(Hk)
-        Es[:, k], vs[:, :, k] = diagonalize(Hk[k], Neig=Neig, target=target, method=method)
+    blas_threads = BLAS.get_num_threads()
+    dense = !(Hk[1] isa SparseMatrixCSC)
+    dense && Nk < Threads.nthreads() && BLAS.set_num_threads(max(blas_threads, Threads.nthreads() ÷ Nk))
+    try
+        Threads.@threads for k in eachindex(Hk)
+            Es[:, k], v = diagonalize(Hk[k], Neig=Neig, target=target, method=method, vectors=vectors)
+            vectors && (vs[:, :, k] = v)
+        end
+    finally
+        BLAS.set_num_threads(blas_threads)
     end
 
     return Es, vs
@@ -133,11 +145,12 @@ Fully diagonalizes a Hermitian Hamiltonian matrix `Hk` and returns the eigenvalu
 - `real_values::Vector{Float64}`: A vector containing the real parts of the eigenvalues of `Hk`. The eigenvalues are computed using the Hermitian matrix, so they are guaranteed to be real.
 - `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to an eigenvalue of `Hk`. The eigenvectors are computed in the standard basis and are complex-valued.
 """
-function diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0, method="shift-invert")
+function diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0, method="shift-invert", vectors=true)
     if abs(hermiticity_mismatch(Hk)) > 1e-5
         maxdiff, inds = findmax(abs.(Hk .- Hermitian(Hk)))
         @warn "Hamiltonian not hermitian! Maximum missmatch: $maxdiff at $inds."
     end
+    vectors || return real.(eigvals(Hermitian(Hk))), nothing
     eig = eigen(Hermitian(Hk))
     return real.(eig.values), eig.vectors
 end
@@ -178,7 +191,7 @@ Diagonalizes a sparse Hermitian matrix `Hk` to find a specified number of eigenv
 - `eigenvalues::Vector{Float64}`: A vector of the real parts of the computed eigenvalues, focusing on those closest to the target. The number of eigenvalues returned is equal to `Neig`.
 - `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to one of the computed eigenvalues.
 """
-function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert")
+function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert", vectors=true)
     if method == "shift-invert"
         Es, vs, _, _, _, _ = lock(() -> eigs(Hk, nev=Neig, sigma=target), ARPACK_LOCK)
         if abs(Es[1] - target) > abs(Es[end] - target)

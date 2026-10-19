@@ -149,18 +149,18 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
                 strc_ind += 1
                 system, config_index = get_system_and_config_index(index, local_inds)
                 ham_time_local = @elapsed Hk = get_hamiltonian(ham, index, ks, comm, write_hr=write_hr, config_index=config_index, system=system, rank=rank, nranks=nranks, deflate=deflate)
-                Neig = ham.sp_diag isa Sparse ? get_neig(conf) : size(Hk[1], 1)
+                Neig = ham.sp_diag isa Sparse ? get_neig(conf) : hamiltonian_dim(Hk)
 
                 Es = zeros(1, 1); vs = zeros(ComplexF64, 1, 1, 1)
                 diag_time_local = @elapsed begin
                     if !skip_diag
-                        Es, vs = diagonalize(Hk, Neig=Neig, target=get_eig_target(conf), method=get_diag_method(conf))
+                        Es, vs = diagonalize(Hk, Neig=Neig, target=get_eig_target(conf), method=get_diag_method(conf), vectors=save_vecs)
                     end
                 end
 
                 write_time = @elapsed begin
                     if write_hk
-                        write_ham(Hk, ks, comm, config_index, system=system, rank=rank, nranks=nranks, temp=true, deflate=deflate)
+                        write_ham(host_hamiltonians(Hk), ks, comm, config_index, system=system, rank=rank, nranks=nranks, temp=true, deflate=deflate)
                     end
                     if Nstrc_tot == 1 && rank == 0
                         if !skip_diag; write_to_file(Es, "Es"); end

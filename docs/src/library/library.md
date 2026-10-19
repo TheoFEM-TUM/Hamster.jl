@@ -17,7 +17,7 @@ Filter = x -> !(x in [Hamster.run_calculation])
 
 ```@autodocs
 Modules = [Hamster]
-Pages = ["eff_ham.jl", "ham.jl", "ham_grad.jl", "ham_write.jl", "model/model.jl"]
+Pages = ["eff_ham.jl", "model/ham.jl", "ham_grad.jl", "ham_write.jl", "model/model.jl"]
 ```
 
 # SOC
@@ -83,4 +83,11 @@ Pages = ["output.jl", "out/model_summary.jl"]
 Modules = [Hamster]
 Pages = ["out/dos.jl"]
 Filter = x -> !(x in [Hamster.compute_dos, Hamster.orbital_labels, Hamster.DOSSettings])
+```
+
+# Device (GPU)
+
+```@autodocs
+Modules = [Hamster]
+Pages = ["device/device.jl", "device/kernels.jl", "device/linear_map.jl", "device/device_ham.jl"]
 ```
