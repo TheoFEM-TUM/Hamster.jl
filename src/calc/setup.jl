@@ -5,12 +5,13 @@
     local_structure_indices(conf, comm; optimize, rank=0, nranks=1, write_output=true)
 
 Sample the configuration indices of all systems (training and validation indices if `optimize = true`) and split them
-over the MPI ranks. Returns the local training and validation indices (per system).
+over the MPI ranks. Returns the local training and validation indices (per system), followed by the indices of all ranks.
 """
 function local_structure_indices(conf, comm; optimize, rank=0, nranks=1, write_output=true)
     train_inds, val_inds = get_config_inds_for_systems(get_systems(conf), comm, conf, rank=rank, write_output=write_output,
                                                        optimize=optimize)
-    return split_indices_into_chunks(train_inds, nranks, rank=rank), split_indices_into_chunks(val_inds, nranks, rank=rank)
+    return split_indices_into_chunks(train_inds, nranks, rank=rank), split_indices_into_chunks(val_inds, nranks, rank=rank),
+           train_inds, val_inds
 end
 
 """

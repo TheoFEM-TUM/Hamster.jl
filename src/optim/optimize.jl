@@ -24,9 +24,10 @@ Optimizes the model by performing training and optional validation steps.
 # Returns
 - Updates the HamsterProfiler `prof` and the model parameters in `ham_train` and `ham_val`.
 """
-function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_empty_config(); verbosity=get_verbosity(conf), Nbatch=get_nbatch(conf), validate=get_validate(conf), valeachiter=get_valeachiter(conf), rank=0, nranks=1)
+function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_empty_config(); verbosity=get_verbosity(conf), Nbatch=get_nbatch(conf), validate=get_validate(conf), valeachiter=get_valeachiter(conf), rank=0, nranks=1,
+                         start_iter=1, after_iteration=nothing)
     print_start_message(prof; verbosity=verbosity)
-    for iter in 1:optim.Niter
+    for iter in start_iter:optim.Niter
         iter_begin = MPI.Wtime()
         for (batch_id, indices) in enumerate(chunks(1:ham_train.Nstrc, n=Nbatch))
             train_step!(ham_train, indices, optim, dl.train_data, prof, iter, batch_id, comm, conf, rank=rank, nranks=nranks)
@@ -38,6 +39,7 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_emp
             val_step!(ham_val, optim.val_loss, dl.val_data, prof, iter, comm, rank=rank, nranks=nranks, valeachiter=valeachiter)
             print_val_status(prof, iter, verbosity=verbosity)
         end
+        isnothing(after_iteration) || after_iteration(iter, validate && mod(iter, valeachiter) == 0)
         MPI.Barrier(comm)
         iter_time = MPI.Wtime() - iter_begin
         if verbosity > 1 && rank == 0; println("Iteration time: $iter_time s"); end
@@ -111,7 +113,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         MPI.Bcast!(params, comm, root=0)
         set_params!(model, params)
     end
-    optim.adam.eta = lr_min + 0.5 * (lr - lr_min) * (1 + cos(π * iter / optim.Niter))
+    optim.adam.eta = cosine_lr(iter, optim.Niter, lr, lr_min)
     update_time_local = MPI.Wtime() - update_begin
 
     L_train = MPI.Reduce(sum(Ls_train), +, comm, root=0)

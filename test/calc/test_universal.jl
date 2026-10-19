@@ -44,5 +44,5 @@
 
     prof = Hamster.main(comm, conf, rank=rank)
     @test mean(prof.L_train[:, end]) < 0.2
-    rm("hamster.out"); rm("hamster_out.h5"); rm("params.dat"); rm(strc_file); rm(eig_file)
+    rm("hamster.out"); rm("hamster_out.h5"); rm("params.dat"); rm("checkpoint", recursive=true, force=true); rm(strc_file); rm(eig_file)
 end

@@ -162,3 +162,6 @@ push!(CONFIG_TAGS, ConfigTag{Bool}("validate", "Optimizer", conf->get_validate(c
 @configtag printeachbatch Bool get_verbosity(conf)>1 "profiler prints after each batch." "Optimizer"
 @configtag printeachiter Int64 1 "iteration interval for profiler prints." "Optimizer"
 @configtag valeachiter Int64 1 "iteration interval for validation." "Optimizer"
+@configtag write_every Int64 1 "write params.dat and the checkpoint every n iterations (0: only at the end)." "Optimizer"
+@configtag restart Bool false "continue the fit from the checkpoint." "Optimizer"
+@configtag checkpoint String "checkpoint" "folder of the checkpoint (latest parameters and optimizer state)." "Optimizer"
