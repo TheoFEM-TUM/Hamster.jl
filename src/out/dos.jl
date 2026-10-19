@@ -198,50 +198,119 @@ function jackson_kernel(M)
 end
 
 """
+    hermitian_mul!(Y, H, X)
+
+`Y = H X` for a Hermitian sparse matrix `H` and the vectors stored as the columns of `transpose(X)`, i.e., `X` is
+Nvec × Nε, so that the entries of all vectors for one orbital are contiguous. Since `H = Hᴴ`, column `j` of `H` gives
+the entries `j` of the products, so the columns are distributed over the threads without write conflicts, and `H` is
+read once for all vectors.
+"""
+function hermitian_mul!(Y, H::SparseMatrixCSC, X)
+    rows, vals = rowvals(H), nonzeros(H)
+    tforeach(chunks(1:size(H, 2), n=4 * Threads.nthreads())) do cols
+        for j in cols
+            fill!(view(Y, :, j), 0)
+            for p in nzrange(H, j)
+                c = conj(vals[p]); r = rows[p]
+                @inbounds @simd for k in axes(X, 1)
+                    Y[k, j] += c * X[k, r]
+                end
+            end
+        end
+    end
+    return Y
+end
+
+hermitian_mul(H::SparseMatrixCSC, v::AbstractVector) = vec(hermitian_mul!(similar(v, 1, length(v)), H, reshape(v, 1, :)))
+
+"""
     kpm_moments(H̃, Hoff, members, pairs, M, Nvec; seed=1234)
 
 Chebyshev moments μₘ = Tr[X Tₘ(H̃)] of the rescaled Hamiltonian `H̃` (spectrum within [-1, 1]), estimated with `Nvec`
 random-phase vectors, for X = 1 (DOS), X = P_A (PDOS of label A) and X = P_A H P_B (COHP of the pair (A, B), with the
 unscaled off-site Hamiltonian `Hoff`).
+
+The recursion runs for all vectors at once, in one pass over the columns of `H̃` per moment that is distributed over the
+threads: column `j` gives the contributions of orbital `j` to the moments and, with `H̃ = H̃ᴴ`, the entries `j` of
+the next Chebyshev vectors. So `H̃` is read once per moment, and all threads are used independently of `Nvec`.
 """
 function kpm_moments(H̃, Hoff, members, pairs, M, Nvec; seed=1234)
     Nε = size(H̃, 1)
-    partial = tmap(chunks(1:Nvec, n=min(Nvec, Threads.nthreads()))) do vecs
-        # `local`: the enclosing function assigns variables of the same names, which would otherwise be shared by all tasks
-        local μ_dos = zeros(M)
-        local μ_pdos = zeros(M, length(members))
-        local μ_cohp = zeros(M, length(pairs))
-        t_prev = zeros(ComplexF64, Nε); t_curr = similar(t_prev); t_next = similar(t_prev); x = similar(t_prev)
-        for ivec in vecs
-            v = exp.(2π * im .* rand(Random.MersenneTwister(seed + ivec), Nε))
-            # w = P_B H P_A v, restricted to the orbitals of B
-            ws = map(pairs) do (a, b)
-                fill!(x, 0); x[members[a]] .= v[members[a]]
-                (Hoff * x)[members[b]]
+    V = Matrix{ComplexF64}(undef, Nvec, Nε)
+    for ivec in 1:Nvec
+        V[ivec, :] .= exp.(2π * im .* rand(Random.MersenneTwister(seed + ivec), Nε))
+    end
+    # P_B H P_A V for each pair (a, b), restricted to the orbitals of B
+    X = zeros(ComplexF64, Nvec, Nε); HX = similar(X)
+    Ws = map(pairs) do (a, b)
+        fill!(X, 0); X[:, members[a]] .= V[:, members[a]]
+        hermitian_mul!(HX, Hoff, X)[:, members[b]]
+    end
+    label = zeros(Int, Nε)
+    for (l, A) in enumerate(members); label[A] .= l; end
+    position = [zeros(Int, Nε) for _ in pairs]
+    for (p, (_, b)) in enumerate(pairs); position[p][members[b]] .= eachindex(members[b]); end
+    pairs_of = [[p for (p, (_, b)) in enumerate(pairs) if b == l] for l in eachindex(members)]
+    weight = [a == b ? 1.0 : 2.0 for (a, b) in pairs]
+
+    μ_dos = zeros(M); μ_pdos = zeros(M, length(members)); μ_cohp = zeros(M, length(pairs))
+    # Tₘ₋₂, Tₘ₋₁ and Tₘ: T₀ = V, T₁ = H̃V, Tₘ₊₁ = 2H̃Tₘ - Tₘ₋₁
+    t_prev = zeros(ComplexF64, Nvec, Nε); t_curr = copy(V); t_next = similar(V)
+    columns = chunks(1:Nε, n=4 * Threads.nthreads())
+    for m in 1:M
+        parts = kpm_pass!(t_next, t_curr, t_prev, V, H̃, Ws, label, position, pairs_of, columns, length(members),
+                          m == 1 ? 1.0 : 2.0, m == 1 ? 0.0 : 1.0, m < M)
+        μ_dos[m] = sum(first, parts)
+        μ_pdos[m, :] .= sum(x -> x[2], parts)
+        μ_cohp[m, :] .= weight .* sum(x -> x[3], parts)
+        m < M && ((t_prev, t_curr, t_next) = (t_curr, t_next, t_prev))
+    end
+    return μ_dos ./ Nvec, μ_pdos ./ Nvec, μ_cohp ./ Nvec
+end
+
+"""
+    kpm_pass!(t_next, t_curr, t_prev, V, H̃, Ws, label, position, pairs_of, columns, nmembers, a, b, recurse)
+
+One step of `kpm_moments`, distributed over the threads by columns: the contributions of `t_curr` (Tₘ₋₁ V) to the DOS,
+PDOS and COHP moments per chunk of columns and, if `recurse`, `t_next = a H̃ t_curr - b t_prev`. (A function of its own,
+so that the closure does not capture the vectors that `kpm_moments` swaps.)
+"""
+function kpm_pass!(t_next, t_curr, t_prev, V, H̃, Ws, label, position, pairs_of, columns, nmembers, a, b, recurse)
+    rows, vals = rowvals(H̃), nonzeros(H̃)
+    Nvec = size(V, 1)
+    return tmap(columns) do cols
+        dos = 0.0; pdos = zeros(nmembers); cohp = zeros(length(Ws))
+        @inbounds for j in cols
+            s = 0.0
+            for k in 1:Nvec
+                s += real(conj(V[k, j]) * t_curr[k, j])
             end
-            # Chebyshev recursion: T₀v = v, T₁v = H̃v, Tₘ₊₁v = 2H̃Tₘv - Tₘ₋₁v
-            t_prev .= v
-            mul!(t_curr, H̃, v)
-            for m in 1:M
-                if m ≥ 3
-                    mul!(t_next, H̃, t_curr)
-                    @. t_next = 2 * t_next - t_prev
-                    t_prev, t_curr, t_next = t_curr, t_next, t_prev
+            dos += s
+            l = label[j]
+            if l > 0
+                pdos[l] += s
+                for p in pairs_of[l]
+                    n = position[p][j]; W = Ws[p]; c = 0.0
+                    for k in 1:Nvec
+                        c += real(conj(W[k, n]) * t_curr[k, j])
+                    end
+                    cohp[p] += c
                 end
-                t = m == 1 ? t_prev : t_curr    # Tₘ₋₁(H̃) v
-                μ_dos[m] += real(dot(v, t))
-                for (l, A) in enumerate(members)
-                    μ_pdos[m, l] += real(dot(view(v, A), view(t, A)))
+            end
+            if recurse
+                for k in 1:Nvec
+                    t_next[k, j] = -b * t_prev[k, j]
                 end
-                for (p, (a, b)) in enumerate(pairs)
-                    μ_cohp[m, p] += (a == b ? 1 : 2) * real(dot(ws[p], view(t, members[b])))
+                for q in nzrange(H̃, j)
+                    c = a * conj(vals[q]); r = rows[q]
+                    @simd for k in 1:Nvec
+                        t_next[k, j] += c * t_curr[k, r]
+                    end
                 end
             end
         end
-        (μ_dos, μ_pdos, μ_cohp)
+        (dos, pdos, cohp)
     end
-    μ_dos, μ_pdos, μ_cohp = (sum(getindex.(partial, i)) ./ Nvec for i in 1:3)
-    return μ_dos, μ_pdos, μ_cohp
 end
 
 """
@@ -267,8 +336,9 @@ end
 function dos_kpm(Hr, Rs, ks, atoms, members, pairs, g, settings)
     Hks = get_hamiltonian(sparse.(Hr), Rs, ks, Sparse())
     bounds = map(Hks) do H
-        Emax = real(eigsolve(H, 1, :LR, ishermitian=true)[1][1])
-        Emin = real(eigsolve(H, 1, :SR, ishermitian=true)[1][1])
+        x0 = rand(Random.MersenneTwister(1), eltype(H), size(H, 1))
+        Emax = real(eigsolve(x -> hermitian_mul(H, x), x0, 1, :LR, ishermitian=true)[1][1])
+        Emin = real(eigsolve(x -> hermitian_mul(H, x), x0, 1, :SR, ishermitian=true)[1][1])
         (Emin, Emax)
     end
     Emin, Emax = minimum(first.(bounds)), maximum(last.(bounds))
