@@ -1,22 +1,3 @@
-println("""
-
-Welcome to
-===========================================================================
-||   _   _                             _                         _   _   ||
-||  | | | |   __ _   _ __ ___    ___  | |_    ___   _ __        (_) | |  ||
-||  | |_| |  / _` | | '_ ` _ \\  / __| | __|  / _ \\ | '__|       | | | |  ||
-||  |  _  | | (_| | | | | | | | \\__ \\ | |_  |  __/ | |     _    | | | |  ||
-||  |_| |_|  \\__,_| |_| |_| |_| |___/  \\__|  \\___| |_|    (_)  _/ | |_|  ||
-||                                                            |__/       ||
-===========================================================================
-Hamiltonian-learning
-    Approach for Multiscale Simulations
-        using a Transferable and Efficient Representation.
-
-""")
-
-using Pkg
-
 const hamster_path = @__DIR__
 
 # Precompiled at the end with `hamster --precompile` (see hamster_precompile.jl)
@@ -61,6 +42,26 @@ function parse_install_args(args)
 end
 
 options = parse_install_args(ARGS)
+
+println("""
+
+Welcome to
+===========================================================================
+||   _   _                             _                         _   _   ||
+||  | | | |   __ _   _ __ ___    ___  | |_    ___   _ __        (_) | |  ||
+||  | |_| |  / _` | | '_ ` _ \\  / __| | __|  / _ \\ | '__|       | | | |  ||
+||  |  _  | | (_| | | | | | | | \\__ \\ | |_  |  __/ | |     _    | | | |  ||
+||  |_| |_|  \\__,_| |_| |_| |_| |___/  \\__|  \\___| |_|    (_)  _/ | |_|  ||
+||                                                            |__/       ||
+===========================================================================
+Hamiltonian-learning
+    Approach for Multiscale Simulations
+        using a Transferable and Efficient Representation.
+
+""")
+
+# Loaded after the options, so that --help also works without Pkg in the load path (e.g., in Pkg.test)
+using Pkg
 
 # The user's default environment: JULIA_PROJECT if set (e.g., by the Julia modules on JSC systems), else @v#.#
 const default_env = dirname(Base.active_project())

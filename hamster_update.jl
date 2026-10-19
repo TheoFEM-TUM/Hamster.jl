@@ -1,5 +1,3 @@
-using Pkg
-
 const hamster_path = @__DIR__
 
 const usage = """
@@ -19,6 +17,9 @@ for arg in ARGS
         error("Unknown option $arg.\n$usage")
     end
 end
+
+# Loaded after the options, so that --help also works without Pkg in the load path (e.g., in Pkg.test)
+using Pkg
 
 if pull
     is_git_repo = try
