@@ -46,6 +46,7 @@ function run_calculation(::Val{:active_learning}, comm, conf::Config; rank=0, nr
     history = Dict("Ntrain" => Int64[], "Npoints" => Int64[], "L_train" => Float64[], "L_val" => Float64[])
     round_trains = Vector{Vector{Int64}}()
     init_dir = ""
+    adam_init = nothing    # Adam moments of the previous round (a fresh Adam would throw the fitted model out of its minimum)
     for round in 1:nrounds
         dir = joinpath("al", "round_$round")
         if rank == 0
@@ -65,7 +66,7 @@ function run_calculation(::Val{:active_learning}, comm, conf::Config; rank=0, nr
         set_value!(conf_round, "Nconf", "Supercell", length(train))
         isempty(init_dir) || init_from_files!(conf_round, joinpath(init_dir, "params.dat"), joinpath(init_dir, "ml_params_next.dat"))
 
-        prof, ham = fit_model(comm, conf_round, rank=rank, nranks=nranks, write_output=false)
+        prof, ham, optim = fit_model(comm, conf_round, rank=rank, nranks=nranks, write_output=false, adam_init=adam_init)
         data_points = get_ml_model(conf) ? MPI.bcast(rank == 0 ? get_ml_data_points(ham, conf) : nothing, comm, root=0) : []
         if rank == 0
             write_params_atomically(ham, conf_round, dir=dir)
@@ -102,12 +103,23 @@ function run_calculation(::Val{:active_learning}, comm, conf::Config; rank=0, nr
         new = MPI.bcast(new, comm, root=0)
         train = sort(vcat(train, new))
 
-        # Initial parameters of the next round: the fitted parameters, new kernel points with weight 0
+        # Initial parameters of the next round: the fitted parameters, new kernel points with weight 0; Adam moments
+        if rank == 0
+            adam_init = Dict(m => optim.adam.state[get_params(model)] for (m, model) in enumerate(ham.models)
+                             if haskey(optim.adam.state, get_params(model)))
+        end
         if rank == 0 && get_ml_model(conf)
             kernel = ham.models[findfirst(m -> m isa HamiltonianKernel, ham.models)]
             next = HamiltonianKernel(vcat(kernel.params, zeros(length(new_points))), vcat(kernel.data_points, new_points),
                                      kernel.sim_params, kernel.structure_descriptors, kernel.update)
             write_params(next, conf_round, filename=joinpath(dir, "ml_params_next"))
+            # New kernel points: no first moment, mean second moment (zero would make their first steps ~3 lr large,
+            # since the bias correction of Adam is used up)
+            ml_index = findfirst(m -> m isa HamiltonianKernel, ham.models)
+            if haskey(adam_init, ml_index)
+                mt, vt, βp = adam_init[ml_index]
+                adam_init[ml_index] = (vcat(mt, zeros(length(new_points))), vcat(vt, fill(mean(vt), length(new_points))), βp)
+            end
             verbosity > 0 && !isempty(new_points) && println("  $(length(new_points)) kernel points added")
         end
         MPI.Barrier(comm)

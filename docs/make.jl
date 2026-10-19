@@ -23,6 +23,7 @@ makedocs(
             "calc/standard.md",
             "calc/optim.md",
             "calc/hyperopt.md",
+            "calc/active_learning.md",
             "calc/gpu.md",
             "calc/dos.md",
             "calc/helper_functions.md"

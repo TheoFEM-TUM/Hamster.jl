@@ -59,6 +59,13 @@ Modules = [Hamster]
 Pages = ["hyperopt_defaults.jl"]
 ```
 
+## [ActiveLearning](@id al-tags)
+
+```@autodocs
+Modules = [Hamster]
+Pages = ["al_defaults.jl"]
+```
+
 ## [DOS](@id dos-tags)
 
 Settings of the [DOS, PDOS and COHP](@ref dos-post-processing) post-processing, which is switched on by the `dos` tag

@@ -67,18 +67,19 @@ training and validation structures (one MD system) are restored, so the fit cont
 interruption. The models must be the same as in the interrupted run.
 """
 function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1, write_output=true)
-   prof, _ = fit_model(comm, conf, rank=rank, nranks=nranks, write_output=write_output)
+   prof, _, _ = fit_model(comm, conf, rank=rank, nranks=nranks, write_output=write_output)
    return prof
 end
 
 """
-    fit_model(comm, conf; rank=0, nranks=1, write_output=true) -> (prof, ham_train)
+    fit_model(comm, conf; rank=0, nranks=1, write_output=true, adam_init=nothing) -> (prof, ham_train, optim)
 
-Fit the models to the training data (see `run_calculation(::Val{:optimization}, ...)`). Returns the profiler and the
-trained `EffectiveHamiltonian` (`nothing` on ranks without data).
+Fit the models to the training data (see `run_calculation(::Val{:optimization}, ...)`). Returns the profiler, the
+trained `EffectiveHamiltonian` and the optimizer (`nothing` on ranks without data). `adam_init` (model index =>
+`(mt, vt, βp)`) sets the initial Adam moments, e.g. those of a previous fit; moments of a different size are ignored.
 """
-function fit_model(comm, conf::Config; rank=0, nranks=1, write_output=true)
-   ham_train = nothing
+function fit_model(comm, conf::Config; rank=0, nranks=1, write_output=true, adam_init=nothing)
+   ham_train, optim = nothing, nothing
    restart_dir = get_restart(conf) && write_output ? checkpoint_dir(conf) : ""
    isempty(restart_dir) || prepare_restart!(conf, restart_dir)
    local_train_inds, local_val_inds, train_inds, val_inds = local_structure_indices(conf, comm, optimize=true, rank=rank,
@@ -104,6 +105,12 @@ function fit_model(comm, conf::Config; rank=0, nranks=1, write_output=true)
       dl = DataLoader(local_train_inds, local_val_inds, Nε_train, Nε_val, conf)
       Nε, Nk = get_neig_and_nk(dl.train_data)
       optim = GDOptimizer(Nε, Nk, conf)
+      if !isnothing(adam_init)
+         for (m, model) in enumerate(ham_train.models)
+            params = get_params(model)
+            haskey(adam_init, m) && size(adam_init[m][1]) == size(params) && (optim.adam.state[params] = deepcopy(adam_init[m]))
+         end
+      end
       prof = HamsterProfiler(3, conf)
       
       start_iter, best_L_val = 1, Inf
@@ -143,5 +150,5 @@ function fit_model(comm, conf::Config; rank=0, nranks=1, write_output=true)
    end
    MPI.Barrier(comm)
 
-   return prof, ham_train
+   return prof, ham_train, optim
 end

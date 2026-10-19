@@ -18,6 +18,7 @@ The type of calculation is selected according to the configuration:
 
 - If an [`Optimizer`](@ref optim-tags) block is present, a standard parameter optimization run is executed (see [here](@ref optim-run)).
 - If a [`HyperOpt`](@ref hyperopt-tags) block is present, hyperparameter optimization is performed. This requires an accompanying [`Optimizer`](@ref optim-tags) block (see [here](@ref hyperopt-run)).
+- If an [`ActiveLearning`](@ref al-tags) block is present, active learning is performed: fits alternate with adding structures from a pool to the training set. This requires an accompanying [`Optimizer`](@ref optim-tags) block (see [here](@ref active-learning-run)).
 - If neither block is provided, a [standard run](@ref hyperopt-run) is performed.
 
 
