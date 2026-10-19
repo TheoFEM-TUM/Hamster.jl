@@ -283,7 +283,7 @@ function get_config_index_sample(conf=get_empty_config();
         Nval -= length(val_config_inds)
         remaining_indices = lowercase(train_mode) == "pc" ? (Nconf_min:Nconf_max) : setdiff(Nconf_min:Nconf_max, train_config_inds)
         remaining_indices = setdiff(remaining_indices, val_config_inds)
-        if length(remaining_indices) ≥ Nval
+        if Nval > 0 && length(remaining_indices) ≥ Nval
             append!(val_config_inds, sample(remaining_indices, Nval, replace=false, ordered=true))
         end
     end

@@ -67,6 +67,18 @@ training and validation structures (one MD system) are restored, so the fit cont
 interruption. The models must be the same as in the interrupted run.
 """
 function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1, write_output=true)
+   prof, _ = fit_model(comm, conf, rank=rank, nranks=nranks, write_output=write_output)
+   return prof
+end
+
+"""
+    fit_model(comm, conf; rank=0, nranks=1, write_output=true) -> (prof, ham_train)
+
+Fit the models to the training data (see `run_calculation(::Val{:optimization}, ...)`). Returns the profiler and the
+trained `EffectiveHamiltonian` (`nothing` on ranks without data).
+"""
+function fit_model(comm, conf::Config; rank=0, nranks=1, write_output=true)
+   ham_train = nothing
    restart_dir = get_restart(conf) && write_output ? checkpoint_dir(conf) : ""
    isempty(restart_dir) || prepare_restart!(conf, restart_dir)
    local_train_inds, local_val_inds, train_inds, val_inds = local_structure_indices(conf, comm, optimize=true, rank=rank,
@@ -131,5 +143,5 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    end
    MPI.Barrier(comm)
 
-   return prof
+   return prof, ham_train
 end
