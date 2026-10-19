@@ -186,15 +186,18 @@ training and the validation set). Settings from the config file are not repeated
       subtracted species mean φ̄:   Br 4.7532 V, Pb -8.1202 V
 
   Onsite corrections Δε = -γ (φ - φ̄) per species (meV):
-    species  sites      σ     min      p1     p99     max  max/σ  >3σ % σ_strc
-    Br         144  193.8  -459.9  -398.3   409.8   520.1   2.68   0.00    5.3
-    Pb          48  143.1  -319.6  -296.8   299.4   347.0   2.43   0.00    6.2
+    species sites      σ    min     p1    p99    max  max/σ  >3σ % σ_strc    δφ̄
+    Br        144  193.8 -459.9 -398.3  409.8  520.1   2.68   0.00    5.3    2.2
+    Pb         48  143.1 -319.6 -296.8  299.4  347.0   2.43   0.00    6.2    2.5
 
     φ̄: species mean of the site potentials over all structures of this run.
     σ: width of Δε; max/σ: largest |Δε| relative to σ; >3σ %: fraction of
       sites with |Δε| > 3σ.
     σ_strc: spread of the per-structure species means, i.e. the part of Δε
       that is lost if the model is built for a single structure.
+    δφ̄: uncertainty of φ̄ in meV of Δε, σ_strc / √(number of structures)
+      (single structure: σ / √sites). The onsite corrections shift by about
+      δφ̄ if other structures are computed together.
 ================================================================================
 ```
 
@@ -204,6 +207,11 @@ training and the validation set). Settings from the config file are not repeated
   show how pronounced the tails are, which is useful to compare large cells with the training cells.
 - `σ_strc` is the spread of the per-structure species means. This part of the correction is lost if the model is built
   for a single structure.
+- `δφ̄` is the uncertainty of `φ̄`: the corrections of a structure shift by about this amount if it is computed together
+  with other structures. If it exceeds 10 meV for a species, the summary ends with a warning (also printed to the log).
+  It decreases with the number of structures in the run and with the cell size: e.g., for 2x2x2 CsPbBr3 cells (Wolf)
+  10 meV with 10 structures, 3 meV with 100 (the band gaps of the two runs differ by about 3 meV) and 30-50 meV for a
+  single structure, while the estimate for a single 16x16x16 cell is 1-2 meV.
 
 ## Real-Space Neighbor Grid
 
