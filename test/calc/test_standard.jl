@@ -5,12 +5,16 @@
     set_value!(conf, "rllm_file", joinpath(path, "rllm.dat"))
     set_value!(conf, "kpoints", joinpath(path, "EIGENVAL_gaas"))
     set_value!(conf, "init_params", joinpath(path, "params.dat"))
+    set_value!(conf, "save_vecs", true)
 
     prof = Hamster.main(comm, conf, rank=rank)
     Es_tb = read_from_file("Es.dat")
     _, Es_dft, _ = Hamster.read_eigenval(conf("kpoints"), 8)
     @test mean(abs.(Es_tb .- Es_dft)) < 0.3
-    rm("hamster.out"); rm("Es.dat")
+    vs = h5read("vs.h5", "vs")
+    @test size(vs) == (8, 8, size(Es_tb, 2))
+    @test all(v -> norm(v) ≈ 1, eachslice(vs, dims=(2, 3)))
+    rm("hamster.out"); rm("Es.dat"); rm("vs.h5")
 end
 
 @testset "Standard PC calculation (SOC+current)" begin
@@ -52,9 +56,10 @@ end
     set_value!(conf, "write_hk", true)
     set_value!(conf, "write_hr", true)
     set_value!(conf, "write_current", true)
-
+    set_value!(conf, "save_vecs", true)
 
     prof = Hamster.main(comm, conf, rank=rank)
+    vs_all = h5read("vs.h5", "vs")
     Es_dft = h5read(joinpath(path, "eigenval.h5"), "eigenvalues")
     Es_tb = read_from_file("Es.dat")
     inds = h5read("hamster_out.h5", "config_inds")
@@ -70,6 +75,8 @@ end
         
         @test Es_tb[:, :, i] ≈ Es
         @test Es_tb[:, :, i] ≈ Es_r
+        # Eigenvectors of structure i (vs.h5, last dimension: structures)
+        @test all(k -> norm(Matrix(Hk[k]) * vs_all[:, :, k, i] - vs_all[:, :, k, i] * Diagonal(Es_tb[:, k, i])) < 1e-8, eachindex(Hk))
 
         Cx, Cy, Cz, Rs_c = read_current(comm, ind; filename="ham.h5", space="r")
         @test Rs == Rs_c
@@ -81,5 +88,5 @@ end
         @test all([size(Cz[R]) == size(Hr[R]) for R in eachindex(Hr)])
     end
 
-    rm("hamster.out"); rm("hamster_out.h5"); rm("Es.dat"); rm("ham.h5")
+    rm("hamster.out"); rm("hamster_out.h5"); rm("Es.dat"); rm("ham.h5"); rm("vs.h5")
 end

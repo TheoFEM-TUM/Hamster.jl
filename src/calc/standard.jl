@@ -45,7 +45,9 @@ Performs a standard calculation for an effective Hamiltonian model, computing ei
   - Loss values (for iterative calculations, if applicable)  
   - Timings and profiling data
 - `Es.dat` — Plain text file containing computed eigenvalues for each structure (written only if `skip_diag` is `true`; default).
+- `vs.h5` — Eigenvectors (dataset `vs`: orbitals × states × k-points × structures), written if `save_vecs` is `true`.
 - `dos.h5` — DOS, PDOS and COHP of every structure, generated if the `dos` tag is set (see [DOS, PDOS and COHP](@ref dos-post-processing)).
+- `unfold.h5` — unfolded bands and spectral function, generated if an `Unfold` block is present (see [Band Unfolding](@ref unfold-post-processing)).
 """
 function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1, verbosity=get_verbosity(conf), write_output=true)
     
@@ -154,7 +156,8 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
                 Es = zeros(1, 1); vs = zeros(ComplexF64, 1, 1, 1)
                 diag_time_local = @elapsed begin
                     if !skip_diag
-                        Es, vs = diagonalize(Hk, Neig=Neig, target=get_eig_target(conf), method=get_diag_method(conf), vectors=save_vecs)
+                        Es, vs = diagonalize(Hk, Neig=Neig, target=get_eig_target(conf), method=get_diag_method(conf), vectors=save_vecs,
+                                                         window=ham.sp_diag isa Sparse ? nothing : diag_window(conf))
                     end
                 end
 
@@ -162,12 +165,17 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
                     if write_hk
                         write_ham(host_hamiltonians(Hk), ks, comm, config_index, system=system, rank=rank, nranks=nranks, temp=true, deflate=deflate)
                     end
+                    # Eigenvalues as text (Es.dat), eigenvectors as HDF5 (vs.h5, binary)
                     if Nstrc_tot == 1 && rank == 0
                         if !skip_diag; write_to_file(Es, "Es"); end
-                        if save_vecs && !skip_diag; write_to_file(vs, "vs"); end
+                        if save_vecs && !skip_diag; h5open(f -> (f["vs"] = vs), "vs.h5", "w"); end
                     else
                         if !skip_diag; write_to_file(Es, "tmp/Es$config_index"); end
-                        if save_vecs && !skip_diag; write_to_file(vs, "tmp/vs$config_index"); end
+                        # With an energy window, the vectors of all structures are padded to the same size
+                        if save_vecs && !skip_diag
+                            size(vs, 2) < size(Es, 1) && (vs = cat(vs, zeros(ComplexF64, size(vs, 1), size(Es, 1) - size(vs, 2), size(vs, 3)), dims=2))
+                            h5open(f -> (f["vs"] = vs), "tmp/vs$config_index.h5", "w")
+                        end
                     end
                 end
             else
@@ -233,6 +241,11 @@ function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_conf
     if !isempty(dos_quantities(conf))
         isnothing(ham) && error("The DOS post-processing requires the Hamiltonian model (ham keyword).")
         run_dos(ham, strcs, bases, local_inds, comm, conf, rank=rank, nranks=nranks)
+    end
+
+    if haskey(conf, "Unfold")
+        isnothing(ham) && error("The unfolding requires the Hamiltonian model (ham keyword).")
+        run_unfold(ham, strcs, bases, local_inds, comm, conf, rank=rank, nranks=nranks)
     end
 
     if write_current_file

@@ -10,7 +10,7 @@
 @configtag ham_file      String "ham.h5" "File where Hamiltonians are stored."
 @configtag write_hr      Bool get_write_current(conf) "Whether to write real-space Hamiltonians. Defaults to true if write_current=true."
 @configtag kpoints String "gamma" "file/method for defining k-points (gamma, EIGENVAL, filename.h5)."
-@configtag save_vecs Bool false "Whether eigenvectors are stored."
+@configtag save_vecs Bool false "Whether eigenvectors are stored (in vs.h5, dataset vs: orbitals × states × k-points × structures)."
 
 
 # ====================
@@ -24,7 +24,21 @@
 # Diagonalization
 # ====================
 @configtag skip_diag Bool false "if true, no eigenvalues are computed."
-@configtag diag_method String "shift-invert" "sparse eigensolver when `sp_diag=true` (shift-invert, krylov-schur)."
+@configtag diag_method String "shift-invert" "sparse eigensolver when `sp_diag=true` (shift-invert: KrylovKit with a sparse LU factorization, orthonormal eigenvectors also for degenerate eigenvalues, k-points in parallel; shift-invert-arpack: ARPACK; krylov-schur: KrylovKit without factorization). The neig eigenvalues closest to eig_target, in ascending order (except with ARPACK)."
+@configtag diag_emin Float64 NaN "lower end of the energy window (eV) of the dense diagonalization (sp_diag = false): only the states in [diag_emin, diag_emax] are computed (Es.dat is padded with NaN). Default: no window."
+@configtag diag_emax Float64 NaN "upper end of the energy window (eV) of the dense diagonalization (see diag_emin)."
+
+"""
+    diag_window(conf)
+
+Energy window `(diag_emin, diag_emax)` of the dense diagonalization, or `nothing`.
+"""
+function diag_window(conf::Config)
+    emin, emax = get_diag_emin(conf), get_diag_emax(conf)
+    isnan(emin) && isnan(emax) && return nothing
+    (isnan(emin) || isnan(emax) || emin ≥ emax) && error("diag_emin and diag_emax must both be set, with diag_emin < diag_emax.")
+    return (emin, emax)
+end
 @configtag neig Int64 6 "number of eigenvalues when using sparse eigensolver."
 @configtag eig_target Float64 0.0 "target energy when using sparse eigensolver."
 

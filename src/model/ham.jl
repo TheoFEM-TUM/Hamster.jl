@@ -102,32 +102,69 @@ Diagonalizes a vector of Hamiltonian matrices `Hk` and returns the specified num
 - `method::String`: The method to be used for calculating eigenvalues of a sparse matrix.
 - `vectors::Bool=true`: Whether the eigenvectors are computed (dense matrices); without them, `vs` is empty and the full
   diagonalization is several times faster.
+- `window=nothing`: Energy window `(Emin, Emax)` of dense matrices: only the eigenvalues and eigenvectors in the window
+  are computed. `Es` keeps `size(Hk[1], 1)` rows (padded with `NaN`), `vs` has as many columns as the k-point with the
+  most states in the window (padded with zeros).
 
-With fewer k-points than threads, the dense diagonalizations use the remaining threads for BLAS.
+With fewer k-points than threads, the dense diagonalizations and the sparse LU factorizations of shift-invert use the
+remaining threads for BLAS (ARPACK, which diagonalizes one k-point at a time, all threads).
 
 # Returns:
 - `Es::Matrix{Float64}`: A matrix where each column `Es[:, k]` contains the `Neig` eigenvalues of the `k`-th Hamiltonian matrix in `Hk`.
 - `vs::Array{ComplexF64, 3}`: A 3D array where each `vs[:, :, k]` contains the `Neig` eigenvectors corresponding to the `k`-th Hamiltonian matrix in `Hk`. The dimensions of `vs` are `(Nε, Neig, Nk)`, where `Nε` is the size of each Hamiltonian matrix, `Neig` is the number of eigenvectors, and `Nk` is the number of Hamiltonian matrices.
 """
-function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0, method="shift-invert", vectors=true)
+function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0, method="shift-invert", vectors=true,
+                     window=nothing)
     Nε = size(Hk[1], 1)
     Nk = length(Hk)
-    Es = zeros(Neig, Nk)
-    vs = zeros(ComplexF64, vectors ? Nε : 0, Neig, Nk)
-
-    blas_threads = BLAS.get_num_threads()
     dense = !(Hk[1] isa SparseMatrixCSC)
-    dense && Nk < Threads.nthreads() && BLAS.set_num_threads(max(blas_threads, Threads.nthreads() ÷ Nk))
+    windowed = dense && !isnothing(window)
+    results = Vector{Any}(undef, Nk)
+
+    # Threads that the loop over k-points leaves idle go to BLAS, which the dense diagonalization and the sparse LU
+    # factorization of shift-invert use (e.g., all threads for a single k-point). ARPACK diagonalizes one k-point at a
+    # time (ARPACK_LOCK), so it always gets all threads.
+    blas_threads = BLAS.get_num_threads()
+    arpack = !dense && method == "shift-invert-arpack"
+    factorizes = dense || method ∈ ("shift-invert", "shift-invert-arpack")
+    if factorizes && (arpack || Nk < Threads.nthreads())
+        BLAS.set_num_threads(max(blas_threads, arpack ? Threads.nthreads() : Threads.nthreads() ÷ Nk))
+    end
     try
         Threads.@threads for k in eachindex(Hk)
-            Es[:, k], v = diagonalize(Hk[k], Neig=Neig, target=target, method=method, vectors=vectors)
-            vectors && (vs[:, :, k] = v)
+            results[k] = windowed ? diagonalize(Hk[k], vectors=vectors, window=window) :
+                                    diagonalize(Hk[k], Neig=Neig, target=target, method=method, vectors=vectors)
         end
     finally
         BLAS.set_num_threads(blas_threads)
     end
 
+    # With a window, the number of states differs between the k-points
+    Nrows = windowed ? Nε : Neig
+    Ncols = windowed ? maximum(r -> length(r[1]), results, init=0) : Neig
+    Es = fill(windowed ? NaN : 0.0, Nrows, Nk)
+    vs = zeros(ComplexF64, vectors ? Nε : 0, Ncols, Nk)
+    for (k, (E, v)) in enumerate(results)
+        Es[1:length(E), k] = E
+        vectors && (vs[:, 1:size(v, 2), k] = v)
+    end
     return Es, vs
+end
+
+"""
+    apply_window(Es, vs, window)
+
+Keep only the eigenvalues (and eigenvectors) in the energy `window` of every k-point: `Es` padded with `NaN` (same number
+of rows), `vs` with as many columns as the k-point with the most states in the window.
+"""
+function apply_window(Es, vs, window)
+    inside = [findall(E -> window[1] ≤ E ≤ window[2], view(Es, :, k)) for k in axes(Es, 2)]
+    Es_w = fill(NaN, size(Es)); vs_w = zeros(eltype(vs), size(vs, 1), maximum(length, inside, init=0), size(Es, 2))
+    for (k, n) in enumerate(inside)
+        Es_w[1:length(n), k] = Es[n, k]
+        size(vs, 1) > 0 && (vs_w[:, 1:length(n), k] = vs[:, n, k])
+    end
+    return Es_w, vs_w
 end
 
 """
@@ -140,15 +177,22 @@ Fully diagonalizes a Hermitian Hamiltonian matrix `Hk` and returns the eigenvalu
 - `Neig::Int=size(Hk, 1)`: The number of eigenvalues and corresponding eigenvectors to compute. Not used.
 - `target::Real=0`: The target eigenvalue around which to focus the computation. Not used.
 - `method::String`: The method to be used for calculating eigenvalues of a sparse matrix.
+- `window=nothing`: Energy window `(Emin, Emax)`: only the eigenvalues (and eigenvectors) in the window.
 
 # Returns:
 - `real_values::Vector{Float64}`: A vector containing the real parts of the eigenvalues of `Hk`. The eigenvalues are computed using the Hermitian matrix, so they are guaranteed to be real.
 - `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to an eigenvalue of `Hk`. The eigenvectors are computed in the standard basis and are complex-valued.
 """
-function diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0, method="shift-invert", vectors=true)
+function diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0, method="shift-invert", vectors=true, window=nothing)
     if abs(hermiticity_mismatch(Hk)) > 1e-5
         maxdiff, inds = findmax(abs.(Hk .- Hermitian(Hk)))
         @warn "Hamiltonian not hermitian! Maximum missmatch: $maxdiff at $inds."
+    end
+    # Energy window (LAPACK zheevr with a range): the eigenvectors outside the window are not back-transformed
+    if !isnothing(window)
+        vectors || return real.(eigvals(Hermitian(Hk), window[1], window[2])), nothing
+        eig = eigen(Hermitian(Hk), window[1], window[2])
+        return real.(eig.values), eig.vectors
     end
     vectors || return real.(eigvals(Hermitian(Hk))), nothing
     eig = eigen(Hermitian(Hk))
@@ -177,35 +221,79 @@ end
 const ARPACK_LOCK = ReentrantLock()
 
 """
-    diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert")
+    diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert", vectors=true)
 
-Diagonalizes a sparse Hermitian matrix `Hk` to find a specified number of eigenvalues and eigenvectors, optionally focusing on eigenvalues near a given target.
+Compute `Neig` eigenvalues of the sparse Hermitian matrix `Hk` close to `target` and their eigenvectors.
 
 # Arguments:
-- `Hk::SparseMatrixCSC`: A sparse Hermitian matrix in compressed sparse column format to be diagonalized. The matrix should be square and Hermitian.
-- `Neig::Int=6`: The number of eigenvalues and corresponding eigenvectors to compute. Defaults to `6`, but can be adjusted based on the required precision or size of the spectrum.
-- `target::Real=0`: The target eigenvalue around which to focus the computation. This is used to prioritize finding eigenvalues closest to this value. Defaults to `0`.
-- `method::String`: The method to be used for calculating eigenvalues of a sparse matrix.
+- `Hk::SparseMatrixCSC`: A sparse Hermitian matrix.
+- `Neig::Int=6`: The number of eigenvalues and eigenvectors.
+- `target::Real=0`: The energy around which the eigenvalues are computed.
+- `method::String`:
+  - `shift-invert` (default): Hermitian Lanczos of KrylovKit on (Hk - target)⁻¹ with a sparse LU factorization, as on
+    the GPU: orthonormal eigenvectors also for degenerate eigenvalues (e.g., Kramers pairs), thread-safe, so k-points
+    are diagonalized in parallel.
+  - `shift-invert-arpack`: ARPACK on (Hk - target)⁻¹. ARPACK has no Hermitian driver for complex matrices: its
+    eigenvectors of degenerate eigenvalues are not orthogonal to each other (the eigenvalues are exact).
+  - `krylov-schur`: Lanczos of KrylovKit on Hk, without factorization (slow for interior eigenvalues).
 
 # Returns:
-- `eigenvalues::Vector{Float64}`: A vector of the real parts of the computed eigenvalues, focusing on those closest to the target. The number of eigenvalues returned is equal to `Neig`.
-- `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to one of the computed eigenvalues.
+- `eigenvalues::Vector{Float64}`: The `Neig` eigenvalues closest to `target` (ascending order with the KrylovKit methods,
+  as returned by ARPACK with `shift-invert-arpack`).
+- `eigenvectors::Matrix{ComplexF64}`: The corresponding eigenvectors (columns).
 """
 function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert", vectors=true)
-    if method == "shift-invert"
+    if method == "shift-invert-arpack"
         Es, vs, _, _, _, _ = lock(() -> eigs(Hk, nev=Neig, sigma=target), ARPACK_LOCK)
         if abs(Es[1] - target) > abs(Es[end] - target)
-            return real.(Es[end-Neig:end]), vs[:, end-Neig:end]
+            return real.(Es[end-Neig+1:end]), vs[:, end-Neig+1:end]
         else
             return real.(Es[1:Neig]), vs[:, 1:Neig]
         end
+    end
+    krylovdim = max(30, 2Neig + 10)      # the KrylovKit default (30) is too small for more than about 25 eigenvalues
+    x0 = rand(ComplexF64, size(Hk, 1))
+    if method == "shift-invert"
+        F = shifted_factorization(Hk, target)
+        μs, xs, info = eigsolve(x -> F \ x, x0, Neig, :LM, ishermitian=true, krylovdim=krylovdim, maxiter=500)
+        check_convergence(info, Neig, method)
+        λs = target .+ 1 ./ real.(μs)
     elseif method == "krylov-schur"
-        Es, vs = eigsolve(Hk, Neig, EigSorter(λ->abs(target-λ), rev=false), ishermitian=true, maxiter=500)
-        if abs(Es[1] - target) > abs(Es[end] - target)
-            return real.(Es[end-Neig:end]), hcat(vs[end-Neig:end]...)
-        else
-            return real.(Es[1:Neig]), hcat(vs[1:Neig]...)
-        end
+        λs, xs, info = eigsolve(Hk, x0, Neig, EigSorter(λ -> abs(target - λ), rev=false), ishermitian=true, krylovdim=krylovdim,
+                                maxiter=500)
+        check_convergence(info, Neig, method)
+        λs = real.(λs)
+    else
+        error("Unknown diag_method '$method'. Valid options are shift-invert, shift-invert-arpack and krylov-schur.")
+    end
+    length(λs) ≥ Neig || error("Sparse eigensolver converged only $(length(λs)) of $Neig eigenvalues.")
+    closest = sortperm(abs.(λs .- target))[1:Neig]
+    perm = closest[sortperm(λs[closest])]
+    return λs[perm], reduce(hcat, xs[perm])
+end
+
+"""
+    check_convergence(info, Neig, method)
+
+Warn if KrylovKit converged fewer than `Neig` eigenvalues (the others are returned as unconverged Ritz values).
+"""
+function check_convergence(info, Neig, method)
+    info.converged ≥ Neig && return nothing
+    @warn "diag_method = $method: only $(info.converged) of $Neig eigenvalues converged after $(info.numiter) restarts " *
+          "(largest residual $(maximum(info.normres[1:min(end, Neig)]))). Increase neig or use another diag_method."
+end
+
+"""
+    shifted_factorization(Hk, target)
+
+Sparse LU factorization of `Hk - target I`. If `target` is (numerically) an eigenvalue, it is shifted by 1e-6 eV.
+"""
+function shifted_factorization(Hk, target)
+    try
+        return lu(Hk - target * I)
+    catch err
+        err isa SingularException || rethrow()
+        return lu(Hk - (target + 1e-6) * I)
     end
 end
 

@@ -56,7 +56,13 @@ function ewald_sum(pos, q, lattice;
 )
 
     @assert length(q) == length(pos) "length(q) must equal number of atoms"
-    @assert abs(sum(q)) < 1e-8 "Periodic PME requires a neutral cell unless you add a neutralizing background"
+    # Charged cells (e.g., with charged defects): Wolf and Zahn are real-space sums, for which a net charge is well
+    # defined. For Ewald, the omitted G = 0 term corresponds to a uniform neutralizing background, which shifts all
+    # potentials by a constant (removed by the mean centering of the onsite potentials).
+    if abs(sum(q)) > 1e-8 && include_long
+        @warn "Ewald sum of a charged cell (net charge $(round(sum(q), digits=4)) e): a uniform neutralizing background is " *
+              "assumed (the potentials are defined up to a constant)." maxlog=1
+    end
 
     lattice_inv = inv(lattice)
     α = alpha == 0. ? (alpha_factor / rcut) : alpha

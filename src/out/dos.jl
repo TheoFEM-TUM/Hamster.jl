@@ -29,17 +29,22 @@ function orbital_labels(strc, basis; soc=false)
 end
 
 """
-    projection_label(orbital, projection)
+    projection_label(orbital, projection, region="")
 
-Label of an orbital name for the given projection: `"element"` (`"Pb-px↑"` → `"Pb"`) or `"orbital"` (`"Pb-px↑"` → `"Pb-px"`).
+Label of an orbital name for the given projection: `"element"` (`"Pb-px↑"` → `"Pb"`), `"orbital"` (`"Pb-px↑"` →
+`"Pb-px"`), `"defect"` or `"localized"` (region of the atom and element, e.g. `"shell1-Pb"`, see `defect_regions` and
+`localized_regions`).
 """
-function projection_label(orbital, projection)
+function projection_label(orbital, projection, region="")
     if projection == "element"
         return String(split(orbital, "-")[1])
     elseif projection == "orbital"
         return replace(orbital, "↑" => "", "↓" => "")
+    elseif projection ∈ ("defect", "localized")
+        isempty(region) && error("The $projection projection needs the region of every orbital.")
+        return "$region-$(split(orbital, "-")[1])"
     else
-        error("Unknown DOS projection '$projection'. Valid options are element and orbital.")
+        error("Unknown DOS projection '$projection'. Valid options are element, orbital, defect and localized.")
     end
 end
 
@@ -224,20 +229,22 @@ end
 hermitian_mul(H::SparseMatrixCSC, v::AbstractVector) = vec(hermitian_mul!(similar(v, 1, length(v)), H, reshape(v, 1, :)))
 
 """
-    kpm_moments(H̃, Hoff, members, pairs, M, Nvec; seed=1234)
+    kpm_moments(H̃, Hoff, members, pairs, M, Nvec; seed=1234, vectors=nothing)
 
 Chebyshev moments μₘ = Tr[X Tₘ(H̃)] of the rescaled Hamiltonian `H̃` (spectrum within [-1, 1]), estimated with `Nvec`
 random-phase vectors, for X = 1 (DOS), X = P_A (PDOS of label A) and X = P_A H P_B (COHP of the pair (A, B), with the
-unscaled off-site Hamiltonian `Hoff`).
+unscaled off-site Hamiltonian `Hoff`). With `vectors` (`Nvec × Nε`), these vectors are used instead and the sums
+⟨v|X Tₘ(H̃)|v⟩ over them are returned (not averaged): for unit vectors on all orbitals of A, the exact PDOS moments of A
+and the exact COHP moments of the pairs (A, B).
 
 The recursion runs for all vectors at once, in one pass over the columns of `H̃` per moment that is distributed over the
 threads: column `j` gives the contributions of orbital `j` to the moments and, with `H̃ = H̃ᴴ`, the entries `j` of
 the next Chebyshev vectors. So `H̃` is read once per moment, and all threads are used independently of `Nvec`.
 """
-function kpm_moments(H̃, Hoff, members, pairs, M, Nvec; seed=1234)
+function kpm_moments(H̃, Hoff, members, pairs, M, Nvec; seed=1234, vectors=nothing)
     Nε = size(H̃, 1)
-    V = Matrix{ComplexF64}(undef, Nvec, Nε)
-    for ivec in 1:Nvec
+    V = isnothing(vectors) ? Matrix{ComplexF64}(undef, Nvec, Nε) : Matrix{ComplexF64}(vectors)
+    isnothing(vectors) && for ivec in 1:Nvec
         V[ivec, :] .= exp.(2π * im .* rand(Random.MersenneTwister(seed + ivec), Nε))
     end
     # P_B H P_A V for each pair (a, b), restricted to the orbitals of B
@@ -265,7 +272,31 @@ function kpm_moments(H̃, Hoff, members, pairs, M, Nvec; seed=1234)
         μ_cohp[m, :] .= weight .* sum(x -> x[3], parts)
         m < M && ((t_prev, t_curr, t_next) = (t_curr, t_next, t_prev))
     end
-    return μ_dos ./ Nvec, μ_pdos ./ Nvec, μ_cohp ./ Nvec
+    norm = isnothing(vectors) ? Nvec : 1
+    return μ_dos ./ norm, μ_pdos ./ norm, μ_cohp ./ norm
+end
+
+"""
+    kpm_local_moments(H̃, Hoff, members, pairs, local_labels, M; batch=32)
+
+Exact PDOS moments of the labels `local_labels` (small sets of orbitals, e.g. the atoms around a defect) and exact COHP
+moments of the pairs that contain one of them, from unit vectors on their orbitals (`batch` vectors at a time) instead
+of the stochastic trace. Returns the PDOS moments (`M × length(local_labels)`), the indices of these pairs in `pairs`
+and their COHP moments.
+"""
+function kpm_local_moments(H̃, Hoff, members, pairs, local_labels, M; batch=32)
+    orbitals = reduce(vcat, members[local_labels], init=Int64[])
+    local_pairs = findall(((a, b),) -> a ∈ local_labels || b ∈ local_labels, pairs)
+    # The vectors act on the first label of a pair: put the local one first
+    oriented = [pairs[p][1] ∈ local_labels ? pairs[p] : reverse(pairs[p]) for p in local_pairs]
+    μ_pdos = zeros(M, length(members)); μ_cohp = zeros(M, length(local_pairs))
+    for part in Iterators.partition(orbitals, batch)
+        V = zeros(ComplexF64, length(part), size(H̃, 1))
+        for (k, i) in enumerate(part); V[k, i] = 1; end
+        _, μp, μc = kpm_moments(H̃, Hoff, members, oriented, M, length(part), vectors=V)
+        μ_pdos .+= μp; μ_cohp .+= μc
+    end
+    return μ_pdos[:, local_labels], local_pairs, μ_cohp
 end
 
 """
@@ -333,7 +364,7 @@ function kpm_reconstruct(μ, energies, center, halfwidth)
     return out
 end
 
-function dos_kpm(Hr, Rs, ks, atoms, members, pairs, g, settings)
+function dos_kpm(Hr, Rs, ks, atoms, members, pairs, g, settings; local_labels=Int64[])
     Hks = get_hamiltonian(sparse.(Hr), Rs, ks, Sparse())
     bounds = map(Hks) do H
         x0 = rand(Random.MersenneTwister(1), eltype(H), size(H, 1))
@@ -342,15 +373,24 @@ function dos_kpm(Hr, Rs, ks, atoms, members, pairs, g, settings)
         (Emin, Emax)
     end
     Emin, Emax = minimum(first.(bounds)), maximum(last.(bounds))
-    center = (Emin + Emax) / 2; halfwidth = (Emax - Emin) / (2 - 0.01)
-    emin = isnan(settings.emin) ? Emin : settings.emin
-    emax = isnan(settings.emax) ? Emax : settings.emax
+    # Padding of three kernel widths (π × halfwidth / M) beyond the extreme eigenvalues, so that the broadened weight of
+    # the lowest and highest states (e.g. deep defect states) lies on the default energy grid
+    center = (Emin + Emax) / 2; halfwidth = (Emax - Emin) / 2 * (1 + 3π / settings.kpm_moments) / (1 - 0.005)
+    emin = isnan(settings.emin) ? center - (1 - 0.005) * halfwidth : settings.emin
+    emax = isnan(settings.emax) ? center + (1 - 0.005) * halfwidth : settings.emax
     energies = collect(range(emin, emax, length=settings.ne))
     wk = g / size(ks, 2)
     dos = zeros(length(energies)); pdos = zeros(length(energies), length(members)); cohp = zeros(length(energies), length(pairs))
     for H in Hks
         H̃ = (H - center * I) ./ halfwidth
-        μ_dos, μ_pdos, μ_cohp = kpm_moments(H̃, offsite(H, atoms), members, pairs, settings.kpm_moments, settings.kpm_vectors)
+        Hoff = offsite(H, atoms)
+        μ_dos, μ_pdos, μ_cohp = kpm_moments(H̃, Hoff, members, pairs, settings.kpm_moments, settings.kpm_vectors)
+        if !isempty(local_labels)
+            μ_pdos[:, local_labels], local_pairs, μ_cohp[:, local_pairs] =
+                kpm_local_moments(H̃, Hoff, members, pairs, local_labels, settings.kpm_moments)
+            # Total DOS from the labels (exact local parts, stochastic rest): the PDOS add up to the DOS
+            μ_dos = vec(sum(μ_pdos, dims=2))
+        end
         dos .+= wk .* vec(kpm_reconstruct(μ_dos, energies, center, halfwidth))
         pdos .+= wk .* kpm_reconstruct(μ_pdos, energies, center, halfwidth)
         cohp .+= wk .* kpm_reconstruct(μ_cohp, energies, center, halfwidth)
@@ -431,6 +471,13 @@ Base.@kwdef struct DOSSettings
     kpm_vectors :: Int64 = 32
     exact_max_orbitals :: Int64 = 4000
     nelec :: Float64 = NaN
+    primitive_poscar :: String = ""
+    defect_shells :: Int64 = 2
+    defect_tol :: Float64 = 1.0
+    defect_separate :: Bool = true
+    localized_threshold :: Float64 = 0.1
+    localized_emin :: Float64 = NaN
+    localized_emax :: Float64 = NaN
 end
 
 """
@@ -459,10 +506,14 @@ DOSSettings(conf::Config) = DOSSettings(quantities=dos_quantities(conf), method=
     projection=lowercase(get_dos_projection(conf)), cohp_pairs=filter(p -> lowercase(p) ≠ "all", get_dos_cohp_pairs(conf)), ne=get_dos_ne(conf),
     emin=get_dos_emin(conf), emax=get_dos_emax(conf), sigma=get_dos_sigma(conf), broadening=lowercase(get_dos_broadening(conf)),
     kpm_moments=get_dos_kpm_moments(conf), kpm_vectors=get_dos_kpm_vectors(conf),
-    exact_max_orbitals=get_dos_exact_max_orbitals(conf), nelec=get_dos_nelec(conf))
+    exact_max_orbitals=get_dos_exact_max_orbitals(conf), nelec=get_dos_nelec(conf),
+    primitive_poscar=isempty(get_dos_primitive_poscar(conf)) && haskey(conf, "Unfold") ? get_unfold_poscar(conf) : get_dos_primitive_poscar(conf),
+    defect_shells=get_dos_defect_shells(conf), defect_tol=get_dos_defect_tol(conf), defect_separate=get_dos_defect_separate(conf),
+    localized_threshold=get_dos_localized_threshold(conf),
+    localized_emin=get_dos_localized_emin(conf), localized_emax=get_dos_localized_emax(conf))
 
 """
-    compute_dos(Hr, Rs, orbitals, atoms, settings=DOSSettings(); ks=zeros(3, 1), soc=false)
+    compute_dos(Hr, Rs, orbitals, atoms, settings=DOSSettings(); ks=zeros(3, 1), soc=false, regions=fill("", length(orbitals)))
 
 Compute the DOS, PDOS and COHP of a real-space Hamiltonian.
 
@@ -474,29 +525,37 @@ Compute the DOS, PDOS and COHP of a real-space Hamiltonian.
 - `settings`: `DOSSettings`.
 - `ks`: k-points (in units of the reciprocal lattice vectors) with equal weights.
 - `soc`: Whether the orbitals are spin orbitals (spin degeneracy 1 instead of 2).
+- `regions`: Region of the atom of every orbital (`"defect"`, `"shell1"`, …, `"bulk"`, see `defect_regions`), for the
+  defect projection. With the kpm method, the PDOS of all regions except the bulk is exact (unit vectors on their
+  orbitals instead of the stochastic trace).
 
 # Returns
-A named tuple with `energies`, `dos`, `pdos` (energies × labels), `cohp` (energies × pairs), `labels`, `pairs`, `method`,
+A named tuple with `energies`, `dos`, `pdos` (energies × labels), `cohp` (energies × pairs), `labels`, `label_atoms`
+(number of atoms per label), `pairs`, `method`,
 and, if `settings.nelec` is set, `fermi_energy`, `idos`, `icohp` (integrated curves) and `icohp_fermi` (ICOHP at the Fermi
 energy).
 """
-function compute_dos(Hr, Rs, orbitals, atoms, settings=DOSSettings(); ks=zeros(3, 1), soc=false)
-    labels = unique(projection_label.(orbitals, settings.projection))
-    label_index = [findfirst(==(projection_label(o, settings.projection)), labels) for o in orbitals]
+function compute_dos(Hr, Rs, orbitals, atoms, settings=DOSSettings(); ks=zeros(3, 1), soc=false, regions=fill("", length(orbitals)))
+    orbital_label = projection_label.(orbitals, settings.projection, regions)
+    labels = unique(orbital_label)
+    label_index = [findfirst(==(l), labels) for l in orbital_label]
     members = [findall(==(l), label_index) for l in eachindex(labels)]
     pairs = "cohp" ∈ settings.quantities ? cohp_pairs(Hr, atoms, label_index, labels, settings.cohp_pairs) : Tuple{Int64, Int64}[]
     g = soc ? 1 : 2
-    method = settings.method == "auto" ? (length(orbitals) ≤ settings.exact_max_orbitals ? "exact" : "kpm") : settings.method
+    method = settings.method == "auto" ? (length(orbitals) ≤ settings.exact_max_orbitals || settings.projection == "localized" ? "exact" : "kpm") : settings.method
     result = if method == "exact"
         dos_exact(Hr, Rs, ks, atoms, members, pairs, g, settings)
     elseif method == "kpm"
-        dos_kpm(Hr, Rs, ks, atoms, members, pairs, g, settings)
+        local_labels = settings.projection == "defect" ? findall(l -> !startswith(l, "bulk"), labels) : Int64[]
+        dos_kpm(Hr, Rs, ks, atoms, members, pairs, g, settings, local_labels=local_labels)
     else
         error("Unknown DOS method '$method'. Valid options are auto, exact and kpm.")
     end
     integrated = isnan(settings.nelec) ? (;) :
         (idos=cumulative_integral(result.energies, result.dos), icohp=reduce(hcat, [cumulative_integral(result.energies, c) for c in eachcol(result.cohp)], init=zeros(length(result.energies), 0)))
-    return merge(result, integrated, (labels=labels, pairs=["$(labels[a])-$(labels[b])" for (a, b) in pairs], method=method))
+    label_atoms = [length(unique(atoms[m])) for m in members]
+    return merge(result, integrated, (labels=labels, label_atoms=label_atoms, pairs=["$(labels[a])-$(labels[b])" for (a, b) in pairs],
+                                      method=method))
 end
 
 """
@@ -513,6 +572,17 @@ function write_dos(file, key, result, settings)
         if "pdos" ∈ settings.quantities
             gp = create_group(g, "pdos")
             for (l, label) in enumerate(result.labels); gp[label] = result.pdos[:, l]; end
+            ga = create_group(g, "label_atoms")
+            for (l, label) in enumerate(result.labels); ga[label] = result.label_atoms[l]; end
+        end
+        haskey(result, :regions) && (g["regions"] = result.regions; g["region_defect"] = result.region_owner)
+        if haskey(result, :participation)
+            p = result.participation
+            gp = create_group(g, "participation")
+            gp["energies"] = p.energies; gp["pn"] = p.pn; gp["ratio"] = p.ratio
+            gp["peak_energies"] = Float64[x.energy for x in p.peaks]; gp["peak_ratios"] = Float64[x.ratio for x in p.peaks]
+            gp["peak_pn"] = Float64[x.pn for x in p.peaks]
+            for (n, x) in enumerate(p.peaks); gp["peak_atoms/$n"] = x.atoms; end
         end
         if "cohp" ∈ settings.quantities
             gc = create_group(g, "cohp")
@@ -538,6 +608,66 @@ function write_dos(file, key, result, settings)
 end
 
 """
+    structure_defect_regions(strc, basis, pc, settings; soc=false)
+
+Region of every atom of `strc` (see `defect_regions`) from the mapping of its displaced positions onto the primitive
+cell `pc` (so that defects that move in an MD trajectory are followed).
+"""
+function structure_defect_regions(strc, basis, pc, settings; soc=false)
+    umap = UnfoldMap(strc, basis, pc.lattice, pc.rs_atom, pc.atom_types, soc=soc, tol=settings.defect_tol, displaced=true)
+    levels, owner = defect_regions(strc, umap, pc.lattice, pc.rs_atom, shells=settings.defect_shells, displaced=true,
+                                   separate=settings.defect_separate)
+    all(==(-1), levels) && @warn "projection = defect: no defect found in the structure (all atoms are bulk)." maxlog=1
+    return levels, owner
+end
+
+"""
+    localized_regions(Hr, Rs, ks, strc, atoms, settings; soc=false)
+
+Localized states of a structure and the atoms around them, from the eigenvectors at the k-points `ks` (no mapping onto a
+primitive cell, so also polarons or self-trapped carriers in a perfect, distorted structure are found): the
+energy-resolved participation of the atoms (see `participation`), the atoms that carry the states with a participation
+ratio below `settings.localized_threshold` (see `localized_atoms`) and their neighbour shells (displaced positions).
+Returns a named tuple with `energies`, `pn`, `ratio` (on the energy grid of the DOS), `peaks`, `levels` (0: atoms
+of the localized states, n: shell n, -1: the rest) and `owner` (the localized region of every atom, see `neighbor_shells`).
+"""
+function localized_regions(Hr, Rs, ks, strc, atoms, settings; soc=false)
+    states = atom_weight_states(Hr, Rs, ks, atoms)
+    σ = settings.sigma
+    Eall = reduce(vcat, first.(states))
+    emin = isnan(settings.emin) ? minimum(Eall) - 5σ : settings.emin
+    emax = isnan(settings.emax) ? maximum(Eall) + 5σ : settings.emax
+    energies = collect(range(emin, emax, length=settings.ne))
+    types = [ion.type for ion in strc.ions]
+    pn, ratio, wa, density = participation(energies, states, types, σ, 1 / size(ks, 2))
+    # Default window: the gap ± 1 eV (with nelec), all states otherwise
+    window = (-Inf, Inf)
+    if !isnan(settings.nelec)
+        g = soc ? 1 : 2
+        occ, _ = occupations(Eall, fill(g / size(ks, 2), length(Eall)), settings.nelec)
+        vbm = maximum(Eall[occ .> 0.5], init=-Inf); cbm = minimum(Eall[occ .≤ 0.5], init=Inf)
+        window = (vbm - 1, cbm + 1)
+    end
+    core, peaks = localized_atoms(energies, ratio, pn, wa, density, threshold=settings.localized_threshold,
+                                  emin=isnan(settings.localized_emin) ? window[1] : settings.localized_emin,
+                                  emax=isnan(settings.localized_emax) ? window[2] : settings.localized_emax)
+    isempty(core) && @warn "projection = localized: no localized states found (participation ratio below $(settings.localized_threshold))." maxlog=1
+    positions = [ion.pos + ion.dist for ion in strc.ions]
+    # One region per localized state (the atoms of a state need not be neighbours); a state that shares atoms with an
+    # earlier one joins its region
+    state = zeros(Int64, length(positions))
+    for p in peaks
+        shared = filter(>(0), state[p.atoms])
+        state[p.atoms] .= isempty(shared) ? maximum(state, init=0) + 1 : minimum(shared)
+    end
+    ids = unique(state[core])
+    levels, owner = neighbor_shells(strc.lattice, positions, nearest_neighbor_distances(strc.lattice, positions), core,
+                                    Tuple{Vector{Float64}, Float64}[], settings.defect_shells, separate=settings.defect_separate,
+                                    core_defects=[findfirst(==(state[a]), ids) for a in core])
+    return (energies=energies, pn=pn, ratio=ratio, peaks=peaks, levels=levels, owner=owner)
+end
+
+"""
     run_dos(ham, strcs, bases, local_inds, comm, conf=get_empty_config(); rank=0, nranks=1, ks=get_kpoints_from_config(conf))
 
 Post-processing step of a standard run: compute the DOS, PDOS and COHP of every structure from its real-space Hamiltonian
@@ -548,10 +678,30 @@ function run_dos(ham, strcs, bases, local_inds, comm, conf=get_empty_config(); r
     settings = DOSSettings(conf)
     filename = get_dos_filename(conf)
     soc = get_soc(conf)
+    settings.projection == "localized" && settings.method == "kpm" &&
+        error("projection = localized needs the eigenvectors: use method = exact (or auto).")
+    settings.projection == "defect" && isempty(settings.primitive_poscar) &&
+        error("projection = defect needs the primitive cell: set primitive_poscar in the DOS block (or poscar in an Unfold block).")
+    pc = settings.projection == "defect" ? read_poscar(settings.primitive_poscar) : nothing
     results = map(eachindex(strcs)) do index
         system, config_index = get_system_and_config_index(index, local_inds)
         orbitals, atoms = orbital_labels(strcs[index], bases[index], soc=soc)
-        time = @elapsed result = compute_dos(get_hr(ham, index), ham.Rs[index], orbitals, atoms, settings, ks=ks, soc=soc)
+        localized = settings.projection == "localized" ?
+            localized_regions(get_hr(ham, index), ham.Rs[index], ks, strcs[index], atoms, settings, soc=soc) : nothing
+        levels, owner = !isnothing(pc) ? structure_defect_regions(strcs[index], bases[index], pc, settings, soc=soc) :
+                        !isnothing(localized) ? (localized.levels, localized.owner) : (Int64[], Int64[])
+        core = isnothing(localized) ? "defect" : "localized"
+        ndefects = maximum(owner, init=0)
+        names = [region_name(levels[a], core, owner[a], ndefects) for a in eachindex(levels)]
+        regions = isempty(levels) ? fill("", length(orbitals)) : names[atoms]
+        if rank == 0 && index == 1 && verbosity > 0 && !isempty(levels)
+            counts = join(["$(count(==(n), names)) $n" for n in unique(names[sortperm(levels)])], ", ")
+            println("DOS: $ndefects $(core == "defect" ? "defect(s)" : "localized region(s)") in structure $config_index, atoms: $counts.")
+        end
+        time = @elapsed result = compute_dos(get_hr(ham, index), ham.Rs[index], orbitals, atoms, settings, ks=ks, soc=soc,
+                                             regions=regions)
+        isempty(levels) || (result = merge(result, (regions=levels, region_owner=owner)))
+        isnothing(localized) || (result = merge(result, (participation=localized,)))
         if rank == 0 && verbosity > 1; println(" DOS of structure $config_index ($(result.method)): $(round(time, digits=2)) s"); end
         (system == "" ? "$config_index" : "$(system)_$config_index", result)
     end

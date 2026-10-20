@@ -164,6 +164,27 @@ function read_from_file(filename; type=Float64)
 end
 
 """
+    collapse_vector_files(; location=joinpath(pwd(), "tmp"), filename="vs.h5")
+
+Combine the eigenvectors of all structures (`location/vs<index>.h5`, dataset `vs`) into the dataset `vs` of `filename`,
+with the structure index as the last dimension (in the order of the indices). The structures are copied one after
+another, so only one of them is in memory at a time.
+"""
+function collapse_vector_files(; location=joinpath(pwd(), "tmp"), filename="vs.h5")
+    files = filter(f -> startswith(f, "vs") && endswith(f, ".h5"), readdir(location))
+    isempty(files) && return nothing
+    files = files[sortperm(parse.(Int64, [f[3:end-3] for f in files]))]
+    dims = h5open(f -> size(f["vs"]), joinpath(location, files[1]))
+    h5open(filename, "w") do out
+        dset = create_dataset(out, "vs", datatype(ComplexF64), dataspace(dims..., length(files)))
+        for (n, f) in enumerate(files)
+            dset[ntuple(_ -> Colon(), length(dims))..., n] = h5read(joinpath(location, f), "vs")
+        end
+    end
+    return nothing
+end
+
+"""
     collapse_files_with!(str)
 
 Searches for all output files in the `"tmp"` directory that contain the substring `str` in their filename.  

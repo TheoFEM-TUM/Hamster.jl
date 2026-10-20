@@ -36,12 +36,9 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity
     out = run_calculation(task, comm, conf, rank=rank, nranks=nranks)
     save(out, rank, filename="hamster_out.h5")
     if rank == 0
-        files = ["Es"]
-        if get_save_vecs(conf); push!(files, "vs"); end
-        collapse_time = @elapsed for str in files
-            if any([occursin(str, file) for file in readdir(joinpath(pwd(), "tmp"))])
-                collapse_files_with(str)
-            end
+        collapse_time = @elapsed begin
+            any(file -> startswith(file, "Es"), readdir(joinpath(pwd(), "tmp"))) && collapse_files_with("Es")
+            get_save_vecs(conf) && collapse_vector_files()
         end
         rm("tmp", recursive=true)
         # COV_EXCL_START

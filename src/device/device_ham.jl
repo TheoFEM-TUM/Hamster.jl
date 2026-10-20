@@ -174,8 +174,10 @@ function device_eigen(Hk::DeviceHk, ::Sparse; Neig=6, target=0.0, method="shift-
     return Es, copyto!(similar(Hk.nzval, ComplexF64, size(vs)), vs)
 end
 
-function diagonalize(Hk::DeviceHk; Neig=Hk.Nε, target=0, method="shift-invert", vectors=true)
+function diagonalize(Hk::DeviceHk; Neig=Hk.Nε, target=0, method="shift-invert", vectors=true, window=nothing)
     Es, vs = device_eigen(Hk, Hk.sp_diag, Neig=Neig, target=target, method=method, vectors=vectors)
+    # Energy window of the dense diagonalization: the eigenvalues outside are removed afterwards
+    isnothing(window) || Hk.sp_diag isa Sparse || return apply_window(Es, Array(vs), window)
     return Es, Array(vs)
 end
 

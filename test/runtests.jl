@@ -108,6 +108,7 @@ end
 if test_all || test_only == "DOS"
     @testset "DOS" begin
         include("out/test_dos.jl")
+        include("out/test_unfold.jl")
     end
 end
 

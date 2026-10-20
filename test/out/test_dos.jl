@@ -179,4 +179,86 @@ end
     @test μ_dos ≈ ref_dos
     @test μ_pdos ≈ ref_pdos
     @test μ_cohp ≈ ref_cohp
+
+    # Exact moments of a local label from unit vectors (in batches): diagonal of Tₘ, and the COHP of the pairs with it
+    Tm = [Matrix{ComplexF64}(I, N, N), Matrix(H̃)]
+    for m in 3:M; push!(Tm, 2 * Matrix(H̃) * Tm[end] - Tm[end-1]); end
+    for local_label in (1, 2)
+        μ_l, local_pairs, μ_c = Hamster.kpm_local_moments(H̃, Hoff, members, pairs, [local_label], M, batch=7)
+        @test μ_l[:, 1] ≈ [real(sum(diag(Tm[m])[members[local_label]])) for m in 1:M]
+        @test local_pairs == (local_label == 1 ? [1, 2] : [2])
+        for (n, p) in enumerate(local_pairs)
+            a, b = pairs[p]
+            ref = [(a == b ? 1 : 2) * real(tr(Matrix(Hoff)[members[a], members[b]] * Tm[m][members[b], members[a]])) for m in 1:M]
+            @test μ_c[:, n] ≈ ref
+        end
+    end
+end
+
+@testset "Defect projection" begin
+    pc = Hamster.read_poscar(joinpath(dos_path, "POSCAR_gaas"))
+    sites(atom) = [(pc.rs_atom[:, atom] .+ [n1, n2, n3]) ./ 2 for n1 in 0:1 for n2 in 0:1 for n3 in 0:1]
+    mktempdir() do dir
+        # 2x2x2 GaAs supercell with an As antisite (As on the first Ga site)
+        poscar = joinpath(dir, "POSCAR_antisite")
+        open(poscar, "w") do f
+            println(f, "GaAs antisite\n1.0"); for a in eachcol(pc.lattice); println(f, join(2 .* a, " ")); end
+            println(f, "Ga As\n7 9\nDirect"); foreach(r -> println(f, join(r, " ")), [sites(1)[2:8]; [sites(1)[1]]; sites(2)])
+        end
+        for method in ("exact", "kpm")
+            cd(dir) do
+                conf = get_dos_test_config()
+                set_value!(conf, "poscar", poscar)
+                set_value!(conf, "dos", "dos pdos cohp")
+                set_value!(conf, "projection", "DOS", "defect")
+                set_value!(conf, "primitive_poscar", "DOS", joinpath(dos_path, "POSCAR_gaas"))
+                set_value!(conf, "method", "DOS", method)
+                set_value!(conf, "kpm_moments", "DOS", 256)
+                Hamster.main(comm, conf, rank=rank, nranks=nranks)
+                h5open("dos.h5") do f
+                    g = f["1"]
+                    E = read(g["energies"])
+                    # The antisite, its 4 As neighbours, 6 second neighbours (Ga) and the remaining 5 atoms
+                    @test sort(read(g["regions"])) == [fill(-1, 5); 0; fill(1, 4); fill(2, 6)]
+                    @test sort(keys(g["pdos"])) == ["bulk-As", "bulk-Ga", "defect-As", "shell1-As", "shell2-Ga"]
+                    @test read(g["label_atoms/defect-As"]) == 1 && read(g["label_atoms/shell1-As"]) == 4
+                    @test sum(read(g["pdos/$l"]) for l in keys(g["pdos"])) ≈ read(g["dos"]) rtol=1e-6
+                    # Exact for both methods (unit vectors with kpm): 8 states per atom
+                    @test integral(E, read(g["pdos/defect-As"])) ≈ 8 atol=1e-3
+                    @test integral(E, read(g["pdos/shell1-As"])) ≈ 32 atol=1e-3
+                    @test "defect-As-shell1-As" ∈ keys(g["cohp"])
+                end
+            end
+        end
+    end
+end
+
+@testset "Localized states" begin
+    # 8 atoms (4 A, 4 B): a state spread over the A atoms (Bloch-like on one sublattice) and a state on atom 6
+    types = UInt8[1, 1, 1, 1, 2, 2, 2, 2]
+    Wa = zeros(8, 2); Wa[1:4, 1] .= 0.25; Wa[6, 2] = 1
+    energies = collect(range(-2, 3, length=501))
+    pn, ratio, wa, density = Hamster.participation(energies, [([0.0, 1.0], Wa)], types, 0.05, 1.0)
+    e0 = findfirst(≈(0.0), energies); e1 = findfirst(≈(1.0), energies)
+    @test pn[e0] ≈ 4 && ratio[e0] ≈ 1           # not localized, although only on the A sublattice
+    @test pn[e1] ≈ 1 && ratio[e1] ≈ 0.25
+    @test isnan(ratio[1]) && wa[:, e1] ≈ Wa[:, 2]
+    atoms, peaks = Hamster.localized_atoms(energies, ratio, pn, wa, density, threshold=0.5)
+    @test atoms == [6] && length(peaks) == 1 && peaks[1].energy ≈ 1.0
+    @test isempty(Hamster.localized_atoms(energies, ratio, pn, wa, density, threshold=0.5, emax=0.5)[1])
+
+    # Standard run of the perfect crystal: no localized states, all atoms are bulk
+    mktempdir() do dir
+        cd(dir) do
+            conf = get_dos_test_config()
+            set_value!(conf, "dos", "pdos")
+            set_value!(conf, "projection", "DOS", "localized")
+            Hamster.main(comm, conf, rank=rank, nranks=nranks)
+            h5open("dos.h5") do f
+                @test all(==(-1), read(f["1/regions"])) && keys(f["1/pdos"]) == ["bulk-As", "bulk-Ga"]
+                @test isempty(read(f["1/participation/peak_energies"]))
+                @test all(r -> isnan(r) || r > 0.9, read(f["1/participation/ratio"]))
+            end
+        end
+    end
 end
