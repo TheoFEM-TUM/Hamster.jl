@@ -379,7 +379,7 @@ function water_fill(total::Real, weights::Vector{Float64}, caps::Vector{<:Real},
     return baseline .+ surplus_alloc
 end
 
-function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_alpha(conf), Nc_min = get_nc_min(conf), Nc_max = get_nc_max(conf))
+function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_alpha(conf), Nc_min = get_nc_min(conf), Nc_max = get_nc_max(conf), N_ratio = get_n_ratio(conf))
     verbosity = get_verbosity(conf)
     keys_list = collect(keys(descr_dict))
     N_key = length(keys_list)
@@ -403,7 +403,7 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
 
     Nc_vec = zeros(Int, N_key)
     Np_vec = zeros(Int, N_key)
-    N_ratio = Npoints / Ncluster
+    N_ratio = N_ratio < 1 ? Npoints / Ncluster : N_ratio
 
     Nc_caps = Nc_max > 0 ? fill(Float64(Nc_max), N_key) : fill(Inf, N_key)
     Nc_floors = Nc_min > 0 ? fill(Float64(Nc_min), N_key) : zeros(Float64, N_key)
