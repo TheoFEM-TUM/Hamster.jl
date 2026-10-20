@@ -78,6 +78,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             only_sample = get_only_sample(conf),
                             kernel_chunck_size = get_kernel_chunk_size(conf),
                             kernel_strat = get_kernel_strat(conf),
+                            sample_norm = get_sample_norm(conf),
                             rank=0,
                             nranks=1)
     Nstrc = length(strcs)
@@ -274,7 +275,8 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                         Npoints=Np,
                         ml_sampling=get_ml_sampling(conf),
                         dim_weights=get_dim_weights(conf),
-                        kernel_strat = kernel_strat
+                        kernel_strat = kernel_strat,
+                        sample_norm = sample_norm
                     )
                     finished = Threads.atomic_add!(N_key_finished, 1) + 1
                     
@@ -293,7 +295,8 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                         Npoints=Np,
                         ml_sampling=get_ml_sampling(conf),
                         dim_weights=get_dim_weights(conf),
-                        kernel_strat=kernel_strat
+                        kernel_strat=kernel_strat,
+                        sample_norm=sample_norm
                     )
 
                     finished = Threads.atomic_add!(N_key_finished, 1) + 1

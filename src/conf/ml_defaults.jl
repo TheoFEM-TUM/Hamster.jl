@@ -122,6 +122,8 @@ get_ml_zero_params(conf::Config)::Bool = conf("zero_params", "ML") == "default" 
 """
 get_kernel_strat(conf::Config)::String = conf("kernel_strat", "ML") == "default" ? "Sampling" : conf("kernel_strat", "ML")
 
+get_sample_norm(conf::Config)::Bool = conf("sample_norm", "ML") == "default" ? false : conf("sample_norm", "ML")
+
 #@configtag sim_tol Float64 0.01 "cutoff tolerance for similarity matrix." "ML"
 #@configtag key_dims Vector{Int64} Int64[] "Which descriptor dimensions to be used as descriptor keys. Only use discrete dimensions!" "ML"
 

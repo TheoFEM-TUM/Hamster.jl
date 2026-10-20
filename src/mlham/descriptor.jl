@@ -451,7 +451,21 @@ function calc_npoint_ncluster(descr_dict, Npoints, Ncluster, conf; alpha = get_a
     return np_nc_dict
 end
 
-function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random", dim_weights=nothing, kernel_strat = "Sampling")
+function compute_norm_params(X::AbstractMatrix)
+    μ = mean(X, dims=2) |> vec
+    σ = std(X,  dims=2) |> vec
+    return μ, σ
+end
+
+function norm_apply(X, μ, σ)
+    return (X .- μ) ./ σ
+end
+
+function norm_invert(X_norm, μ, σ)
+    return X_norm .* σ .+ μ
+end
+
+function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random", dim_weights=nothing, kernel_strat = "Sampling", sample_norm = false)
     #d × n
     Random.seed!(1234)
     weights = descriptors_w[end, :]
@@ -461,13 +475,21 @@ function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alph
     w_strc = weights[valid]
     Np = size(unique_descriptors, 2)
     dw = dim_weights === nothing ? ones(9) : dim_weights
-    X_scaled = unique_descriptors .* dw
+    if sample_norm
+        μ, σ = compute_norm_params(unique_descriptors)
+        X_scaled = norm_apply(unique_descriptors, μ, σ)
+    end
+    if kernel_strat != "Sampling" && sample_norm != true
+        X_scaled = unique_descriptors .* dw
+    else 
+        X_scaled = unique_descriptors
+    end
     nthreads = kernel_strat != "Sampling" ? Threads.nthreads() : 1
     if Npoints < Np
         #w_strc = descriptors_w[end, :]
         result = Logging.with_logger(NullLogger()) do
             if kernel_strat == "Sampling"
-                Clustering.kmeans(unique_descriptors, Ncluster; weights=w_strc, distance=WeightedSqEuclidean(dw.^2), maxiter=50, init=:kmpp)
+                Clustering.kmeans(X_scaled, Ncluster; weights=w_strc, distance=WeightedSqEuclidean(dw.^2), maxiter=50, init=:kmpp)
             elseif kernel_strat == "Coreset"
                 ParallelKMeans.kmeans(
                     Coreset(),
@@ -512,11 +534,12 @@ function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alph
         centroids = result.centers
         cluster_sizes = zeros(Float64, Ncluster)
         for i in eachindex(indices)
-            cluster_sizes[indices[i]] += w_strc[i]
+            #cluster_sizes[indices[i]] += w_strc[i]
+            cluster_sizes[indices[i]] += 1
         end
         cluster_sizes = ceil.(cluster_sizes)
         cluster_variances = [
-            let vals = [normdiff(unique_descriptors[:, i].*dw, centroids[:, c].*dw) for i in findall(x -> x == c, indices)]
+            let vals = [normdiff(X_scaled[:, i], centroids[:, c]) for i in findall(x -> x == c, indices)]
                 isempty(vals) ? 0.0 : mean(vals)
             end
             for c in 1:Ncluster
@@ -553,7 +576,7 @@ function sample_structure_descriptors(descriptors_w; Ncluster=1, Npoints=1, alph
             if ml_sampling[1] == 'r'
                 selected = sample(cluster_indices, num_to_take, replace=false)
             elseif ml_sampling[1] == 'f'
-                selected = farthest_point_sampling(unique_descriptors, cluster_indices, num_to_take)
+                selected = farthest_point_sampling(X_scaled, cluster_indices, num_to_take)
             end
             append!(selected_indices, selected)
         end
