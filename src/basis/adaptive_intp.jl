@@ -22,7 +22,7 @@ AdaptiveInterpolator(conf=get_empty_config(); xmin=get_itp_xmin(conf),
     xmax=get_itp_xmax(conf), Nmax=get_itp_Nmax(conf), Ninit=get_itp_Ninit(conf), tol=get_itp_tol(conf)) = AdaptiveInterpolator(xmin, xmax, Ninit, Nmax, tol)
 
 """
-    interpolate_f(itper::AdaptiveInterpolator, f::Function)
+    interpolate_f(itper::AdaptiveInterpolator, f::Function; rng=Random.default_rng())
 
 Adaptive interpolation of a given function `f` using an `AdaptiveInterpolator`. The function is sampled 
 at adaptive points and interpolated using cubic splines until convergence is reached or the maximum number 
@@ -33,12 +33,13 @@ of samples (`Nmax`) is exceeded.
   settings, such as the initial number of points, the maximum allowed number of points (`Nmax`), 
   and the convergence tolerance.
 - `f::Function`: The function to interpolate.
+- `rng`: Random number generator for the choice of the new points (pass a seeded generator for reproducible results).
 
 # Returns
 - `xs`: A vector of `x` values where the function has been evaluated.
 - `ys`: A vector of `y` values (`f(xs)`) corresponding to the `x` values.
 """
-function interpolate_f(itper::AdaptiveInterpolator, f::Function)
+function interpolate_f(itper::AdaptiveInterpolator, f::Function; rng=Random.default_rng())
     xmin = itper.xmin; xmax = itper.xmax
     Nmax = itper.Nmax
     xs_pool = collect(LinRange(xmin, xmax, Nmax))
@@ -54,7 +55,7 @@ function interpolate_f(itper::AdaptiveInterpolator, f::Function)
     diffs = Float64[]; converged = false
     while length(xs) < Nmax && !converged
         ymax = maximum(abs.(ys))
-        xnew = get_new_point!(xs_pool, fint_new, xmax, ymax)
+        xnew = get_new_point!(xs_pool, fint_new, xmax, ymax, rng=rng)
         ynew = f(xnew)
         insertxy!(xs, ys, xnew, ynew)
         
@@ -94,7 +95,7 @@ function insertxy!(xs, ys, xnew, ynew)
 end
 
 """
-    get_new_point(f, xmax, ymax, Nmax; max_iter=10000)
+    get_new_point!(xs_pool, f, xmax, ymax; max_iter=10000, rng=Random.default_rng())
 
 Generate a new point `xnew` for function sampling based on the gradient and curvature of the function `f`. 
 This function prioritizes areas of the function with high curvature or gradient, to improve sampling in regions 
@@ -106,21 +107,22 @@ with rapid changes.
 - `ymax`: The maximum possible value of the function `f` over the sampled points.
 - `Nmax`: The maximum number of points that can be generated.
 - `max_iter`: Maximum number of iterations to attempt generating a new point (default is `10000`).
+- `rng`: Random number generator for the candidate points and acceptance thresholds.
 
 # Returns
 - `xnew`: A new sampled point `xnew` that is in a region with either high gradient or high curvature, and 
   sufficiently far from existing points in `f.xs`.
 """
-function get_new_point!(xs_pool, f, xmax, ymax; max_iter=10000)
+function get_new_point!(xs_pool, f, xmax, ymax; max_iter=10000, rng=Random.default_rng())
     grad_max = maximum(abs.([gradient(f, x, 1) for x in f.xs]))
     curv_max = maximum(abs.([gradient(f, x, 2) for x in f.xs]))
-    for _ in 1:max_iter, xnew in xs_pool[rand(1:length(xs_pool), length(xs_pool))]
+    for _ in 1:max_iter, xnew in xs_pool[rand(rng, 1:length(xs_pool), length(xs_pool))]
         ynew = abs(f(xnew))
         grad_new = abs(gradient(f, xnew, 1))
         curv_new = abs(gradient(f, xnew, 2))
-        p_y = ymax * rand()
-        p_grad = grad_max * rand()
-        p_curv = curv_max * rand()
+        p_y = ymax * rand(rng)
+        p_grad = grad_max * rand(rng)
+        p_curv = curv_max * rand(rng)
 
         is_large = p_y ≤ ynew
         has_large_gradient = p_grad ≤ grad_new
@@ -131,7 +133,7 @@ function get_new_point!(xs_pool, f, xmax, ymax; max_iter=10000)
         end
     end
     println("Point generation failed!")
-    xnew = xs_pool[rand(1:length(xs_pool))]
+    xnew = xs_pool[rand(rng, 1:length(xs_pool))]
     filter!(x->x≠xnew, xs_pool)
     return xnew
 end

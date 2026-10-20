@@ -72,6 +72,13 @@ end
     xs = range(0.0, 5.0, length=200)
 
     @test all(mean(abs.(rllm[key].(xs) .- rllm_correct[key].(xs))) < 2e-3 for key in keys(rllm))
+
+    # Reproducible: the sampling points of every overlap are seeded with its name, so the result does not depend on
+    # random numbers drawn before, or on the order and distribution over threads of the interpolations
+    Hamster.Random.seed!(1)
+    rllm_reverse = Hamster.get_rllm(reverse(overlaps_gaas), conf)
+    @test keys(rllm_reverse) == keys(rllm) && all(rllm_reverse[key].(xs) == rllm[key].(xs) for key in keys(rllm))
+    @test Hamster.overlap_seed("Ga+As_ssσ") == Hamster.overlap_seed("Ga+As_ssσ") ≠ Hamster.overlap_seed("Ga+As_spσ")
     rm(string(@__DIR__)*"/test_files/rllm.dat")
 
     # Test with .h5 format

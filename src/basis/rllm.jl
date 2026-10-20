@@ -97,14 +97,7 @@ function get_rllm(overlaps, conf=get_empty_config();
         end
         
         if verbosity > 1; println("     Interpolating distance dependence..."); end
-        time = @elapsed Threads.@threads for overlap in overlaps
-            overlap_str = string(overlap, apply_oc=true)
-            if !haskey(rllm_dict, overlap_str)
-                rllm_dict[overlap_str] = interpolate_overlap(overlap, conf)
-                i += 1
-                if verbosity > 1; println("       ($i / $(length(overlaps))) $overlap_str"); end
-            end
-        end
+        time = @elapsed interpolate_overlaps!(rllm_dict, overlaps, conf, verbosity=verbosity)
         save_rllm(rllm_dict, comm, filename=rank_rllm_file, rank=rank, nranks=nranks)
     end
     if verbosity > 0 && rank == 0; println("     Finished in $time s."); end
@@ -140,21 +133,47 @@ function check_for_previous_interpolations!(rllm_dict, i, overlaps, comm=nothing
 end
 
 """
-    interpolate_overlap(overlap, conf::Config)
+    interpolate_overlaps!(rllm_dict, overlaps, conf; verbosity=1)
 
-Interpolates an overlap and stores the resulting cubic spline in the overlap's `rllm` field.
+Interpolate the distance dependence of all `overlaps` that are not yet in `rllm_dict` (threaded) and add them to it.
+The interpolations are computed in parallel and inserted afterwards, since `Dict` is not thread-safe.
+"""
+function interpolate_overlaps!(rllm_dict, overlaps, conf; verbosity=1)
+    names = [string(overlap, apply_oc=true) for overlap in overlaps]
+    todo = [n for n in unique(i -> names[i], eachindex(overlaps)) if !haskey(rllm_dict, names[n])]
+    splines = tmap(n -> interpolate_overlap(overlaps[n], conf), todo)
+    for (k, (n, spline)) in enumerate(zip(todo, splines))
+        rllm_dict[names[n]] = spline
+        if verbosity > 1; println("       ($k / $(length(todo))) $(names[n])"); end
+    end
+    return rllm_dict
+end
+
+"""
+    overlap_seed(name)
+
+Seed of the random sampling points for the interpolation of the overlap `name`, derived from the name only, so that
+the interpolation does not depend on the number of threads or MPI ranks, or on random numbers drawn before.
+"""
+overlap_seed(name) = foldl((h, c) -> mod(31h + Int64(c), 2^61 - 1), codeunits(name), init=7)
+
+"""
+    interpolate_overlap(overlap, conf::Config; rng=MersenneTwister(overlap_seed(...)))
+
+Interpolates an overlap and stores the resulting cubic spline in the overlap's `rllm` field. The random choice of the
+sampling points uses a generator seeded with the name of the overlap (see `overlap_seed`), so the result is reproducible.
 
 # Arguments
 - `overlap`: An overlap object that contains information about the interaction type and orbital configuration.
 - `conf::Config`: A configuration object that provides values for parameters such as `n` and `α` for each ion type involved in the overlap.
 
 """
-function interpolate_overlap(overlap, conf::Config)
+function interpolate_overlap(overlap, conf::Config; rng=MersenneTwister(overlap_seed(string(overlap, apply_oc=true))))
     itper = AdaptiveInterpolator(conf)
     ns = Int64[get_n(conf, number_to_element(overlap.ion_label.types[i])) for i in 1:2]
     αs = Float64[get_alpha(conf, number_to_element(overlap.ion_label.types[i])) for i in 1:2]
     f(r) = distance_dependence(overlap.type, overlap.orbconfig, r, ns, αs)
-    xs, ys = interpolate_f(itper, f)
+    xs, ys = interpolate_f(itper, f, rng=rng)
     return CubicSpline(xs, ys)
 end
 
@@ -348,15 +367,7 @@ function precalc_rllm(bases, conf=get_empty_config();
 
     rank_rllm_file = nranks > 1 ? get_rank_filename(rllm_file, rank) : rllm_file
     rllm_dict = Dict{String, CubicSpline{Float64}}()
-    i = 0
-    tforeach(local_unique_overlaps) do overlap
-        overlap_str = string(overlap, apply_oc=true)
-        if !haskey(rllm_dict, overlap_str)
-            rllm_dict[overlap_str] = interpolate_overlap(overlap, conf)
-            i += 1
-            if verbosity > 1 && rank == 0; println("       ($i / $(length(local_unique_overlaps))) $overlap_str"); end
-        end
-    end
+    interpolate_overlaps!(rllm_dict, local_unique_overlaps, conf, verbosity=rank == 0 ? verbosity : 0)
     save_rllm(rllm_dict, comm, filename=rank_rllm_file, rank=rank, nranks=nranks)
     MPI.Barrier(comm)
     combine_local_rllm_files(rllm_file, comm; rank, nranks)
