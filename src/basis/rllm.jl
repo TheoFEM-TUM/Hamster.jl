@@ -150,30 +150,22 @@ function interpolate_overlaps!(rllm_dict, overlaps, conf; verbosity=1)
 end
 
 """
-    overlap_seed(name)
+    interpolate_overlap(overlap, conf::Config)
 
-Seed of the random sampling points for the interpolation of the overlap `name`, derived from the name only, so that
-the interpolation does not depend on the number of threads or MPI ranks, or on random numbers drawn before.
-"""
-overlap_seed(name) = foldl((h, c) -> mod(31h + Int64(c), 2^61 - 1), codeunits(name), init=7)
-
-"""
-    interpolate_overlap(overlap, conf::Config; rng=MersenneTwister(overlap_seed(...)))
-
-Interpolates an overlap and stores the resulting cubic spline in the overlap's `rllm` field. The random choice of the
-sampling points uses a generator seeded with the name of the overlap (see `overlap_seed`), so the result is reproducible.
+Interpolates an overlap and stores the resulting cubic spline in the overlap's `rllm` field (deterministic, see
+`interpolate_f`).
 
 # Arguments
 - `overlap`: An overlap object that contains information about the interaction type and orbital configuration.
 - `conf::Config`: A configuration object that provides values for parameters such as `n` and `α` for each ion type involved in the overlap.
 
 """
-function interpolate_overlap(overlap, conf::Config; rng=MersenneTwister(overlap_seed(string(overlap, apply_oc=true))))
+function interpolate_overlap(overlap, conf::Config)
     itper = AdaptiveInterpolator(conf)
     ns = Int64[get_n(conf, number_to_element(overlap.ion_label.types[i])) for i in 1:2]
     αs = Float64[get_alpha(conf, number_to_element(overlap.ion_label.types[i])) for i in 1:2]
     f(r) = distance_dependence(overlap.type, overlap.orbconfig, r, ns, αs)
-    xs, ys = interpolate_f(itper, f, rng=rng)
+    xs, ys = interpolate_f(itper, f)
     return CubicSpline(xs, ys)
 end
 
@@ -191,17 +183,27 @@ Computes the distance-dependent interaction between two orbitals, based on their
 
 # Returns
 - The integral `I` of the overlap function between the two orbitals over the given distance `r`, modified by a sign factor if necessary.
+
+The orbitals sit on the z axis and have the same `m`, so the integrand depends on the azimuth φ only through
+cos(mφ)² or sin(mφ)², a trigonometric polynomial of degree 2|m|: the φ integral is done exactly with the trapezoidal
+rule on 2|m| + 1 points, which leaves a 2D cubature in (ρ, z). The z range is split at the two atoms, where the
+integrand has cusps (exponential radial functions), and the cubature stops at an absolute error of 1e-8 (relative
+1e-6), well below the interpolation tolerance.
 """
 function distance_dependence(ME, orbconfig, r, ns, αs)::Float64
     R₁ = ndict[ns[1]](αs[1]); R₂ = ndict[ns[2]](αs[2])
-    xmin = [-10, -10, -10]; xmax = [15+r/3, 15+r/3, r+15]
     param = string(ME)
     m = mdict_inv[param[3]]
     l₁, l₂ = typeof(orbconfig) == MirrOrb ? (ldict_inv[param[2]], ldict_inv[param[1]]) : (ldict_inv[param[1]], ldict_inv[param[2]])
     sign = l₁ > l₂ ? (-1)^(l₁+l₂) : 1
     Y₁, Y₂ = get_spherical.([l₁, l₂], m)
     f = Overlap(Y₁, R₁, zeros(3), Y₂, R₂, [0., 0., r])
-    I, _ = hcubature(f, xmin, xmax, rtol=1e-5, maxevals=1000000, initdiv=5)
+    nφ = 2abs(m) + 1
+    φs = (0:nφ-1) .* (2π / nφ)
+    g(x) = x[1] * (2π / nφ) * sum(f([x[1] * cos(φ), x[1] * sin(φ), x[2]]) for φ in φs)   # x = (ρ, z)
+    zs = r > 0 ? [-10.0, 0.0, r, r + 15] : [-10.0, 0.0, 15.0]
+    I = sum(hcubature(g, [0.0, zs[k]], [15 + r/3, zs[k+1]], rtol=1e-6, atol=1e-8 / (length(zs) - 1), maxevals=1000000,
+                      initdiv=5)[1] for k in 1:length(zs)-1)
     return sign*I
 end
 

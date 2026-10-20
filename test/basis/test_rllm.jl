@@ -73,12 +73,16 @@ end
 
     @test all(mean(abs.(rllm[key].(xs) .- rllm_correct[key].(xs))) < 2e-3 for key in keys(rllm))
 
-    # Reproducible: the sampling points of every overlap are seeded with its name, so the result does not depend on
-    # random numbers drawn before, or on the order and distribution over threads of the interpolations
+    # Deterministic: independent of random numbers drawn before and of the order (and threads) of the interpolations
     Hamster.Random.seed!(1)
     rllm_reverse = Hamster.get_rllm(reverse(overlaps_gaas), conf)
     @test keys(rllm_reverse) == keys(rllm) && all(rllm_reverse[key].(xs) == rllm[key].(xs) for key in keys(rllm))
-    @test Hamster.overlap_seed("Ga+As_ssσ") == Hamster.overlap_seed("Ga+As_ssσ") ≠ Hamster.overlap_seed("Ga+As_spσ")
+
+    # Overlap of two 1s Slater orbitals with the same exponent: S(R) = exp(-αR) (1 + αR + (αR)²/3)
+    ss = overlaps_gaas[findfirst(o -> string(o.type) == "ssσ", overlaps_gaas)]
+    for α in (1.0, 2.5), R in (0.0, 0.7, 2.0, 4.5)
+        @test Hamster.distance_dependence(ss.type, ss.orbconfig, R, [1, 1], [α, α]) ≈ exp(-α * R) * (1 + α * R + (α * R)^2 / 3) atol=1e-6
+    end
     rm(string(@__DIR__)*"/test_files/rllm.dat")
 
     # Test with .h5 format
