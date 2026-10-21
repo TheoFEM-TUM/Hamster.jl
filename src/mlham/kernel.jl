@@ -1,5 +1,5 @@
 """
-    mutable struct HamiltonianKernel{T1, T2}
+    mutable struct HamiltonianKernel{S<:SimMat}
 
 A kernel structure used for computing weighted similarity functions.
 
@@ -7,14 +7,19 @@ A kernel structure used for computing weighted similarity functions.
 - `ws :: Vector{Float64}`: Weights for each sample point.
 - `xs :: Vector{T1}`: Sample points.
 - `sim_params :: T2`: Parameters for the similarity function.
+- `sms :: Vector{S}`: Precomputed kernel features, one `SimMat` per structure.
+- `simmat_file :: String`: HDF5 file the `SimMat`s are written to / loaded from when they are batched (`nbatch > 1`).
 """
-mutable struct HamiltonianKernel{}
+mutable struct HamiltonianKernel{S<:SimMat}
     params :: Vector{Float64}
     kp :: Kernelpoints
     sim_params :: Float64
     update :: Bool
-    sm :: SimMat
+    sms :: Vector{S}
+    simmat_file :: String
 end
+
+HamiltonianKernel(params, kp, sim_params, update, sms) = HamiltonianKernel(params, kp, sim_params, update, sms, simmat_filename(0))
 
 
 
@@ -29,11 +34,54 @@ function HamiltonianKernel(params :: Vector{Float64},
     tol :: Float64;
     conf = get_empty_config(),
     rank = 0,
-    systems = nothing
+    systems = nothing,
+    simmat_prefix = "simmat"
     )
-    sm = get_kernel_features(structure_descriptors, kp, sim_params, tol, conf = conf, rank = rank, systems = systems)
 
-    return HamiltonianKernel(params,kp, sim_params, update, sm)
+    nbatch = get_nbatch(conf)
+    label = replace(simmat_prefix, r"^simmat_?" => "")
+    if nbatch > 1 && !isempty(structure_descriptors)
+        # compute, write and drop the kernel features batch by batch to limit the peak memory
+        simmat_file = simmat_filename(rank; prefix = simmat_prefix)
+        sms = nothing
+        for (batch_id, inds) in enumerate(chunks(1:length(structure_descriptors), n = nbatch))
+            sms_batch = get_kernel_features(structure_descriptors[inds], kp, sim_params, tol, conf = conf, rank = rank,
+                                            systems = systems === nothing ? nothing : systems[inds], label = label)
+            write_simmat(sms_batch; filename = simmat_file, append = batch_id > 1)
+            sms_empty = [get_empty_simmat(s) for s in sms_batch]
+            sms = sms === nothing ? sms_empty : append!(sms, sms_empty)
+            sms_batch = nothing
+            GC.gc()
+        end
+    else
+        sms = get_kernel_features(structure_descriptors, kp, sim_params, tol, conf = conf, rank = rank, systems = systems, label = label)
+        simmat_file = simmat_filename(rank; prefix = simmat_prefix)
+    end
+    return HamiltonianKernel(params,kp, sim_params, update, sms, simmat_file)
+end
+
+"""
+    unload_simmats!(kernel::HamiltonianKernel, indices)
+
+Replaces `kernel.sms[i]` for all `i` in `indices` by empty `SimMat`s (see `get_empty_simmat`) to free memory.
+"""
+function unload_simmats!(kernel::HamiltonianKernel, indices)
+    for i in indices
+        kernel.sms[i] = get_empty_simmat(kernel.sms[i])
+    end
+    return kernel
+end
+
+"""
+    load_simmats!(kernel::HamiltonianKernel, indices; filename=kernel.simmat_file)
+
+Replaces `kernel.sms[i]` for all `i` in `indices` by the `SimMat`s read with `read_simmat_index` from `filename`.
+"""
+function load_simmats!(kernel::HamiltonianKernel, indices; filename = kernel.simmat_file)
+    for i in indices
+        kernel.sms[i] = read_simmat_index(i; filename = filename)
+    end
+    return kernel
 end
 
 """
@@ -80,7 +128,8 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             kernel_strat = get_kernel_strat(conf),
                             sample_norm = get_sample_norm(conf),
                             rank=0,
-                            nranks=1)
+                            nranks=1,
+                            simmat_prefix="simmat")
     Nstrc = length(strcs)
     structure_descriptors = Vector{Any}(undef, Nstrc)
     tmap!(structure_descriptors, 1:Nstrc) do n
@@ -377,7 +426,8 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
     return HamiltonianKernel(params, kp, sim_params,structure_descriptors, update_ml, sp_tol;
             conf =conf,
             rank = rank,
-            systems = systems)
+            systems = systems,
+            simmat_prefix = simmat_prefix)
 
 
 
@@ -403,8 +453,8 @@ Constructs a set of real-space Hamiltonians from a `HamiltonianKernel`.
 
 
 function get_hr(kernel::HamiltonianKernel, mode, index; apply_soc=false)
-    @views desc_vec = kernel.sm.feature_vec[index]
-    (NR, Ne) = kernel.sm.feature_shape[1][index]
+    @views desc_vec = kernel.sms[index].feature_vec
+    (NR, Ne) = kernel.sms[index].feature_shape[1]
     key_ranges = kernel.kp.key_ranges
     Hr = get_empty_complex_hamiltonians(Ne, NR, mode)
 
@@ -730,7 +780,7 @@ function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc
         for (bi, index) in enumerate(indices)
             
             for R in eachindex(dL_dHr[bi])
-                @views desc_vec, nnz_ham = kernel.sm.feature_vec[index][R]
+                @views desc_vec, nnz_ham = kernel.sms[index].feature_vec[R]
                 tforeach(1:nnz_ham) do m
                     tid = Threads.threadid()
                     @views desc_vec_small, (i,j,key) =  desc_vec[m]
@@ -764,7 +814,7 @@ function get_model_gradient_old(kernel::HamiltonianKernel, indices, reg, dL_dHr;
     if kernel.update
         tforeach( eachindex(dparams)) do n
             for (bi, index) in enumerate(indices)
-                @views desc_vec = kernel.sm.feature_vec[index][n]
+                @views desc_vec = kernel.sms[index].feature_vec[n]
                 for R in eachindex(dL_dHr[bi])
                     for (i, j, exp_val) in zip(findnz(desc_vec[R])...)
                         if !soc

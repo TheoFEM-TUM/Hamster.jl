@@ -47,6 +47,26 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_emp
 end
 
 """
+    load_simmats!(ham::EffectiveHamiltonian, indices)
+    unload_simmats!(ham::EffectiveHamiltonian, indices)
+
+Loads / unloads the `SimMat`s of the structures `indices` for every `HamiltonianKernel` in `ham.models`.
+"""
+function load_simmats!(ham::EffectiveHamiltonian, indices)
+    for model in ham.models
+        model isa HamiltonianKernel && load_simmats!(model, indices)
+    end
+    return ham
+end
+
+function unload_simmats!(ham::EffectiveHamiltonian, indices)
+    for model in ham.models
+        model isa HamiltonianKernel && unload_simmats!(model, indices)
+    end
+    return ham
+end
+
+"""
     train_step!(ham_train, indices, optim, train_data)
 
 Performs a single training step on a Hamiltonian model by computing gradients and updating model parameters.
@@ -77,7 +97,8 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     warmup_ratio=get_warmup_ratio(conf),
     lr_warmup=get_lr_warmup(conf),
     offset_step = get_offset_step(conf),
-    ls_weight = get_ls_weight(conf)
+    ls_weight = get_ls_weight(conf),
+    nbatch = get_nbatch(conf)
     )
 
     if rank == 0 && offset_step == iter
@@ -96,6 +117,8 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
             lr_min + 0.5 * (lr - lr_min) * (1 + cos(π * progress))
     end
     lr_log = optim.adam.eta
+
+    if nbatch > 1; load_simmats!(ham_train, indices); end
 
     forward_times = Float64[]
     backward_times = Float64[]
@@ -233,6 +256,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
             #println(" MAE: $L_train_MAE eV")
         end
     end
+    if nbatch > 1; unload_simmats!(ham_train, indices); end
 end
 
 """
@@ -253,7 +277,9 @@ Evaluates the validation loss for a Hamiltonian model over a given validation da
 """
 function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1, valeachiter=valeachiter, conf =get_empty_config())
     ls_weight = get_ls_weight(conf)
+    nbatch = get_nbatch(conf)
     val_begin = MPI.Wtime()
+    if nbatch > 1; load_simmats!(ham_val, 1:ham_val.Nstrc); end
     pc_weights = Float64[]
     Ls_val = map(1:ham_val.Nstrc) do index
         push!(pc_weights, losses[index].pc_weight)
@@ -307,6 +333,7 @@ function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1
         prof.L_val_MAE[iter-valeachiter+1:iter] .= L_val_MAE ./ pc_weights_tot
         prof.L_val_BG[iter-valeachiter+1:iter] .= L_val_BG ./ pc_weights_tot
     end
+    if nbatch > 1; unload_simmats!(ham_val, 1:ham_val.Nstrc); end
 end
 
 """

@@ -37,7 +37,7 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity
             if any([occursin(str, file) for file in readdir(joinpath(pwd(), "tmp"))]) && get_kpoints_file(conf)[end-2:end] == ".h5" && length(get_systems_conf(conf)) == 0
                 collapse_files_with(str)
             else 
-                for file in readdir(joinpath(pwd(), "tmp"))
+                for file in filter(file -> occursin(str, file), readdir(joinpath(pwd(), "tmp")))
                     cp(joinpath("tmp", file), "Es.dat"; force=true)
                 end
             end

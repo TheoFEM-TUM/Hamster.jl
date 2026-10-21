@@ -52,8 +52,8 @@ export write_hr, read_hr, write_ham, read_ham
 export SOCModel
 
 export Loss, Regularization, update!, DataLoader, GDOptimizer, optimize_model!, HamsterProfiler
-export Kernelpoints, SimMat
-export HamiltonianKernel
+export Kernelpoints, SimMat, get_empty_simmat, write_simmat, read_simmat, read_simmat_index
+export HamiltonianKernel, load_simmats!, unload_simmats!
 
 
 

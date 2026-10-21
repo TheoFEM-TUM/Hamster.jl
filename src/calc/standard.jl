@@ -54,7 +54,7 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1,
 
     if rank == 0 && verbosity > 1; println("Getting Hamiltonian models..."); end
     begin_time = MPI.Wtime()
-    ham = EffectiveHamiltonian(strcs, bases, comm, conf, rank=rank, nranks=nranks)
+    ham = EffectiveHamiltonian(strcs, bases, comm, conf, rank=rank, nranks=nranks, simmat_prefix="simmat_standard")
     ham_time = MPI.Wtime() - begin_time
     if rank == 0 && verbosity > 1; println(" Model time: $ham_time s"); end
 
@@ -98,6 +98,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
     Nstrc_tot = MPI.Reduce(ham.Nstrc, +, comm, root=0)
 
     for (batch_id, indices) in enumerate(chunks(1:ham.Nstrc, n=Nbatch))
+        if Nbatch > 1; load_simmats!(ham, indices); end
         for index in indices
             strc_ind += 1
             system, config_index = get_system_and_config_index(index, local_inds)
@@ -144,6 +145,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
 
             print_train_status(prof, strc_ind, batch_id, verbosity=verbosity)
         end
+        if Nbatch > 1; unload_simmats!(ham, indices); end
     end
 end
 

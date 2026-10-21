@@ -22,6 +22,7 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
                               nranks=1,
                               systems=[strc.system for strc in strcs],
                               rllm_type = "train",
+                              simmat_prefix = "simmat_train",
                               verbosity=get_verbosity(conf))
 
     if isempty(strcs) && isempty(bases)
@@ -52,9 +53,9 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
         if rank == 0 && verbosity > 1; println("   Getting ML model..."); end
         begin_time = MPI.Wtime()
         if ml_data_points ≠ nothing
-            kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, ml_data_points, rank=rank, nranks=nranks)
+            kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, ml_data_points, rank=rank, nranks=nranks, simmat_prefix=simmat_prefix)
         else
-            kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, rank=rank, nranks=nranks)
+            kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, rank=rank, nranks=nranks, simmat_prefix=simmat_prefix)
         end
         models = (models..., kernel)
         ml_time = MPI.Wtime() - begin_time
@@ -86,6 +87,7 @@ function EffectiveHamiltonian(strcs, bases, subdirs :: Vector{String}, comm, con
                               rank=0, 
                               nranks=1,
                               systems=[strc.system for strc in strcs],
+                              simmat_prefix = "simmat_train",
                               verbosity=get_verbosity(conf))
 
     if isempty(strcs) && isempty(bases)
@@ -123,9 +125,9 @@ function EffectiveHamiltonian(strcs, bases, subdirs :: Vector{String}, comm, con
         if rank == 0 && verbosity > 1; println("   Getting ML model..."); end
         begin_time = MPI.Wtime()
         if ml_data_points ≠ nothing
-            kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, ml_data_points, rank=rank, nranks=nranks)
+            kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, ml_data_points, rank=rank, nranks=nranks, simmat_prefix=simmat_prefix)
         else
-            kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, rank=rank, nranks=nranks)
+            kernel = HamiltonianKernel(strcs, bases, models[1], comm, conf, rank=rank, nranks=nranks, simmat_prefix=simmat_prefix)
         end
         models = (models..., kernel)
         ml_time = MPI.Wtime() - begin_time

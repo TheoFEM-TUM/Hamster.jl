@@ -141,9 +141,9 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       end
       train_bases = Basis[Basis(strc, conf, comm=comm_active) for strc in train_strcs]
       if target_dir != "missing"
-         ham_train = EffectiveHamiltonian(train_strcs, train_bases, local_subdirs, comm_active, conf, rank=active_rank, nranks=active_size)
+         ham_train = EffectiveHamiltonian(train_strcs, train_bases, local_subdirs, comm_active, conf, rank=active_rank, nranks=active_size, simmat_prefix="simmat_train")
       else
-         ham_train = EffectiveHamiltonian(train_strcs, train_bases, comm_active, conf, rank=active_rank, nranks=active_size)
+         ham_train = EffectiveHamiltonian(train_strcs, train_bases, comm_active, conf, rank=active_rank, nranks=active_size, simmat_prefix="simmat_train")
       end
       #time = MPI.Wtime() - start_time
       #MPI.Barrier(comm)
@@ -159,7 +159,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       end
 
       val_bases = Basis[Basis(strc, conf, comm=comm_active) for strc in val_strcs]
-      ham_val = EffectiveHamiltonian(val_strcs, val_bases, comm_active, conf, rank=active_rank, nranks=active_size, ml_data_points=get_ml_data_points(ham_train, conf), rllm_type="val")
+      ham_val = EffectiveHamiltonian(val_strcs, val_bases, comm_active, conf, rank=active_rank, nranks=active_size, ml_data_points=get_ml_data_points(ham_train, conf), rllm_type="val", simmat_prefix="simmat_val")
       #time = MPI.Wtime() - start_time
       #MPI.Barrier(comm)
       #if get_verbosity(conf) > 1 && active_rank == 0; println("Rank $active_rank :    Validation Effective Hamiltonian initialization time: $time s"); end
