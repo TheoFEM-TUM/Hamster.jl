@@ -433,84 +433,45 @@ vector connecting a pair of orbitals.
 # Keyword Arguments
 - `rcut`: Real-space cutoff radius for bond construction.
 - `rcut_tol`: Tolerance applied to the cutoff condition.
-- `npar`: Number of parallel chunks used for bond generation.
 
 # Returns
-- `bonds::Vector{SparseMatrixCSC{SVector{3,Float64},Int64}}`:
-  A vector of sparse matrices, one for each lattice translation `R`, whose
-  nonzero entries store Cartesian bond vectors as `SVector{3,Float64}`.
+- `bonds::Vector{NTuple{3, SparseMatrixCSC{Float64, Int64}}}`: for each lattice
+  translation `R`, the x, y and z components of the Cartesian bond vectors
+  r_j + R - r_i (sparse `Nε × Nε` matrices with the same sparsity pattern).
 """
-function get_bonds(strc, basis, conf=get_empty_config(); 
-                            rcut=get_rcut(conf), 
-                            rcut_tol=get_rcut_tol(conf),
-                            npar=get_nthreads_bands(conf))
-
-    nn_grid_points = iterate_nn_grid_points(strc.point_grid)
+function get_bonds(strc, basis, conf=get_empty_config();
+                   rcut=get_rcut(conf),
+                   rcut_tol=get_rcut_tol(conf))
     Nε = length(basis)
     Ts = frac_to_cart(strc.Rs, strc.lattice)
     nR = size(strc.Rs, 2)
-    ij_map = get_ion_orb_to_index_map(length.(basis.orbitals))
+    offset = cumsum(vcat(0, length.(basis.orbitals)[1:end-1]))
 
-    # Allocate thread-local storage
-    is_thread = [ [Int[] for _ in 1:nR] for _ in 1:npar ]
-    js_thread = [ [Int[] for _ in 1:nR] for _ in 1:npar ]
-    vals_x_thread = [ [Float64[] for _ in 1:nR] for _ in 1:npar ]
-    vals_y_thread = [ [Float64[] for _ in 1:nR] for _ in 1:npar ]
-    vals_z_thread = [ [Float64[] for _ in 1:nR] for _ in 1:npar ]
-
-    Threads.@threads for (chunk_id, indices) in enumerate(chunks(nn_grid_points, n=npar))
-        @views for (iion1, iion2, R) in indices
+    # Bonds of the atom pairs in the neighbouring grid cells, per chunk of grid cells and lattice vector
+    parts = tmap(grid_cell_chunks(strc.point_grid)) do chunk
+        is = [Int64[] for _ in 1:nR]; js = [Int64[] for _ in 1:nR]; ds = [SVector{3, Float64}[] for _ in 1:nR]
+        for (grid_point, inds) in chunk, nn_grid_point in nn_grid_points(grid_point, strc.point_grid.dictR),
+            (iion2, R) in strc.point_grid.dictR[nn_grid_point], iion1 in inds
+            (isempty(basis.orbitals[iion1]) || isempty(basis.orbitals[iion2])) && continue
             r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
             r⃗₂ = apply_pbc(strc.ions[iion2].pos, Ts[:, R]) - strc.ions[iion2].dist
-
-            r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, Ts[:, R])
-            r = normdiff(r⃗₁, r⃗₂)
             bond = SVector{3, Float64}(r⃗₂ .- r⃗₁)
-
-            if r_nd ≤ rcut && r - abs(rcut_tol) < rcut &&
-            !isempty(basis.orbitals[iion1]) && !isempty(basis.orbitals[iion2])
-
-                for jorb1 in eachindex(basis.orbitals[iion1]), jorb2 in eachindex(basis.orbitals[iion2])
-                    i = ij_map[(iion1, jorb1)]
-                    j = ij_map[(iion2, jorb2)]
-
-                    push!(is_thread[chunk_id][R], i)
-                    push!(js_thread[chunk_id][R], j)
-                    push!(vals_x_thread[chunk_id][R], bond[1])
-                    push!(vals_y_thread[chunk_id][R], bond[2])
-                    push!(vals_z_thread[chunk_id][R], bond[3])
-                end
+            (normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, Ts[:, R]) ≤ rcut && norm(bond) - abs(rcut_tol) < rcut) || continue
+            for jorb1 in eachindex(basis.orbitals[iion1]), jorb2 in eachindex(basis.orbitals[iion2])
+                push!(is[R], offset[iion1] + jorb1); push!(js[R], offset[iion2] + jorb2); push!(ds[R], bond)
             end
         end
+        (is, js, ds)
     end
 
-    # Merge thread-local buffers
-    is = [Int[] for _ in 1:nR]
-    js = [Int[] for _ in 1:nR]
-    vals_x = [Float64[] for _ in 1:nR]
-    vals_y = [Float64[] for _ in 1:nR]
-    vals_z = [Float64[] for _ in 1:nR]
-
-    for R in 1:nR
-        for t in 1:npar
-            append!(is[R], is_thread[t][R])
-            append!(js[R], js_thread[t][R])
-            append!(vals_x[R], vals_x_thread[t][R])
-            append!(vals_y[R], vals_y_thread[t][R])
-            append!(vals_z[R], vals_z_thread[t][R])
-        end
+    # One sparse matrix per lattice vector and component; the three components share the sparsity pattern
+    return tmap(1:nR) do R
+        I = reduce(vcat, [p[1][R] for p in parts]); J = reduce(vcat, [p[2][R] for p in parts])
+        D = reduce(vcat, [p[3][R] for p in parts])
+        order = sparse(I, J, collect(1:length(I)), Nε, Nε)          # position of every entry in CSC order
+        perm = nonzeros(order)
+        ntuple(a -> SparseMatrixCSC(Nε, Nε, copy(order.colptr), copy(rowvals(order)), [D[n][a] for n in perm]), 3)
     end
-
-    # Build sparse matrices
-    bonds = Vector{NTuple{3,SparseMatrixCSC{Float64,Int64}}}(undef, nR)
-    for R in 1:nR
-        bx = sparse(is[R], js[R], vals_x[R], Nε, Nε)
-        by = sparse(is[R], js[R], vals_y[R], Nε, Nε)
-        bz = sparse(is[R], js[R], vals_z[R], Nε, Nε)
-        bonds[R] = (bx, by, bz)
-    end
-
-    return bonds
 end
 
 get_unique_overlaps(bases) = unique(vcat([basis.overlaps for basis in bases]...))
