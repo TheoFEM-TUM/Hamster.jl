@@ -7,7 +7,8 @@ The ML correction of a matrix element is a scalar kernel value of its descriptor
 kernel is not. A symmetry operation that maps an orbital onto its negative (a p orbital under inversion) or onto a
 combination of orbitals (dz2 under a threefold axis, px under a hexagonal sixfold axis) therefore relates the
 corrections of different elements in a way the kernel does not reproduce: without further measures, the corrections
-break the symmetry of the structure (e.g. split Kramers pairs in a centrosymmetric crystal).
+break the symmetry of the structure (e.g. split Kramers pairs at generic k in a centrosymmetric crystal; at Γ and the
+other time-reversal invariant points time reversal alone keeps them degenerate).
 
 With `enforce_symmetry_group = O_h` or `D_6h` in the `ML` block, the corrections transform exactly like the Hamiltonian
 under every operation of the point group (axes along the Cartesian axes; for `D_6h` the sixfold axis along z). The
@@ -25,7 +26,12 @@ remain. It holds for every structure (the model is continuous in the geometry an
 structures whose symmetry is a subgroup of the chosen group are exactly symmetric. For p and t2g orbitals under `O_h`
 the orbits are the orbitals with both signs (2 variants per orbital); eg orbitals under `O_h` and in-plane p orbitals
 under `D_6h` have larger orbits, which makes the ML part more expensive for these elements. Hybrid orbitals are not
-averaged. The shells must be complete (e.g. all three p orbitals).
+averaged, and s orbitals are their own orbit (no sign average, which would remove their corrections). The shells must
+be complete (e.g. all three p orbitals).
+
+The corrections inherit a restriction of the descriptor: it describes an orbital by its angular function along the bond
+and by sign-invariant environment values, so a p orbital exactly perpendicular to the bond gets no s-p correction, even
+in an asymmetric environment that would allow such a coupling (as in the two-centre Slater-Koster form).
 
 The group only helps if the structure is aligned with its axes. Hamster checks this for the lattice of every system:
 `hamster.out` lists how many operations of the group map the lattice onto itself, compared with the point group of

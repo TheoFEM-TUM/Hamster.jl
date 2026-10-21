@@ -61,6 +61,18 @@ end
 end
 
 @testset "Symmetry O_h: Kramers degeneracy with SOC" begin
+    # At the time-reversal invariant points (Γ, X, M, R) time reversal alone keeps the Kramers pairs degenerate (H(R)
+    # is real, the ML correction spin-independent), with or without the group
+    trim = [0 0 0; 0.5 0 0; 0.5 0.5 0; 0.5 0.5 0.5]
+    for group in ("O_h", "none")
+        conf = symm_config(group, soc=true)
+        strc = Structure(conf); basis = Basis(strc, conf)
+        Hamster.Random.seed!(1)
+        ham = EffectiveHamiltonian([strc], [basis], comm, conf)
+        Es = [eigvals(Hermitian(Matrix(H))) for H in get_hamiltonian(ham, 1, Matrix(transpose(trim)))]
+        @test maximum(maximum(abs, E[2:2:end] .- E[1:2:end]) for E in Es) < 1e-8
+    end
+    # At generic k the double degeneracy needs inversion and time reversal: broken without the group
     ks = [0.13 0.31 0.41; 0.07 0.22 0.17; 0.29 0.05 0.36]
     for (group, degenerate) in (("O_h", true), ("none", false))
         conf = symm_config(group, soc=true)
@@ -208,6 +220,7 @@ end
     mktempdir() do dir
         strc, basis, Hr = symmetry_test_kernel(dir, srtio3, atoms, 4.0, "O_h")
         @test maximum(abs, real(Hr[R_index(strc, [0, 0, 0])])) > 1e-3
+        @test all(R -> Hr[R] ≈ Matrix(Hr[R_index(strc, -strc.Rs[:, R])])', axes(strc.Rs, 2))     # Hermitian
         # exact up to the geometry tensor (distance functions interpolated to ~1e-6), which enters the environment
         @test maximum(g -> covariance_violation(strc, basis, Hr, g), G[1:12]) < 1e-5
     end
