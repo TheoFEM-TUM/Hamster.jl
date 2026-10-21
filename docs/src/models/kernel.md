@@ -34,8 +34,8 @@ corrections are computed as before. The tag is written to the ML parameter file 
 a model trained with a group cannot be evaluated without it.
 
 For CsPbBr3 (chain 13 refit, three seeds, MD test sets at 425/525/625 K), the symmetric corrections (O_h,
-`env_scale = 6`) have the same band error as before (test MAE 0.0425 vs 0.0426 eV) and half the error of the band gap
-(0.095 vs 0.221 eV, without the systematic overestimate of 0.2 eV).
+`env_scale = 6`) have the same band error as before (test MAE 0.0425 vs 0.0426 eV) and less than half the error of the
+band gap (0.093 vs 0.221 eV, without the systematic overestimate of 0.2 eV).
 
 ## Model Summary
 
