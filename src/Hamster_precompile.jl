@@ -66,7 +66,7 @@ function precompile_configs(dir, data)
     ml(lines...) = block("ML", "ncluster = 3", "npoints = 10", lines...)
     return [
         # Standard runs: dense (with DOS, exact), sparse with shift-invert (with DOS, KPM), MD snapshots with ML
-        options(poscar, params, "kpoints = $eigenval", "dos = all") * block("DOS", "ne = 200", "nelec = 8") * PRECOMPILE_ATOMS,
+        options(poscar, params, "kpoints = $eigenval", "dos = all jdos") * block("DOS", "ne = 200", "nelec = 8") * PRECOMPILE_ATOMS,
         options(poscar, params, "sp_mode = true", "sp_diag = true", "neig = 2", "eig_target = 3.0", "dos = all") *
             block("DOS", "method = kpm", "ne = 200", "nelec = 8", "kpm_moments = 64", "kpm_vectors = 4") * PRECOMPILE_ATOMS,
         options(poscar, params, "sp_mode = true", "kpoints = $(joinpath(dir, "eigenval.h5"))") * md * ml("init_params = rand") * PRECOMPILE_ATOMS,

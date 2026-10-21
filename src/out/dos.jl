@@ -1,5 +1,6 @@
-# Density of states (DOS), projected DOS (PDOS) and crystal orbital Hamilton populations (COHP) computed from the
-# real-space Hamiltonian, either by exact diagonalization (dense) or by the kernel polynomial method (KPM, sparse).
+# Density of states (DOS), projected DOS (PDOS), crystal orbital Hamilton populations (COHP) and the joint density of
+# states (JDOS) computed from the real-space Hamiltonian, either by exact diagonalization (dense) or by the kernel
+# polynomial method (KPM, sparse; not for the JDOS).
 #
 # Conventions:
 # - All quantities include the spin degeneracy g (g = 2 without SOC, g = 1 with SOC, where every orbital is a spin
@@ -8,6 +9,9 @@
 #       COHP_AB(E) = g Σₖ wₖ Σₙ δ(E - Eₙₖ) Σ_{i ∈ A, j ∈ B or i ∈ B, j ∈ A} Re(c*ᵢₙₖ Hᵢⱼ(k) cⱼₙₖ),
 #   summed over orbitals on different atoms (on-site terms are excluded). Negative values are bonding.
 #   The sum over all pairs plus the on-site contributions gives E·DOS(E).
+# - The JDOS counts the vertical transitions between occupied and empty states,
+#       JDOS(ω) = g Σₖ wₖ Σ_{v,c} f_v (1 - f_c) δ(ω - (E_ck - E_vk)),
+#   with the zero-temperature occupations f for `nelec` electrons (no transition matrix elements).
 
 """
     orbital_labels(strc, basis; soc=false) -> (orbitals, atoms)
@@ -170,17 +174,60 @@ function dos_exact(Hr, Rs, ks, atoms, members, pairs, g, settings)
         pdos .+= wk .* (W * transpose(P))
         cohp .+= wk .* (W * transpose(C))
     end
-    result = (energies=energies, dos=dos, pdos=pdos, cohp=cohp, fermi_energy=NaN, icohp_fermi=Float64[])
+    result = (energies=energies, dos=dos, pdos=pdos, cohp=cohp, fermi_energy=NaN, icohp_fermi=Float64[],
+              jdos_energies=Float64[], jdos=Float64[])
     if !isnan(settings.nelec)
         occ, fermi = occupations(Eall, fill(wk, length(Eall)), settings.nelec)
         occ_k = Iterators.Stateful(occ)
+        occs = [collect(Iterators.take(occ_k, length(E))) for (E, _, _) in states]
         icohp = zeros(length(pairs))
-        for (E, _, C) in states
-            icohp .+= wk .* (C * collect(Iterators.take(occ_k, length(E))))
+        for ((_, _, C), f) in zip(states, occs)
+            icohp .+= wk .* (C * f)
         end
         result = merge(result, (fermi_energy=fermi, icohp_fermi=icohp))
+        if "jdos" ∈ settings.quantities
+            ω, jdos = joint_dos(first.(states), occs, wk, settings)
+            result = merge(result, (jdos_energies=ω, jdos=jdos))
+        end
     end
     return result
+end
+
+"""
+    joint_dos(Es, occs, wk, settings) -> (ω, jdos)
+
+Joint density of states JDOS(ω) = Σₖ wₖ Σ_{v,c} f_v (1 - f_c) δ(ω - (E_ck - E_vk)) from the eigenvalues `Es[k]` and
+occupations `occs[k]` of every k-point (weight `wk`, including the spin degeneracy), on `settings.ne` transition energies
+from 0 to `settings.jdos_emax` (default: largest transition energy + 5σ).
+
+There are (occupied × empty) transitions per k-point, so they are not broadened one by one: every transition energy is
+first split between its two neighbouring grid points (linearly, which keeps its weight and mean), and the resulting
+weights are then broadened with `settings.broadening` of width `settings.sigma`. This costs O(transitions + ne²) instead
+of O(transitions × ne) and is accurate as long as the grid spacing is small compared with σ.
+"""
+function joint_dos(Es, occs, wk, settings)
+    σ = settings.sigma
+    ωmax = isnan(settings.jdos_emax) ? maximum(maximum(E) - minimum(E) for E in Es) + 5σ : settings.jdos_emax
+    ω = collect(range(0.0, ωmax, length=settings.ne))
+    dω = ω[2] - ω[1]
+    weights = sum(tmap(eachindex(Es)) do k
+        E, f = Es[k], occs[k]
+        h = zeros(length(ω))
+        for i in findall(>(1e-12), f), j in findall(<(1 - 1e-12), f)
+            x = max(E[j] - E[i], 0.0) / dω               # ≥ 0 at zero temperature (rounding aside)
+            n = floor(Int64, x)
+            n + 2 ≤ length(ω) || continue
+            w = f[i] * (1 - f[j]); s = x - n
+            h[n+1] += w * (1 - s); h[n+2] += w * s
+        end
+        h
+    end)
+    kernel = [broadening_weight(d * dω, σ, settings.broadening) for d in -(length(ω) - 1):(length(ω) - 1)]
+    jdos = zeros(length(ω))
+    for n in findall(!iszero, weights), m in eachindex(ω)
+        jdos[m] += weights[n] * kernel[m - n + length(ω)]
+    end
+    return ω, wk .* jdos
 end
 
 # ==============================================================================================================
@@ -355,7 +402,8 @@ function dos_kpm(Hr, Rs, ks, atoms, members, pairs, g, settings)
         pdos .+= wk .* kpm_reconstruct(μ_pdos, energies, center, halfwidth)
         cohp .+= wk .* kpm_reconstruct(μ_cohp, energies, center, halfwidth)
     end
-    result = (energies=energies, dos=dos, pdos=pdos, cohp=cohp, fermi_energy=NaN, icohp_fermi=Float64[])
+    result = (energies=energies, dos=dos, pdos=pdos, cohp=cohp, fermi_energy=NaN, icohp_fermi=Float64[],
+              jdos_energies=Float64[], jdos=Float64[])
     if !isnan(settings.nelec)
         # Tolerance for the electron count: three times the expected relative error of the stochastic trace
         tol = max(0.01, 3 / sqrt(size(Hks[1], 1) * settings.kpm_vectors))
@@ -431,6 +479,7 @@ Base.@kwdef struct DOSSettings
     kpm_vectors :: Int64 = 32
     exact_max_orbitals :: Int64 = 4000
     nelec :: Float64 = NaN
+    jdos_emax :: Float64 = NaN
 end
 
 """
@@ -443,14 +492,15 @@ DOSSettings(settings::DOSSettings; kwargs...) = DOSSettings(; (f => getfield(set
 """
     dos_quantities(conf)
 
-The quantities requested with the `dos` tag (`dos`, `pdos`, `cohp`; `all` for all three), validated.
+The quantities requested with the `dos` tag (`dos`, `pdos`, `cohp`, `jdos`; `all` for dos, pdos and cohp, which can be
+combined with `jdos`), validated.
 """
 function dos_quantities(conf::Config)
     quantities = lowercase.(get_dos(conf))
-    "all" ∈ quantities && return ["dos", "pdos", "cohp"]
+    "all" ∈ quantities && return vcat(["dos", "pdos", "cohp"], "jdos" ∈ quantities ? ["jdos"] : String[])
     filter!(≠("none"), quantities)
     for q in quantities
-        q ∈ ("dos", "pdos", "cohp") || error("Unknown value '$q' for tag dos. Valid values are dos, pdos, cohp and all.")
+        q ∈ ("dos", "pdos", "cohp", "jdos") || error("Unknown value '$q' for tag dos. Valid values are dos, pdos, cohp, jdos and all.")
     end
     return quantities
 end
@@ -459,12 +509,12 @@ DOSSettings(conf::Config) = DOSSettings(quantities=dos_quantities(conf), method=
     projection=lowercase(get_dos_projection(conf)), cohp_pairs=filter(p -> lowercase(p) ≠ "all", get_dos_cohp_pairs(conf)), ne=get_dos_ne(conf),
     emin=get_dos_emin(conf), emax=get_dos_emax(conf), sigma=get_dos_sigma(conf), broadening=lowercase(get_dos_broadening(conf)),
     kpm_moments=get_dos_kpm_moments(conf), kpm_vectors=get_dos_kpm_vectors(conf),
-    exact_max_orbitals=get_dos_exact_max_orbitals(conf), nelec=get_dos_nelec(conf))
+    exact_max_orbitals=get_dos_exact_max_orbitals(conf), nelec=get_dos_nelec(conf), jdos_emax=get_dos_jdos_emax(conf))
 
 """
     compute_dos(Hr, Rs, orbitals, atoms, settings=DOSSettings(); ks=zeros(3, 1), soc=false)
 
-Compute the DOS, PDOS and COHP of a real-space Hamiltonian.
+Compute the DOS, PDOS, COHP and JDOS of a real-space Hamiltonian.
 
 # Arguments
 - `Hr`: Real-space Hamiltonian, one matrix per lattice vector (as returned by `get_hr`).
@@ -478,7 +528,8 @@ Compute the DOS, PDOS and COHP of a real-space Hamiltonian.
 # Returns
 A named tuple with `energies`, `dos`, `pdos` (energies × labels), `cohp` (energies × pairs), `labels`, `pairs`, `method`,
 and, if `settings.nelec` is set, `fermi_energy`, `idos`, `icohp` (integrated curves) and `icohp_fermi` (ICOHP at the Fermi
-energy).
+energy). With `jdos` among `settings.quantities` (needs `nelec` and the exact method), `jdos_energies` (transition
+energies) and `jdos`.
 """
 function compute_dos(Hr, Rs, orbitals, atoms, settings=DOSSettings(); ks=zeros(3, 1), soc=false)
     labels = unique(projection_label.(orbitals, settings.projection))
@@ -487,6 +538,11 @@ function compute_dos(Hr, Rs, orbitals, atoms, settings=DOSSettings(); ks=zeros(3
     pairs = "cohp" ∈ settings.quantities ? cohp_pairs(Hr, atoms, label_index, labels, settings.cohp_pairs) : Tuple{Int64, Int64}[]
     g = soc ? 1 : 2
     method = settings.method == "auto" ? (length(orbitals) ≤ settings.exact_max_orbitals ? "exact" : "kpm") : settings.method
+    if "jdos" ∈ settings.quantities
+        isnan(settings.nelec) && error("The JDOS needs the number of electrons (tag nelec of the DOS block).")
+        method == "kpm" && error("The JDOS needs the exact method (method = exact, or auto with at most exact_max_orbitals = " *
+                                 "$(settings.exact_max_orbitals) orbitals; this structure has $(length(orbitals))).")
+    end
     result = if method == "exact"
         dos_exact(Hr, Rs, ks, atoms, members, pairs, g, settings)
     elseif method == "kpm"
@@ -518,6 +574,10 @@ function write_dos(file, key, result, settings)
             gc = create_group(g, "cohp")
             for (p, pair) in enumerate(result.pairs); gc[pair] = result.cohp[:, p]; end
         end
+        if "jdos" ∈ settings.quantities
+            g["jdos_energies"] = result.jdos_energies
+            g["jdos"] = result.jdos
+        end
         if !isnan(result.fermi_energy)
             g["fermi_energy"] = result.fermi_energy
             g["idos"] = result.idos
@@ -540,7 +600,7 @@ end
 """
     run_dos(ham, strcs, bases, local_inds, comm, conf=get_empty_config(); rank=0, nranks=1, ks=get_kpoints_from_config(conf))
 
-Post-processing step of a standard run: compute the DOS, PDOS and COHP of every structure from its real-space Hamiltonian
+Post-processing step of a standard run: compute the DOS, PDOS, COHP and JDOS of every structure from its real-space Hamiltonian
 and write them to the file `filename` of the `DOS` block (default `dos.h5`), one group per structure.
 """
 function run_dos(ham, strcs, bases, local_inds, comm, conf=get_empty_config(); rank=0, nranks=1, ks=get_kpoints_from_config(conf),

@@ -31,6 +31,11 @@ dos_test_ks = [0.0 0.25 0.5 0.1; 0.0 0.0 0.5 0.3; 0.0 0.25 0.5 0.2]
     @test Hamster.dos_quantities(conf) == ["pdos", "cohp"]
     set_value!(conf, "dos", "all")
     @test Hamster.dos_quantities(conf) == ["dos", "pdos", "cohp"]
+    set_value!(conf, "dos", "all jdos")
+    @test Hamster.dos_quantities(conf) == ["dos", "pdos", "cohp", "jdos"]
+    set_value!(conf, "dos", "jdos")
+    @test Hamster.dos_quantities(conf) == ["jdos"]
+    @test isnan(Hamster.get_dos_jdos_emax(conf))
     set_value!(conf, "dos", "bands")
     @test_throws ErrorException Hamster.dos_quantities(conf)
     @test Hamster.get_dos_cohp_pairs(conf) == String[]
@@ -121,9 +126,40 @@ end
     @test rk.dos[findfirst(≥(rk.fermi_energy), rk.energies)] < 0.01 * maximum(rk.dos)
 end
 
+@testset "JDOS" begin
+    # Dimer: one transition from the bonding (-|t|) to the antibonding (+|t|) state at ω = 2|t|, per spin
+    t = -1.0
+    r = compute_dos([[0.0 t; t 0.0]], zeros(3, 1), ["A-s", "B-s"], [1, 2],
+                    DOSSettings(quantities=["jdos"], sigma=0.02, nelec=2.0, ne=4000, jdos_emax=4.0))
+    @test r.jdos_energies[1] == 0 && r.jdos_energies[end] ≈ 4.0
+    @test integral(r.jdos_energies, r.jdos) ≈ 2 atol=1e-6            # spin degeneracy 2
+    @test integral(r.jdos_energies, r.jdos .* r.jdos_energies) / 2 ≈ 2abs(t) atol=1e-6
+    @test r.jdos_energies[argmax(r.jdos)] ≈ 2abs(t) atol=2e-3
+    # nelec and the exact method are required
+    @test_throws ErrorException compute_dos([[0.0 t; t 0.0]], zeros(3, 1), ["A-s", "B-s"], [1, 2], DOSSettings(quantities=["jdos"]))
+    @test_throws ErrorException compute_dos([[0.0 t; t 0.0]], zeros(3, 1), ["A-s", "B-s"], [1, 2],
+                                            DOSSettings(quantities=["jdos"], nelec=2.0, method="kpm"))
+
+    # GaAs: sum rule (4 occupied × 4 empty bands per k-point and spin) and agreement with broadening every transition
+    conf = get_dos_test_config()
+    strc = Structure(conf); basis = Basis(strc, conf)
+    ham = EffectiveHamiltonian([strc], [basis], comm, conf, rank=rank, nranks=nranks)
+    Hr = get_hr(ham, 1)
+    for broadening in ("gaussian", "lorentzian")
+        settings = DOSSettings(quantities=["dos", "jdos"], nelec=8.0, ne=3000, sigma=0.1, broadening=broadening)
+        rg = compute_dos(Hr, ham.Rs[1], orbital_labels(strc, basis)..., settings, ks=dos_test_ks)
+        Es, _ = diagonalize(get_hamiltonian(ham, 1, dos_test_ks))
+        ref = [2 / size(dos_test_ks, 2) * sum(Hamster.broadening_weight(ω - (Es[c, k] - Es[v, k]), 0.1, broadening)
+                                              for k in axes(Es, 2), v in 1:4, c in 5:8) for ω in rg.jdos_energies]
+        @test maximum(abs.(rg.jdos .- ref)) < 1e-3 * maximum(ref)
+        broadening == "gaussian" && @test integral(rg.jdos_energies, rg.jdos) ≈ 2 * 16 atol=1e-3
+        @test rg.jdos_energies[end] ≈ maximum(Es[8, :] .- Es[1, :]) + 0.5 atol=0.1
+    end
+end
+
 @testset "DOS post-processing of a standard run" begin
     conf = get_dos_test_config()
-    set_value!(conf, "dos", "dos pdos cohp")
+    set_value!(conf, "dos", "dos pdos cohp jdos")
     set_value!(conf, "nelec", "DOS", 8)
     set_value!(conf, "ne", "DOS", 500)
     mktempdir() do dir
@@ -139,6 +175,8 @@ end
                 @test haskey(g, "fermi_energy") && haskey(g, "icohp_fermi")
                 @test read(attributes(g)["method"]) == "exact"
                 @test integral(read(g["energies"]), read(g["dos"])) ≈ 16 atol=0.01
+                @test length(read(g["jdos"])) == length(read(g["jdos_energies"])) == 500
+                @test integral(read(g["jdos_energies"]), read(g["jdos"])) ≈ 2 * 16 atol=0.05
             end
         end
     end
