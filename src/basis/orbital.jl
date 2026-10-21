@@ -117,7 +117,7 @@ get_axis(o::px) = SVector{3}([1., 0., 0.]); get_axis(o::py) = SVector{3}([0., 1.
 get_axis(o::pxdx2) =  SVector{3}([1., 0., 0.]); get_axis(o::pydy2) = SVector{3}([0., 1., 0.]); get_axis(o::pzdz2) = SVector{3}([0., 0., 1.])
 
 get_orbital_list(::s) = Angular[s()]
-get_orbital_list(p::px) = Angular[px(), py(), py()]
+get_orbital_list(p::px) = Angular[px(), py(), pz()]
 get_orbital_list(p::py) = Angular[px(), py(), pz()]
 get_orbital_list(p::pz) = Angular[px(), py(), pz()]
 get_orbital_list(h::sp3) = Angular[s(), px(), py(), pz()]
