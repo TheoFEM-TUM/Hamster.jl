@@ -51,6 +51,7 @@ function hyper_optimize(params, labels, prof, comm, conf; rank=0, nranks=1, verb
             println("   $key = $param_value")
         end
         println("Current optimum: $(minimum(prof.L_train[1, 1:iter])).")
+        flush(stdout)       # stdout redirected to a file (jobs) is buffered otherwise
     end
     # COV_EXCL_STOP
     return Lmin
@@ -159,6 +160,7 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
             println("   $param = $(prof.param_values[index, indmin])")
         end
         println("========================================")
+        flush(stdout)
     end
     # COV_EXCL_STOP
 
