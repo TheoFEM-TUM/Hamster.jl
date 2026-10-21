@@ -413,8 +413,7 @@ end
 """
     get_bonds(strc, basis, conf=get_empty_config();
               rcut=get_rcut(conf),
-              rcut_tol=get_rcut_tol(conf),
-              npar=get_nthreads_bands(conf))
+              rcut_tol=get_rcut_tol(conf))
 
 Construct bond vectors between basis orbitals for all lattice translations.
 
