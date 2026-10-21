@@ -162,6 +162,34 @@ H^{\mathbf{R}}
 V_v^0 h_v^{\mathbf{R}}.
 ```
 
+## Orbitals
+
+The orbitals of an element are given with the `orbitals` tag of its `atom` block:
+
+- pure orbitals: `s`, `px`, `py`, `pz` and the d orbitals `dxy`, `dyz`, `dxz`, `dz2`, `dx2_y2` (e.g.
+  `orbitals = dxy dyz dxz dz2 dx2_y2` for Ti in SrTiO3); their orientation is given by their angular function;
+- hybrid orbitals: `sp3` and `sp3dr2` (one orbital per hybrid, oriented along the bonds with `NNaxes = true`).
+
+For the d orbitals, the Slater-Koster factors are evaluated in the bond frame, with the parity factor ``(-1)^{l_1+l_2}``
+of the bond direction where the order of the orbitals or of the parameter is reversed (e.g. `O+Sr_spσ` for s on Sr and
+p on O). In the descriptor of the ML model, a d orbital (which has no single axis) gets the angle
+``\theta = \arccos T`` with the normalized value ``T = \sqrt{4\pi/5}\, Y(\hat{\mathbf{n}})`` of its angular
+function along the bond; for a p orbital this is the angle between its axis and the bond.
+
+## Slater-Koster Convention
+
+Every parameter scales a distance dependence that is an overlap integral of the orbitals, so the geometry tensor with
+all parameters set to one equals the overlap integrals of the orbitals in their actual geometry,
+
+```math
+\sum_v h_{vij}^{\mathbf{R}} = \langle \phi_i(\mathbf{r} - \boldsymbol{\tau}_i) \,|\, \phi_j(\mathbf{r} - \boldsymbol{\tau}_j + \mathbf{R}) \rangle,
+```
+
+for every pair of orbitals and bond direction (checked by `test/basis/test_sk_overlaps.jl`). Between different
+elements, a parameter belongs to its elements in order: `Ga+As_spσ` couples s on Ga with p on As, and not p on Ga with
+s on As (up to version 0.5 both, which gave wrong s-p elements in general bond directions if both elements have s and p
+orbitals; models in which one of the two elements has only one l, e.g. CsPbBr3 or hybrid orbitals, are not affected).
+
 ## Parameter Sharing
 
 For multiple structures, each structure may contain a local parameter ordering.
