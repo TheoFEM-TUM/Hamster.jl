@@ -187,8 +187,7 @@ all parameters set to one equals the overlap integrals of the orbitals in their 
 
 for every pair of orbitals and bond direction (checked by `test/basis/test_sk_overlaps.jl`). Between different
 elements, a parameter belongs to its elements in order: `Ga+As_spσ` couples s on Ga with p on As, and not p on Ga with
-s on As (up to version 0.5 both, which gave wrong s-p elements in general bond directions if both elements have s and p
-orbitals; models in which one of the two elements has only one l, e.g. CsPbBr3 or hybrid orbitals, are not affected).
+s on As (before version 0.6 it coupled both, which changes models in which both elements have s and p orbitals).
 
 ## Parameter Sharing
 
