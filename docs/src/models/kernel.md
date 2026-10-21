@@ -7,7 +7,7 @@ The ML correction of a matrix element is a scalar kernel value of its descriptor
 kernel is not. A symmetry operation that maps an orbital onto its negative (a p orbital under inversion) or onto a
 combination of orbitals (dz2 under a threefold axis, px under a hexagonal sixfold axis) therefore relates the
 corrections of different elements in a way the kernel does not reproduce: without further measures, the corrections
-break the symmetry of the structure (in ideal cubic CsPbBr3 by up to 0.4 eV per element, with split Kramers pairs).
+break the symmetry of the structure (e.g. split Kramers pairs in a centrosymmetric crystal).
 
 With `enforce_symmetry_group = O_h` or `D_6h` in the `ML` block, the corrections transform exactly like the Hamiltonian
 under every operation of the point group (axes along the Cartesian axes; for `D_6h` the sixfold axis along z). The
@@ -28,14 +28,10 @@ under `D_6h` have larger orbits, which makes the ML part more expensive for thes
 averaged. The shells must be complete (e.g. all three p orbitals).
 
 The environment descriptor is the sum of squares ``e_i = \sum_k H_{ik}^2 f_\mathrm{cut}`` (sign-invariant). Its values
-and especially their thermal variation are much smaller than those of the linear environment (for CsPbBr3 by a factor
-5-6), so `env_scale` should be increased (CsPbBr3: `env_scale = 6`). With `enforce_symmetry_group = none` (default), the
+and especially their variation are much smaller than those of the linear environment, so `env_scale` usually has to be
+increased for the kernel to resolve them (their spread should be comparable to `sim_params`). With `enforce_symmetry_group = none` (default), the
 corrections are computed as before. The tag is written to the ML parameter file and taken from there as the default;
 a model trained with a group cannot be evaluated without it.
-
-For CsPbBr3 (chain 13 refit, three seeds, MD test sets at 425/525/625 K), the symmetric corrections (O_h,
-`env_scale = 6`) have the same band error as before (test MAE 0.0425 vs 0.0426 eV) and less than half the error of the
-band gap (0.093 vs 0.221 eV, without the systematic overestimate of 0.2 eV).
 
 ## Model Summary
 
