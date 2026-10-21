@@ -121,3 +121,54 @@ shell_types(l) = l == 1 ? Angular[px(), py(), pz()] : l == 2 ? Angular[dxz(), dx
                  error("No shell for l = $l.")
 
 shell_index(orb) = findfirst(t -> typeof(t) == typeof(orb.type), shell_types(orb.type.l))
+
+"""
+    lattice_operations(A, group; tol=1e-2) -> Int64
+
+Number of operations g of `group` that map the lattice with the lattice vectors `A` (columns) onto itself, i.e. for
+which A⁻¹ g A is an integer matrix (relative tolerance `tol`, which allows the small distortions of MD cells).
+"""
+lattice_operations(A, group; tol=1e-2) = count(g -> (M = A \ (g * A); norm(M - round.(M)) < tol * norm(M)), group)
+
+"""
+    lattice_point_group_order(A; tol=1e-2) -> Int64
+
+Number of point-group operations of the lattice `A` independent of its orientation (holohedry): the integer matrices M
+with entries -1, 0, 1 for which A M A⁻¹ is orthogonal (enough for reduced cells).
+"""
+function lattice_point_group_order(A; tol=1e-2)
+    Ainv = inv(A)
+    n = 0
+    for entries in Iterators.product(ntuple(_ -> (-1, 0, 1), 9)...)
+        M = reshape(collect(Float64, entries), 3, 3)
+        abs(abs(det(M)) - 1) < 1e-8 || continue
+        g = A * M * Ainv
+        norm(g' * g - I) < tol && (n += 1)
+    end
+    return n
+end
+
+"""
+    check_symmetry_orientation(lattice, group_name; write_output=true) -> (found, order, other)
+
+Compare the operations of the point group `group_name` that are symmetries of `lattice` (`found`) with the order of
+the point group of the lattice itself (`order`) and with the number found for the other group (`other`). Writes a line
+to hamster.out and warns if the lattice is more symmetric than the group finds (the structure is not aligned with the
+axes of the group: O_h along x, y, z; D_6h with the sixfold axis along z and a twofold axis along x) or if the other
+group fits better.
+"""
+function check_symmetry_orientation(lattice, group_name; write_output=true)
+    other_name = group_name == "O_h" ? "D_6h" : "O_h"
+    group = point_group(group_name)
+    found = lattice_operations(lattice, group)
+    other = lattice_operations(lattice, point_group(other_name))
+    order = lattice_point_group_order(lattice)
+    write_output && append_output_line("enforce_symmetry_group = $group_name: $found of $(length(group)) operations are " *
+                                       "symmetries of the lattice (point group of the lattice: $order operations)")
+    if found < min(order, length(group))
+        @warn "enforce_symmetry_group = $group_name: only $found of its operations are symmetries of the lattice, " *
+              "which has $order. The structure is probably not aligned with the axes of the group (O_h: x, y, z; " *
+              "D_6h: sixfold axis along z, twofold axis along x)" * (other > found ? "; $other_name fits better ($other)." : ".")
+    end
+    return found, order, other
+end

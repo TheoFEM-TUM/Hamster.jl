@@ -240,3 +240,20 @@ end
         @test maximum(g -> covariance_violation(strc, basis, Hr, g), G) > 1e-3
     end
 end
+
+@testset "Symmetry: orientation of the lattice" begin
+    a = 3.96
+    c, s = cosd(30), sind(30)
+    cubic = a * Matrix(1.0I, 3, 3)
+    hexagonal = [3.0 -1.5 0; 0 3 * sqrt(3) / 2 0; 0 0 5.0]
+    tetragonal = Matrix(Diagonal([a, a, 1.02a]))
+    rotated = [c -s 0; s c 0; 0 0 1] * cubic
+    @test Hamster.lattice_point_group_order(cubic) == 48 && Hamster.lattice_point_group_order(rotated) == 48
+    @test Hamster.lattice_point_group_order(hexagonal) == 24 && Hamster.lattice_point_group_order(tetragonal) == 16
+    @test Hamster.check_symmetry_orientation(cubic, "O_h", write_output=false) == (48, 48, 8)
+    @test Hamster.check_symmetry_orientation(tetragonal, "O_h", write_output=false)[1] == 16
+    @test (@test_logs Hamster.check_symmetry_orientation(hexagonal, "D_6h", write_output=false)) == (24, 24, 8)
+    # misaligned or the wrong group: warning
+    @test_logs (:warn, r"not aligned") Hamster.check_symmetry_orientation(rotated, "O_h", write_output=false)
+    @test_logs (:warn, r"D_6h fits better") Hamster.check_symmetry_orientation(hexagonal, "O_h", write_output=false)
+end

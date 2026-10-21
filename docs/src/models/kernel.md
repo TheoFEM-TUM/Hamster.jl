@@ -27,6 +27,11 @@ the orbits are the orbitals with both signs (2 variants per orbital); eg orbital
 under `D_6h` have larger orbits, which makes the ML part more expensive for these elements. Hybrid orbitals are not
 averaged. The shells must be complete (e.g. all three p orbitals).
 
+The group only helps if the structure is aligned with its axes. Hamster checks this for the lattice of every system:
+`hamster.out` lists how many operations of the group map the lattice onto itself, compared with the point group of
+the lattice; a warning is given if the lattice is more symmetric than the group finds (the structure is probably
+rotated) or if the other group fits better.
+
 The environment descriptor is the sum of squares ``e_i = \sum_k H_{ik}^2 f_\mathrm{cut}`` (sign-invariant). Its values
 and especially their variation are much smaller than those of the linear environment, so `env_scale` usually has to be
 increased for the kernel to resolve them (their spread should be comparable to `sim_params`). With `enforce_symmetry_group = none` (default), the

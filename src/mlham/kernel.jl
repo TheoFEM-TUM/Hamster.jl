@@ -79,7 +79,13 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         get_tb_descriptor_and_symmetry(model.hs[n], model.params, strcs[n], bases[n], conf)
     end
     structure_descriptors = first.(descriptors_and_symmetry)
-    symmetry = get_ml_enforce_symmetry_group(conf) == "none" ? nothing : last.(descriptors_and_symmetry)
+    group = get_ml_enforce_symmetry_group(conf)
+    symmetry = group == "none" ? nothing : last.(descriptors_and_symmetry)
+    if !isnothing(symmetry) && rank == 0 && write_summary
+        for system in unique(systems)                       # one check per system (first structure)
+            check_symmetry_orientation(strcs[findfirst(==(system), systems)].lattice, group)
+        end
+    end
     external_data_points = !isnothing(data_points)
     if external_data_points
         params = zeros(length(data_points))
