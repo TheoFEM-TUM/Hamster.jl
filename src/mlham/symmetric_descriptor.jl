@@ -2,12 +2,14 @@
     SymmetryTerms
 
 Variants of the descriptors of one structure (enforce_symmetry_group, see `symmetry_variants`): the ML correction of a
-matrix element is ΔH_ij = Σ_v w_v K(x_v). Per lattice vector `R`: `base_weights[R][k]` is the weight of the k-th stored
-descriptor (in the order of `findnz`), `extra[R]` holds the other variants as (index k, descriptor, weight).
+matrix element is ΔH_ij = Σ_v w_v K(x_v). All elements of a shell pair of two atoms use the same orbital pairs (u, v),
+only with other weights, so every distinct descriptor is stored once: per lattice vector `R`, `X[R]` holds the
+descriptors and `W[R][t, k]` is the weight of `X[R][t]` in the k-th stored matrix element (in the order of `findnz`),
+i.e. ΔH = transpose(W[R]) * K(X[R]).
 """
 struct SymmetryTerms
-    base_weights :: Vector{Vector{Float64}}
-    extra :: Vector{Vector{Tuple{Int64, SVector{8, Float64}, Float64}}}
+    X :: Vector{Vector{SVector{8, Float64}}}
+    W :: Vector{SparseMatrixCSC{Float64, Int64}}
 end
 
 """
@@ -107,27 +109,27 @@ end
 """
     symmetry_variants(orbit_i, loc_i, orbit_j, loc_j, same_shell_onsite) -> Vector{Tuple}
 
-Orbital pairs (u, v) and weights over which the kernel of the element (i, j) is averaged: u runs over the orbit of the
-shell of orbital i with the weight (S⁻¹u)·c_i (c_i: its coefficients in the shell), v likewise for j; s and hybrid
-orbitals are their own orbit (`nothing`, weight 1). On the same site and in the same shell, the tied pairs (u, u) with
+Orbital pairs (a, u, b, v, w) over which the kernel of the element (i, j) is averaged: u = U[a] runs over the orbit of
+the shell of orbital i with the weight (S⁻¹u)·c_i (c_i: its coefficients in the shell), v = U[b] likewise for j; s and
+hybrid orbitals are their own orbit (index 0, `nothing`, weight 1). On the same site and in the same shell, the tied pairs (u, u) with
 the weight (S^(-1/2)u)·c_i (S^(-1/2)u)·c_j are added as well, which keeps the isotropic part of the on-site block
 (the bilinear average alone removes a constant). The first pair is the one of the orbitals themselves.
 """
 function symmetry_variants(orbit_i, li, orbit_j, lj, same_shell_onsite)
-    side(orbit, loc) = isnothing(orbit) ? [(nothing, 1.0)] :
-        [(u, w) for (u, w) in ((u, (orbit.Sinv * u)[loc]) for u in orbit.U) if abs(w) > 1e-12]
+    side(orbit, loc) = isnothing(orbit) ? [(0, nothing, 1.0)] :
+        [(a, u, w) for (a, u) in enumerate(orbit.U) for w in ((orbit.Sinv * u)[loc],) if abs(w) > 1e-12]
     A = side(orbit_i, li); B = side(orbit_j, lj)
-    pairs = [(u, v, a * b) for (u, a) in A for (v, b) in B]
+    pairs = [(a, u, b, v, wa * wb) for (a, u, wa) in A for (b, v, wb) in B]
     if same_shell_onsite
-        for u in orbit_i.U
+        for (a, u) in enumerate(orbit_i.U)
             s = orbit_i.Shalf * u
             w = s[li] * s[lj]
-            abs(w) > 1e-12 && push!(pairs, (u, u, w))
+            abs(w) > 1e-12 && push!(pairs, (a, u, a, u, w))
         end
     end
     # the pair of the orbitals themselves first (the stored descriptor)
     own(u, loc) = isnothing(u) || (u[loc] ≈ 1 && count(x -> abs(x) > 1e-12, u) == 1)
-    k = findfirst(p -> own(p[1], li) && own(p[2], lj), pairs)
+    k = findfirst(p -> own(p[2], li) && own(p[4], lj), pairs)
     if !isnothing(k)
         pairs[1], pairs[k] = pairs[k], pairs[1]
     end
@@ -191,8 +193,9 @@ function symmetric_tb_descriptor(h, V, strc::Structure, basis, conf::Config, gro
     cells = collect(strc.point_grid.dict0)
     parts = tmap(chunks(cells, n=4 * Threads.nthreads())) do chunk
         is = [Int64[] for _ in 1:NR]; js = [Int64[] for _ in 1:NR]; vals = [SVector{8, Float64}[] for _ in 1:NR]
-        ws = [Float64[] for _ in 1:NR]
-        extra = [Tuple{Int64, Int64, SVector{8, Float64}, Float64}[] for _ in 1:NR]
+        # distinct descriptors of the orbital pairs, and the terms (i, j, index of the descriptor, weight)
+        Xc = [SVector{8, Float64}[] for _ in 1:NR]
+        terms = [Tuple{Int64, Int64, Int64, Float64}[] for _ in 1:NR]
         for (grid_point, inds) in chunk, nn_grid_point in nn_grid_points(grid_point, strc.point_grid.dictR),
             (jion, R) in strc.point_grid.dictR[nn_grid_point], iion in inds
             (Norb_per_ion[iion] == 0 || Norb_per_ion[jion] == 0) && continue
@@ -217,6 +220,9 @@ function symmetric_tb_descriptor(h, V, strc::Structure, basis, conf::Config, gro
             Δr_ang = apply_distortion ? Δr_dist : Δr
             Δrij = Δr_ang > 0 ? normalize(rj - ri) : nothing
             Δrji = Δr_ang > 0 ? normalize(ri - rj) : nothing
+            # Descriptor index of every orbital pair of this atom pair. The descriptor of a pure orbital depends only
+            # on its orbit vector (key: l and index in the orbit), that of s and hybrid orbitals on the orbital
+            pair_index = Dict{NTuple{4, Int64}, Int64}()
             for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
                 i = offset[iion] + iorb; j = offset[jion] + jorb
                 orb_i = basis.orbitals[iion][iorb]; orb_j = basis.orbitals[jion][jorb]
@@ -225,7 +231,14 @@ function symmetric_tb_descriptor(h, V, strc::Structure, basis, conf::Config, gro
                 orbit_i = l_i ≥ 1 ? orbits[l_i] : nothing; orbit_j = l_j ≥ 1 ? orbits[l_j] : nothing
                 loc_i = l_i ≥ 1 ? shell_index(orb_i) : 1; loc_j = l_j ≥ 1 ? shell_index(orb_j) : 1
                 same_shell_onsite = iion == jion && Δr == 0 && l_i == l_j && l_i ≥ 1
-                for (v, (u_i, u_j, w)) in enumerate(symmetry_variants(orbit_i, loc_i, orbit_j, loc_j, same_shell_onsite))
+                for (v, (a, u_i, b, u_j, w)) in enumerate(symmetry_variants(orbit_i, loc_i, orbit_j, loc_j, same_shell_onsite))
+                    key = (max(l_i, 0), a == 0 ? iorb : a, max(l_j, 0), b == 0 ? jorb : b)
+                    t = get(pair_index, key, 0)
+                    if t > 0
+                        v == 1 && (push!(is[R], i); push!(js[R], j); push!(vals[R], Xc[R][t]))
+                        push!(terms[R], (i, j, t, w))
+                        continue
+                    end
                     θ1 = θ_of(orb_i, iion, u_i, Δrij); θ2 = θ_of(orb_j, jion, u_j, Δrji)
                     φ = φ_of(orb_i, u_i, orb_j, u_j)
                     e_i = e_of(orb_i, iion, i, u_i); e_j = e_of(orb_j, jion, j, u_j)
@@ -240,29 +253,31 @@ function symmetric_tb_descriptor(h, V, strc::Structure, basis, conf::Config, gro
                     end
                     e1, e2 = orbswap ? (e_j, e_i) : (e_i, e_j)
                     x = SVector{8, Float64}(Z1, Z2, Δr_in, φ, θ1, θ2, e1 * env_scale, e2 * env_scale)
-                    if v == 1
-                        push!(is[R], i); push!(js[R], j); push!(vals[R], x); push!(ws[R], w)
-                    else
-                        push!(extra[R], (i, j, x, w))
-                    end
+                    push!(Xc[R], x); t = pair_index[key] = length(Xc[R])
+                    v == 1 && (push!(is[R], i); push!(js[R], j); push!(vals[R], x))
+                    push!(terms[R], (i, j, t, w))
                 end
             end
         end
-        (is, js, vals, ws, extra)
+        (is, js, vals, Xc, terms)
     end
     descriptors = SparseMatrixCSC{SVector{8, Float64}, Int64}[sparse(reduce(vcat, [p[1][R] for p in parts]), reduce(vcat, [p[2][R] for p in parts]),
                                                                reduce(vcat, [p[3][R] for p in parts]), Nε, Nε) for R in 1:NR]
-    base_weights = map(1:NR) do R
-        W = sparse(reduce(vcat, [p[1][R] for p in parts]), reduce(vcat, [p[2][R] for p in parts]),
-                   reduce(vcat, [p[4][R] for p in parts]), Nε, Nε)
-        nonzeros(W)
-    end
-    variant_terms = map(1:NR) do R
+    # The descriptors of all chunks, and the weight matrices (duplicate terms, e.g. a bilinear and a tied pair with the
+    # same descriptor, are summed)
+    Xs = map(R -> reduce(vcat, [p[4][R] for p in parts]), 1:NR)
+    Ws = map(1:NR) do R
         D = descriptors[R]
-        map(reduce(vcat, [p[5][R] for p in parts])) do (i, j, x, w)
-            k = nzrange(D, j)[searchsortedfirst(view(rowvals(D), nzrange(D, j)), i)]
-            (k, x, w)
+        ts = Int64[]; ks = Int64[]; ws = Float64[]
+        offset_t = 0
+        for p in parts
+            for (i, j, t, w) in p[5][R]
+                push!(ts, offset_t + t); push!(ws, w)
+                push!(ks, nzrange(D, j)[searchsortedfirst(view(rowvals(D), nzrange(D, j)), i)])
+            end
+            offset_t += length(p[4][R])
         end
+        sparse(ts, ks, ws, length(Xs[R]), nnz(D))
     end
-    return descriptors, SymmetryTerms(base_weights, variant_terms)
+    return descriptors, SymmetryTerms(Xs, Ws)
 end

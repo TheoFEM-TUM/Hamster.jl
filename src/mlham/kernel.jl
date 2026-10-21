@@ -186,13 +186,7 @@ lattice vector `R`: the kernel, or with enforce_symmetry_group its weighted sum 
 function evaluate_kernel(kernel::HamiltonianKernel, hins, index, R)
     isnothing(kernel.symmetry) && return evaluate_kernel(kernel, hins)
     terms = kernel.symmetry[index]
-    vals = evaluate_kernel(kernel, hins) .* terms.base_weights[R]
-    extra = terms.extra[R]
-    extra_vals = evaluate_kernel(kernel, [x for (_, x, _) in extra])
-    for ((k, _, w), v) in zip(extra, extra_vals)
-        vals[k] += w * v
-    end
-    return vals
+    return transpose(terms.W[R]) * evaluate_kernel(kernel, terms.X[R])
 end
 
 """
@@ -429,7 +423,7 @@ function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc
             for R in eachindex(dL_dHr[bi])
                 g_R = Float64[]
                 for (i, j, hin) in zip(findnz(h_env[R])...)
-                    push!(hins, hin)
+                    isnothing(kernel.symmetry) && push!(hins, hin)
                     if !soc
                         push!(g_R, real(dL_dHr[bi][R][i, j]))
                     else
@@ -439,12 +433,9 @@ function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc
                 if isnothing(kernel.symmetry)
                     append!(gs, g_R)
                 else
-                    # enforce_symmetry_group: every variant of a descriptor contributes with its weight
+                    # enforce_symmetry_group: every distinct descriptor contributes with the weighted gradient of its elements
                     terms = kernel.symmetry[index]
-                    append!(gs, g_R .* terms.base_weights[R])
-                    for (k, x, w) in terms.extra[R]
-                        push!(hins, x); push!(gs, w * g_R[k])
-                    end
+                    append!(hins, terms.X[R]); append!(gs, terms.W[R] * g_R)
                 end
             end
         end

@@ -411,9 +411,14 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; c
         for R in 1:N_R
             h_env_R = structure_descriptors[i][R]
             touples = collect(zip(findnz(h_env_R)...))
-            # Variants of the descriptors (enforce_symmetry_group), grouped by their matrix element
-            variants = [Tuple{SVector{8, Float64}, Float64}[] for _ in touples]
-            isnothing(symmetry) || foreach(((k, x, w),) -> push!(variants[k], (x, w)), symmetry[i].extra[R])
+            # enforce_symmetry_group: the similarities of the distinct descriptors of the variants (see `SymmetryTerms`),
+            # once for every key bucket of the matrix elements that use them
+            if !isnothing(symmetry)
+                X = symmetry[i].X[R]; W = symmetry[i].W[R]
+                element_keys = [keyfun(hin) for (_, _, hin) in touples]
+                needed = unique([(rowvals(W)[q], element_keys[n]) for n in eachindex(touples) for q in nzrange(W, n)])
+                sims = Dict(zip(needed, tmap(((t, key),) -> exp_sim_all(@view(data_points[key_ranges[key]]), X[t], σ=sim_params), needed)))
+            end
             N_total_temp  = length(touples)
             N_test_temp = zeros(N_total_temp)
             tforeach(1:length(touples)) do n
@@ -421,12 +426,10 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; c
                 key = keyfun(hin)
                 data_points_vector = @view data_points[key_ranges[key]]
                 #val_vec = exp_sim_all(data_points_vector, hin, σ=sim_params, dim_weights = dim_weights)
-                val_vec = exp_sim_all(data_points_vector, hin, σ=sim_params)
-                if !isnothing(symmetry)
-                    val_vec .*= symmetry[i].base_weights[R][n]
-                    for (x, w) in variants[n]
-                        val_vec .+= w .* exp_sim_all(data_points_vector, x, σ=sim_params)
-                    end
+                val_vec = if isnothing(symmetry)
+                    exp_sim_all(data_points_vector, hin, σ=sim_params)
+                else
+                    sum(nonzeros(W)[q] .* sims[(rowvals(W)[q], key)] for q in nzrange(W, n))
                 end
                 val_vec[abs.(val_vec) .<= tol] .= 0
                 val_vec = sparse(val_vec)

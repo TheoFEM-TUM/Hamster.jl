@@ -43,35 +43,26 @@ end
 end
 
 """
-hr[rows[u]] += Σ_{t ∈ ptr[u]:ptr[u+1]-1} w[t] Σ_n p[n] * exp(-|X[:, t] - D[:, n]|² * γ), i.e., the Gaussian kernel
-model with γ = 1/(2σ²), summed over the descriptor variants of every matrix element (one with weight 1 without
-enforce_symmetry_group).
+k[t] = Σ_n p[n] * exp(-|X[:, t] - D[:, n]|² * γ), the Gaussian kernel model with γ = 1/(2σ²) at the descriptors X.
 """
-@kernel function gaussian_kernel_hr_kernel!(hr, @Const(rows), @Const(ptr), @Const(w), @Const(X), @Const(D), @Const(p), γ)
-    u = @index(Global)
-    acc = zero(eltype(p))
-    @inbounds for t in ptr[u]:(ptr[u+1]-1)
-        acc_t = zero(eltype(p))
-        for n in axes(D, 2)
-            acc_t += p[n] * exp(-squared_distance(X, t, D, n) * γ)
-        end
-        acc += w[t] * acc_t
+@kernel function gaussian_kernel_eval_kernel!(k, @Const(X), @Const(D), @Const(p), γ)
+    t = @index(Global)
+    acc = zero(eltype(k))
+    @inbounds for n in axes(D, 2)
+        acc += p[n] * exp(-squared_distance(X, t, D, n) * γ)
     end
-    @inbounds hr[rows[u]] += acc
+    @inbounds k[t] = acc
 end
 
 """
-g[n] = Σ_u real(G[rows[u]]) Σ_{t ∈ ptr[u]:ptr[u+1]-1} w[t] * exp(-|X[:, t] - D[:, n]|² * γ), the gradient of the
-Gaussian kernel model.
+g[n] = Σ_t a[t] * exp(-|X[:, t] - D[:, n]|² * γ), the gradient of the Gaussian kernel model, given the gradient `a`
+w.r.t. its values at the descriptors X.
 """
-@kernel function gaussian_kernel_grad_kernel!(g, @Const(rows), @Const(ptr), @Const(w), @Const(X), @Const(D), @Const(G), γ)
+@kernel function gaussian_kernel_grad_kernel!(g, @Const(X), @Const(D), @Const(a), γ)
     n = @index(Global)
     acc = zero(eltype(g))
-    @inbounds for u in eachindex(rows)
-        Gu = real(G[rows[u]])
-        for t in ptr[u]:(ptr[u+1]-1)
-            acc += Gu * w[t] * exp(-squared_distance(X, t, D, n) * γ)
-        end
+    @inbounds for t in axes(X, 2)
+        acc += a[t] * exp(-squared_distance(X, t, D, n) * γ)
     end
     @inbounds g[n] = acc
 end

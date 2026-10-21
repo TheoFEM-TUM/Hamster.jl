@@ -64,7 +64,9 @@ function accumulate_hr!(hr, block::DeviceSparseBlock, p)
 end
 
 function accumulate_hr!(hr, block::DeviceKernelBlock, p)
-    launch_kernel!(gaussian_kernel_hr_kernel!, hr, length(block.rows), block.rows, block.ptr, block.w, block.X, block.D, p, block.γ)
+    k = similar(p, Float64, size(block.X, 2))
+    launch_kernel!(gaussian_kernel_eval_kernel!, k, length(k), block.X, block.D, p, block.γ)
+    launch_kernel!(csr_matvec_add_kernel!, hr, length(hr), block.rowptr, block.colval, block.nzval, k)
 end
 
 """
@@ -78,8 +80,10 @@ function parameter_gradient(block::DeviceSparseBlock, G)
 end
 
 function parameter_gradient(block::DeviceKernelBlock, G)
+    a = similar(G, Float64, size(block.X, 2))
+    launch_kernel!(csr_real_matvec_kernel!, a, length(a), block.t_rowptr, block.t_colval, block.t_nzval, G)
     g = similar(G, Float64, block.nparams)
-    launch_kernel!(gaussian_kernel_grad_kernel!, g, block.nparams, block.rows, block.ptr, block.w, block.X, block.D, G, block.γ)
+    launch_kernel!(gaussian_kernel_grad_kernel!, g, block.nparams, block.X, block.D, a, block.γ)
 end
 
 """

@@ -71,7 +71,8 @@ end
 """
     ShellOrbit
 
-Orbit of the orbitals of a shell (pure orbitals of one l, in the order of `types`) under a point group and the sign:
+Orbit of the orbitals of a shell (pure orbitals of one l, in the order of `types`) under a point group (the signs come
+from the group where it contains them, e.g. inversion for p, the twofold axes for t2g):
 the vectors `U` (coefficients in the shell), the inverse frame operator `Sinv` = (Σ u uᵀ)⁻¹ and its square root
 `Shalf` = (Σ u uᵀ)^(-1/2).
 """
@@ -92,8 +93,8 @@ function ShellOrbit(types, group)
     for k in 1:n
         e = zeros(n); e[k] = 1
         isempty(U) || norm(e - reduce(hcat, U) * (reduce(hcat, U) \ e)) > 1e-8 || continue
-        for D in Ds, sgn in (1, -1)
-            add!(round.(sgn * D * e, digits=12))
+        for D in Ds
+            add!(round.(D * e, digits=12))
         end
     end
     S = sum(u * u' for u in U)
