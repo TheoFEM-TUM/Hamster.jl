@@ -7,14 +7,20 @@ A kernel structure used for computing weighted similarity functions.
 - `ws :: Vector{Float64}`: Weights for each sample point.
 - `xs :: Vector{T1}`: Sample points.
 - `sim_params :: T2`: Parameters for the similarity function.
+- `symmetry`: `SymmetryTerms` of every structure (`enforce_symmetry_group` set) or `nothing`: the correction of a matrix element
+  is then the weighted sum of the kernel over the variants of its descriptor (see `symmetry_variants`).
 """
-mutable struct HamiltonianKernel{T1, T2, T3}
+mutable struct HamiltonianKernel{T1, T2, T3, T4}
     params :: Vector{Float64}
     data_points :: Vector{T1}
     sim_params :: T2
     structure_descriptors :: Vector{T3}
     update :: Bool
+    symmetry :: T4
 end
+
+HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update) =
+    HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update, nothing)
 
 """
     HamiltonianKernel(strcs, bases, model, comm, conf; 
@@ -69,9 +75,11 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             label="",
                             write_summary=true)
     systems = [strc.system for strc in strcs]
-    structure_descriptors = map(eachindex(strcs)) do n
-        get_tb_descriptor(model.hs[n], model.params, strcs[n], bases[n], conf)
+    descriptors_and_symmetry = map(eachindex(strcs)) do n
+        get_tb_descriptor_and_symmetry(model.hs[n], model.params, strcs[n], bases[n], conf)
     end
+    structure_descriptors = first.(descriptors_and_symmetry)
+    symmetry = get_ml_enforce_symmetry_group(conf) == "none" ? nothing : last.(descriptors_and_symmetry)
     external_data_points = !isnothing(data_points)
     if external_data_points
         params = zeros(length(data_points))
@@ -101,7 +109,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
     if !external_data_points
         params, data_points = init_ml_params!(data_points, conf, mode=mode, update_ml=update_ml)
     end
-    kernel = HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml)
+    kernel = HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml, symmetry)
     write_summary && write_model_summary(kernel, strcs, bases, comm, conf, rank=rank, label=label)
     return sim_mat ? HamiltonianKernelPrecalced(kernel, rank, systems, conf) : kernel
 end
@@ -131,7 +139,7 @@ function get_hr(kernel::HamiltonianKernel, mode::Dense, index; apply_soc=false)
     Hr = get_empty_complex_hamiltonians(size(h_env[1], 1), length(h_env), mode)
     for R in eachindex(h_env)
         is, js, hins = findnz(h_env[R])
-        vals = evaluate_kernel(kernel, hins)
+        vals = evaluate_kernel(kernel, hins, index, R)
         for t in eachindex(vals)
             Hr[R][is[t], js[t]] = vals[t]
         end
@@ -145,7 +153,7 @@ function get_hr(kernel::HamiltonianKernel, mode::Sparse, index; apply_soc=false)
     Hr = get_empty_complex_hamiltonians(Nε, length(h_env), mode)
     for R in eachindex(h_env)
         is, js, hins = findnz(h_env[R])
-        Hr[R] = sparse(is, js, evaluate_kernel(kernel, hins), Nε, Nε)
+        Hr[R] = sparse(is, js, evaluate_kernel(kernel, hins, index, R), Nε, Nε)
     end
     return apply_soc ? apply_spin_basis.(Hr) : Hr
 end
@@ -159,6 +167,24 @@ function evaluate_kernel(kernel::HamiltonianKernel, hins)
     vals = Vector{Float64}(undef, length(hins))
     tforeach(eachindex(hins)) do t
         vals[t] = kernel(hins[t])
+    end
+    return vals
+end
+
+"""
+    evaluate_kernel(kernel::HamiltonianKernel, hins, index, R) -> Vector{Float64}
+
+Corrections of the matrix elements with the descriptors `hins` (in the order of `findnz`) of structure `index` and
+lattice vector `R`: the kernel, or with enforce_symmetry_group its weighted sum over the variants of every descriptor.
+"""
+function evaluate_kernel(kernel::HamiltonianKernel, hins, index, R)
+    isnothing(kernel.symmetry) && return evaluate_kernel(kernel, hins)
+    terms = kernel.symmetry[index]
+    vals = evaluate_kernel(kernel, hins) .* terms.base_weights[R]
+    extra = terms.extra[R]
+    extra_vals = evaluate_kernel(kernel, [x for (_, x, _) in extra])
+    for ((k, _, w), v) in zip(extra, extra_vals)
+        vals[k] += w * v
     end
     return vals
 end
@@ -204,6 +230,23 @@ function copy_params!(receiving_model::HamiltonianKernel, sending_model::Hamilto
 end
 
 """
+    ml_header(conf) -> String
+
+Header of the ML parameter file. The settings are resolved before the file is opened: their defaults can come from the
+header of the parameter file that is overwritten (`init_params`), which is empty once it is opened for writing.
+"""
+function ml_header(conf)
+    return string("begin ", get_system(conf), "\n",
+                  "  rcut = ", get_ml_rcut(conf), "\n",
+                  "  sim_params = ", get_ml_sim_params(conf), "\n",
+                  "  env_scale = ", get_ml_env_scale(conf), "\n",
+                  "  apply_distortion = ", get_ml_apply_distortion(conf), "\n",
+                  "  apply_orthogonality = ", get_ml_apply_orthogonality(conf), "\n",
+                  "  enforce_symmetry_group = ", get_ml_enforce_symmetry_group(conf), "\n",
+                  "end\n\n")
+end
+
+"""
     write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filename=get_ml_filename(conf))
 
 Writes the parameters and configuration settings of a HamiltonianKernel object to a file.
@@ -214,16 +257,9 @@ Writes the parameters and configuration settings of a HamiltonianKernel object t
 - `filename`: The name of the file to which the data will be written (default: `get_ml_filename(conf)`).
 """
 function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filename=get_ml_filename(conf))
+    header = ml_header(conf)
     open(filename*".dat", "w") do file
-        # Write header to file
-        println(file, "begin ", get_system(conf))
-        println(file, "  rcut = ", get_ml_rcut(conf))
-        println(file, "  sim_params = ", get_ml_sim_params(conf))
-        println(file, "  env_scale = ", get_ml_env_scale(conf))
-        println(file, "  apply_distortion = ", get_ml_apply_distortion(conf))
-        println(file, "  apply_orthogonality = ", get_ml_apply_orthogonality(conf))
-        println(file, "end")
-        println(file, "")
+        write(file, header)
         for n in eachindex(kernel.params)
             print(file, kernel.params[n])
             for data_point in kernel.data_points[n]
@@ -267,7 +303,8 @@ function read_ml_params(conf=get_empty_config(); filename=get_ml_filename(conf))
             fn_name = Symbol("get_ml_", key)
             fn = getfield(@__MODULE__, fn_name)
             conf_val = fn(conf)
-            @assert tryparse(typeof(conf_val), val) == conf_val
+            same = conf_val isa AbstractString ? val == conf_val : tryparse(typeof(conf_val), val) == conf_val
+            same || error("The ML parameter file $filename was written with $key = $val, the config uses $key = $conf_val.")
         end
     end
 
@@ -384,12 +421,23 @@ function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc
         for (bi, index) in enumerate(indices)
             h_env = kernel.structure_descriptors[index]
             for R in eachindex(dL_dHr[bi])
+                g_R = Float64[]
                 for (i, j, hin) in zip(findnz(h_env[R])...)
                     push!(hins, hin)
                     if !soc
-                        push!(gs, real(dL_dHr[bi][R][i, j]))
+                        push!(g_R, real(dL_dHr[bi][R][i, j]))
                     else
-                        push!(gs, real(dL_dHr[bi][R][2i-1, 2j-1] + dL_dHr[bi][R][2i, 2j]))
+                        push!(g_R, real(dL_dHr[bi][R][2i-1, 2j-1] + dL_dHr[bi][R][2i, 2j]))
+                    end
+                end
+                if isnothing(kernel.symmetry)
+                    append!(gs, g_R)
+                else
+                    # enforce_symmetry_group: every variant of a descriptor contributes with its weight
+                    terms = kernel.symmetry[index]
+                    append!(gs, g_R .* terms.base_weights[R])
+                    for (k, x, w) in terms.extra[R]
+                        push!(hins, x); push!(gs, w * g_R[k])
                     end
                 end
             end

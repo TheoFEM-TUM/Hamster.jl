@@ -64,7 +64,7 @@ function accumulate_hr!(hr, block::DeviceSparseBlock, p)
 end
 
 function accumulate_hr!(hr, block::DeviceKernelBlock, p)
-    launch_kernel!(gaussian_kernel_hr_kernel!, hr, length(block.rows), block.rows, block.X, block.D, p, block.γ)
+    launch_kernel!(gaussian_kernel_hr_kernel!, hr, length(block.rows), block.rows, block.ptr, block.w, block.X, block.D, p, block.γ)
 end
 
 """
@@ -79,7 +79,7 @@ end
 
 function parameter_gradient(block::DeviceKernelBlock, G)
     g = similar(G, Float64, block.nparams)
-    launch_kernel!(gaussian_kernel_grad_kernel!, g, block.nparams, block.rows, block.X, block.D, G, block.γ)
+    launch_kernel!(gaussian_kernel_grad_kernel!, g, block.nparams, block.rows, block.ptr, block.w, block.X, block.D, G, block.γ)
 end
 
 """

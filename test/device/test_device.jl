@@ -109,6 +109,31 @@ end
     end
 end
 
+@testset "Device: ML corrections with enforce_symmetry_group = O_h (CsPbBr3, s and p orbitals)" begin
+    ml_path = joinpath(@__DIR__, "..", "mlham", "test_files")
+    for group in ("O_h", "none"), device in [ArrayDevice(Array), ArrayDevice(JLArray)]
+        conf = get_config(filename=joinpath(ml_path, "hconf_cspbbr3"))
+        set_value!(conf, "poscar", joinpath(ml_path, "POSCAR_CsPbBr3")); set_value!(conf, "rllm_file", joinpath(ml_path, "rllm_cspbbr3.dat"))
+        set_value!(conf, "init_params", "ML", "rand"); set_value!(conf, "init_params", "zeros"); set_value!(conf, "verbosity", 0)
+        set_value!(conf, "Npoints", "ML", 40); set_value!(conf, "Ncluster", "ML", 8); set_value!(conf, "update", "ML", true)
+        set_value!(conf, "enforce_symmetry_group", "ML", group); set_value!(conf, "sp_mode", true)
+        ham_cpu, ham_dev = get_device_test_hams(conf, device)
+        @test isnothing(ham_cpu.models[2].symmetry) == (group == "none")
+        @test maxdiff(Matrix.(get_hr(ham_cpu, 1)), get_dense_device_hr(ham_dev, 1)) < 1e-10
+        # Gradient of the ML parameters (with the variants and their weights)
+        loss = Loss(2); reg = Regularization(conf)
+        Es, _ = diagonalize(get_hamiltonian(ham_cpu, 1, ks_device_test))
+        data = Hamster.EigData(ks_device_test, Es .+ 0.1 .* randn(size(Es)))
+        _, cache_cpu = Hamster.forward(ham_cpu, 1, loss, data)
+        _, cache_dev = Hamster.forward(ham_dev, 1, loss, data)
+        dL_dHr = Hamster.backward(ham_cpu, 1, loss, data, cache_cpu, conf)
+        g_dev = Hamster.backward(ham_dev, 1, loss, data, cache_dev, conf)
+        grad_cpu = Hamster.get_model_gradient(ham_cpu.models[2], [1], reg, [dL_dHr])
+        grad_dev = Hamster.get_model_gradient(ham_dev.models[2], [1], reg, Hamster.model_gradient_input([g_dev], 2))
+        @test grad_cpu ≈ grad_dev atol=1e-8
+    end
+end
+
 @testset "Device gradient of the Ewald coupling matches CPU" begin
     # Distorted CsPbBr3 cell (inequivalent Br sites, so that the centered potentials do not vanish), TB + Ewald
     path = joinpath(@__DIR__, "..", "model", "test_files")

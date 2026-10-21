@@ -26,6 +26,23 @@ function print_hamster(io_stream=stdout)
 end
 
 """
+    read_header_value(file, key) -> Union{String, Nothing}
+
+Value of `key` in the header (`begin <system>` ... `end`) of the parameter file `file`, `nothing` if the file has no
+header or no such entry.
+"""
+function read_header_value(file, key)
+    isfile(file) || return nothing
+    for line in eachline(file)
+        fields = split(strip(line))
+        isempty(fields) && continue
+        fields[1] == "end" && return nothing
+        length(fields) ≥ 3 && fields[1] == key && fields[2] == "=" && return String(fields[3])
+    end
+    return nothing
+end
+
+"""
     open_and_read(file::AbstractString) -> Vector{String}
 
 Open a file, read all lines, and return them as a vector of strings.
