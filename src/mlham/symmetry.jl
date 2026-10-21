@@ -87,9 +87,14 @@ function ShellOrbit(types, group)
     U = Vector{Float64}[]
     add!(u) = any(v -> norm(v - u) < 1e-8, U) || push!(U, u)
     Ds = [shell_representation(types, g) for g in group]
-    for k in 1:n, D in Ds, sgn in (1, -1)
+    # Orbits of the basis orbitals that are not yet spanned (e.g. under O_h: dxz covers t2g, dz2 covers eg), which
+    # gives the smallest set of this kind
+    for k in 1:n
         e = zeros(n); e[k] = 1
-        add!(round.(sgn * D * e, digits=12))
+        isempty(U) || norm(e - reduce(hcat, U) * (reduce(hcat, U) \ e)) > 1e-8 || continue
+        for D in Ds, sgn in (1, -1)
+            add!(round.(sgn * D * e, digits=12))
+        end
     end
     S = sum(u * u' for u in U)
     return ShellOrbit(collect(types), U, inv(S), inv(sqrt(Symmetric(S))))
