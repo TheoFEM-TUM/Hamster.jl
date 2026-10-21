@@ -132,3 +132,15 @@ end
     result = Hamster.parse_lines_as_array(lines_int, type=Int)
     @test result == [1 2 3; 4 5 6]
 end
+@testset "read_header_value" begin
+    mktempdir() do dir
+        file = joinpath(dir, "params.dat")
+        write(file, "begin CsPbBr3\n  enforce_symmetry_group = O_h\n  rcut = 5.0\nend\n\nother = 1\n")
+        @test Hamster.read_header_value(file, "enforce_symmetry_group") == "O_h"
+        @test isnothing(Hamster.read_header_value(file, "other"))          # after the header
+        write(file, "a = 1\nb = 2\n")                                       # no header
+        @test Hamster.read_header_value(file, "b") == "2"
+        @test isnothing(Hamster.read_header_value(file, "c"))
+        @test isnothing(Hamster.read_header_value(joinpath(dir, "missing.dat"), "a"))
+    end
+end

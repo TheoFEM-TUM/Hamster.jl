@@ -87,6 +87,12 @@ function get_tb_pd_overlap(base1, base2, r0, θ₁, φ₁, θ₂, φ₂, ns, αs
     return Is
 end
 
+@testset "get_base_orb" begin
+    @test Hamster.get_base_orb(px()) == px()
+    @test Hamster.get_base_orb(s(), pz()) == (s(), pz())
+    @test Hamster.get_base_orb(s(), pz(), bondswap=true) == (pz(), s())
+end
+
 @testset "SH transform p-orbitals" begin
     _, θ, φ = Hamster.transform_to_spherical([0., 0., 1.])
     _, θ′, φ′ = Hamster.transform_to_spherical(2 .* rand(3) .- 1)

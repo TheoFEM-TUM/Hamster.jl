@@ -25,7 +25,8 @@ functions linear in both orbitals; on the same site and shell, the pairs ``(u, u
 remain. It holds for every structure (the model is continuous in the geometry and needs no symmetry detection), so
 structures whose symmetry is a subgroup of the chosen group are exactly symmetric. For p and t2g orbitals under `O_h`
 the orbits are the orbitals with both signs (2 variants per orbital); eg orbitals under `O_h` and in-plane p orbitals
-under `D_6h` have larger orbits, which makes the ML part more expensive for these elements. Hybrid orbitals are not
+under `D_6h` have larger orbits, which makes the ML part more expensive for these elements. All elements of a shell
+pair use the same orbital pairs, so every distinct descriptor is evaluated only once. Hybrid orbitals are not
 averaged, and s orbitals are their own orbit (no sign average, which would remove their corrections). The shells must
 be complete (e.g. all three p orbitals).
 

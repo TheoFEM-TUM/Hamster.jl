@@ -263,19 +263,20 @@ function symmetric_tb_descriptor(h, V, strc::Structure, basis, conf::Config, gro
     end
     descriptors = SparseMatrixCSC{SVector{8, Float64}, Int64}[sparse(reduce(vcat, [p[1][R] for p in parts]), reduce(vcat, [p[2][R] for p in parts]),
                                                                reduce(vcat, [p[3][R] for p in parts]), Nε, Nε) for R in 1:NR]
-    # The descriptors of all chunks, and the weight matrices (duplicate terms, e.g. a bilinear and a tied pair with the
-    # same descriptor, are summed)
-    Xs = map(R -> reduce(vcat, [p[4][R] for p in parts]), 1:NR)
+    # The distinct descriptors of all chunks (identical ones also occur for different atom pairs, e.g. the elements
+    # (i, j) and (j, i) of the home cell) and the weight matrices (duplicate terms, e.g. a bilinear and a tied pair with
+    # the same descriptor, are summed)
+    Xs = [SVector{8, Float64}[] for _ in 1:NR]
     Ws = map(1:NR) do R
         D = descriptors[R]
+        index = Dict{SVector{8, Float64}, Int64}()
         ts = Int64[]; ks = Int64[]; ws = Float64[]
-        offset_t = 0
         for p in parts
+            global_index = [get!(() -> (push!(Xs[R], x); length(Xs[R])), index, x) for x in p[4][R]]
             for (i, j, t, w) in p[5][R]
-                push!(ts, offset_t + t); push!(ws, w)
+                push!(ts, global_index[t]); push!(ws, w)
                 push!(ks, nzrange(D, j)[searchsortedfirst(view(rowvals(D), nzrange(D, j)), i)])
             end
-            offset_t += length(p[4][R])
         end
         sparse(ts, ks, ws, length(Xs[R]), nnz(D))
     end

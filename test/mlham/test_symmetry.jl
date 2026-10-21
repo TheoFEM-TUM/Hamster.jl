@@ -108,6 +108,49 @@ end
     end
 end
 
+@testset "Symmetry O_h: apply_distortion and apply_distance_distortion" begin
+    # Cubic reference positions, actual Pb position (pos - dist) displaced along z: polar (C4v) with apply_distortion
+    # (angles and distances of the actual positions) and with apply_distance_distortion (actual distances only)
+    for (key, polar) in (("apply_distortion", true), ("apply_distance_distortion", false))
+        conf = symm_config("O_h")
+        set_value!(conf, key, "ML", true)
+        strc_0 = Structure(conf)
+        rs = reduce(hcat, [ion.pos for ion in strc_0.ions]); types = [ion.type for ion in strc_0.ions]
+        δ = zeros(3, length(types)); δ[3, 1] = -0.15
+        strc = Structure(strc_0.Rs, rs, δ, types, strc_0.lattice, conf)
+        basis = Basis(strc, conf); model = TBModel([strc], [basis], comm, conf)
+        Hamster.Random.seed!(1)
+        kernel = HamiltonianKernel([strc], [basis], model, comm, conf)
+        rows = Hamster.shell_rows(basis); rcut = Hamster.get_ml_rcut(conf)
+        P = Hamster.shell_projections(strc, rows, rcut, apply_distortion=polar)[(1, 1)]                   # Pb p
+        @test abs(P[1]) < 1e-10 && abs(P[2]) < 1e-10 && (abs(P[3]) > 1e-3) == polar
+        @test all(abs.(Hamster.shell_projections(strc, rows, rcut)[(1, 1)]) .< 1e-10)                    # reference: cubic
+        Hr = get_hr(kernel, Hamster.Dense(), 1)
+        R0 = R_index(strc, [0, 0, 0])
+        @test abs(real(Hr[R0][1, 2])) < 1e-10 && abs(real(Hr[R0][1, 3])) < 1e-10
+        @test real(Hr[R0][2, 2]) ≈ real(Hr[R0][3, 3])
+        @test all(R -> Hr[R] ≈ Matrix(Hr[R_index(strc, -strc.Rs[:, R])])', axes(strc.Rs, 2))
+        ks = [0.3 0.1 0.2; -0.1 0.3 0.2]
+        Es = [eigvals(Hermitian(Matrix(H))) for H in get_hamiltonian(Hr, strc.Rs, Matrix(transpose(ks)))]
+        @test Es[1] ≈ Es[2] atol=1e-8
+    end
+end
+
+@testset "Symmetry O_h: hybrid orbitals are their own orbit" begin
+    # GaAs with sp3 hybrids only: one descriptor per element (the one of get_tb_descriptor) with weight 1
+    path = joinpath(@__DIR__, "test_files")
+    conf = get_config(filename=joinpath(path, "hconf"))
+    set_value!(conf, "poscar", joinpath(path, "POSCAR_gaas")); set_value!(conf, "rllm_file", joinpath(path, "rllm.dat"))
+    set_value!(conf, "verbosity", 0)
+    strc = Structure(conf); basis = Basis(strc, conf); model = TBModel(strc, basis, conf)
+    d0 = Hamster.get_tb_descriptor(model.hs, model.params, strc, basis, conf)
+    d, sym = Hamster.get_tb_descriptor_and_symmetry(model.hs, model.params, strc, basis, conf, group="O_h")
+    @test all(R -> findnz(d[R])[1:2] == findnz(d0[R])[1:2], eachindex(d))
+    @test all(R -> all(x -> x[1] ≈ x[2], zip(nonzeros(d[R]), nonzeros(d0[R]))), eachindex(d))
+    @test all(R -> all(==(1), nonzeros(sym.W[R])) && all(==(1), diff(sym.W[R].colptr)), eachindex(d))
+    @test all(R -> all(k -> sym.X[R][rowvals(sym.W[R])[k]] == nonzeros(d[R])[k], 1:nnz(d[R])), eachindex(d))
+end
+
 @testset "Symmetry O_h: precomputed similarities and gradient" begin
     conf = symm_config("O_h")
     strc, basis, kernel = symm_kernel(conf)
