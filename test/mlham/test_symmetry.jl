@@ -137,7 +137,8 @@ end
 end
 
 @testset "Symmetry O_h: hybrid orbitals are their own orbit" begin
-    # GaAs with sp3 hybrids only: one descriptor per element (the one of get_tb_descriptor) with weight 1
+    # GaAs with sp3 hybrids only: one descriptor per element with weight 1, with the distance and angles of
+    # get_tb_descriptor (the environment values differ: squared instead of linear environment)
     path = joinpath(@__DIR__, "test_files")
     conf = get_config(filename=joinpath(path, "hconf"))
     set_value!(conf, "poscar", joinpath(path, "POSCAR_gaas")); set_value!(conf, "rllm_file", joinpath(path, "rllm.dat"))
@@ -146,7 +147,7 @@ end
     d0 = Hamster.get_tb_descriptor(model.hs, model.params, strc, basis, conf)
     d, sym = Hamster.get_tb_descriptor_and_symmetry(model.hs, model.params, strc, basis, conf, group="O_h")
     @test all(R -> findnz(d[R])[1:2] == findnz(d0[R])[1:2], eachindex(d))
-    @test all(R -> all(x -> x[1] ≈ x[2], zip(nonzeros(d[R]), nonzeros(d0[R]))), eachindex(d))
+    @test all(R -> all(x -> x[1][1:6] ≈ x[2][1:6], zip(nonzeros(d[R]), nonzeros(d0[R]))), eachindex(d))
     @test all(R -> all(==(1), nonzeros(sym.W[R])) && all(==(1), diff(sym.W[R].colptr)), eachindex(d))
     @test all(R -> all(k -> sym.X[R][rowvals(sym.W[R])[k]] == nonzeros(d[R])[k], 1:nnz(d[R])), eachindex(d))
 end
