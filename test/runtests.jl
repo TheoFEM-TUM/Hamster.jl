@@ -53,6 +53,7 @@ if test_all || test_only == "Basis"
         include("basis/test_param.jl")
         include("basis/test_rllm.jl")
         include("basis/test_basis.jl")
+        include("basis/test_sk_overlaps.jl")
     end
 end
 

@@ -236,13 +236,22 @@ Return true if `overlap` contributes to the matrix element between the orbitals 
 - `orb2`: The second orbital.
 - `ion_label`: The ion label to check if the overlap corresponds to the same type of ions as the orbitals.
 
+Between different elements, the angular momenta of the overlap belong to its elements in order (e.g. `Ga+As_spσ`: s on
+Ga, p on As), so the reversed assignment (p on Ga, s on As) does not contribute. For the same element, both orders
+contribute.
+
 # Returns
 - `Bool`: Returns `true` if the overlap contributes to the matrix element, i.e., if the orbital types of `orb1` and `orb2` match the types in the overlap, and the `ion_label` matches.
 """
 function overlap_contributes_to_matrix_element(overlap, orb1, orb2, ion_label)::Bool
     l₁, l₂ = orb1.type.l, orb2.type.l
     l₁_ov, l₂_ov = overlap.type.base[1].l, overlap.type.base[2].l
-    return same_ion_label(overlap, ion_label) && ( (l₁ == l₁_ov && l₂ == l₂_ov) || (l₁ == l₂_ov && l₂ == l₁_ov))
+    same_ion_label(overlap, ion_label) || return false
+    if ion_label.types[1] ≠ ion_label.types[2]
+        ion_label.types[1] == overlap.ion_label.types[1] && return l₁ == l₁_ov && l₂ == l₂_ov
+        return l₁ == l₂_ov && l₂ == l₁_ov
+    end
+    return (l₁ == l₁_ov && l₂ == l₂_ov) || (l₁ == l₂_ov && l₂ == l₁_ov)
 end
 
 """
