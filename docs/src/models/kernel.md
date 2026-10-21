@@ -1,5 +1,42 @@
 # Kernel-based ML corrections
 
+## Symmetry of the Corrections
+
+The ML correction of a matrix element is a scalar kernel value of its descriptor,
+``\Delta H_{ij} = \sum_k w_k \exp(-|x_{ij} - d_k|^2 / 2\sigma^2)``. A matrix element is linear in both orbitals; the
+kernel is not. A symmetry operation that maps an orbital onto its negative (a p orbital under inversion) or onto a
+combination of orbitals (dz2 under a threefold axis, px under a hexagonal sixfold axis) therefore relates the
+corrections of different elements in a way the kernel does not reproduce: without further measures, the corrections
+break the symmetry of the structure (in ideal cubic CsPbBr3 by up to 0.4 eV per element, with split Kramers pairs).
+
+With `enforce_symmetry_group = O_h` or `D_6h` in the `ML` block, the corrections transform exactly like the Hamiltonian
+under every operation of the point group (axes along the Cartesian axes; for `D_6h` the sixfold axis along z). The
+kernel is averaged over the orbit ``P`` of the orbitals of each shell under the group (and the sign),
+
+```math
+\Delta H_{ij} = \sum_{u \in P_i} \sum_{v \in P_j} (S_i^{-1} u)\cdot c_i \, (S_j^{-1} v)\cdot c_j \; K(x(u, v)),
+\qquad S = \sum_{u \in P} u u^\mathsf{T},
+```
+
+where ``c_i`` are the coefficients of orbital ``i`` in its shell and ``x(u, v)`` is the descriptor of the orbitals ``u``
+and ``v`` (angles from their angular functions, squared environment ``u^\mathsf{T} E u``). This projects the kernel onto
+functions linear in both orbitals; on the same site and shell, the pairs ``(u, u)`` are added so that isotropic shifts
+remain. It holds for every structure (the model is continuous in the geometry and needs no symmetry detection), so
+structures whose symmetry is a subgroup of the chosen group are exactly symmetric. For p and t2g orbitals under `O_h`
+the orbits are the orbitals with both signs (2 variants per orbital); eg orbitals under `O_h` and in-plane p orbitals
+under `D_6h` have larger orbits, which makes the ML part more expensive for these elements. Hybrid orbitals are not
+averaged. The shells must be complete (e.g. all three p orbitals).
+
+The environment descriptor is the sum of squares ``e_i = \sum_k H_{ik}^2 f_\mathrm{cut}`` (sign-invariant). Its values
+and especially their thermal variation are much smaller than those of the linear environment (for CsPbBr3 by a factor
+5-6), so `env_scale` should be increased (CsPbBr3: `env_scale = 6`). With `enforce_symmetry_group = none` (default), the
+corrections are computed as before. The tag is written to the ML parameter file and taken from there as the default;
+a model trained with a group cannot be evaluated without it.
+
+For CsPbBr3 (chain 13 refit, three seeds, MD test sets at 425/525/625 K), the symmetric corrections (O_h,
+`env_scale = 6`) have the same band error as before (test MAE 0.0425 vs 0.0426 eV) and half the error of the band gap
+(0.095 vs 0.221 eV, without the systematic overestimate of 0.2 eV).
+
 ## Model Summary
 
 When the model is built in a Hamster run, a summary is appended to `hamster.out`, with the number of descriptor
