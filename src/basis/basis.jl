@@ -130,12 +130,12 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
     contributing_overlaps = Dict{NTuple{4, Int64}, Vector{Int64}}()
     for ((type1, l1), orb1) in representative_orbitals, ((type2, l2), orb2) in representative_orbitals
         ion_label = IonLabel(type1, type2, sorted=false)
-        contributing_overlaps[(type1, type2, l1, l2)] = [k for k in eachindex(basis.overlaps) if overlap_contributes_to_matrix_element(basis.overlaps[k], orb1, orb2, ion_label)]
+        contributing_overlaps[(type1, type2, l1, l2)] = [k for k in eachindex(basis.overlaps)
+            if overlap_contributes_to_matrix_element(basis.overlaps[k], orb1, orb2, ion_label)]
     end
     orbital_axes = [SVector{3, Float64}[orb.axis for orb in orbs] for orbs in basis.orbitals]
     orbital_ls = [Int64[orb.type.l for orb in orbs] for orbs in basis.orbitals]
     overlap_types = SVector{2, UInt8}[sort(Cllm.ion_label.types) for Cllm in basis.overlaps]
-    gram_schmidt = lowercase(tmethod)[1] == 'g'
     onsite, sepNN = get_onsite(conf), get_sepNN(conf)
     parts = tmap(grid_cell_chunks(strc.point_grid, n=4 * npar)) do chunk
         entries = (v=Int64[], i=Int64[], j=Int64[], R=Int64[], val=Float64[])
@@ -151,7 +151,9 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
             r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, T⃗)
             r = normdiff(r⃗₁, r⃗₂)
             if r_nd ≤ rcut && r-abs(rcut_tol) < rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
-                Û = gram_schmidt ? get_transformed_system(r⃗₁, r⃗₂, orbital_axes[iion1][1]) : get_transformed_system(r⃗₁, r⃗₂)
+                # Bond frames for both directions of the bond (the reversed one for swapped orbital pairs)
+                Û = get_sk_transform_matrix(r⃗₁, r⃗₂, orbital_axes[iion1][1], tmethod)
+                Û_swap = get_sk_transform_matrix(r⃗₂, r⃗₁, orbital_axes[iion1][1], tmethod)
                 nnlabel = get_nn_label(r, nn_dict[ion_label], conf, onsite=onsite, sepNN=sepNN)
                 # The radial part depends only on the overlap and the distance, not on the orbitals
                 f = fcut(r, rcut, rcut_tol)
@@ -162,20 +164,35 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
                 for jorb1 in eachindex(orbital_axes[iion1]), jorb2 in eachindex(orbital_axes[iion2])
                     i = offset[iion1] + jorb1
                     j = offset[iion2] + jorb2
-                    θ₁, φ₁ = get_rotated_angles(Û, orbital_axes[iion1][jorb1])
-                    θ₂, φ₂ = get_rotated_angles(Û, orbital_axes[iion2][jorb2])
+                    orb1 = basis.orbitals[iion1][jorb1]; orb2 = basis.orbitals[iion2][jorb2]
+                    # Hybrid orbitals (l < 0) are evaluated in the bond frame from atom 1 to atom 2, as before the d orbitals
+                    hybrid = orb1.type.l < 0 || orb2.type.l < 0
+                    bondswap = !hybrid && determine_bondswap(ion_types[iion1], ion_types[iion2], orb1.type, orb2.type, i, j)
+                    U = bondswap ? Û_swap : Û
+                    base = get_base_orb(orb1.type, orb2.type, bondswap=bondswap)
+                    θ₁, φ₁ = get_rotated_angles(U, orbital_axes[iion1][jorb1])
+                    θ₂, φ₂ = get_rotated_angles(U, orbital_axes[iion2][jorb2])
 
                     for k in contributing_overlaps[(Int64(ion_types[iion1]), Int64(ion_types[iion2]), orbital_ls[iion1][jorb1], orbital_ls[iion2][jorb2])]
                         Cllm = basis.overlaps[k]
                         mode = get_mode(mode_dicts, k, ion_label, jorb1, jorb2)
                         orbconfig = get_orbconfig(oc_dicts, k, ion_label, jorb1, jorb2)
+                        # Base orbitals in the order of the parameter definition. Two signs of the bond direction (parity
+                        # (-1)^(l₁ + l₂) for odd l₁ + l₂), which the angular functions of dorbs did not account for:
+                        # - reversing the order of the base orbitals without reversing the bond;
+                        # - parameters with decreasing l (e.g. Ga+As_psσ), whose distance dependence already contains
+                        #   the sign (see distance_dependence), which the angular part applies again.
+                        reversed_base = !hybrid && Cllm.type.base_ls ≠ (base[1].l, base[2].l)
+                        base_k = reversed_base ? reverse(base) : base
+                        odd = !hybrid && isodd(base[1].l + base[2].l)
+                        flips = (reversed_base ? 1 : 0) + (Cllm.type.base_ls[1] > Cllm.type.base_ls[2] ? 1 : 0)
+                        parity = odd && isodd(flips) ? -1.0 : 1.0
                         v::Int64 = nnlabel ≠ 0 ? get(param_indices, (k, nnlabel), 0) :
-                            get_param_index(Cllm, nnlabel, basis.parameters, basis.orbitals[iion1][jorb1], basis.orbitals[iion2][jorb2], i, j,
-                                            overlap_label=overlap_labels[k])
+                            get_param_index(Cllm, nnlabel, basis.parameters, orb1, orb2, i, j, overlap_label=overlap_labels[k])
 
                         angles[1] = θ₁; angles[2] = φ₁; angles[3] = θ₂; angles[4] = φ₂
-                        evaluate_overlap!(angles, Cllm, orbconfig, mode)
-                        hval = angles[5] * radial[k]
+                        evaluate_overlap!(angles, Cllm, base_k, orbconfig, mode)
+                        hval = parity * angles[5] * radial[k]
 
                         if abs(hval) ≥ sp_tol
                             push!(entries.v, v); push!(entries.i, i); push!(entries.j, j); push!(entries.R, R); push!(entries.val, hval)
@@ -190,12 +207,13 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
 end
 
 """
-    evaluate_overlap!(buffer, overlap, orbconfig, mode)
+    evaluate_overlap!(buffer, overlap, base, orbconfig, mode)
 
-Writes the angular part of `overlap` for the angles `buffer[1:4]` (θ₁, φ₁, θ₂, φ₂) to `buffer[5]`.
+Writes the angular part of `overlap` with the base orbitals `base` for the angles `buffer[1:4]` (θ₁, φ₁, θ₂, φ₂) to
+`buffer[5]`.
 """
-function evaluate_overlap!(buffer, overlap, orbconfig, mode)
-    @inbounds buffer[5] = overlap(orbconfig, mode, buffer[1], buffer[2], buffer[3], buffer[4])
+function evaluate_overlap!(buffer, overlap, base, orbconfig, mode)
+    @inbounds buffer[5] = overlap(base, orbconfig, mode, buffer[1], buffer[2], buffer[3], buffer[4])
     return nothing
 end
 
@@ -226,6 +244,28 @@ function assemble_geometry_tensor(parts, NV, NR, Nε)
 end
 
 """
+    determine_bondswap(ion_type1, ion_type2, orb1, orb2, i, j)
+
+Determine whether a bond-direction flip is required for a TB matrix element
+given the definition of that interaction.
+
+This accounts for the fact that some hopping parameters (e.g. s-p couplings)
+change sign when the bonding axis is defined in the opposite direction.
+
+Returns `true` if a bond swap is needed, which occurs when:
+  - The two ions appear in reversed order (`areswapped(ion_type1, ion_type2)`), or
+  - The ions are of the same type, but different orbital types (`orb1`, `orb2`)
+    are used with reversed orbital indices (`i > j`).
+
+Otherwise, returns `false`.
+"""
+function determine_bondswap(ion_type1, ion_type2, orb1, orb2, i, j)
+    ionswap = areswapped(ion_type1, ion_type2)
+    sameion_bondflip = ion_type1 == ion_type2 && i > j && typeof(orb1) ≠ typeof(orb2)
+    return ionswap || sameion_bondflip
+end
+
+"""
     overlap_contributes_to_matrix_element(overlap, orb1, orb2, ion_label)
 
 Return true if `overlap` contributes to the matrix element between the orbitals `orb1` and `orb2` for `ion_label`.
@@ -245,7 +285,7 @@ contribute.
 """
 function overlap_contributes_to_matrix_element(overlap, orb1, orb2, ion_label)::Bool
     l₁, l₂ = orb1.type.l, orb2.type.l
-    l₁_ov, l₂_ov = overlap.type.base[1].l, overlap.type.base[2].l
+    l₁_ov, l₂_ov = overlap.type.base_ls[1], overlap.type.base_ls[2]
     same_ion_label(overlap, ion_label) || return false
     if ion_label.types[1] ≠ ion_label.types[2]
         ion_label.types[1] == overlap.ion_label.types[1] && return l₁ == l₁_ov && l₂ == l₂_ov

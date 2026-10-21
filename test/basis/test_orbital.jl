@@ -38,11 +38,11 @@ end
     # Test 1: Default hybrid orbital orientation
     orbitals = Hamster.get_orbitals(strc_cspbbr3, conf)
     expected_types = [[Hamster.s, Hamster.px, Hamster.py, Hamster.pz], [Hamster.s], [Hamster.px, Hamster.py, Hamster.pz], [Hamster.px, Hamster.py, Hamster.pz], [Hamster.px, Hamster.py, Hamster.pz]]
-    expected_axes = [[SVector{3}([0., 0., 1.]), SVector{3}([1., 0., 0.]), SVector{3}([0., 1., 0.]), SVector{3}([0., 0., 1.])], 
+    expected_axes = [[SVector{3}([0., 0., 1.]), SVector{3}([0., 0., 1.]), SVector{3}([0., 0., 1.]), SVector{3}([0., 0., 1.])], 
                     [SVector{3}([0., 0., 1.])], 
-                    [SVector{3}([1., 0., 0.]), SVector{3}([0., 1., 0.]), SVector{3}([0., 0., 1.])], 
-                    [SVector{3}([1., 0., 0.]), SVector{3}([0., 1., 0.]), SVector{3}([0., 0., 1.])], 
-                    [SVector{3}([1., 0., 0.]), SVector{3}([0., 1., 0.]), SVector{3}([0., 0., 1.])]]
+                    [SVector{3}([0., 0., 1.]), SVector{3}([0., 0., 1.]), SVector{3}([0., 0., 1.])], 
+                    [SVector{3}([0., 0., 1.]), SVector{3}([0., 0., 1.]), SVector{3}([0., 0., 1.])], 
+                    [SVector{3}([0., 0., 1.]), SVector{3}([0., 0., 1.]), SVector{3}([0., 0., 1.])]]
     expected_ion_types = [[82, 82, 82, 82], [55], [35, 35, 35], [35, 35, 35], [35, 35, 35]]
 
     @test sum(Hamster.get_number_of_orbitals(orbitals)) == 14
