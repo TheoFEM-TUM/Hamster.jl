@@ -182,6 +182,10 @@ end
         Hamster.write_params(kernel, conf, filename=file)
         @test occursin("enforce_symmetry_group = O_h", read(file * ".dat", String))
         @test Hamster.read_ml_params(conf, filename=file)[1] ≈ kernel.params
+        # An unknown header entry gives a clear error
+        write(file * ".dat", replace(read(file * ".dat", String), "enforce_symmetry_group = O_h" => "enforce_symmetry_group = O_h\n  antisymmetrize = false"))
+        err = try Hamster.read_ml_params(conf, filename=file); nothing catch e; e end
+        @test err isa ErrorException && occursin("unknown header entry antisymmetrize", err.msg)
         # Overwriting the file it was read from (init_params = output, settings from its header) keeps the header
         ml = get_empty_config()
         set_value!(ml, "init_params", "ML", file * ".dat")

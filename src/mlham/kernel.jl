@@ -301,6 +301,8 @@ function read_ml_params(conf=get_empty_config(); filename=get_ml_filename(conf))
             key = strip(key)
             val = strip(val)
             fn_name = Symbol("get_ml_", key)
+            isdefined(@__MODULE__, fn_name) || error("The ML parameter file $filename contains the unknown header entry " *
+                                                     "$key = $val (written by another version of Hamster?).")
             fn = getfield(@__MODULE__, fn_name)
             conf_val = fn(conf)
             same = conf_val isa AbstractString ? val == conf_val : tryparse(typeof(conf_val), val) == conf_val
