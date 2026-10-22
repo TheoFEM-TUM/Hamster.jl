@@ -129,6 +129,7 @@ function print_val_status(prof, iter; verbosity=1)
     printit = decide_printit(1, 1, iter, prof.printeachbatch, prof.printeachiter; verbosity=verbosity)
     if printit
         println(@sprintf("   Iteration: %d / %d | Val Loss: %.4f | Time: %.5f s", iter, Niter, prof.L_val[iter], prof.val_times[iter]))
+        flush(stdout)       # stdout redirected to a file (jobs) is buffered otherwise
     end
 end
 
@@ -167,6 +168,7 @@ function print_iteration_status(iter, Niter, batch_id, Nbatch, L_train, time_ite
     elseif L_train == 0 && batch_id ≠ 0
         println(@sprintf("Batch %d / %d | Iteration: %d / %d | Time: %.5f s | ETA: %.2f s", batch_id, Nbatch, iter, Niter, time_iter, time_left))
     end
+    flush(stdout)           # stdout redirected to a file (jobs) is buffered otherwise
 end
 
 """
@@ -186,6 +188,7 @@ function print_start_message(prof::HamsterProfiler; verbosity=1)
         println(@sprintf("Total Iterations: %d", Niter))
         println(@sprintf("Total Batches per Iteration: %d", Nbatch))
         println("========================================")
+        flush(stdout)
     end
 end
 
@@ -220,6 +223,7 @@ function print_final_status(prof; verbosity=1)
             println(@sprintf("Validation Time: %.2f seconds", val_time))
         end
         println("========================================")
+        flush(stdout)
     end
 end
 
