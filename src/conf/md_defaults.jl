@@ -1,0 +1,62 @@
+# ====================
+# MD block: molecular dynamics with energies and forces from the Hamster Hamiltonian (TB + Wolf onsites + SOC) and a
+# learned nuclear (repulsive) term. The block switches on an MD calculation; `task` selects fit, eval or run.
+# ====================
+@configtag task String "run" "MD task: fit (learn the nuclear term from DFT energies and forces), eval (energies and forces of `train_data` with a fitted model) or run (NVT molecular dynamics)." "MD"
+@configtag model String "md_model.h5" "file of the nuclear term, written by task = fit and read by eval and run." "MD"
+
+# Electrons
+@configtag electrons String "auto" "electronic solver: exact (dense diagonalization at the k-points of `kgrid`), kpm (linear-scaling Chebyshev expansion of the Fermi operator at Γ) or auto (exact up to `exact_max_orbitals` orbitals, kpm above)." "MD"
+@configtag exact_max_orbitals Int64 3000 "largest number of orbitals for which electrons = auto uses exact diagonalization." "MD"
+@configtag kt Float64 0.1 "electronic temperature kT (eV) of the Fermi-Dirac occupations. The energy is the Mermin free energy, which the forces are the derivative of." "MD"
+@configtag kgrid Vector{Int64} [1, 1, 1] "Γ-centered k-point grid of the exact solver (e.g. the k-points of the DFT reference data). kpm uses Γ only, so its cells have to be large enough." "MD"
+@configtag charge Float64 0.0 "net charge of the cell (number of electrons removed), added to the valence electrons of the atom blocks (`valence`)." "MD"
+@configtag kpm_order Int64 0 "number of Chebyshev polynomials of the kpm solver; 0: from kt, the spectral width and `kpm_tol`." "MD"
+@configtag kpm_tol Float64 1e-7 "accuracy of the Chebyshev expansion of the Fermi operator, sets the order if kpm_order = 0." "MD"
+@configtag probe_radius Float64 10.0 "probing distance (Å) of the kpm solver: atoms of the same color are farther apart, so the density matrix is exact up to its elements between atoms at this distance. Larger is more accurate and more expensive (number of probe vectors ∝ probe_radius³)." "MD"
+@configtag kpm_precision String "double" "floating point precision of the Chebyshev recursion: double or single (faster on GPUs with few FP64 units)." "MD"
+@configtag spectrum_margin Float64 0.05 "relative margin added to the estimated spectral bounds of the kpm solver." "MD"
+@configtag nelec_tol Float64 1e-6 "tolerance of the electron number (per electron) at which the chemical potential of the previous step is kept by kpm." "MD"
+
+# Nuclear (repulsive) term
+@configtag rep_rcut Float64 6.0 "cutoff (Å) of the learned pair potentials." "MD"
+@configtag rep_nknots Int64 12 "number of cubic B-splines of each pair potential." "MD"
+@configtag rep_rmin Float64 0.0 "lower end (Å) of the spline range; 0: shortest distance of each species pair in the training data minus `rep_margin`." "MD"
+@configtag rep_margin Float64 0.3 "distance (Å) below the shortest training distance down to which the splines reach; below, a fixed repulsive wall acts." "MD"
+@configtag rep_wall Float64 10.0 "strength (eV/Å³) of the cubic repulsive wall below the spline range." "MD"
+@configtag rep_coulomb Bool true "add the Coulomb energy of the effective charges `qeff` (Wolf/Zahn sum of the Ewald block) with a fitted scale to the nuclear term." "MD"
+
+# Fit
+@configtag train_data Vector{String} String[] "reference data (vasprun.xml of VASP MD runs, or HDF5 files with lattice, positions, types, energies, forces) for task = fit (and eval)." "MD"
+@configtag val_data Vector{String} String[] "validation data for task = fit and hyperparameter optimizations." "MD"
+@configtag stride Int64 1 "use every `stride`-th frame of the training data." "MD"
+@configtag val_stride Int64 1 "use every `val_stride`-th frame of the validation data." "MD"
+@configtag skip Int64 0 "number of leading frames (equilibration) skipped in every data file." "MD"
+@configtag lambda Float64 1e-6 "ridge regularization of the coefficients of the nuclear term." "MD"
+@configtag smoothness Float64 1e-4 "regularization of the second differences of the spline coefficients (smooth pair potentials)." "MD"
+@configtag energy_weight Float64 1.0 "weight of the energies (per atom, eV) in the fit, relative to the forces (eV/Å)." "MD"
+@configtag force_weight Float64 1.0 "weight of the forces in the fit." "MD"
+@configtag loss_energy_weight Float64 10.0 "validation loss of a fit (e.g. for a HyperOpt block): force RMSE + loss_energy_weight × energy RMSE per atom." "MD"
+@configtag cache String "md_electrons.h5" "cache of the electronic energies and forces of the data sets (reused if the electronic settings and data are unchanged); none to switch it off." "MD"
+
+# Dynamics
+@configtag nsteps Int64 1000 "number of MD steps." "MD"
+@configtag dt Float64 2.0 "time step (fs)." "MD"
+@configtag temperature Float64 300.0 "temperature (K) of the NVT ensemble." "MD"
+@configtag init_temperature Float64 get_md_temperature(conf) "temperature (K) of the initial Maxwell-Boltzmann velocities." "MD"
+@configtag thermostat String "csvr" "thermostat: csvr (stochastic velocity rescaling, Bussi et al. 2007), langevin (BAOAB) or none (NVE, for tests)." "MD"
+@configtag tau Float64 100.0 "time constant (fs) of the thermostat (langevin: 1 / friction)." "MD"
+@configtag seed Int64 1 "random seed of the initial velocities and the thermostat." "MD"
+@configtag init_poscar String "default" "initial positions (POSCAR with the atoms in the order of the reference structure); default: the reference structure." "MD"
+@configtag supercell Vector{Int64} [1, 1, 1] "repetitions of the reference structure (poscar) along the three lattice vectors for the MD cell." "MD"
+@configtag skin Float64 0.5 "skin (Å) of the neighbor lists of the distance-dependent terms, which are rebuilt when an atom has moved by half of it." "MD"
+@configtag output String "md.h5" "output file of the MD run (thermodynamics, trajectory, eigenvalues, analysis)." "MD"
+@configtag restart Bool false "continue the run in `output` from its restart data (positions, velocities, step); the trajectory is appended." "MD"
+@configtag thermo_every Int64 1 "write energies, temperature and pressure every n steps." "MD"
+@configtag traj_every Int64 10 "write positions and velocities every n steps (0: never)." "MD"
+@configtag eig_every Int64 0 "compute eigenvalues every n steps (0: never): `neig` eigenvalues closest to the chemical potential (exact: all at Γ)." "MD"
+@configtag print_every Int64 10 "print the status every n steps (verbosity > 0)." "MD"
+@configtag analysis Bool true "at the end of a run, compute the radial distribution functions, the vibrational density of states and the mean squared displacement from the trajectory." "MD"
+@configtag rdf_rmax Float64 8.0 "largest distance (Å) of the radial distribution functions." "MD"
+@configtag rdf_nbins Int64 400 "number of bins of the radial distribution functions." "MD"
+@configtag equilibration Int64 0 "number of initial steps excluded from the analysis." "MD"

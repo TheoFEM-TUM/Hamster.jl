@@ -15,7 +15,8 @@ Evaluate a given set of hyperparameters by updating a configuration and running 
 # Returns
 - `Float64`: The minimum training loss obtained from the optimization calculation.
 """
-function hyper_optimize(params, labels, prof, comm, conf; rank=0, nranks=1, verbosity=get_verbosity(conf), validate=get_validate(conf))::Float64
+function hyper_optimize(params, labels, prof, comm, conf; rank=0, nranks=1, verbosity=get_verbosity(conf),
+                        validate=haskey(conf.blocks, "MD") ? !isempty(get_md_val_data(conf)) : get_validate(conf))::Float64
     if rank == 0 && verbosity > 0; println("========================================"); end # coverage: ignore
 
     param_values = map(labels) do label
@@ -35,7 +36,8 @@ function hyper_optimize(params, labels, prof, comm, conf; rank=0, nranks=1, verb
     end
 
     begin_time = MPI.Wtime()
-    prof_opt = Hamster.run_calculation(Val{:optimization}(), comm, conf, rank=rank, nranks=nranks, write_output=false)
+    task = haskey(conf.blocks, "MD") ? Val{:md}() : Val{:optimization}()
+    prof_opt = Hamster.run_calculation(task, comm, conf, rank=rank, nranks=nranks, write_output=false)
     time = MPI.Wtime() - begin_time
     prof.timings[1, iter] = time
     Lmin = validate ? minimum(prof_opt.L_val) : minimum(prof_opt.L_train)

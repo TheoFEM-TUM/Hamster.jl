@@ -123,3 +123,9 @@ if test_all || test_only == "calc"
 end
 
 MPI.Finalize()
+
+if test_all || test_only == "MD"
+    @testset "MD" begin
+        include("md/test_md.jl")
+    end
+end

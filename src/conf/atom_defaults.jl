@@ -33,3 +33,10 @@ get_charge_scale(conf::Config, type)::Float64 = conf("charge_scale", type) == "d
 If `nnaxes::Bool=true`, the orbital axes are rotated along the connecting vectors with the nearest neighbors of the respective orbitals. The number of nearest neighbors depends on the number of orbitals.
 """
 get_nnaxes(conf::Config, type)::Bool = conf("nnaxes", type) == "default" ? false : conf("nnaxes", type)
+"""
+**valence**=0
+
+The `valence::Float` is the number of electrons that an atom of this type contributes to the TB bands, used by the MD
+(`MD` block) to fill the bands, e.g. Cs 0, Pb 2 (6s), Br 6 (4p) for CsPbBr3.
+"""
+get_valence(conf::Config, type)::Float64 = conf("valence", type) == "default" ? 0. : conf("valence", type)

@@ -107,14 +107,73 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
     offset = cumsum(vcat(0, norbs[1:end-1]))
     ion_types = get_ion_types(strc.ions)
     nn_dict = get_nn_thresholds(strc.ions, frac_to_cart(strc.Rs, strc.lattice), strc.point_grid, conf)
-    oc_dicts, mode_dicts = get_oc_and_mode_dicts(basis.overlaps, strc.ions)
-
     Ts = frac_to_cart(strc.Rs, strc.lattice)
 
     rllm_dict = get_rllm_from_file(basis.overlaps, conf, comm = comm, file=file)
+    ctx = GeometryContext(strc, basis, rllm_dict, tmethod=tmethod)
+    onsite, sepNN = get_onsite(conf), get_sepNN(conf)
+    parts = tmap(grid_cell_chunks(strc.point_grid, n=4 * npar)) do chunk
+        entries = (v=Int64[], i=Int64[], j=Int64[], R=Int64[], val=Float64[])
+        radial = zeros(length(basis.overlaps))
+        angles = zeros(5)
+        for (grid_point, inds) in chunk, nn_grid_point in nn_grid_points(grid_point, strc.point_grid.dictR),
+            (iion2, R) in strc.point_grid.dictR[nn_grid_point], iion1 in inds
+            ion_label = IonLabel(ion_types[iion1], ion_types[iion2], sorted=false)
+            T⃗ = SVector{3, Float64}(Ts[1, R], Ts[2, R], Ts[3, R])
+            r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
+            r⃗₂ = apply_pbc(strc.ions[iion2].pos, T⃗) - strc.ions[iion2].dist
+            
+            r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, T⃗)
+            r = normdiff(r⃗₁, r⃗₂)
+            if r_nd ≤ rcut && r-abs(rcut_tol) < rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
+                nnlabel = get_nn_label(r, nn_dict[ion_label], conf, onsite=onsite, sepNN=sepNN)
+                # The radial part depends only on the overlap and the distance, not on the orbitals
+                f = fcut(r, rcut, rcut_tol)
+                types_sorted = sort(ion_label.types)
+                for k in eachindex(basis.overlaps)
+                    radial[k] = ctx.overlap_types[k] == types_sorted ? ctx.rllms[k](r) * f : 0.0
+                end
+                geometry_entries!(ctx, iion1, iion2, offset[iion1], offset[iion2], r⃗₁, r⃗₂, nnlabel, radial, angles) do v, i, j, k, hval
+                    if abs(hval) ≥ sp_tol
+                        push!(entries.v, v); push!(entries.i, i); push!(entries.j, j); push!(entries.R, R); push!(entries.val, hval)
+                    end
+                end
+            end
+        end
+        entries
+    end
+    return assemble_geometry_tensor(parts, length(basis.parameters), size(strc.Rs, 2), length(basis)[1])
+end
+
+"""
+    GeometryContext(strc, basis, rllm_dict; tmethod="rotation")
+
+Lookups of the geometry tensor that depend only on the ion types and the orbitals, not on the positions: the distance
+dependence and the label of every overlap, the overlaps that contribute to the matrix elements between two angular
+momenta of two ion types, the parameter index of every overlap for neighbors, and the orbital configurations and modes.
+Used by `geometry_entries!` for one pair of ions.
+"""
+struct GeometryContext{B, S, OC, MD}
+    basis :: B
+    ion_types :: Vector{UInt8}
+    rllms :: Vector{S}
+    overlap_labels :: Vector{SVector{3, Int64}}
+    overlap_types :: Vector{SVector{2, UInt8}}
+    param_indices :: Dict{Tuple{Int64, Int64}, Int64}
+    contributing_overlaps :: Dict{NTuple{4, Int64}, Vector{Int64}}
+    orbital_axes :: Vector{Vector{SVector{3, Float64}}}
+    orbital_ls :: Vector{Vector{Int64}}
+    oc_dicts :: OC
+    mode_dicts :: MD
+    tmethod :: String
+end
+
+function GeometryContext(strc, basis, rllm_dict; tmethod="rotation")
+    ion_types = get_ion_types(strc.ions)
+    oc_dicts, mode_dicts = get_oc_and_mode_dicts(basis.overlaps, strc.ions)
     # Distance dependence and label of every overlap, looked up once instead of for every matrix element
     rllms = [rllm_dict[string(Cllm, apply_oc=true)] for Cllm in basis.overlaps]
-    overlap_labels = [me_to_overlap_label(Cllm.type) for Cllm in basis.overlaps]
+    overlap_labels = SVector{3, Int64}[me_to_overlap_label(Cllm.type) for Cllm in basis.overlaps]
     # Whether an overlap contributes to a matrix element depends only on the ion types and the angular momenta
     # of the two orbitals, so the contributing overlaps are determined once per combination
     representative_orbitals = Dict{Tuple{Int64, Int64}, eltype(eltype(basis.orbitals))}()
@@ -136,74 +195,62 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
     orbital_axes = [SVector{3, Float64}[orb.axis for orb in orbs] for orbs in basis.orbitals]
     orbital_ls = [Int64[orb.type.l for orb in orbs] for orbs in basis.orbitals]
     overlap_types = SVector{2, UInt8}[sort(Cllm.ion_label.types) for Cllm in basis.overlaps]
-    onsite, sepNN = get_onsite(conf), get_sepNN(conf)
-    parts = tmap(grid_cell_chunks(strc.point_grid, n=4 * npar)) do chunk
-        entries = (v=Int64[], i=Int64[], j=Int64[], R=Int64[], val=Float64[])
-        radial = zeros(length(basis.overlaps))
-        angles = zeros(5)
-        for (grid_point, inds) in chunk, nn_grid_point in nn_grid_points(grid_point, strc.point_grid.dictR),
-            (iion2, R) in strc.point_grid.dictR[nn_grid_point], iion1 in inds
-            ion_label = IonLabel(ion_types[iion1], ion_types[iion2], sorted=false)
-            T⃗ = SVector{3, Float64}(Ts[1, R], Ts[2, R], Ts[3, R])
-            r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
-            r⃗₂ = apply_pbc(strc.ions[iion2].pos, T⃗) - strc.ions[iion2].dist
-            
-            r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, T⃗)
-            r = normdiff(r⃗₁, r⃗₂)
-            if r_nd ≤ rcut && r-abs(rcut_tol) < rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
-                # Bond frames for both directions of the bond (the reversed one for swapped orbital pairs)
-                Û = get_sk_transform_matrix(r⃗₁, r⃗₂, orbital_axes[iion1][1], tmethod)
-                Û_swap = get_sk_transform_matrix(r⃗₂, r⃗₁, orbital_axes[iion1][1], tmethod)
-                nnlabel = get_nn_label(r, nn_dict[ion_label], conf, onsite=onsite, sepNN=sepNN)
-                # The radial part depends only on the overlap and the distance, not on the orbitals
-                f = fcut(r, rcut, rcut_tol)
-                types_sorted = sort(ion_label.types)
-                for k in eachindex(basis.overlaps)
-                    radial[k] = overlap_types[k] == types_sorted ? rllms[k](r) * f : 0.0
-                end
-                for jorb1 in eachindex(orbital_axes[iion1]), jorb2 in eachindex(orbital_axes[iion2])
-                    i = offset[iion1] + jorb1
-                    j = offset[iion2] + jorb2
-                    orb1 = basis.orbitals[iion1][jorb1]; orb2 = basis.orbitals[iion2][jorb2]
-                    # Hybrid orbitals (l < 0) are evaluated in the bond frame from atom 1 to atom 2, as before the d orbitals
-                    hybrid = orb1.type.l < 0 || orb2.type.l < 0
-                    bondswap = !hybrid && determine_bondswap(ion_types[iion1], ion_types[iion2], orb1.type, orb2.type, i, j)
-                    U = bondswap ? Û_swap : Û
-                    base = get_base_orb(orb1.type, orb2.type, bondswap=bondswap)
-                    θ₁, φ₁ = get_rotated_angles(U, orbital_axes[iion1][jorb1])
-                    θ₂, φ₂ = get_rotated_angles(U, orbital_axes[iion2][jorb2])
+    return GeometryContext(basis, ion_types, rllms, overlap_labels, overlap_types, param_indices, contributing_overlaps,
+                           orbital_axes, orbital_ls, oc_dicts, mode_dicts, tmethod)
+end
 
-                    for k in contributing_overlaps[(Int64(ion_types[iion1]), Int64(ion_types[iion2]), orbital_ls[iion1][jorb1], orbital_ls[iion2][jorb2])]
-                        Cllm = basis.overlaps[k]
-                        mode = get_mode(mode_dicts, k, ion_label, jorb1, jorb2)
-                        orbconfig = get_orbconfig(oc_dicts, k, ion_label, jorb1, jorb2)
-                        # Base orbitals in the order of the parameter definition. Two signs of the bond direction (parity
-                        # (-1)^(l₁ + l₂) for odd l₁ + l₂), which the angular functions of dorbs did not account for:
-                        # - reversing the order of the base orbitals without reversing the bond;
-                        # - parameters with decreasing l (e.g. Ga+As_psσ), whose distance dependence already contains
-                        #   the sign (see distance_dependence), which the angular part applies again.
-                        reversed_base = !hybrid && Cllm.type.base_ls ≠ (base[1].l, base[2].l)
-                        base_k = reversed_base ? reverse(base) : base
-                        odd = !hybrid && isodd(base[1].l + base[2].l)
-                        flips = (reversed_base ? 1 : 0) + (Cllm.type.base_ls[1] > Cllm.type.base_ls[2] ? 1 : 0)
-                        parity = odd && isodd(flips) ? -1.0 : 1.0
-                        v::Int64 = nnlabel ≠ 0 ? get(param_indices, (k, nnlabel), 0) :
-                            get_param_index(Cllm, nnlabel, basis.parameters, orb1, orb2, i, j, overlap_label=overlap_labels[k])
+"""
+    geometry_entries!(emit, ctx, iion1, iion2, offset1, offset2, r⃗₁, r⃗₂, nnlabel, radial, angles=zeros(5))
 
-                        angles[1] = θ₁; angles[2] = φ₁; angles[3] = θ₂; angles[4] = φ₂
-                        evaluate_overlap!(angles, Cllm, base_k, orbconfig, mode)
-                        hval = parity * angles[5] * radial[k]
+Matrix elements of the geometry tensor between the orbitals of the ions `iion1` (at `r⃗₁`) and `iion2` (at `r⃗₂`):
+calls `emit(v, i, j, k, hval)` for every contribution of an overlap `k` to the matrix element between the orbitals
+`i = offset1 + jorb1` and `j = offset2 + jorb2`, with the parameter index `v` and the value `hval` (the angular part
+times `radial[k]`, the distance dependence of overlap `k`). Every contribution is emitted, also zeros, so `emit`
+decides which ones to keep.
+"""
+function geometry_entries!(emit, ctx::GeometryContext, iion1, iion2, offset1, offset2, r⃗₁, r⃗₂, nnlabel, radial, angles=zeros(5))
+    basis = ctx.basis
+    type1, type2 = ctx.ion_types[iion1], ctx.ion_types[iion2]
+    ion_label = IonLabel(type1, type2, sorted=false)
+    axes1, axes2 = ctx.orbital_axes[iion1], ctx.orbital_axes[iion2]
+    # Bond frames for both directions of the bond (the reversed one for swapped orbital pairs)
+    Û = get_sk_transform_matrix(r⃗₁, r⃗₂, axes1[1], ctx.tmethod)
+    Û_swap = get_sk_transform_matrix(r⃗₂, r⃗₁, axes1[1], ctx.tmethod)
+    for jorb1 in eachindex(axes1), jorb2 in eachindex(axes2)
+        i = offset1 + jorb1
+        j = offset2 + jorb2
+        orb1 = basis.orbitals[iion1][jorb1]; orb2 = basis.orbitals[iion2][jorb2]
+        # Hybrid orbitals (l < 0) are evaluated in the bond frame from atom 1 to atom 2, as before the d orbitals
+        hybrid = orb1.type.l < 0 || orb2.type.l < 0
+        bondswap = !hybrid && determine_bondswap(type1, type2, orb1.type, orb2.type, i, j)
+        U = bondswap ? Û_swap : Û
+        base = get_base_orb(orb1.type, orb2.type, bondswap=bondswap)
+        θ₁, φ₁ = get_rotated_angles(U, axes1[jorb1])
+        θ₂, φ₂ = get_rotated_angles(U, axes2[jorb2])
 
-                        if abs(hval) ≥ sp_tol
-                            push!(entries.v, v); push!(entries.i, i); push!(entries.j, j); push!(entries.R, R); push!(entries.val, hval)
-                        end
-                    end
-                end
-            end
+        for k in ctx.contributing_overlaps[(Int64(type1), Int64(type2), ctx.orbital_ls[iion1][jorb1], ctx.orbital_ls[iion2][jorb2])]
+            Cllm = basis.overlaps[k]
+            mode = get_mode(ctx.mode_dicts, k, ion_label, jorb1, jorb2)
+            orbconfig = get_orbconfig(ctx.oc_dicts, k, ion_label, jorb1, jorb2)
+            # Base orbitals in the order of the parameter definition. Two signs of the bond direction (parity
+            # (-1)^(l₁ + l₂) for odd l₁ + l₂), which the angular functions of dorbs did not account for:
+            # - reversing the order of the base orbitals without reversing the bond;
+            # - parameters with decreasing l (e.g. Ga+As_psσ), whose distance dependence already contains
+            #   the sign (see distance_dependence), which the angular part applies again.
+            reversed_base = !hybrid && Cllm.type.base_ls ≠ (base[1].l, base[2].l)
+            base_k = reversed_base ? reverse(base) : base
+            odd = !hybrid && isodd(base[1].l + base[2].l)
+            flips = (reversed_base ? 1 : 0) + (Cllm.type.base_ls[1] > Cllm.type.base_ls[2] ? 1 : 0)
+            parity = odd && isodd(flips) ? -1.0 : 1.0
+            v::Int64 = nnlabel ≠ 0 ? get(ctx.param_indices, (k, nnlabel), 0) :
+                get_param_index(Cllm, nnlabel, basis.parameters, orb1, orb2, i, j, overlap_label=ctx.overlap_labels[k])
+
+            angles[1] = θ₁; angles[2] = φ₁; angles[3] = θ₂; angles[4] = φ₂
+            evaluate_overlap!(angles, Cllm, base_k, orbconfig, mode)
+            emit(v, i, j, k, parity * angles[5] * radial[k])
         end
-        entries
     end
-    return assemble_geometry_tensor(parts, length(basis.parameters), size(strc.Rs, 2), length(basis)[1])
+    return nothing
 end
 
 """

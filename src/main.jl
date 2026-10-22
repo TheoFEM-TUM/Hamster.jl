@@ -62,10 +62,14 @@ Given a `Config` instance, decides which type of calculation is to be performed 
 # Details
 - An `Optimizer` without a `HyperOpt` block tells Hamster to run a parameter optimization.
 - An `Optimizer` with a `HyperOpt` block tells Hamster to run a hyperparameter optimization.
+- An `MD` block tells Hamster to run a molecular dynamics task (fit, eval or run, see the `task` tag); with a `HyperOpt`
+  block, the hyperparameters of the MD fit are optimized.
 - Otherwise, a standard calculation is performed.
 """
 function decide_which_task_to_perform(conf::Config)
-    if haskey(conf, "Optimizer") && !haskey(conf, "HyperOpt")
+    if haskey(conf.blocks, "MD")
+        return haskey(conf, "HyperOpt") ? Val{:hyper_optimization}() : Val{:md}()
+    elseif haskey(conf, "Optimizer") && !haskey(conf, "HyperOpt")
         return Val{:optimization}()
     elseif haskey(conf, "Optimizer") && haskey(conf, "HyperOpt")
         return Val{:hyper_optimization}()

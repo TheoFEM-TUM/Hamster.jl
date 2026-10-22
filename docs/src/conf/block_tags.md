@@ -68,3 +68,13 @@ in the `Options` block.
 Modules = [Hamster]
 Pages = ["dos_defaults.jl"]
 ```
+
+## [MD](@id md-tags)
+
+Settings of the [molecular dynamics](@ref md-run), which is switched on by the `MD` block. The atom blocks need the
+`valence` tag (electrons per atom in the TB bands).
+
+```@autodocs
+Modules = [Hamster]
+Pages = ["md_defaults.jl"]
+```

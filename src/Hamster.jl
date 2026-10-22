@@ -11,6 +11,7 @@ include("conf/config.jl"); include("conf/read_config.jl")
 include("conf/defaults.jl"); include("conf/strc_defaults.jl"); include("conf/atom_defaults.jl"); include("conf/basis_defaults.jl")
 include("conf/model_defaults.jl"); include("conf/optim_defaults.jl"); include("conf/supercell_defaults.jl") 
 include("conf/ml_defaults.jl"); include("conf/soc_defaults.jl"); include("conf/hyperopt_defaults.jl"); include("conf/ewald_defaults.jl"); include("conf/dos_defaults.jl")
+include("conf/md_defaults.jl")
 
 include("out/output.jl")
 
@@ -36,7 +37,12 @@ include("device/device.jl"); include("device/kernels.jl"); include("device/linea
 include("out/model_summary.jl")
 include("out/dos.jl")
 
-include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hyperopt.jl")
+include("md/md_utils.jl"); include("md/neighbors.jl"); include("md/angular.jl"); include("md/md_tb.jl")
+include("md/md_electrostatics.jl"); include("md/md_repulsive.jl"); include("md/md_hamiltonian.jl"); include("md/md_solvers.jl")
+include("md/md_potential.jl"); include("md/md_data.jl"); include("md/md_fit.jl"); include("md/md_dynamics.jl")
+include("md/md_analysis.jl")
+
+include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hyperopt.jl"); include("calc/md.jl")
 
 include("main.jl")
 
@@ -62,6 +68,9 @@ export run_calculation
 
 export CPUDevice, ArrayDevice
 export compute_dos, orbital_labels
+
+export MDPotential, MDRepulsive, md_compute!, md_reference_structure, read_vasprun, read_md_data, write_md_data
+export md_analysis, md_rdf, md_vdos, md_msd
 
 # Precompililation
 include("Hamster_precompile.jl")
