@@ -115,6 +115,10 @@ Advice:
   `HyperOpt` block.
 - Splines of pairs that never come close in the data are only constrained by the regularization; increase
   `smoothness` if they show unphysical features.
+- The validation error alone does not show whether the model is stable away from the data: without regularization
+  (`lambda`), the many three-body coefficients can cancel on the data and create holes elsewhere, into which MD runs
+  fall after some picoseconds (the potential energy drops without bound). Check every candidate model with a short MD
+  run above the target temperature (e.g. in the DFT cell with the exact solver) and keep a small `lambda`.
 
 ## Workflow
 
