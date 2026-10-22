@@ -251,6 +251,13 @@ end
             @test h5read("part.h5", "thermo/E_cons") ≈ h5read("full.h5", "thermo/E_cons") atol=1e-7
             @test h5read("part.h5", "thermo/step") == 0:40
 
+            # Langevin (BAOAB)
+            set_value!(conf, "restart", "MD", false); set_value!(conf, "thermostat", "MD", "langevin")
+            set_value!(conf, "nsteps", "MD", 30); set_value!(conf, "output", "MD", "langevin.h5")
+            lg = Hamster.run_calculation(Val{:md}(), comm, conf)
+            @test lg.step == 30
+            @test all(T -> 0 < T < 1500, h5read("langevin.h5", "thermo/temperature"))
+
             # The analysis functions
             a = md_analysis("full.h5")
             @test all(isfinite, a.rdf["total"])
