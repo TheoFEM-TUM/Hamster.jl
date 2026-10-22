@@ -128,6 +128,8 @@ function md_step!(state::MDState, pot::MDPotential, settings; neig=0)
         state.result = md_compute!(pot, x; neig=neig)
         kick!(v, state.result.forces, m, dt / 2)
         thermostat == "csvr" && (state.thermostat_energy -= csvr_rescale!(v, m, settings.ndof, T, dt / 2, τ, rng))
+        # the forces have no net component, so this only removes rounding errors (3N - 3 degrees of freedom)
+        remove_com_velocity!(v, m)
     end
     state.step += 1
     state.time += dt

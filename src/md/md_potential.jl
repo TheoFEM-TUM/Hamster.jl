@@ -160,7 +160,21 @@ function md_compute!(pot::MDPotential, positions; neig=0)
                                                nl_coulomb=isnothing(pot.nl_wolf) ? pot.nl_rep : pot.nl_wolf)
         W += Wrep
     end
+    remove_net_force!(F, pot.masses)
     return MDResult(α * el.F + E_rep, el.F, E_rep, el.μ, F, W, el.w, el.eigenvalues)
+end
+
+"""
+    remove_net_force!(F, masses)
+
+Remove the net force, distributed in proportion to the masses (so that the center of mass is not accelerated). The
+forces of the exact solver sum to zero up to rounding; those of the kpm solver only up to the probing error, which
+would otherwise make the center of mass drift.
+"""
+function remove_net_force!(F, masses)
+    Fnet = sum(F, dims=2)
+    F .-= Fnet .* (masses' ./ sum(masses))
+    return F
 end
 
 """

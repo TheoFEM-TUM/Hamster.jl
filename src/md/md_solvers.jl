@@ -59,7 +59,7 @@ function solve_electrons!(solver::ExactSolver, pat::GammaPattern, tb::MDTBModel,
     end
     Es = reduce(hcat, [e.values for e in eigs])
     nfun(μ) = s * sum(solver.wk[ik] * sum(ε -> fermi(ε, μ, kT), view(Es, :, ik)) for ik in 1:Nk) - nelec
-    μ = bisect(nfun, minimum(Es) - 20kT, maximum(Es) + 20kT, tol=1e-13)
+    μ = solve_mu(nfun, minimum(Es) - 20kT, maximum(Es) + 20kT, s, 1e-10 * max(nelec, 1))
     Ω = s * sum(solver.wk[ik] * sum(ε -> grand_potential(ε, μ, kT), view(Es, :, ik)) for ik in 1:Nk)
     F = Ω + μ * nelec
 
@@ -87,6 +87,22 @@ function solve_electrons!(solver::ExactSolver, pat::GammaPattern, tb::MDTBModel,
     # (the names W and w are used in the tasks, so the sums get other names: assigning W here would make it shared)
     Wtot = sum(first, parts); wtot = sum(last, parts)
     return ElectronResult(F, μ, Wtot, wtot, eigenvalues > 0 ? Es : zeros(0, 0))
+end
+
+"""
+    solve_mu(nfun, lo, hi, s, tol)
+
+Chemical potential for the electron count `nfun(μ) = N(μ) - N_e`: in a gapped system the middle of the gap (between the
+points where half an electron per spin channel is missing or added), where `nfun` is zero within `tol`, otherwise the
+root of `nfun`. All points in the gap give the same free energy; the middle is a stable choice and the natural target
+of shift-invert eigenvalues.
+"""
+function solve_mu(nfun, lo, hi, s, tol)
+    μ_lo = bisect(μ -> nfun(μ) + s / 2, lo, hi, tol=1e-10)
+    μ_hi = bisect(μ -> nfun(μ) - s / 2, lo, hi, tol=1e-10)
+    μ_mid = (μ_lo + μ_hi) / 2
+    abs(nfun(μ_mid)) ≤ tol && return μ_mid
+    return bisect(nfun, lo, hi, tol=1e-12)
 end
 
 # ======================================================================================================================
@@ -261,7 +277,7 @@ function solve_electrons!(solver::KPMSolver, pat::GammaPattern, tb::MDTBModel, h
     solver.npasses = 1
     nfun(μ) = s * dot(dcoeffs(μ), moments) - nelec
     if abs(nfun(μ)) > solver.nelec_tol * max(nelec, 1)
-        μ = bisect(nfun, b - a, b + a, tol=1e-10)
+        μ = solve_mu(nfun, b - a, b + a, s, solver.nelec_tol * max(nelec, 1))
         moments = kpm_pass!(w, tab, dcoeffs(μ))
         solver.npasses = 2
     end
