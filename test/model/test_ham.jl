@@ -73,6 +73,18 @@ end
     @test Es2 ≈ Es_correct
     @test vs_dense ≈ vs2
 
+    # Both strategies (k-points over the threads, or one after the other with all threads in BLAS) give the same
+    # eigenvalues and valid eigenvectors (orthonormal, H v = E v), also without eigenvectors
+    for strategy in (:kpoints, :blas)
+        Es_s, vs_s = diagonalize(Hk1, strategy=strategy)
+        @test Es_s ≈ Es_correct
+        @test all(k -> Hk1[k] * vs_s[:, :, k] ≈ vs_s[:, :, k] * Diagonal(Es_s[:, k]) &&
+                       vs_s[:, :, k]' * vs_s[:, :, k] ≈ I, axes(vs_s, 3))
+        @test diagonalize(Hk1, strategy=strategy, vectors=false)[1] ≈ Es_correct
+    end
+    @test diagonalize(Hk1, large=1)[1] ≈ Es_correct
+    @test_throws ErrorException diagonalize(Hk1, strategy=:gpu)
+
     # Test Neig
     Hk_sp = get_hamiltonian(Hr_sp, Rs, kpoints, Hamster.Sparse())
     Es_sp, _ = diagonalize(Hk_sp, Neig=3, target=-15)
