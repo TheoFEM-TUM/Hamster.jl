@@ -97,6 +97,6 @@ Pages = ["device/device.jl", "device/kernels.jl", "device/linear_map.jl", "devic
 ```@autodocs
 Modules = [Hamster]
 Pages = ["md/md_utils.jl", "md/neighbors.jl", "md/angular.jl", "md/md_tb.jl", "md/md_electrostatics.jl", "md/md_repulsive.jl",
-         "md/md_hamiltonian.jl", "md/md_solvers.jl", "md/md_potential.jl", "md/md_data.jl", "md/md_fit.jl",
+         "md/md_hamiltonian.jl", "md/md_solvers.jl", "md/md_potential.jl", "md/md_dataset.jl", "md/md_fit.jl",
          "md/md_dynamics.jl", "md/md_analysis.jl"]
 ```

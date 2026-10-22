@@ -39,7 +39,7 @@ include("out/dos.jl")
 
 include("md/md_utils.jl"); include("md/neighbors.jl"); include("md/angular.jl"); include("md/md_tb.jl")
 include("md/md_electrostatics.jl"); include("md/md_repulsive.jl"); include("md/md_hamiltonian.jl"); include("md/md_solvers.jl")
-include("md/md_potential.jl"); include("md/md_data.jl"); include("md/md_fit.jl"); include("md/md_dynamics.jl")
+include("md/md_potential.jl"); include("md/md_dataset.jl"); include("md/md_fit.jl"); include("md/md_dynamics.jl")
 include("md/md_analysis.jl")
 
 include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hyperopt.jl"); include("calc/md.jl")
