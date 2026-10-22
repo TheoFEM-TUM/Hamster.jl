@@ -84,8 +84,9 @@ function solve_electrons!(solver::ExactSolver, pat::GammaPattern, tb::MDTBModel,
         end
         (W, w)
     end
-    W = sum(first, parts); w = sum(last, parts)
-    return ElectronResult(F, μ, W, w, eigenvalues > 0 ? Es : zeros(0, 0))
+    # (the names W and w are used in the tasks, so the sums get other names: assigning W here would make it shared)
+    Wtot = sum(first, parts); wtot = sum(last, parts)
+    return ElectronResult(F, μ, Wtot, wtot, eigenvalues > 0 ? Es : zeros(0, 0))
 end
 
 # ======================================================================================================================

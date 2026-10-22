@@ -139,18 +139,19 @@ function repulsive_energy_forces!(F, rep::MDRepulsive, nl, positions, L, types; 
         end
         (E, W)
     end
-    E = sum(first, parts; init=0.0); W = sum(last, parts; init=zero(SMatrix{3, 3, Float64}))
+    # (E and W are local to the tasks above; the totals have other names, which keeps them local there)
+    Etot = sum(first, parts; init=0.0); Wtot = sum(last, parts; init=zero(SMatrix{3, 3, Float64}))
     for (s, t) in enumerate(rep.species)
-        E += rep.coeffs[s] * count(==(t), types)
+        Etot += rep.coeffs[s] * count(==(t), types)
     end
     if rep.coulomb && !isnothing(wolf)
         λ = rep.coeffs[coulomb_index(rep)]
         if λ ≠ 0
-            E += λ * coulomb_energy(wolf, nl_coulomb, positions, L)
-            W += pair_kernel_forces!(F, wolf, nl_coulomb, positions, L, (a, b) -> λ * wolf.q[a] * wolf.q[b] / 2)
+            Etot += λ * coulomb_energy(wolf, nl_coulomb, positions, L)
+            Wtot += pair_kernel_forces!(F, wolf, nl_coulomb, positions, L, (a, b) -> λ * wolf.q[a] * wolf.q[b] / 2)
         end
     end
-    return E, W
+    return Etot, Wtot
 end
 
 """

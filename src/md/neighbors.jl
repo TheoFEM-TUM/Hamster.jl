@@ -81,7 +81,7 @@ function NeighborList(positions, lattice, rc; skin=0.0, rmin=0.0, include=(i, j)
         (is, js, ns)
     end
     i = reduce(vcat, getindex.(parts, 1)); j = reduce(vcat, getindex.(parts, 2)); n = reduce(vcat, getindex.(parts, 3))
-    first = ones(Int64, N + 1)
+    first = zeros(Int64, N + 1); first[1] = 1
     for a in i
         first[a+1] += 1
     end

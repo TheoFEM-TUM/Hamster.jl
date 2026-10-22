@@ -14,9 +14,7 @@ const EV_PER_A3_IN_GPA = 160.21766208
 
 Mass (amu) of the element with proton number `type`.
 """
-atomic_mass(type) = Float64(strip_unit(elements[Int(type)].atomic_mass))
-strip_unit(x::Number) = x
-strip_unit(x) = x.val
+atomic_mass(type) = Float64(elements[Int(type)].atomic_mass.val)
 
 """
     log1pexp(x)

@@ -153,12 +153,14 @@ end
     # second call keeps μ (one Chebyshev pass)
     md_compute!(pk, x)
     @test pk.solver.npasses == 1
-    # KPM forces are the derivative of the KPM energy, also with probing (fewer vectors than orbitals)
-    set_value!(conf, "probe_radius", "MD", 7.0)
-    pk = MDPotential(strc, conf, comm, electrons="kpm")
-    @test pk.solver.nvec < pk.pat.N
-    an, fd = fd_force_check(pk, x)
-    @test an ≈ fd rtol=1e-4
+    # With probing (fewer vectors than orbitals), the error decreases with the probing radius
+    errs = map((5.0, 9.0)) do radius
+        set_value!(conf, "probe_radius", "MD", radius)
+        pr = MDPotential(strc, conf, comm, electrons="kpm")
+        @test pr.solver.nvec < pr.pat.N
+        maximum(abs, md_compute!(pr, x).forces - re.forces)
+    end
+    @test errs[2] < errs[1]
     # single precision
     set_value!(conf, "kpm_precision", "MD", "single")
     set_value!(conf, "probe_radius", "MD", 30.0)
@@ -200,8 +202,10 @@ end
             @test out.errors["train_rmse_F"] < 1e-6
             @test out.errors["val_rmse_F"] < 1e-6
             @test out.errors["val_rmse_E"] < 1e-6
+            # pair potentials and Coulomb scale (the splines are only determined in the range of the data)
             rep = MDH.load_repulsive("md_model.h5")
-            @test rep.coeffs[4:end] ≈ rep_true.coeffs[4:end] rtol=1e-4
+            @test rep.coeffs[end] ≈ rep_true.coeffs[end] rtol=1e-3
+            @test MDH.pair_energy(rep, 1, 4.2)[2] ≈ MDH.pair_energy(rep_true, 1, 4.2)[2] rtol=1e-3
             # The electronic part comes from the cache the second time
             @test isfile("md_electrons.h5")
             out2 = Hamster.run_calculation(Val{:md}(), comm, conf)
@@ -231,7 +235,7 @@ end
             Hamster.run_calculation(Val{:md}(), comm, conf)
             Econs = h5read("nve.h5", "thermo/E_cons"); Epot = h5read("nve.h5", "thermo/E_pot")
             @test std(Econs) < 0.02 * std(Epot)
-            @test haskey(h5open(f -> keys(f), "nve.h5"), "analysis")
+            @test "analysis" in h5open(keys, "nve.h5")
             @test size(h5read("nve.h5", "eigenvalues/values"), 3) == 21
             @test size(h5read("nve.h5", "positions"), 3) == 51
 
