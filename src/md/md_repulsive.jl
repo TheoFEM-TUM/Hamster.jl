@@ -15,7 +15,8 @@ difference between DFT and electronic energies and forces:
 - three-body terms of the angle θ_jik at atom i between its neighbors j and k (closer than `rcut3`): Legendre
   polynomials `P_l` up to `lmax3` (−1: none) times `w(r) = (1 - r/rcut3)³`, for every species triplet (center; pair);
 - `E_C`: Coulomb energy of the effective charges `qeff` (Wolf/Zahn sum of the `Ewald` block) with the scale `λ_C`;
-- `E_wall = Σ A (rmin - r)³` below `rmin` of each pair: a fixed repulsion where no training data constrain the splines.
+- `E_wall = Σ A (rmin - r)³` below `rmin` of each pair: a fixed repulsion where no training data constrain the splines,
+  which are continued linearly below `rmin`.
 
 # Fields
 - `species`: types with an atomic energy; `pairs`: species pairs (sorted); `rmin`: start of the spline range per pair.
@@ -119,7 +120,9 @@ Pair potential (splines and wall, without Coulomb) of pair `P` at `r` and its de
 """
 function pair_energy(rep::MDRepulsive, P, r)
     r ≥ rep.rcut && return 0.0, 0.0
-    k0, vals, ders = spline_basis(rep, P, r)
+    # Below the spline range the splines are continued linearly (no unconstrained wiggles where no data are)
+    rs = max(r, rep.rmin[P])
+    k0, vals, ders = spline_basis(rep, P, rs)
     off = spline_offset(rep, P)
     e = 0.0; de = 0.0
     for m in 0:3
@@ -127,6 +130,7 @@ function pair_energy(rep::MDRepulsive, P, r)
         (1 ≤ k ≤ rep.nknots) || continue
         e += rep.coeffs[off+k] * vals[m+1]; de += rep.coeffs[off+k] * ders[m+1]
     end
+    e += de * (r - rs)
     ew, dew = wall_energy(rep, P, r)
     return e + ew, de + dew
 end
@@ -306,12 +310,13 @@ function repulsive_features(rep::MDRepulsive, nl, positions, L, types; wolf=noth
         d = bond_vector(positions, L, a, b, nl.n[p])
         r = norm(d)
         r < rep.rcut || continue
-        k0, vals, ders = spline_basis(rep, P, r)
+        rs = max(r, rep.rmin[P])            # linear continuation below the spline range, as in pair_energy
+        k0, vals, ders = spline_basis(rep, P, rs)
         off = spline_offset(rep, P)
         for m in 0:3
             k = k0 + m
             (1 ≤ k ≤ rep.nknots) || continue
-            xE[off+k] += vals[m+1] / 2
+            xE[off+k] += (vals[m+1] + ders[m+1] * (r - rs)) / 2
             for x in 1:3
                 XF[3(a-1)+x, off+k] += ders[m+1] * d[x] / r
             end

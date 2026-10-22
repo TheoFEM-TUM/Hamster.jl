@@ -128,7 +128,7 @@ function fit_repulsive!(rep::MDRepulsive, data::MDData, E_el, F_el, wolf, conf=g
     AtA = zeros(nc, nc); Atb = zeros(nc)
     wE = get_md_energy_weight(conf) / Nf
     wF = get_md_force_weight(conf) / (3N * Nf)
-    rcmax = max(rep.rcut, isnothing(wolf) ? 0.0 : wolf.rc)
+    rcmax = max(rep.rcut, rep.rcut3, isnothing(wolf) ? 0.0 : wolf.rc)
     parts = tmap(1:Nf) do n
         pos = data.positions[:, :, n]; L = SMatrix{3, 3, Float64}(data.lattice[:, :, n])
         nl = NeighborList(pos, L, rcmax; rmin=1e-8)
@@ -172,7 +172,7 @@ absolute energy per atom (eV) and of the force components (eV/Å).
 """
 function md_errors(rep::MDRepulsive, data::MDData, E_el, F_el, wolf)
     N = length(data.types); Nf = nframes(data)
-    rcmax = max(rep.rcut, isnothing(wolf) ? 0.0 : wolf.rc)
+    rcmax = max(rep.rcut, rep.rcut3, isnothing(wolf) ? 0.0 : wolf.rc)
     E = zeros(Nf); F = zeros(3, N, Nf)
     tforeach(1:Nf) do n
         pos = data.positions[:, :, n]; L = SMatrix{3, 3, Float64}(data.lattice[:, :, n])

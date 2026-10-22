@@ -152,7 +152,9 @@ function md_compute!(pot::MDPotential, positions; neig=0)
     end
     E_rep = 0.0
     if !isnothing(pot.rep)
-        pot.nl_rep = isnothing(pot.nl_rep) ? NeighborList(positions, L, pot.rep.rcut; skin=pot.skin, rmin=1e-8) :
+        # the list has to cover the pair and the three-body cutoff
+        rc_rep = max(pot.rep.rcut, nthreebody(pot.rep) > 0 ? pot.rep.rcut3 : 0.0)
+        pot.nl_rep = isnothing(pot.nl_rep) ? NeighborList(positions, L, rc_rep; skin=pot.skin, rmin=1e-8) :
                      update_neighbors(pot.nl_rep, positions, L; rmin=1e-8)
         E_rep, Wrep = repulsive_energy_forces!(F, pot.rep, pot.nl_rep, positions, L, tb.types; wolf=pot.wolf,
                                                nl_coulomb=isnothing(pot.nl_wolf) ? pot.nl_rep : pot.nl_wolf)
