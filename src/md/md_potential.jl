@@ -30,8 +30,8 @@ end
 """
     MDResult
 
-Energies (eV), forces (eV/Å) and virial `Σ d ⊗ ∂E/∂d` (eV) of a structure: total potential energy `E`, electronic free
-energy `E_el`, nuclear term `E_rep`, chemical potential `μ`, electrons per atom `w` and eigenvalues (if requested).
+Energies (eV), forces (eV/Å) and virial `Σ d ⊗ ∂E/∂d` (eV) of a structure: total potential energy `E` (= α `E_el` +
+`E_rep` with the fitted scale α of the nuclear term, usually 1), electronic free energy `E_el`, nuclear term `E_rep`, chemical potential `μ`, electrons per atom `w` and eigenvalues (if requested).
 """
 struct MDResult
     E :: Float64
@@ -145,6 +145,11 @@ function md_compute!(pot::MDPotential, positions; neig=0)
         W += wolf_forces!(F, pot.wolf, pot.nl_wolf, positions, L, el.w)
     end
 
+    # Fitted scale of the electronic part (1 unless the nuclear term was fitted with rep_electron_scale)
+    α = electron_scale(pot.rep)
+    if α ≠ 1
+        F .*= α; W *= α
+    end
     E_rep = 0.0
     if !isnothing(pot.rep)
         pot.nl_rep = isnothing(pot.nl_rep) ? NeighborList(positions, L, pot.rep.rcut; skin=pot.skin, rmin=1e-8) :
@@ -153,7 +158,7 @@ function md_compute!(pot::MDPotential, positions; neig=0)
                                                nl_coulomb=isnothing(pot.nl_wolf) ? pot.nl_rep : pot.nl_wolf)
         W += Wrep
     end
-    return MDResult(el.F + E_rep, el.F, E_rep, el.μ, F, W, el.w, el.eigenvalues)
+    return MDResult(α * el.F + E_rep, el.F, E_rep, el.μ, F, W, el.w, el.eigenvalues)
 end
 
 """

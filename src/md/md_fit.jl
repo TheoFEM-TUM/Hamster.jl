@@ -133,8 +133,15 @@ function fit_repulsive!(rep::MDRepulsive, data::MDData, E_el, F_el, wolf, conf=g
         pos = data.positions[:, :, n]; L = SMatrix{3, 3, Float64}(data.lattice[:, :, n])
         nl = NeighborList(pos, L, rcmax; rmin=1e-8)
         xE, XF, Ewall, Fwall = repulsive_features(rep, nl, pos, L, data.types; wolf=wolf)
-        yE = data.energies[n] - E_el[n] - Ewall
-        yF = vec(data.forces[:, :, n] .- F_el[:, :, n] .- Fwall)
+        if rep.electron_scale
+            # the electronic energy and forces are a feature with the fitted scale α
+            xE[electron_index(rep)] = E_el[n]; XF[:, electron_index(rep)] .= vec(F_el[:, :, n])
+            yE = data.energies[n] - Ewall
+            yF = vec(data.forces[:, :, n] .- Fwall)
+        else
+            yE = data.energies[n] - E_el[n] - Ewall
+            yF = vec(data.forces[:, :, n] .- F_el[:, :, n] .- Fwall)
+        end
         (wE / N^2 * (xE * xE') + wF * (XF' * XF), wE / N^2 * yE * xE + wF * (XF' * yF))
     end
     for (A, b) in parts
@@ -172,8 +179,9 @@ function md_errors(rep::MDRepulsive, data::MDData, E_el, F_el, wolf)
         nl = NeighborList(pos, L, rcmax; rmin=1e-8)
         Fn = zeros(3, N)
         Erep, _ = repulsive_energy_forces!(Fn, rep, nl, pos, L, data.types; wolf=wolf)
-        E[n] = E_el[n] + Erep
-        F[:, :, n] = F_el[:, :, n] .+ Fn
+        α = electron_scale(rep)
+        E[n] = α * E_el[n] + Erep
+        F[:, :, n] = α .* F_el[:, :, n] .+ Fn
     end
     dE = (E .- data.energies) ./ N
     dF = F .- data.forces
@@ -202,15 +210,18 @@ function run_md_fit(comm, conf; rank=0, nranks=1, verbosity=get_verbosity(conf),
     end
     E_tr, F_tr, μ_tr = cached_electronic_reference(pot, train, get_md_train_data(conf), comm, conf, stride=get_md_stride(conf),
                                                    rank=rank, nranks=nranks, verbosity=verbosity)
-    rmin_data = shortest_distances(train, get_md_rep_rcut(conf))
+    # Spline range of every pair: from the shortest distance in the data (minus a margin), at least 1 Å below rep_rcut
+    # (pairs that are never closer than rep_rcut in the data get a range that the regularization keeps flat)
+    rcut = get_md_rep_rcut(conf)
+    rmin_data = shortest_distances(train, max(rcut, 10.0))
     margin = get_md_rep_margin(conf)
-    rmin = Dict(P => (get_md_rep_rmin(conf) > 0 ? get_md_rep_rmin(conf) : r - margin) for (P, r) in rmin_data)
+    rmin = Dict(P => (get_md_rep_rmin(conf) > 0 ? get_md_rep_rmin(conf) : min(r - margin, rcut - 1.0)) for (P, r) in rmin_data)
     coulomb = get_md_rep_coulomb(conf) && !isnothing(pot.wolf)
     rep = MDRepulsive(unique(train.types), rmin, conf, coulomb=coulomb)
     fit_repulsive!(rep, train, E_tr, F_tr, pot.wolf, conf)
     err_tr = md_errors(rep, train, E_tr, F_tr, pot.wolf)
     errors = Dict("train_rmse_E" => err_tr.rmse_E, "train_rmse_F" => err_tr.rmse_F, "train_mae_E" => err_tr.mae_E,
-                  "train_mae_F" => err_tr.mae_F)
+                  "train_mae_F" => err_tr.mae_F, "electron_scale" => electron_scale(rep))
     predictions = Dict{String, Any}("train_E_dft" => train.energies, "train_E" => err_tr.E, "train_E_el" => E_tr,
                                     "train_F_dft" => train.forces, "train_F" => err_tr.F, "train_F_el" => F_tr, "train_mu" => μ_tr)
     L_val = [NaN]
@@ -229,6 +240,7 @@ function run_md_fit(comm, conf; rank=0, nranks=1, verbosity=get_verbosity(conf),
                 1e3err_tr.rmse_E, err_tr.rmse_F, err_tr.rmse_F_ref)
         haskey(errors, "val_rmse_E") && @printf("   Validation: energy RMSE %.2f meV/atom, force RMSE %.4f eV/Å\n",
                                                 1e3errors["val_rmse_E"], errors["val_rmse_F"])
+        rep.electron_scale && @printf("   Scale of the electronic energy: %.4f\n", electron_scale(rep))
         flush(stdout)
     end
     if write_output && rank == 0

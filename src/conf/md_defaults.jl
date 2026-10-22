@@ -13,7 +13,7 @@
 @configtag charge Float64 0.0 "net charge of the cell (number of electrons removed), added to the valence electrons of the atom blocks (`valence`)." "MD"
 @configtag kpm_order Int64 0 "number of Chebyshev polynomials of the kpm solver; 0: from kt, the spectral width and `kpm_tol`." "MD"
 @configtag kpm_tol Float64 1e-7 "accuracy of the Chebyshev expansion of the Fermi operator, sets the order if kpm_order = 0." "MD"
-@configtag probe_radius Float64 10.0 "probing distance (Å) of the kpm solver: atoms of the same color are farther apart, so the density matrix is exact up to its elements between atoms at this distance. Larger is more accurate and more expensive (number of probe vectors ∝ probe_radius³)." "MD"
+@configtag probe_radius Float64 12.0 "probing distance (Å) of the kpm solver: atoms of the same color are farther apart, so the density matrix is exact up to its elements between atoms at this distance. Larger is more accurate and more expensive (number of probe vectors ∝ probe_radius³). It should exceed the period of chains of strong bonds (e.g. twice the lattice constant of perovskites)." "MD"
 @configtag kpm_precision String "double" "floating point precision of the Chebyshev recursion: double or single (faster on GPUs with few FP64 units)." "MD"
 @configtag spectrum_margin Float64 0.05 "relative margin added to the estimated spectral bounds of the kpm solver." "MD"
 @configtag nelec_tol Float64 1e-6 "tolerance of the electron number (per electron) at which the chemical potential of the previous step is kept by kpm." "MD"
@@ -24,6 +24,9 @@
 @configtag rep_rmin Float64 0.0 "lower end (Å) of the spline range; 0: shortest distance of each species pair in the training data minus `rep_margin`." "MD"
 @configtag rep_margin Float64 0.3 "distance (Å) below the shortest training distance down to which the splines reach; below, a fixed repulsive wall acts." "MD"
 @configtag rep_wall Float64 10.0 "strength (eV/Å³) of the cubic repulsive wall below the spline range." "MD"
+@configtag rep_lmax3 Int64 4 "highest order of the Legendre polynomials of the bond angles in the three-body terms of the nuclear term (-1: no three-body terms)." "MD"
+@configtag rep_rcut3 Float64 4.5 "cutoff (Å) of the three-body terms (≤ rep_rcut)." "MD"
+@configtag rep_electron_scale Bool false "fit a scale of the electronic free energy (and its forces) in the MD energy, e.g. for TB models fitted to band structures whose Hellmann-Feynman forces are too stiff. The Hamiltonian itself is not changed." "MD"
 @configtag rep_coulomb Bool true "add the Coulomb energy of the effective charges `qeff` (Wolf/Zahn sum of the Ewald block) with a fitted scale to the nuclear term." "MD"
 
 # Fit
