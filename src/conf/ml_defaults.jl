@@ -19,6 +19,7 @@
 @configtag sim_mat Bool false "precalc similarity matrix of ML descriptors." "ML"
 @configtag sim_tol Float64 0.01 "cutoff tolerance for similarity matrix." "ML"
 @configtag key_dims Vector{Int64} Int64[] "Which descriptor dimensions to be used as descriptor keys. Only use discrete dimensions!" "ML"
+@configtag enforce_symmetry_group String ml_header_default(get_ml_init_params(conf), "enforce_symmetry_group", "none") "point group (O_h, D_6h or none) for which the ML corrections are made exactly symmetric, by averaging the kernel over the orbits of the orbitals under the group (see symmetry_variants). The axes of the group are the Cartesian axes (D_6h: sixfold axis along z). none: no averaging (as before the tag). Default: from the header of the ML parameter file, none otherwise." "ML"
 
 function decide_ml_update(conf::Config)::Bool
     if haskey(conf, "Optimizer") && haskey(conf, "ML")
@@ -26,4 +27,15 @@ function decide_ml_update(conf::Config)::Bool
     else
         return false
     end
+end
+
+"""
+    ml_header_default(file, key, default)
+
+Value of `key` in the header of the ML parameter file `file` (`init_params`), `default` if there is no such file or entry.
+"""
+function ml_header_default(file, key, default)
+    path = isfile(file) ? file : file * ".dat"
+    value = read_header_value(path, key)
+    return isnothing(value) ? default : value
 end

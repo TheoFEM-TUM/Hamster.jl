@@ -43,25 +43,26 @@ end
 end
 
 """
-hr[rows[t]] += Σ_n p[n] * exp(-|X[:, t] - D[:, n]|² * γ), i.e., the Gaussian kernel model with γ = 1/(2σ²).
+k[t] = Σ_n p[n] * exp(-|X[:, t] - D[:, n]|² * γ), the Gaussian kernel model with γ = 1/(2σ²) at the descriptors X.
 """
-@kernel function gaussian_kernel_hr_kernel!(hr, @Const(rows), @Const(X), @Const(D), @Const(p), γ)
+@kernel function gaussian_kernel_eval_kernel!(k, @Const(X), @Const(D), @Const(p), γ)
     t = @index(Global)
-    acc = zero(eltype(p))
+    acc = zero(eltype(k))
     @inbounds for n in axes(D, 2)
         acc += p[n] * exp(-squared_distance(X, t, D, n) * γ)
     end
-    @inbounds hr[rows[t]] += acc
+    @inbounds k[t] = acc
 end
 
 """
-g[n] = Σ_t real(G[rows[t]]) * exp(-|X[:, t] - D[:, n]|² * γ), the gradient of the Gaussian kernel model.
+g[n] = Σ_t a[t] * exp(-|X[:, t] - D[:, n]|² * γ), the gradient of the Gaussian kernel model, given the gradient `a`
+w.r.t. its values at the descriptors X.
 """
-@kernel function gaussian_kernel_grad_kernel!(g, @Const(rows), @Const(X), @Const(D), @Const(G), γ)
+@kernel function gaussian_kernel_grad_kernel!(g, @Const(X), @Const(D), @Const(a), γ)
     n = @index(Global)
     acc = zero(eltype(g))
     @inbounds for t in axes(X, 2)
-        acc += real(G[rows[t]]) * exp(-squared_distance(X, t, D, n) * γ)
+        acc += a[t] * exp(-squared_distance(X, t, D, n) * γ)
     end
     @inbounds g[n] = acc
 end

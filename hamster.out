@@ -1,0 +1,1140 @@
+enforce_symmetry_group = O_h: 48 of 48 operations are symmetries of the lattice (point group of the lattice: 48 operations)
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001   66.67   66.67
+    Cs onsite              1  1.000  1.000  1.000  1.000    0.00    0.00
+    Pb onsite             16  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Br                378  0.000  0.001  0.911  1.000    3.17    3.17
+    Br+Cs                 72  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Pb                144  0.000  0.001  0.001  1.000   25.00   25.00
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  1.000   25.00   25.00
+    Pb+Pb                 96  0.000  0.001  0.001  1.000   25.00   25.00
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     486 (0.0 MB)
+================================================================================
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001  100.00  100.00
+    Cs onsite              1  0.000  0.001  0.001  0.001  100.00  100.00
+    Pb onsite             16  0.001  0.001  0.001  1.000   25.00   25.00
+    Br+Br                378  0.000  0.001  0.001  1.000   23.81   23.81
+    Br+Cs                 72  0.000  0.001  0.001  1.000   38.89   38.89
+    Br+Pb                144  0.000  0.001  0.001  0.001   56.94   56.94
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  0.001   50.00   50.00
+    Pb+Pb                 96  0.001  0.001  0.001  1.000   45.83   45.83
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     486 (0.0 MB)
+================================================================================
+enforce_symmetry_group = O_h: 48 of 48 operations are symmetries of the lattice (point group of the lattice: 48 operations)
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001   66.67   66.67
+    Cs onsite              1  1.000  1.000  1.000  1.000    0.00    0.00
+    Pb onsite             16  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Br                378  0.000  0.001  0.911  1.000    3.17    3.17
+    Br+Cs                 72  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Pb                144  0.000  0.001  0.001  1.000   25.00   25.00
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  1.000   25.00   25.00
+    Pb+Pb                 96  0.000  0.001  0.001  1.000   25.00   25.00
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     486 (0.0 MB)
+================================================================================
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001  100.00  100.00
+    Cs onsite              1  0.000  0.001  0.001  0.001  100.00  100.00
+    Pb onsite             16  0.001  0.001  0.001  1.000   25.00   25.00
+    Br+Br                378  0.000  0.001  0.001  1.000   23.81   23.81
+    Br+Cs                 72  0.000  0.001  0.001  1.000   38.89   38.89
+    Br+Pb                144  0.000  0.001  0.001  0.001   56.94   56.94
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  0.001   50.00   50.00
+    Pb+Pb                 96  0.001  0.001  0.001  1.000   45.83   45.83
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     542 (0.0 MB)
+================================================================================
+enforce_symmetry_group = O_h: 48 of 48 operations are symmetries of the lattice (point group of the lattice: 48 operations)
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001   66.67   66.67
+    Cs onsite              1  0.000  0.001  0.001  0.001  100.00  100.00
+    Pb onsite             16  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Br                378  0.000  0.001  0.001  1.000   15.87   15.87
+    Br+Cs                 72  0.000  0.001  0.001  1.000   33.33   33.33
+    Br+Pb                144  0.000  0.001  0.001  0.201   33.33   52.78
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  0.001   62.50   62.50
+    Pb+Pb                 96  0.000  0.001  0.001  0.973   37.50   37.50
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     486 (0.0 MB)
+================================================================================
+enforce_symmetry_group = O_h: 48 of 48 operations are symmetries of the lattice (point group of the lattice: 48 operations)
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001   66.67   66.67
+    Cs onsite              1  1.000  1.000  1.000  1.000    0.00    0.00
+    Pb onsite             16  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Br                378  0.000  0.001  0.911  1.000    3.17    3.17
+    Br+Cs                 72  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Pb                144  0.000  0.001  0.001  1.000   25.00   25.00
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  1.000   25.00   25.00
+    Pb+Pb                 96  0.000  0.001  0.001  1.000   25.00   25.00
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     486 (0.0 MB)
+================================================================================
+enforce_symmetry_group = O_h: 48 of 48 operations are symmetries of the lattice (point group of the lattice: 48 operations)
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001   66.67   66.67
+    Cs onsite              1  1.000  1.000  1.000  1.000    0.00    0.00
+    Pb onsite             16  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Br                378  0.000  0.001  0.911  1.000    3.17    3.17
+    Br+Cs                 72  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Pb                144  0.000  0.001  0.001  1.000   25.00   25.00
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  1.000   25.00   25.00
+    Pb+Pb                 96  0.000  0.001  0.001  1.000   25.00   25.00
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      15 (total 15)
+      R vectors per structure:     21
+      parameters:                  15
+        per shell:                 onsite 5, NN1 10
+        per ion pair:              O+O 4, O+Sr 1, O+Ti 2, Sr+Sr 2, Ti+Sr 1,
+                                   Ti+Ti 5
+      geometry tensor entries:     501 (0.0 MB)
+================================================================================
+enforce_symmetry_group = O_h: 48 of 48 operations are symmetries of the lattice (point group of the lattice: 48 operations)
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          919
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    O onsite              27  0.000  0.001  0.001  0.001  100.00  100.00
+    Sr onsite              1  0.000  0.001  0.001  0.001  100.00  100.00
+    Ti onsite             25  0.000  0.001  0.001  0.001   52.00   52.00
+    O+O                  378  0.000  0.001  0.001  0.229   44.44   60.32
+    O+Sr                  72  1.000  1.000  1.000  1.000    0.00    0.00
+    O+Ti                 180  0.000  0.001  0.001  1.000   20.00   20.00
+    Sr+Sr                  6  0.000  0.001  0.001  0.001  100.00  100.00
+    Sr+Ti                 80  1.000  1.000  1.000  1.000    0.00    0.00
+    Ti+Ti                150  0.000  0.001  0.001  0.001   57.33   57.33
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      15 (total 15)
+      R vectors per structure:     21
+      parameters:                  15
+        per shell:                 onsite 5, NN1 10
+        per ion pair:              O+O 4, O+Sr 1, O+Ti 2, Sr+Sr 2, Ti+Sr 1,
+                                   Ti+Ti 5
+      geometry tensor entries:     501 (0.0 MB)
+================================================================================
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          919
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    O onsite              27  0.000  0.001  0.001  0.001   77.78   77.78
+    Sr onsite              1  1.000  1.000  1.000  1.000    0.00    0.00
+    Ti onsite             25  1.000  1.000  1.000  1.000    0.00    0.00
+    O+O                  378  0.000  0.001  0.001  1.000   46.03   46.03
+    O+Sr                  72  0.000  0.001  0.001  0.001   61.11   61.11
+    O+Ti                 180  0.000  0.001  0.001  1.000   28.89   28.89
+    Sr+Sr                  6  0.000  0.001  0.001  1.000   33.33   33.33
+    Sr+Ti                 80  0.000  0.001  0.001  1.000   45.00   45.00
+    Ti+Ti                150  0.000  0.001  0.001  1.000   36.00   36.00
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         1
+      orbitals per structure:      4 (total 4)
+      R vectors per structure:     9
+      parameters:                  8
+        per shell:                 onsite 4, NN1 4
+        per ion pair:              Ga+Ga 8
+      geometry tensor entries:     84 (0.0 MB)
+================================================================================
+enforce_symmetry_group = D_6h: 24 of 24 operations are symmetries of the lattice (point group of the lattice: 24 operations)
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          144
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Ga onsite             16  0.000  0.001  0.001  1.000   12.50   12.50
+    Ga+Ga                128  0.000  0.001  0.001  1.000   15.62   15.62
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         1
+      orbitals per structure:      4 (total 4)
+      R vectors per structure:     9
+      parameters:                  8
+        per shell:                 onsite 4, NN1 4
+        per ion pair:              Ga+Ga 8
+      geometry tensor entries:     84 (0.0 MB)
+================================================================================
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          144
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Ga onsite             16  0.000  0.001  0.001  1.000   12.50   12.50
+    Ga+Ga                128  0.000  0.001  0.001  1.000   28.12   28.12
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     486 (0.0 MB)
+================================================================================
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001  100.00  100.00
+    Cs onsite              1  0.000  0.001  0.001  0.001  100.00  100.00
+    Pb onsite             16  0.001  0.001  0.001  1.000   25.00   25.00
+    Br+Br                378  0.000  0.001  0.001  1.000   23.81   23.81
+    Br+Cs                 72  0.000  0.001  0.001  1.000   38.89   38.89
+    Br+Pb                144  0.000  0.001  0.001  0.001   56.94   56.94
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  0.001   50.00   50.00
+    Pb+Pb                 96  0.001  0.001  0.001  1.000   45.83   45.83
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     486 (0.0 MB)
+================================================================================
+enforce_symmetry_group = O_h: 48 of 48 operations are symmetries of the lattice (point group of the lattice: 48 operations)
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001   66.67   66.67
+    Cs onsite              1  1.000  1.000  1.000  1.000    0.00    0.00
+    Pb onsite             16  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Br                378  0.000  0.001  0.911  1.000    3.17    3.17
+    Br+Cs                 72  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Pb                144  0.000  0.001  0.001  1.000   25.00   25.00
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  1.000   25.00   25.00
+    Pb+Pb                 96  0.000  0.001  0.001  1.000   25.00   25.00
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     486 (0.0 MB)
+================================================================================
+enforce_symmetry_group = O_h: 48 of 48 operations are symmetries of the lattice (point group of the lattice: 48 operations)
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001   66.67   66.67
+    Cs onsite              1  1.000  1.000  1.000  1.000    0.00    0.00
+    Pb onsite             16  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Br                378  0.000  0.001  0.911  1.000    3.17    3.17
+    Br+Cs                 72  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Pb                144  0.000  0.001  0.001  1.000   25.00   25.00
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  1.000   25.00   25.00
+    Pb+Pb                 96  0.000  0.001  0.001  1.000   25.00   25.00
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     486 (0.0 MB)
+================================================================================
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001  100.00  100.00
+    Cs onsite              1  0.000  0.001  0.001  0.001  100.00  100.00
+    Pb onsite             16  0.001  0.001  0.001  1.000   25.00   25.00
+    Br+Br                378  0.000  0.001  0.001  1.000   23.81   23.81
+    Br+Cs                 72  0.000  0.001  0.001  1.000   38.89   38.89
+    Br+Pb                144  0.000  0.001  0.001  0.001   56.94   56.94
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  0.001   50.00   50.00
+    Pb+Pb                 96  0.001  0.001  0.001  1.000   45.83   45.83
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     486 (0.0 MB)
+================================================================================
+enforce_symmetry_group = O_h: 48 of 48 operations are symmetries of the lattice (point group of the lattice: 48 operations)
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001   66.67   66.67
+    Cs onsite              1  1.000  1.000  1.000  1.000    0.00    0.00
+    Pb onsite             16  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Br                378  0.000  0.001  0.911  1.000    3.17    3.17
+    Br+Cs                 72  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Pb                144  0.000  0.001  0.001  1.000   25.00   25.00
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  1.000   25.00   25.00
+    Pb+Pb                 96  0.000  0.001  0.001  1.000   25.00   25.00
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     486 (0.0 MB)
+================================================================================
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001  100.00  100.00
+    Cs onsite              1  0.000  0.001  0.001  0.001  100.00  100.00
+    Pb onsite             16  0.001  0.001  0.001  1.000   25.00   25.00
+    Br+Br                378  0.000  0.001  0.001  1.000   23.81   23.81
+    Br+Cs                 72  0.000  0.001  0.001  1.000   38.89   38.89
+    Br+Pb                144  0.000  0.001  0.001  0.001   56.94   56.94
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  0.001   50.00   50.00
+    Pb+Pb                 96  0.001  0.001  0.001  1.000   45.83   45.83
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     486 (0.0 MB)
+================================================================================
+enforce_symmetry_group = O_h: 48 of 48 operations are symmetries of the lattice (point group of the lattice: 48 operations)
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001   66.67   66.67
+    Cs onsite              1  1.000  1.000  1.000  1.000    0.00    0.00
+    Pb onsite             16  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Br                378  0.000  0.001  0.911  1.000    3.17    3.17
+    Br+Cs                 72  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Pb                144  0.000  0.001  0.001  1.000   25.00   25.00
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  1.000   25.00   25.00
+    Pb+Pb                 96  0.000  0.001  0.001  1.000   25.00   25.00
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     486 (0.0 MB)
+================================================================================
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001  100.00  100.00
+    Cs onsite              1  0.000  0.001  0.001  0.001  100.00  100.00
+    Pb onsite             16  0.001  0.001  0.001  1.000   25.00   25.00
+    Br+Br                378  0.000  0.001  0.001  1.000   23.81   23.81
+    Br+Cs                 72  0.000  0.001  0.001  1.000   38.89   38.89
+    Br+Pb                144  0.000  0.001  0.001  0.001   56.94   56.94
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  0.001   50.00   50.00
+    Pb+Pb                 96  0.001  0.001  0.001  1.000   45.83   45.83
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     542 (0.0 MB)
+================================================================================
+enforce_symmetry_group = O_h: 48 of 48 operations are symmetries of the lattice (point group of the lattice: 48 operations)
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001   66.67   66.67
+    Cs onsite              1  0.000  0.001  0.001  0.001  100.00  100.00
+    Pb onsite             16  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Br                378  0.000  0.001  0.001  1.000   15.87   15.87
+    Br+Cs                 72  0.000  0.001  0.001  1.000   33.33   33.33
+    Br+Pb                144  0.000  0.001  0.001  0.201   33.33   52.78
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  0.001   62.50   62.50
+    Pb+Pb                 96  0.000  0.001  0.001  0.973   37.50   37.50
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     486 (0.0 MB)
+================================================================================
+enforce_symmetry_group = O_h: 48 of 48 operations are symmetries of the lattice (point group of the lattice: 48 operations)
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001   66.67   66.67
+    Cs onsite              1  1.000  1.000  1.000  1.000    0.00    0.00
+    Pb onsite             16  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Br                378  0.000  0.001  0.911  1.000    3.17    3.17
+    Br+Cs                 72  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Pb                144  0.000  0.001  0.001  1.000   25.00   25.00
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  1.000   25.00   25.00
+    Pb+Pb                 96  0.000  0.001  0.001  1.000   25.00   25.00
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      14 (total 14)
+      R vectors per structure:     21
+      parameters:                  20
+        per shell:                 onsite 7, NN1 13
+        per ion pair:              Br+Br 4, Br+Cs 1, Br+Pb 3, Cs+Cs 2, Cs+Pb 2,
+                                   Pb+Pb 8
+      geometry tensor entries:     486 (0.0 MB)
+================================================================================
+enforce_symmetry_group = O_h: 48 of 48 operations are symmetries of the lattice (point group of the lattice: 48 operations)
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          804
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Br onsite             27  0.000  0.001  0.001  0.001   66.67   66.67
+    Cs onsite              1  1.000  1.000  1.000  1.000    0.00    0.00
+    Pb onsite             16  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Br                378  0.000  0.001  0.911  1.000    3.17    3.17
+    Br+Cs                 72  1.000  1.000  1.000  1.000    0.00    0.00
+    Br+Pb                144  0.000  0.001  0.001  1.000   25.00   25.00
+    Cs+Cs                  6  1.000  1.000  1.000  1.000    0.00    0.00
+    Cs+Pb                 64  0.000  0.001  0.001  1.000   25.00   25.00
+    Pb+Pb                 96  0.000  0.001  0.001  1.000   25.00   25.00
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      15 (total 15)
+      R vectors per structure:     21
+      parameters:                  15
+        per shell:                 onsite 5, NN1 10
+        per ion pair:              O+O 4, O+Sr 1, O+Ti 2, Sr+Sr 2, Ti+Sr 1,
+                                   Ti+Ti 5
+      geometry tensor entries:     501 (0.0 MB)
+================================================================================
+enforce_symmetry_group = O_h: 48 of 48 operations are symmetries of the lattice (point group of the lattice: 48 operations)
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          919
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    O onsite              27  0.000  0.001  0.001  0.001  100.00  100.00
+    Sr onsite              1  0.000  0.001  0.001  0.001  100.00  100.00
+    Ti onsite             25  0.000  0.001  0.001  0.001   52.00   52.00
+    O+O                  378  0.000  0.001  0.001  0.229   44.44   60.32
+    O+Sr                  72  1.000  1.000  1.000  1.000    0.00    0.00
+    O+Ti                 180  0.000  0.001  0.001  1.000   20.00   20.00
+    Sr+Sr                  6  0.000  0.001  0.001  0.001  100.00  100.00
+    Sr+Ti                 80  1.000  1.000  1.000  1.000    0.00    0.00
+    Ti+Ti                150  0.000  0.001  0.001  0.001   57.33   57.33
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         5
+      orbitals per structure:      15 (total 15)
+      R vectors per structure:     21
+      parameters:                  15
+        per shell:                 onsite 5, NN1 10
+        per ion pair:              O+O 4, O+Sr 1, O+Ti 2, Sr+Sr 2, Ti+Sr 1,
+                                   Ti+Ti 5
+      geometry tensor entries:     501 (0.0 MB)
+================================================================================
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          919
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    O onsite              27  0.000  0.001  0.001  0.001   77.78   77.78
+    Sr onsite              1  1.000  1.000  1.000  1.000    0.00    0.00
+    Ti onsite             25  1.000  1.000  1.000  1.000    0.00    0.00
+    O+O                  378  0.000  0.001  0.001  1.000   46.03   46.03
+    O+Sr                  72  0.000  0.001  0.001  0.001   61.11   61.11
+    O+Ti                 180  0.000  0.001  0.001  1.000   28.89   28.89
+    Sr+Sr                  6  0.000  0.001  0.001  1.000   33.33   33.33
+    Sr+Ti                 80  0.000  0.001  0.001  1.000   45.00   45.00
+    Ti+Ti                150  0.000  0.001  0.001  1.000   36.00   36.00
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         1
+      orbitals per structure:      4 (total 4)
+      R vectors per structure:     9
+      parameters:                  8
+        per shell:                 onsite 4, NN1 4
+        per ion pair:              Ga+Ga 8
+      geometry tensor entries:     84 (0.0 MB)
+================================================================================
+enforce_symmetry_group = D_6h: 24 of 24 operations are symmetries of the lattice (point group of the lattice: 24 operations)
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          144
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Ga onsite             16  0.000  0.001  0.001  1.000   12.50   12.50
+    Ga+Ga                128  0.000  0.001  0.001  1.000   15.62   15.62
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         1
+      orbitals per structure:      4 (total 4)
+      R vectors per structure:     9
+      parameters:                  8
+        per shell:                 onsite 4, NN1 4
+        per ion pair:              Ga+Ga 8
+      geometry tensor entries:     84 (0.0 MB)
+================================================================================
+
+================================================================================
+  ML Model Summary
+--------------------------------------------------------------------------------
+      descriptor vectors:          144
+
+  Coverage: similarity of every descriptor to its most similar data point
+    group        descriptors    min     p1     p5 median  <tol %  <0.5 %
+    Ga onsite             16  0.000  0.001  0.001  1.000   12.50   12.50
+    Ga+Ga                128  0.000  0.001  0.001  1.000   28.12   28.12
+
+    Similarity exp(-|x - d|² / 2σ²) with σ = sim_params: 1 for a descriptor x
+      equal to a data point d, close to 0 far from all data points.
+    group: ion pair of the matrix elements, or onsite terms of an element.
+    descriptors: number of descriptor vectors (matrix elements) of the group.
+    min: smallest similarity; p1, p5, median: 1st, 5th and 50th percentiles,
+      i.e. 1%, 5% and 50% of the descriptors have a smaller similarity
+      (resolution 0.001).
+    <tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %:
+      below 0.5.
+    Descriptors with a small similarity to all data points are outside the
+      training data; there, the ML correction is close to zero and the model
+      falls back to TB.
+================================================================================

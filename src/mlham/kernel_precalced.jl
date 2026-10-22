@@ -47,7 +47,8 @@ function HamiltonianKernelPrecalced(kernel::HamiltonianKernel, rank, systems, co
     if rank == 0 && verbosity > 1; println("    Rank 0 : Starting calculation of similarity matrix..."); end
     time = @elapsed begin
         kp, params = get_sorted_Kernelpoints(kernel.data_points, ones(Int64, length(kernel.data_points)), kernel.params, conf)
-        sm = get_kernel_features(kernel.structure_descriptors, kp, kernel.sim_params, sim_tol, conf = conf, rank = rank, systems = systems)
+        sm = get_kernel_features(kernel.structure_descriptors, kp, kernel.sim_params, sim_tol, conf = conf, rank = rank, systems = systems,
+                                 symmetry = kernel.symmetry)
     end
     if rank == 0 && verbosity > 1; println(@sprintf("    Finished calculating similarity matrix in %.2f seconds...", time)); end
 
@@ -171,16 +172,9 @@ Writes the parameters and configuration settings of a HamiltonianKernel object t
 """
 function write_params(kernel::HamiltonianKernelPrecalced, conf=get_empty_config(); filename=get_ml_filename(conf))
     data_points = kernel.kp.datapoints
+    header = ml_header(conf)
     open(filename*".dat", "w") do file
-        # Write header to file
-        println(file, "begin ", get_system(conf))
-        println(file, "  rcut = ", get_ml_rcut(conf))
-        println(file, "  sim_params = ", get_ml_sim_params(conf))
-        println(file, "  env_scale = ", get_ml_env_scale(conf))
-        println(file, "  apply_distortion = ", get_ml_apply_distortion(conf))
-        println(file, "  apply_orthogonality = ", get_ml_apply_orthogonality(conf))
-        println(file, "end")
-        println(file, "")
+        write(file, header)
         for n in eachindex(kernel.params)
             print(file, kernel.params[n])
             for data_point in data_points[n]

@@ -367,6 +367,8 @@ Generates precomputed kernel feature vectors based on structure descriptors and 
 - `rank`: MPI rank for distributed computation and logging (default: 0).
 - `systems`: Labels for each structure (default: auto-generated strings).
 - `key_dims`: Key dimensions from configuration.
+- `symmetry`: `SymmetryTerms` of every structure (enforce_symmetry_group) or `nothing`: the feature vector of a matrix element is
+  then the weighted sum of the similarities of all variants of its descriptor (the model stays linear in the weights).
 
 # Returns
 - `SimMat{T1, T2}`: Similarity matrix containing feature vectors, descriptor shapes, and parameters.
@@ -376,7 +378,7 @@ Generates precomputed kernel feature vectors based on structure descriptors and 
 - Filters features below tolerance to maintain sparsity.
 - Provides detailed logging of coverage statistics (number of non-zero features vs. total elements).
 """
-function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; conf = get_empty_config(), rank = 0, systems = nothing, key_dims = get_ml_key_dims(conf), hyperopt_iter = get_hyperopt_niter(conf), verbosity = get_verbosity(conf))
+function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; conf = get_empty_config(), rank = 0, systems = nothing, key_dims = get_ml_key_dims(conf), hyperopt_iter = get_hyperopt_niter(conf), verbosity = get_verbosity(conf), symmetry = nothing)
     #dim_weights = get_dim_weights(conf)
     data_points = kp.datapoints
     key_ranges = kp.key_ranges
@@ -409,6 +411,14 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; c
         for R in 1:N_R
             h_env_R = structure_descriptors[i][R]
             touples = collect(zip(findnz(h_env_R)...))
+            # enforce_symmetry_group: the similarities of the distinct descriptors of the variants (see `SymmetryTerms`),
+            # once for every key bucket of the matrix elements that use them
+            if !isnothing(symmetry)
+                X = symmetry[i].X[R]; W = symmetry[i].W[R]
+                element_keys = [keyfun(hin) for (_, _, hin) in touples]
+                needed = unique([(rowvals(W)[q], element_keys[n]) for n in eachindex(touples) for q in nzrange(W, n)])
+                sims = Dict(zip(needed, tmap(((t, key),) -> exp_sim_all(@view(data_points[key_ranges[key]]), X[t], σ=sim_params), needed)))
+            end
             N_total_temp  = length(touples)
             N_test_temp = zeros(N_total_temp)
             tforeach(1:length(touples)) do n
@@ -416,7 +426,11 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; c
                 key = keyfun(hin)
                 data_points_vector = @view data_points[key_ranges[key]]
                 #val_vec = exp_sim_all(data_points_vector, hin, σ=sim_params, dim_weights = dim_weights)
-                val_vec = exp_sim_all(data_points_vector, hin, σ=sim_params)
+                val_vec = if isnothing(symmetry)
+                    exp_sim_all(data_points_vector, hin, σ=sim_params)
+                else
+                    sum(nonzeros(W)[q] .* sims[(rowvals(W)[q], key)] for q in nzrange(W, n))
+                end
                 val_vec[abs.(val_vec) .<= tol] .= 0
                 val_vec = sparse(val_vec)
                 covered = nnz(val_vec) > 0 ? 1 : 0

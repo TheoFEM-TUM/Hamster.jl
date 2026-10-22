@@ -17,15 +17,19 @@ end
 SparseTerms(T, nparams) = SparseTerms(NTuple{3, Int64}[], Int64[], T[], nparams)
 
 """
-    GaussianKernelTerms(keys, X, D, σ)
+    GaussianKernelTerms(keys, X, D, σ, W)
 
-Host representation of the Gaussian kernel model `Hr[R][i, j] = Σ_n params[n] * exp(-|X[:, t] - D[:, n]|² / 2σ²)` with `keys[t] = (R, i, j)`.
+Host representation of the Gaussian kernel model
+`Hr[R][i, j] = Σ_t W[t, u] Σ_n params[n] * exp(-|X[:, t] - D[:, n]|² / 2σ²)` with `keys[u] = (R, i, j)`: the matrix
+elements are weighted sums of the kernel at the distinct descriptors `X[:, t]` (the variants of enforce_symmetry_group,
+see `SymmetryTerms`; without it, every element has its own descriptor with weight 1).
 """
 struct GaussianKernelTerms
     keys :: Vector{NTuple{3, Int64}}
     X :: Matrix{Float64}
     D :: Matrix{Float64}
     σ :: Float64
+    W :: SparseMatrixCSC{Float64, Int64}
 end
 
 """
@@ -61,22 +65,34 @@ end
 
 function linear_terms(kernel::HamiltonianKernel, index; soc=false)
     h_env = kernel.structure_descriptors[index]
+    symmetry = isnothing(kernel.symmetry) ? nothing : kernel.symmetry[index]
     Ndim = length(first(kernel.data_points))
-    n = sum(nnz, h_env, init=0) * (soc ? 2 : 1)
-    keys = Vector{NTuple{3, Int64}}(undef, n)
-    X = Matrix{Float64}(undef, Ndim, n)
-    t = 0
+    keys = NTuple{3, Int64}[]
+    columns = Vector{Float64}[]; ts = Int64[]; us = Int64[]; ws = Float64[]
     for R in eachindex(h_env)
-        for (i, j, hin) in zip(findnz(h_env[R])...)
+        offset_t = length(columns)
+        if isnothing(symmetry)
+            append!(columns, Vector{Float64}.(nonzeros(h_env[R])))
+        else
+            append!(columns, Vector{Float64}.(symmetry.X[R]))
+            W = symmetry.W[R]
+        end
+        for (k, (i, j, _)) in enumerate(zip(findnz(h_env[R])...))
             for key in spin_keys(R, i, j, soc)
-                t += 1
-                keys[t] = key
-                X[:, t] .= hin
+                push!(keys, key)
+                if isnothing(symmetry)
+                    push!(ts, offset_t + k); push!(us, length(keys)); push!(ws, 1.0)
+                else
+                    for q in nzrange(W, k)
+                        push!(ts, offset_t + rowvals(W)[q]); push!(us, length(keys)); push!(ws, nonzeros(W)[q])
+                    end
+                end
             end
         end
     end
+    X = isempty(columns) ? zeros(Ndim, 0) : reduce(hcat, columns)
     D = reduce(hcat, Vector{Float64}.(kernel.data_points))
-    return GaussianKernelTerms(keys, X, D, kernel.sim_params)
+    return GaussianKernelTerms(keys, X, D, kernel.sim_params, sparse(ts, us, ws, size(X, 2), length(keys)))
 end
 
 function linear_terms(kernel::HamiltonianKernelPrecalced, index; soc=false)
@@ -148,15 +164,22 @@ end
 """
     DeviceKernelBlock
 
-Device representation of `GaussianKernelTerms` of model `model_index`. `rows[t]` is the entry of descriptor `X[:, t]`.
+Device representation of `GaussianKernelTerms` of model `model_index`: the kernel at the descriptors (columns of `X`)
+and the weights of the descriptors in the entries, A[e, t] (CSR arrays of A in `rowptr`, `colval`, `nzval` and of its
+transpose in `t_rowptr`, `t_colval`, `t_nzval`), so that hr = A * k with k[t] = Σ_n params[n] exp(-γ |X[:, t] - D[:, n]|²).
 """
-struct DeviceKernelBlock{IV, M}
+struct DeviceKernelBlock{IV, M, V}
     model_index :: Int64
     nparams :: Int64
-    rows :: IV
     X :: M
     D :: M
     γ :: Float64
+    rowptr :: IV
+    colval :: IV
+    nzval :: V
+    t_rowptr :: IV
+    t_colval :: IV
+    t_nzval :: V
 end
 
 """
@@ -223,7 +246,10 @@ function host_linear_map(models, index, Nε, NR; soc=false)
             (m=m, nparams=terms.nparams, A=A, At=At)
         else
             allunique(rows) || error("Kernel model contains duplicate matrix elements.")
-            (m=m, nparams=size(terms.D, 2), rows=rows, X=terms.X, D=terms.D, γ=1 / (2 * terms.σ^2))
+            # weights of the descriptors in the entries (rows of A: entries, columns: descriptors)
+            W = terms.W
+            A = sparse([rows[u] for u in axes(W, 2) for _ in nzrange(W, u)], rowvals(W), nonzeros(W), Nent, size(W, 1))
+            (m=m, nparams=size(terms.D, 2), X=terms.X, D=terms.D, γ=1 / (2 * terms.σ^2), A=A, At=copy(transpose(A)), kernel=true)
         end
     end
 
@@ -266,13 +292,15 @@ function DeviceLinearMap(host::NamedTuple, device)
     Ti = Int32
     dev(x) = to_device(device, Ti.(x))
     blocks = map(host.blocks) do b
-        if haskey(b, :A)
+        if haskey(b, :kernel)
+            DeviceKernelBlock(b.m, b.nparams, to_device(device, b.X), to_device(device, b.D), b.γ,
+                dev(b.At.colptr), dev(b.At.rowval), to_device(device, b.At.nzval),
+                dev(b.A.colptr), dev(b.A.rowval), to_device(device, b.A.nzval))
+        else
             T = eltype(b.A.nzval)
             # The CSC arrays of At (A) are the CSR arrays of A (At)
             DeviceSparseBlock(b.m, b.nparams, dev(b.At.colptr), dev(b.At.rowval), to_device(device, T.(b.At.nzval)),
                 dev(b.A.colptr), dev(b.A.rowval), to_device(device, T.(b.A.nzval)))
-        else
-            DeviceKernelBlock(b.m, b.nparams, dev(b.rows), to_device(device, b.X), to_device(device, b.D), b.γ)
         end
     end
     return DeviceLinearMap(host.Nε, host.NR, dev(host.I), dev(host.J), dev(host.Ridx), blocks, dev(host.hk_rowptr),
