@@ -38,6 +38,13 @@ Implemented by the `HamsterCUDAExt` extension, which is loaded with `using CUDA`
 function gpu_device end
 
 """
+    gpu_count()
+
+Number of GPUs visible on this node. Implemented by the `HamsterCUDAExt` extension, which is loaded with `using CUDA`.
+"""
+function gpu_count end
+
+"""
     device_synchronize(x)
 
 Wait until all device operations on the array `x` have finished (no-op on the host). Used before timings are taken,
@@ -79,6 +86,20 @@ function init_device(conf=get_empty_config(), comm=nothing; device=get_device(co
     else
         error("Unknown device '$device'. Valid options are cpu and gpu.")
     end
+end
+
+"""
+    get_num_gpus(conf, comm, hostname; device=get_device(conf))
+
+Total number of GPUs used by all MPI ranks, i.e., the number of distinct (node, GPU) pairs that the ranks bind to in `init_device`.
+Returns 0 for `device = cpu`. Must be called on all ranks; the result is only valid on rank 0.
+"""
+function get_num_gpus(conf, comm, hostname; device=get_device(conf))
+    lowercase(device) == "gpu" && !isempty(methods(gpu_count)) || return 0
+    ngpus_node = gpu_count()
+    gpu = ngpus_node > 0 ? (hostname, mod(get_node_local_rank(comm), ngpus_node)) : nothing
+    gpus = MPI.gather(gpu, comm, root=0)
+    return isnothing(gpus) ? 0 : length(unique(filter(!isnothing, gpus)))
 end
 
 function get_node_local_rank(comm)

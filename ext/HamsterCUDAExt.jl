@@ -10,6 +10,8 @@ function Hamster.gpu_device(local_rank::Integer)
     return ArrayDevice(CuArray)
 end
 
+Hamster.gpu_count() = length(CUDA.devices())
+
 Hamster.device_synchronize(::CuArray) = CUDA.synchronize()
 
 const CuDeviceHk = DeviceHk{<:CuVector}

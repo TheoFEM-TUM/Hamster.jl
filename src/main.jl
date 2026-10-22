@@ -7,7 +7,9 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity
     if !("tmp" in readdir(pwd())) && rank == 0; mkdir("tmp"); end
     
     set_seed!(conf, rank=rank)
-    hostnames = MPI.gather(readchomp(`hostname`), comm, root=0)
+    hostname = readchomp(`hostname`)
+    hostnames = MPI.gather(hostname, comm, root=0)
+    num_gpus = get_num_gpus(conf, comm, hostname)
     if rank == 0
         generate_output(conf, hostnames=hostnames)
         julia_num_threads = Threads.nthreads()
@@ -22,7 +24,7 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity
         # COV_EXCL_STOP
 
         Nconf = get_Nconf(conf)
-        write_block_summary("Parallelization", num_nodes=num_nodes, nhamster=nranks, 
+        write_block_summary("Parallelization", num_nodes=num_nodes, num_gpus=num_gpus, nhamster=nranks, 
             nstrc_per_hamster=round(Int64, Nconf/nranks), nstrc_per_node=round(Int64, Nconf/num_nodes), 
             julia_num_threads=julia_num_threads, nthreads_kpoints=nthreads_kpoints, 
             nthreads_bands=nthreads_bands, nthreads_blas=nthreads_blas)
