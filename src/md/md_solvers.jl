@@ -192,12 +192,13 @@ mutable struct KPMSolver{D} <: MDElectronSolver
     work :: Union{Nothing, NamedTuple}
     npasses :: Int
     ncolors :: Dict{UInt8, Int}
+    gap :: Tuple{Float64, Float64}
 end
 
 function KPMSolver(tb::MDTBModel, conf=get_empty_config(); device=CPUDevice(), radius=get_md_probe_radius(conf))
     pcol, nvec, ncolors = probe_colors(tb.types, tb.norb, nspin(tb), tb.reference, tb.lattice, radius)
     return KPMSolver{typeof(device)}(device, pcol, nvec, get_md_kpm_order(conf), get_md_kpm_tol(conf),
-        get_md_spectrum_margin(conf), get_md_nelec_tol(conf), (NaN, NaN), NaN, nothing, nothing, 0, ncolors)
+        get_md_spectrum_margin(conf), get_md_nelec_tol(conf), (NaN, NaN), NaN, nothing, nothing, 0, ncolors, (NaN, NaN))
 end
 
 kpm_eltype(T, conf) = lowercase(get_md_kpm_precision(conf)) == "single" ? (T <: Complex ? ComplexF32 : Float32) : T
@@ -276,11 +277,21 @@ function solve_electrons!(solver::KPMSolver, pat::GammaPattern, tb::MDTBModel, h
     moments = kpm_pass!(w, tab, dcoeffs(μ))
     solver.npasses = 1
     nfun(μ) = s * dot(dcoeffs(μ), moments) - nelec
-    if abs(nfun(μ)) > solver.nelec_tol * max(nelec, 1)
+    # In a gapped system μ is put in the middle of the gap (the plateau of the electron count); the probed count can be
+    # off by a few electrons, which would otherwise put μ at a band edge. Without a gap: the root of the count.
+    gap = kpm_gap(tab, moments, nelec, kT, s)
+    if !isnothing(gap)
+        if !(gap[1] + 2kT ≤ μ ≤ gap[2] - 2kT)
+            μ = (gap[1] + gap[2]) / 2
+            moments = kpm_pass!(w, tab, dcoeffs(μ))
+            solver.npasses = 2
+        end
+    elseif abs(nfun(μ)) > solver.nelec_tol * max(nelec, 1)
         μ = solve_mu(nfun, b - a, b + a, s, solver.nelec_tol * max(nelec, 1))
         moments = kpm_pass!(w, tab, dcoeffs(μ))
         solver.npasses = 2
     end
+    solver.gap = isnothing(gap) ? (NaN, NaN) : gap
     solver.μ = μ
     F = s * dot(grand_potential_coefficients(tab, μ, kT), moments) + μ * nelec
 
@@ -299,9 +310,55 @@ end
 """
     sparse_eigenvalues(H, target; neig=6)
 
-Eigenvalues of the sparse Hamiltonian `H` closest to `target` (shift-invert).
+Eigenvalues of the sparse Hermitian Hamiltonian `H` closest to `target` (shift-invert with a sparse LU factorization
+and a Krylov-Schur eigensolver, with a Krylov space large enough for degenerate band edges).
 """
-sparse_eigenvalues(H, target; neig=6) = sort(first(diagonalize(H, Neig=min(neig, size(H, 1) - 2), target=target, vectors=false)))
+function sparse_eigenvalues(H, target; neig=6)
+    n = size(H, 1)
+    neig = min(neig, n - 2)
+    F = lu(H - target * I)
+    x0 = normalize(randn(Xoshiro(1), eltype(H), n))
+    μs, _ = eigsolve(x -> F \ x, x0, neig, :LM, ishermitian=true, krylovdim=max(40, 3neig + 10), maxiter=200)
+    λs = target .+ 1 ./ real.(μs[1:min(neig, length(μs))])
+    return sort(λs)
+end
+
+"""
+    kpm_gap(tab, moments, nelec, kT, s; ngrid=1000, rel_dos=0.02, max_offset=0.02)
+
+Gap of the spectrum from the probed Chebyshev moments: the electron count `N(μ) = s Σ_q f(ε_q - μ) (Cᵀm)_q` on a grid of
+μ, the intervals where its slope is below `rel_dos` times the mean density of states and that are wider than 4kT, and
+of these the one whose count is closest to `nelec` (at most `max_offset` × nelec + 2s away). Returns `(lower, upper)`
+or `nothing` (no gap, e.g. a metal).
+"""
+function kpm_gap(tab::ChebyshevTable, moments, nelec, kT, s; ngrid=1000, rel_dos=0.02, max_offset=0.02)
+    v = transpose(tab.C) * moments
+    μs = range(tab.b - tab.a, tab.b + tab.a, length=ngrid)
+    N = [s * sum(fermi(tab.ε[q], μ, kT) * v[q] for q in eachindex(v)) for μ in μs]
+    dμ = step(μs)
+    thr = rel_dos * abs(N[end] - N[1]) / (2tab.a)       # fraction of the mean density of states
+    flat = [abs(N[i+1] - N[i]) / dμ < thr for i in 1:ngrid-1]
+    best = nothing; bestoff = Inf
+    i = 1
+    while i ≤ ngrid - 1
+        if flat[i]
+            j = i
+            while j < ngrid - 1 && flat[j+1]
+                j += 1
+            end
+            lo, hi = μs[i], μs[j+1]
+            off = abs((N[i] + N[j+1]) / 2 - nelec)
+            if hi - lo > 4kT && off < bestoff
+                best = (lo, hi); bestoff = off
+            end
+            i = j + 1
+        else
+            i += 1
+        end
+    end
+    (isnothing(best) || bestoff > max_offset * nelec + 2s) && return nothing
+    return best
+end
 
 """
     kpm_pass!(w, tab, d)
