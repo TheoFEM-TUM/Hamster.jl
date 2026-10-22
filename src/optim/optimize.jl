@@ -118,7 +118,9 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     end
     lr_log = optim.adam.eta
 
-    if nbatch > 1; load_simmats!(ham_train, indices); end
+    # The device path keeps the linear maps of all structures, so the SimMats are only needed for real-space data
+    load_sms = nbatch > 1 && !(uses_device_path(ham_train) && train_data isa AbstractVector{<:EigData})
+    if load_sms; load_simmats!(ham_train, indices); end
 
     forward_times = Float64[]
     backward_times = Float64[]
@@ -219,8 +221,8 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         end
     end
     update_begin = MPI.Wtime()
-    for model in ham_train.models
-        model_grad_local = get_model_gradient(model, indices, optim.reg, dL_dHr; soc=ham_train.soc)
+    for (model_index, model) in enumerate(ham_train.models)
+        model_grad_local = get_model_gradient(model, indices, optim.reg, model_gradient_input(dL_dHr, model_index); soc=ham_train.soc)
         model_grad = MPI.Reduce(model_grad_local, +, comm, root=0)
         if rank == 0; update!(model, optim.adam, model_grad ./ pc_weights_tot); end
         params = get_params(model)
@@ -256,7 +258,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
             #println(" MAE: $L_train_MAE eV")
         end
     end
-    if nbatch > 1; unload_simmats!(ham_train, indices); end
+    if load_sms; unload_simmats!(ham_train, indices); end
 end
 
 """
@@ -279,7 +281,8 @@ function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1
     ls_weight = get_ls_weight(conf)
     nbatch = get_nbatch(conf)
     val_begin = MPI.Wtime()
-    if nbatch > 1; load_simmats!(ham_val, 1:ham_val.Nstrc); end
+    load_sms = nbatch > 1 && !(uses_device_path(ham_val) && val_data isa AbstractVector{<:EigData})
+    if load_sms; load_simmats!(ham_val, 1:ham_val.Nstrc); end
     pc_weights = Float64[]
     Ls_val = map(1:ham_val.Nstrc) do index
         push!(pc_weights, losses[index].pc_weight)
@@ -333,7 +336,7 @@ function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1
         prof.L_val_MAE[iter-valeachiter+1:iter] .= L_val_MAE ./ pc_weights_tot
         prof.L_val_BG[iter-valeachiter+1:iter] .= L_val_BG ./ pc_weights_tot
     end
-    if nbatch > 1; unload_simmats!(ham_val, 1:ham_val.Nstrc); end
+    if load_sms; unload_simmats!(ham_val, 1:ham_val.Nstrc); end
 end
 
 """
@@ -353,6 +356,7 @@ The behavior of the function depends on the type of `data`, which can be either 
 - `cache`: A preliminary result that is needed to compute the gradient.
 """
 function forward(ham::EffectiveHamiltonian, index, data::EigData, l::Loss)
+    if uses_device_path(ham); return device_forward(ham, index, data, l); end
     Hk = get_hamiltonian(ham, index, data.kp)
     Es, vs = diagonalize(Hk)
 
@@ -371,6 +375,7 @@ function forward(Es, loss::Loss, data::EigData)
 end
 
 function forward(ham::EffectiveHamiltonian, index, loss, data::EigData)
+    if uses_device_path(ham); return device_forward(ham, index, loss, data); end
     Hk = get_hamiltonian(ham, index, data.kp)
     Es, vs = diagonalize(Hk)
     L_train = loss(Es, data.Es)
@@ -403,6 +408,7 @@ The function behavior varies depending on the type of `data`, which can be eithe
 - `gradient`: The computed gradient of the loss with respect to the parameters of `ham`.
 """
 function backward(L_train_weight::Float64, ham::EffectiveHamiltonian, index, loss, data::EigData, cache, conf=get_empty_config(); nthreads_kpoints=get_nthreads_kpoints(conf), nthreads_bands=get_nthreads_bands(conf))
+    if uses_device_path(ham); return device_backward(L_train_weight, ham, index, loss, data, cache); end
     Es_tb, vs = cache
     dL_dE = backward(loss, Es_tb, data.Es) .* L_train_weight
     dE_dHr = get_eigenvalue_gradient(vs, ham.Rs[index], data.kp, ham.sp_mode, ham.sp_iterators[index], nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=ham.sp_tol)

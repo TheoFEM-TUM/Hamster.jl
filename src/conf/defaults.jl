@@ -98,6 +98,14 @@ Possible options:
 get_diag_method(conf::Config)::String = conf("diag_method") == "default" ? "shift-invert" : conf("diag_method")
 
 """
+**device**=cpu
+
+The `device::String` tag sets the compute device for building, diagonalizing and differentiating Hamiltonians (`cpu`, `gpu`).
+`gpu` requires `using CUDA` (and `using CUDSS` for the shift-invert eigensolver); each MPI rank binds to one GPU of its node.
+"""
+get_device(conf::Config)::String = conf("device") == "default" ? "cpu" : conf("device")
+
+"""
 **skip_diag**=false
 
 If `skip_diag` is set to true, no eigenvalues are computed for the Hamiltonian.

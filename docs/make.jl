@@ -18,6 +18,7 @@ makedocs(
             "conf/general_tags.md",
             "conf/block_tags.md"
         ],
+        "GPU Support" => "calc/gpu.md",
         "Examples" => [
             "examples/examples.md",
             "examples/model_eval.md",

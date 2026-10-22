@@ -75,3 +75,9 @@ Pages = ["conf/read_config.jl", "conf/config.jl"]
 Modules = [Hamster]
 Pages = ["output.jl"]
 ```
+# Device (GPU)
+
+```@autodocs
+Modules = [Hamster]
+Pages = ["device/device.jl", "device/kernels.jl", "device/linear_map.jl", "device/device_ham.jl"]
+```

@@ -1,4 +1,4 @@
-struct EffectiveHamiltonian{T, S1, S2, IT}
+struct EffectiveHamiltonian{T, S1, S2, IT, DC}
     Nstrc :: Int64
     models :: T
     systems :: Vector{String}
@@ -8,6 +8,7 @@ struct EffectiveHamiltonian{T, S1, S2, IT}
     sp_iterators :: IT
     soc :: Bool
     Rs :: Vector{Matrix{Float64}}
+    device_ctx :: DC
 end
 
 function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf(); 
@@ -23,10 +24,11 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
                               systems=[strc.system for strc in strcs],
                               rllm_type = "train",
                               simmat_prefix = "simmat_train",
+                              device=nothing,
                               verbosity=get_verbosity(conf))
 
     if isempty(strcs) && isempty(bases)
-        return EffectiveHamiltonian(0, Nothing[], String[], Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)])
+        return EffectiveHamiltonian(0, Nothing[], String[], Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)], nothing)
     end
 
     if rank == 0 && verbosity > 0; println("Building effective Hamiltonian model..."); end
@@ -70,10 +72,20 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
         if rank == 0 && verbosity > 1; println("    SOC time: $soc_time s"); end
     end
 
+    device_ctx = nothing
+    device = isnothing(device) ? init_device(conf, comm) : device
+    if uses_device_path(device)
+        if rank == 0 && verbosity > 1; println("   Moving Hamiltonian models to device..."); end
+        begin_time = MPI.Wtime()
+        device_ctx = DeviceContext(device, models, strcs, bases, conf, soc=soc)
+        device_time = MPI.Wtime() - begin_time
+        if rank == 0 && verbosity > 1; println("    Device time: $device_time s"); end
+    end
+
     eff_ham_time = MPI.Wtime() - eff_ham_begin_time
     if rank == 0 && verbosity > 0; println("Effective Hamiltonian model time: $eff_ham_time s"); end
 
-    return EffectiveHamiltonian(length(strcs), models, systems, sp_mode, sp_diag, sp_tol, sp_iterators, soc, Rs)
+    return EffectiveHamiltonian(length(strcs), models, systems, sp_mode, sp_diag, sp_tol, sp_iterators, soc, Rs, device_ctx)
 end
 
 function EffectiveHamiltonian(strcs, bases, subdirs :: Vector{String}, comm, conf=get_empty_conf(); 
@@ -88,10 +100,11 @@ function EffectiveHamiltonian(strcs, bases, subdirs :: Vector{String}, comm, con
                               nranks=1,
                               systems=[strc.system for strc in strcs],
                               simmat_prefix = "simmat_train",
+                              device=nothing,
                               verbosity=get_verbosity(conf))
 
     if isempty(strcs) && isempty(bases)
-        return EffectiveHamiltonian(0, Nothing[], String[], Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)])
+        return EffectiveHamiltonian(0, Nothing[], String[], Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)], nothing)
     end
 
     if rank == 0 && verbosity > 0; println("Building effective Hamiltonian model..."); end
@@ -142,11 +155,23 @@ function EffectiveHamiltonian(strcs, bases, subdirs :: Vector{String}, comm, con
         if rank == 0 && verbosity > 1; println("    SOC time: $soc_time s"); end
     end
 
+    device_ctx = nothing
+    device = isnothing(device) ? init_device(conf, comm) : device
+    if uses_device_path(device)
+        if rank == 0 && verbosity > 1; println("   Moving Hamiltonian models to device..."); end
+        begin_time = MPI.Wtime()
+        device_ctx = DeviceContext(device, models, strcs, bases, conf, soc=soc)
+        device_time = MPI.Wtime() - begin_time
+        if rank == 0 && verbosity > 1; println("    Device time: $device_time s"); end
+    end
+
     eff_ham_time = MPI.Wtime() - eff_ham_begin_time
     if rank == 0 && verbosity > 0; println("Effective Hamiltonian model time: $eff_ham_time s"); end
 
-    return EffectiveHamiltonian(length(strcs), models, systems, sp_mode, sp_diag, sp_tol, sp_iterators, soc, Rs)
+    return EffectiveHamiltonian(length(strcs), models, systems, sp_mode, sp_diag, sp_tol, sp_iterators, soc, Rs, device_ctx)
 end
+
+uses_device_path(ham::EffectiveHamiltonian) = !isnothing(ham.device_ctx)
 
 """
     get_hamiltonian(ham::EffectiveHamiltonian, index, ks)
@@ -163,12 +188,17 @@ Construct the Hamiltonian matrix for given k-points `ks` from the real-space Ham
 - `Hk`: The Hamiltonian matrix in reciprocal space corresponding to the given k-points.
 """
 function get_hamiltonian(ham::EffectiveHamiltonian, index, ks; write_hr=false, config_index=index, system="")
+    if uses_device_path(ham); return get_device_hamiltonian(ham, index, ks)[1]; end
     Hr = get_hr(ham, index)
     Hk = get_hamiltonian(Hr, ham.Rs[index], ks, ham.sp_diag)
     return Hk
 end
 
 function get_hamiltonian(ham::EffectiveHamiltonian, index, ks, comm; write_hr=false, config_index=index, system="", rank=rank, nranks=nranks)
+    if uses_device_path(ham)
+        if write_hr; write_ham(get_hr(ham, index), ham.Rs[index], comm, config_index, space="r", system=system, rank=rank, nranks=nranks); end
+        return get_device_hamiltonian(ham, index, ks)[1]
+    end
     Hr = get_hr(ham, index)
     if write_hr; write_ham(Hr, ham.Rs[index], comm, config_index, space="r", system=system, rank=rank, nranks=nranks); end
     Hk = get_hamiltonian(Hr, ham.Rs[index], ks, ham.sp_diag)

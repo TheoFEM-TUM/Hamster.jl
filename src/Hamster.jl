@@ -1,7 +1,8 @@
 module Hamster
 
 using LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Dates, PeriodicTable, UnPack, MPI, Clustering, BlockDiagonals, DataStructures,
-    CubicSplines, HCubature, Statistics, ChunkSplitters, FiniteDiff, StatsBase, HDF5, Printf, OhMyThreads, TreeParzen, Arpack, Random, Distances, Logging, ParallelKMeans
+    CubicSplines, HCubature, Statistics, ChunkSplitters, FiniteDiff, StatsBase, HDF5, Printf, OhMyThreads, TreeParzen, Arpack, Random, Distances, Logging, ParallelKMeans,
+    KernelAbstractions
 
 include("parse/utils.jl"); include("parse/poscar.jl"); include("parse/eigenval.jl"); include("parse/xdatcar.jl"); include("parse/wannier90.jl")
 include("parse/commandline.jl")
@@ -31,6 +32,8 @@ include("optim/optimize.jl")
 
 include("mlham/simmat.jl"); include("mlham/descriptor.jl"); include("mlham/kernel.jl")
 
+include("device/device.jl"); include("device/kernels.jl"); include("device/linear_map.jl"); include("device/device_ham.jl")
+
 include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hyperopt.jl")
 
 include("auto_bandmin/hamster_subshells.jl"); include("auto_bandmin/POTCAR_subshells.jl"); include("auto_bandmin/get_bandmin.jl")
@@ -58,6 +61,8 @@ export HamiltonianKernel, load_simmats!, unload_simmats!
 
 
 export run_calculation
+
+export CPUDevice, ArrayDevice
 
 # Precompililation
 include("Hamster_precompile.jl")

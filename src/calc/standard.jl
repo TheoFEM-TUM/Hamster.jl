@@ -104,7 +104,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
             system, config_index = get_system_and_config_index(index, local_inds)
             ks = get_kpoints_from_config(conf, system = system)
             ham_time_local = @elapsed Hk = get_hamiltonian(ham, index, ks, comm, write_hr=write_hr, config_index=config_index, system=system, rank=rank, nranks=nranks)
-            Neig = ham.sp_diag isa Sparse ? get_neig(conf) : size(Hk[1], 1)
+            Neig = ham.sp_diag isa Sparse ? get_neig(conf) : hamiltonian_dim(Hk)
 
             Es = zeros(1, 1); vs = zeros(ComplexF64, 1, 1, 1)
             diag_time_local = @elapsed begin
@@ -118,7 +118,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
 
             write_begin = MPI.Wtime()
             if write_hk
-                write_ham(Hk, ks, comm, config_index, filename=ham_file, system=system, rank=rank, nranks=nranks)
+                write_ham(host_hamiltonians(Hk), ks, comm, config_index, filename=ham_file, system=system, rank=rank, nranks=nranks)
             end
             if !(config_index isa Int) && rank == 0
                 if !skip_diag; write_to_file(Es, "Es"); end
