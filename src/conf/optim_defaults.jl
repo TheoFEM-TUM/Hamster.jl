@@ -227,6 +227,15 @@ The `valeachiter` tag determines at what iteration interval a validation step is
 """
 get_valeachiter(conf::Config)::Int64 = conf("valeachiter", "Optimizer") == "default" ? 1 : conf("valeachiter", "Optimizer")
 
+"""
+    shuffle_batches=false
+
+If `shuffle_batches` is set to true, the training structures of each MPI rank are shuffled before they are split into `nbatch` batches
+in every iteration (stochastic mini-batches). Otherwise, the batches are consecutive ranges of the structures and the same in every iteration.
+Set `seed` for reproducible batches.
+"""
+get_shuffle_batches(conf::Config)::Bool = conf("shuffle_batches", "Optimizer") == "default" ? false : conf("shuffle_batches", "Optimizer")
+
 get_warmup_ratio(conf::Config)::Float64 = conf("warmup_ratio", "Optimizer") == "default" ? 0.0 : conf("warmup_ratio", "Optimizer")
 
 get_lr_warmup(conf::Config)::Float64 = conf("lr_warmup", "Optimizer") == "default" ? 0.00001 : conf("lr_warmup", "Optimizer")

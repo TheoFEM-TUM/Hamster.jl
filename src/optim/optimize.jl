@@ -14,6 +14,7 @@ Optimizes the model by performing training and optional validation steps.
 - `verbosity`: The level of verbosity for logging.
 - `Nbatch`: The number of batches per training iteration.
 - `validate`: A flag indicating whether to perform validation during training.
+- `shuffle_batches`: A flag indicating whether the structures are shuffled before they are split into batches in every iteration.
 
 # Workflow
 1. Print the start message.
@@ -24,11 +25,12 @@ Optimizes the model by performing training and optional validation steps.
 # Returns
 - Updates the HamsterProfiler `prof` and the model parameters in `ham_train` and `ham_val`.
 """
-function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_empty_config(); verbosity=get_verbosity(conf), Nbatch=get_nbatch(conf), validate=get_validate(conf), valeachiter=get_valeachiter(conf), rank=0, nranks=1)
+function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_empty_config(); verbosity=get_verbosity(conf), Nbatch=get_nbatch(conf), validate=get_validate(conf), valeachiter=get_valeachiter(conf), shuffle_batches=get_shuffle_batches(conf), rank=0, nranks=1)
     print_start_message(prof; verbosity=verbosity)
     for iter in 1:optim.Niter
         iter_begin = MPI.Wtime()
-        for (batch_id, indices) in enumerate(chunks(1:ham_train.Nstrc, n=Nbatch))
+        strc_indices = shuffle_batches ? shuffle(1:ham_train.Nstrc) : (1:ham_train.Nstrc)
+        for (batch_id, indices) in enumerate(chunks(strc_indices, n=Nbatch))
             train_step!(ham_train, indices, optim, dl.train_data, prof, iter, batch_id, comm, conf, rank=rank, nranks=nranks)
             print_train_status(prof, iter, batch_id, verbosity=verbosity)
             #if rank == 0;@info "NEXT";end
