@@ -216,8 +216,8 @@ The output file (`output`, default `md.h5`) contains:
 - `positions`, `lattice`, `types`: the trajectory in fractional coordinates, so the file can be used as `xdatcar` of a
   standard run (with the same `poscar`) to compute band structures, DOS or other quantities of the snapshots with any
   Hamster model, including ML corrections;
-- `eigenvalues/`: eigenvalues every `eig_every` steps (exact: all eigenvalues at all k-points; kpm: the `neig`
-  eigenvalues closest to the chemical potential, by shift-invert);
+- `eigenvalues/`: eigenvalues every `eig_every` steps (exact: all eigenvalues at all k-points; kpm: `neig` eigenvalues
+  at Γ by shift-invert, half of them at each edge of the gap found in the electron count);
 - `analysis/`: mean and standard deviation of temperature and pressure, partial radial distribution functions,
   vibrational density of states per species (mass-weighted power spectrum of the velocities, normalized to 3 per atom),
   velocity autocorrelation and mean squared displacements, for the frames after `equilibration` steps;

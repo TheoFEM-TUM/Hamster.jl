@@ -302,7 +302,12 @@ function solve_electrons!(solver::KPMSolver, pat::GammaPattern, tb::MDTBModel, h
     gamma_weights!(W, wat, pat, tb, ρnz, s)
     Es = zeros(0, 0)
     if eigenvalues > 0
-        Es = reshape(sparse_eigenvalues(gamma_matrix(pat, nz), μ, neig=eigenvalues), :, 1)
+        H = gamma_matrix(pat, nz)
+        # With a gap, half of the eigenvalues at each band edge (in large cells, all eigenvalues closest to μ can belong
+        # to one band); otherwise the ones closest to μ
+        Es = isnan(solver.gap[1]) ? sparse_eigenvalues(H, μ, neig=eigenvalues) :
+             vcat(sparse_eigenvalues(H, solver.gap[1], neig=cld(eigenvalues, 2)), sparse_eigenvalues(H, solver.gap[2], neig=fld(eigenvalues, 2)))
+        Es = reshape(sort(Es), :, 1)
     end
     return ElectronResult(F, μ, W, wat, Es)
 end

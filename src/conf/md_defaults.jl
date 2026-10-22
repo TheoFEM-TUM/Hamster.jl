@@ -57,7 +57,7 @@
 @configtag restart Bool false "continue the run in `output` from its restart data (positions, velocities, step); the trajectory is appended." "MD"
 @configtag thermo_every Int64 1 "write energies, temperature and pressure every n steps." "MD"
 @configtag traj_every Int64 10 "write positions and velocities every n steps (0: never)." "MD"
-@configtag eig_every Int64 0 "compute eigenvalues every n steps (0: never): `neig` eigenvalues closest to the chemical potential (exact: all at Γ)." "MD"
+@configtag eig_every Int64 0 "compute eigenvalues every n steps (0: never): exact: all at all k-points; kpm: `neig` eigenvalues at Γ, half of them closest to each band edge (or closest to the chemical potential without a gap)." "MD"
 @configtag print_every Int64 10 "print the status every n steps (verbosity > 0)." "MD"
 @configtag analysis Bool true "at the end of a run, compute the radial distribution functions, the vibrational density of states and the mean squared displacement from the trajectory." "MD"
 @configtag rdf_rmax Float64 8.0 "largest distance (Å) of the radial distribution functions." "MD"
