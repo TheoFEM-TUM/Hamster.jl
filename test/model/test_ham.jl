@@ -83,6 +83,8 @@ end
         @test diagonalize(Hk1, strategy=strategy, vectors=false)[1] ≈ Es_correct
     end
     @test diagonalize(Hk1, large=1)[1] ≈ Es_correct
+    Es_m, vs_m = diagonalize(Hk1, large=1, strategy=:kpoints)          # MRRR solver for "large" matrices with few threads
+    @test Es_m ≈ Es_correct && all(k -> Hk1[k] * vs_m[:, :, k] ≈ vs_m[:, :, k] * Diagonal(Es_m[:, k]), axes(vs_m, 3))
     @test_throws ErrorException diagonalize(Hk1, strategy=:gpu)
 
     # Test Neig

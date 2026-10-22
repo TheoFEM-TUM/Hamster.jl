@@ -103,10 +103,11 @@ Diagonalizes a vector of Hamiltonian matrices `Hk` and returns the specified num
 - `vectors::Bool=true`: Whether the eigenvectors are computed (dense matrices); without them, `vs` is empty and the full
   diagonalization is several times faster.
 
-Dense matrices are diagonalized with LAPACK's divide-and-conquer solver (`zheevd`), directly into the result array.
-With fewer k-points than threads, large matrices (at least `large` orbitals, with eigenvectors) are diagonalized one
-after the other with all threads in BLAS, where divide and conquer scales well; otherwise the k-points are distributed
-over the threads (with the remaining threads for BLAS). `strategy` (`:auto`, `:kpoints` or `:blas`) overrides this choice.
+Dense matrices are diagonalized directly into the result array. With fewer k-points than threads, large matrices (at
+least `large` orbitals, with eigenvectors) are diagonalized one after the other with all threads in BLAS; otherwise the
+k-points are distributed over the threads (with the remaining threads for BLAS). `strategy` (`:auto`, `:kpoints` or
+`:blas`) overrides this choice. The eigenvectors are computed with LAPACK's divide-and-conquer solver (`zheevd`), except
+for large matrices with fewer than 4 BLAS threads, where the MRRR solver (`zheevr`) is faster.
 
 # Returns:
 - `Es::Matrix{Float64}`: A matrix where each column `Es[:, k]` contains the `Neig` eigenvalues of the `k`-th Hamiltonian matrix in `Hk`.
@@ -135,13 +136,15 @@ function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0
         if strategy == :blas
             # Few large matrices: one after the other, with all threads in BLAS
             BLAS.set_num_threads(nthreads)
+            mrrr = Nε ≥ large && nthreads < 4
             for k in eachindex(Hk)
-                Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k])
+                Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k], mrrr=mrrr)
             end
         else
             Nk < nthreads && BLAS.set_num_threads(max(blas_threads, nthreads ÷ Nk))
+            mrrr = Nε ≥ large && BLAS.get_num_threads() < 4
             Threads.@threads for k in eachindex(Hk)
-                Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k])
+                Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k], mrrr=mrrr)
             end
         end
     finally
@@ -152,17 +155,22 @@ function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0
 end
 
 """
-    dense_eigen!(V, H) -> eigenvalues
+    dense_eigen!(V, H; mrrr=false) -> eigenvalues
 
-Eigenvalues of the Hermitian matrix `H` (upper triangle) with LAPACK's divide-and-conquer solver; the eigenvectors are
-written to `V` (`nothing`: eigenvalues only).
+Eigenvalues of the Hermitian matrix `H` (upper triangle); the eigenvectors are written to `V` (`nothing`: eigenvalues
+only), computed with LAPACK's divide-and-conquer solver (`zheevd`) or, with `mrrr`, the MRRR solver (`zheevr`).
 """
-function dense_eigen!(V, H)
+function dense_eigen!(V, H; mrrr=false)
     if abs(hermiticity_mismatch(H)) > 1e-5
         maxdiff, inds = findmax(abs.(H .- Hermitian(H)))
         @warn "Hamiltonian not hermitian! Maximum missmatch: $maxdiff at $inds."
     end
     isnothing(V) && return real.(eigvals(Hermitian(H)))
+    if mrrr
+        E, Z = LAPACK.syevr!('V', 'A', 'U', Matrix(H), 0.0, 0.0, 0, 0, -1.0)
+        copyto!(V, Z)
+        return E
+    end
     copyto!(V, H)
     return LAPACK.syevd!('V', 'U', V)[1]
 end
