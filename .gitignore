@@ -31,3 +31,11 @@ playground.jl
 
 # Generated documentation of the input tags (docs/make.jl)
 docs/src/conf/tags/
+# outputs of the tutorial runs
+tutorials/**/hamster.log
+tutorials/**/hamster.out
+tutorials/**/hamster_out*.h5
+tutorials/**/Es.dat
+tutorials/**/*.png
+tutorials/**/*.csv
+!docs/src/assets/tutorials/*.png
