@@ -22,7 +22,6 @@ begin ML
     update = true
     init_params = zeros
     npoints = 200
-    cluster = 20
 end
 
 begin SOC
