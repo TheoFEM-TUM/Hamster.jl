@@ -1,0 +1,34 @@
+# Tutorial 8b: DOS and PDOS of a large GaAs cell (512 atoms) with TB + ML, kernel polynomial method (KPM)
+begin Options
+    poscar = POSCAR_large
+    rcut = 7
+    init_params = ../data/gaas/params_tb.dat
+    load_rllm = true
+    rllm_file = ../data/gaas/rllm.dat
+    skip_diag = true                          # no eigenvalues, only the DOS
+    dos = all                                 # total DOS, projected DOS (PDOS) and COHP
+end
+
+begin DOS
+    method = kpm                              # sparse matrix-vector products only
+    kpm_moments = 512                         # energy resolution
+    kpm_vectors = 16                          # random vectors (stochastic error)
+    nelec = 2048                              # 4 valence electrons per atom: Fermi energy, integrated DOS and COHP
+end
+
+begin ML
+    init_params = ../data/gaas/ml_params.dat
+end
+
+begin atom Ga
+    n = 3
+    alpha = 9
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+end
+
+begin atom As
+    n = 3
+    alpha = 13
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+    nnaxes = true
+end

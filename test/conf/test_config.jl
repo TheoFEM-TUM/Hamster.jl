@@ -121,6 +121,9 @@ end
         file = joinpath(dir, "hconf")
         write(file, "begin Options\n  xdatcar = traj.h5\n  rcut = 5\nend\nbegin ML\n  npoints = 10\nend\n")
         @test_logs (:warn, r"belongs in the Supercell block") get_config(filename=file)
+        # an empty block switches on its model
+        write(file, "begin Options\n  rcut = 5\nend\nbegin SOC\nend\n")
+        @test Hamster.get_soc(get_config(filename=file))
     end
 
     # Generated documentation: one page per block and an index, every tag once with its anchor

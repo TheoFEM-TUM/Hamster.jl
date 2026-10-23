@@ -1,0 +1,28 @@
+# Tutorial 8a: band edges of a large GaAs cell (512 atoms) with TB + ML, from a sparse eigensolver at Γ
+begin Options
+    poscar = POSCAR_large                     # julia make_cell.jl
+    rcut = 7
+    init_params = ../data/gaas/params_tb.dat
+    load_rllm = true
+    rllm_file = ../data/gaas/rllm.dat
+    sp_diag = true                            # sparse Hamiltonian and shift-invert eigensolver ...
+    neig = 16                                 # ... for the 16 eigenvalues ...
+    eig_target = 3.2                          # ... closest to this energy (eV, in the band gap)
+end
+
+begin ML
+    init_params = ../data/gaas/ml_params.dat  # ML corrections of tutorial 6 (or your own ml_params.dat)
+end
+
+begin atom Ga
+    n = 3
+    alpha = 9
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+end
+
+begin atom As
+    n = 3
+    alpha = 13
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+    nnaxes = true
+end

@@ -70,6 +70,7 @@ Training and validation loss of a fit against the iterations.
 function plot_losses(file="hamster_out.h5"; out="losses.png")
     L_train = vec(sum(h5read(file, "L_train"), dims=1)) ./ size(h5read(file, "L_train"), 1)   # mean over batches
     L_val = h5open(f -> haskey(f, "L_val") ? read(f["L_val"]) : Float64[], file)
+    L_val = all(iszero, L_val) ? Float64[] : L_val                                       # fit without validation
     if HAS_PLOTS
         p = Plots.plot(L_train, xlabel="iteration", ylabel="loss (eV)", label="training", lw=2, yscale=:log10,
                        framestyle=:box, grid=false, size=(600, 400), color="#2a78d6")
@@ -82,4 +83,59 @@ function plot_losses(file="hamster_out.h5"; out="losses.png")
     @printf("Final training loss: %.4f eV", L_train[end]); isempty(L_val) || @printf(", validation loss: %.4f eV", L_val[end])
     println()
     return L_train, L_val
+end
+
+"""
+    plot_dos(file="dos.h5"; structure=nothing, out="dos.png", xlims=nothing)
+
+DOS and PDOS (left) and -COHP (right) of a DOS post-processing run (first structure by default), energies relative
+to the Fermi energy if it was computed (`nelec`).
+"""
+function plot_dos(file="dos.h5"; structure=nothing, out="dos.png", xlims=nothing)
+    h5open(file) do f
+        g = f[isnothing(structure) ? first(keys(f)) : string(structure)]
+        E = read(g["energies"])
+        Ef = haskey(g, "fermi_energy") ? read(g["fermi_energy"]) : 0.0
+        pdos = haskey(g, "pdos") ? Dict(k => read(g["pdos"][k]) for k in keys(g["pdos"])) : Dict{String, Vector{Float64}}()
+        dos = haskey(g, "dos") ? read(g["dos"]) : sum(values(pdos))                       # the PDOS add up to the DOS
+        cohp = haskey(g, "cohp") ? Dict(k => read(g["cohp"][k]) for k in keys(g["cohp"])) : Dict{String, Vector{Float64}}()
+        haskey(g, "fermi_energy") && @printf("Fermi energy: %.3f eV (energies below are relative to it)\n", Ef)
+        for k in sort(collect(keys(cohp)))
+            haskey(g, "icohp_fermi") && haskey(g["icohp_fermi"], k) && @printf("ICOHP %-6s: %10.2f eV\n", k, read(g["icohp_fermi"][k]))
+        end
+        if HAS_PLOTS
+            xl = isnothing(xlims) ? :auto : xlims
+            p1 = Plots.plot(E .- Ef, dos, label="total", color=:black, lw=1.5, xlabel="E - E_F (eV)", ylabel="states / eV",
+                            framestyle=:box, grid=false, xlims=xl)
+            for k in sort(collect(keys(pdos)))
+                Plots.plot!(p1, E .- Ef, pdos[k], label=k, lw=1.5)
+            end
+            p2 = Plots.plot(xlabel="E - E_F (eV)", ylabel="-COHP", framestyle=:box, grid=false, xlims=xl)
+            Plots.hline!(p2, [0], color=:gray, label="")
+            for k in sort(collect(keys(cohp)))
+                Plots.plot!(p2, E .- Ef, -cohp[k], label=k, lw=1.5)
+            end
+            Plots.vline!(p1, [0], color=:gray, ls=:dash, label=""); Plots.vline!(p2, [0], color=:gray, ls=:dash, label="")
+            Plots.savefig(Plots.plot(p1, p2, layout=(1, 2), size=(1000, 400), margin=5Plots.mm), out)
+            println("Figure written to ", out)
+        else
+            csv = replace(out, r"\.\w+$" => ".csv")
+            labels = vcat(sort(collect(keys(pdos))), "cohp " .* sort(collect(keys(cohp))))
+            cols = hcat(E .- Ef, dos, [pdos[k] for k in sort(collect(keys(pdos)))]..., [cohp[k] for k in sort(collect(keys(cohp)))]...)
+            writedlm(csv, cols, ','); println("DOS written to ", csv, " (columns: E - E_F, DOS, ", join(labels, ", "), ")")
+        end
+    end
+end
+
+"""
+    band_edges_sparse(file="Es.dat"; eig_target) -> (vbm, cbm)
+
+Band edges from a sparse eigensolver run (only the eigenvalues closest to `eig_target`): the highest eigenvalue below
+and the lowest above `eig_target`, which must lie in the band gap.
+"""
+function band_edges_sparse(file="Es.dat"; eig_target)
+    E = vec(read_bands(file))
+    vbm, cbm = maximum(filter(<(eig_target), E)), minimum(filter(>(eig_target), E))
+    @printf("Highest state below eig_target: %.3f eV, lowest above: %.3f eV, gap: %.3f eV\n", vbm, cbm, cbm - vbm)
+    return vbm, cbm
 end

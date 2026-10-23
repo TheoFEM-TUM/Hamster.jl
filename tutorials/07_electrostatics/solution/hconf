@@ -1,0 +1,58 @@
+# Tutorial 7 (solution): electrostatic on-site corrections (Wolf summation) for CsPbBr3 MD snapshots (without SOC)
+begin Options
+    poscar = ../../data/cspbbr3/POSCAR
+    rcut = 5.5
+    sp_mode = true
+    init_params = ../../data/cspbbr3/params_tb.dat
+    load_rllm = true
+    rllm_file = ../../data/cspbbr3/rllm.dat
+end
+
+begin Supercell
+    poscar = ../../data/cspbbr3/SC_POSCAR
+    xdatcar = ../../data/cspbbr3/structures_md.h5
+    Nconf = 10
+    Nconf_max = 20
+end
+
+begin Optimizer
+    update_tb = false
+    lr = 0.05
+    niter = 100
+    loss = MAE
+    train_data = ../../data/cspbbr3/eigenval_md.h5
+    val_data = ../../data/cspbbr3/eigenval_md.h5
+    train_mode = md
+    val_mode = md
+    val_ratio = 1
+    valeachiter = 5
+    bandmin = 105
+    wE_96-112 = 0.5
+    wE_72-73 = 5                             # valence band maximum and conduction band minimum
+end
+
+begin Ewald
+    method = wolf
+    rcut = 15
+    alpha = 0.2
+    charge_scale = 0
+    update = true
+end
+
+begin atom Cs
+    alpha = 38.6
+    orbitals = s
+    qeff = 1.02
+end
+
+begin atom Pb
+    alpha = 37
+    orbitals = s px py pz
+    qeff = 1.248
+end
+
+begin atom Br
+    alpha = 14.3
+    orbitals = px py pz
+    qeff = -0.756
+end
