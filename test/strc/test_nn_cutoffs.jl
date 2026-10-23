@@ -1,4 +1,7 @@
-using LinearAlgebra, Random
+using LinearAlgebra
+
+# Deterministic pseudo-random displacements (standard deviation about σ / √2)
+rattle(σ, dims; phase=1.7) = σ .* sin.(phase .* reshape(1:prod(dims), dims) .^ 2)
 
 # Diamond Si: 8-atom conventional cell repeated n × n × n times (Cartesian positions, lattice)
 function si_diamond(n=2; a=5.431)
@@ -58,8 +61,7 @@ end
     # Distorted structures: every bond of the first shell of the reference keeps label 1, the farther shells label 2,
     # in MD mode (reference positions + displacements) and for a distorted POSCAR (no reference)
     nn_si = 5.431 * sqrt(3) / 4
-    Random.seed!(1)
-    δ = 0.05 .* randn(size(rs))
+    δ = rattle(0.07, size(rs))
     si_md = Structure(Rs, rs, δ, types, lattice, conf)
     si_pc = Structure(Rs, rs .- δ, zeros(size(rs)), types, lattice, conf)
     for strc in (si_md, si_pc)
@@ -98,8 +100,7 @@ end
         basis = Basis(ideal, conf)
         Hamster.get_rllm(basis.overlaps, conf)
         h0 = Hamster.get_geometry_tensor(ideal, basis, conf)
-        Random.seed!(2)
-        δ = 1e-4 .* randn(size(rs))
+        δ = rattle(1e-4, size(rs), phase=2.3)
         for strc in (Structure(Rs, rs, δ, types, lattice, conf), Structure(Rs, rs .- δ, zeros(size(rs)), types, lattice, conf))
             h = Hamster.get_geometry_tensor(strc, basis, conf)
             @test size(h) == size(h0)
