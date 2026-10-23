@@ -83,3 +83,77 @@ function get_nn_thresholds(ions, Ts, point_grid, conf=get_empty_config(); sepNN=
     end
     return NN_dict
 end
+
+"""
+    get_nn_cutoffs(ions, Ts, point_grid, conf=get_empty_config(); sepNN=get_sepNN(conf), shell_gap=1.1, bin_width=0.01)
+
+Distance up to which a pair of ions counts as nearest neighbors (label 1 with `sepNN = true`), for every `IonLabel`:
+the midpoint between the first and the second neighbor shell of the reference positions `ion.pos`. Distorted
+structures (MD snapshots, a distorted POSCAR) therefore keep the labels of their bonds as long as no bond is stretched
+or compressed past the midpoint; a bond that crosses it changes its parameters abruptly.
+
+The shells are found from the sorted pair distances: the first shell ends at the first jump to a distance more than
+`shell_gap` times the previous one. Distances within 10 % of each other (`shell_gap = 1.1`) therefore belong to the same
+shell, e.g. the first-shell bonds of a distorted reference structure. Without a second shell, the cutoff is the
+nearest-neighbor distance (as `get_nn_thresholds`). With `sepNN = false`, the cutoffs are zero, as in
+`get_nn_thresholds`.
+
+The distances are collected in bins of `bin_width` (minimum and maximum per bin) instead of being sorted, so the cost
+is linear in the number of pairs. A jump by `shell_gap` cannot occur within a bin (for distances above
+`bin_width / (shell_gap - 1)`), so the result is the same as with sorted distances.
+"""
+function get_nn_cutoffs(ions, Ts, point_grid, conf=get_empty_config(); sepNN=get_sepNN(conf), shell_gap=1.1, bin_width=0.01)
+    sepNN || return get_nn_thresholds(ions, Ts, point_grid, conf, sepNN=false)
+    bins = Dict{IonLabel, Dict{Int64, Tuple{Float64, Float64}}}()             # label => (bin => (min, max) distance)
+    for (iion1, iion2, R) in iterate_nn_grid_points(point_grid)
+        Δr = normdiff(ions[iion1].pos, ions[iion2].pos, view(Ts, :, R))
+        Δr == 0 && continue
+        b = floor(Int64, Δr / bin_width)
+        for ion_label in (IonLabel(ions[iion1].type, ions[iion2].type, sorted=false), IonLabel(ions[iion1].type, ions[iion2].type, sorted=true))
+            label_bins = get!(bins, ion_label, Dict{Int64, Tuple{Float64, Float64}}())
+            lo, hi = get(label_bins, b, (Inf, -Inf))
+            label_bins[b] = (min(lo, Δr), max(hi, Δr))
+        end
+    end
+    NN_dict = Dict{IonLabel, Float64}()
+    for (ion_label, label_bins) in bins
+        keys_sorted = sort!(collect(keys(label_bins)))                          # at most (largest distance) / bin_width bins
+        nn_distance, shell_max = label_bins[keys_sorted[1]]
+        NN_dict[ion_label] = nn_distance
+        for b in keys_sorted[2:end]
+            lo, hi = label_bins[b]
+            if lo > shell_gap * shell_max
+                NN_dict[ion_label] = (shell_max + lo) / 2
+                break
+            end
+            shell_max = hi
+        end
+    end
+    return NN_dict
+end
+"""
+    nn_label_statistics(strc, basis, conf=get_empty_config()) -> Dict{String, NTuple{3, Float64}}
+
+Nearest-neighbor cutoff and number of bonds with label 1 (nearest neighbors) and 2 (farther shells) for every ion pair
+(e.g. `"Si+Si"`) of a structure with `sepNN = true`, with the labels assigned as in `get_geometry_tensor` (distances
+with the distortion, cutoffs from `get_nn_cutoffs`). Every bond is counted once. Ions without orbitals are skipped.
+"""
+function nn_label_statistics(strc, basis, conf=get_empty_config(); rcut=get_rcut(conf), rcut_tol=get_rcut_tol(conf))
+    Ts = frac_to_cart(strc.Rs, strc.lattice)
+    cutoffs = get_nn_cutoffs(strc.ions, Ts, strc.point_grid, conf)
+    stats = Dict{String, NTuple{3, Float64}}()
+    for (iion1, iion2, R) in iterate_nn_grid_points(strc.point_grid)
+        (isempty(basis.orbitals[iion1]) || isempty(basis.orbitals[iion2])) && continue
+        T = view(Ts, :, R)
+        r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, T)
+        r = normdiff(strc.ions[iion1].pos - strc.ions[iion1].dist, apply_pbc(strc.ions[iion2].pos, T) - strc.ions[iion2].dist)
+        (r_nd == 0 || r_nd > rcut || r - abs(rcut_tol) ≥ rcut) && continue
+        ion_label = IonLabel(strc.ions[iion1].type, strc.ions[iion2].type, sorted=false)
+        cutoff = cutoffs[ion_label]
+        nnlabel = get_nn_label(r, cutoff, conf, onsite=true, sepNN=true)
+        key = string(IonLabel(strc.ions[iion1].type, strc.ions[iion2].type, sorted=true))
+        _, n1, n2 = get(stats, key, (cutoff, 0.0, 0.0))
+        stats[key] = (cutoff, n1 + 0.5 * (nnlabel == 1), n2 + 0.5 * (nnlabel == 2))   # every bond appears twice
+    end
+    return stats
+end

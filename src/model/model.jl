@@ -90,7 +90,7 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
     params_per_strc = [[findfirst(p->p==param, param_labels) for param in basis.parameters] for basis in bases]
     model = TBModel(hs, ones(nparams), param_labels, params_per_strc, update_tb)
     init_params!(model, conf, initas=initas)
-    write_summary && write_model_summary(model, strcs, bases, comm, rank=rank, label=label)
+    write_summary && write_model_summary(model, strcs, bases, comm, conf, rank=rank, label=label)
     return model
 end
 

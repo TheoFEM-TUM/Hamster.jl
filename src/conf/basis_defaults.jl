@@ -2,7 +2,7 @@
 # Orbital / basis config
 #
 @configtag onsite Bool true "use separate parameters for onsite matrix elements." category="basis"
-@configtag sepNN Bool false "use separate parameters for nearest-neighbor interactions. This can improve accuracy, however, may at the same time affect transferability negatively." category="basis"
+@configtag sepNN Bool false "use separate parameters for nearest-neighbor interactions (NN1) and the farther shells (NN2). Bonds up to the midpoint between the first two neighbor shells of the reference structure count as nearest neighbors, also when they are distorted. This can improve accuracy, however, may at the same time affect transferability negatively." category="basis"
 
 """
 **orbitals**=[]
