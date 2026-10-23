@@ -1,0 +1,29 @@
+# Tutorial 3 (solution): fit the TB parameters of GaAs to DFT eigenvalues of the primitive cell.
+begin Options
+    poscar = ../../data/gaas/POSCAR
+    rcut = 7                                       # cutoff radius (Å)
+end
+
+# The Optimizer block switches to a fit
+begin Optimizer
+    train_data = ../../data/gaas/EIGENVAL_train    # DFT eigenvalues (k-point grid) for the fit ...
+    val_data = ../../data/gaas/EIGENVAL_val        # ... and for the validation
+    niter = 300                                    # number of iterations
+    lr = 0.2                                       # learning rate (Adam)
+    loss = MAE                                     # mean absolute error
+    wE = 1 1 1 1 1 1 0.1 0.1                       # weight of each band: the upper conduction bands count less
+    wk_1 = 5                                       # the first k-point (Γ) counts more: band gap
+end
+
+begin atom Ga
+    n = 3                                          # radial functions of the 4th row: n = 3 ... (see the tutorial)
+    alpha = 9
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2         # four sp3 hybrids per atom: 8 bands for 2 atoms
+end
+
+begin atom As
+    n = 3
+    alpha = 13
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+    nnaxes = true                                  # hybrids along the bonds to the 4 nearest neighbours
+end

@@ -1,0 +1,172 @@
+
+Welcome to
+===========================================================================
+||   _   _                             _                         _   _   ||
+||  | | | |   __ _   _ __ ___    ___  | |_    ___   _ __        (_) | |  ||
+||  | |_| |  / _` | | '_ ` _ \  / __| | __|  / _ \ | '__|       | | | |  ||
+||  |  _  | | (_| | | | | | | | \__ \ | |_  |  __/ | |     _    | | | |  ||
+||  |_| |_|  \__,_| |_| |_| |_| |___/  \__|  \___| |_|    (_)  _/ | |_|  ||
+||                                                            |__/       ||
+===========================================================================
+Hamiltonian-learning
+    Approach for Multiscale Simulations 
+        using a Transferable and Efficient Representation.
+
+
+Starting Hamster run on 2026-10-23 at 09:05:15.352.
+  Hamster is running on host(s): "pop-os"
+================================================================================
+  Parallelization Summary
+--------------------------------------------------------------------------------
+      num_nodes:                         1                                 
+      nhamster:                          1                                 
+      nstrc_per_hamster:                 1                                 
+      nstrc_per_node:                    1                                 
+      julia_num_threads:                 4                                 
+      nthreads_kpoints:                  4                                 
+      nthreads_bands:                    4                                 
+      nthreads_blas:                     1                                 
+================================================================================
+
+The following input parameters are used:
+
+================================================================================
+  Options
+--------------------------------------------------------------------------------
+    verbosity = 1                               # Controls output verbosity
+                                                  (0=minimal, 1=normal,
+                                                  2=verbose, 3=debug).
+    h5_deflate = 0                              # Deflate compression level used
+                                                  for HDF5 datasets. Valid
+                                                  values are 0-9, where 0
+                                                  disables compression, 1 gives
+                                                  the fastest compression, and 9
+                                                  gives the highest compression
+                                                  effort.
+    write_current = false                       # Whether to write current
+                                                  operator.
+    current_file = ham.h5                       # File where current operator is
+                                                  stored.
+    current_components = xyz                    # Which Cartesian components of
+                                                  the current operator to
+                                                  compute and write, any
+                                                  combination of 'x', 'y', 'z'
+                                                  (e.g. "x" or "xz"). Defaults
+                                                  to all three.
+    write_hk = false                            # Whether to write k-space
+                                                  Hamiltonians.
+    ham_file = ham.h5                           # File where Hamiltonians are
+                                                  stored.
+    write_hr = false                            # Whether to write real-space
+                                                  Hamiltonians. Defaults to true
+                                                  if write_current=true.
+    kpoints = ../data/gaas/EIGENVAL_bands       # file/method for defining
+                                                  k-points (gamma, EIGENVAL,
+                                                  filename.h5).
+    save_vecs = false                           # Whether eigenvectors are
+                                                  stored.
+    system = unknown                            # name of the system
+    init_params = ../data/gaas/params_tb.dat    # TB parameter initialization
+                                                  (file, ones, zeros, rand).
+    skip_diag = false                           # if true, no eigenvalues are
+                                                  computed.
+    diag_method = shift-invert                  # sparse eigensolver when
+                                                  `sp_diag=true` (shift-invert,
+                                                  krylov-schur).
+    neig = 6                                    # number of eigenvalues when
+                                                  using sparse eigensolver.
+    eig_target = 0.0                            # target energy when using
+                                                  sparse eigensolver.
+    device = cpu                                # Compute device for building,
+                                                  diagonalizing and
+                                                  differentiating Hamiltonians
+                                                  (cpu, gpu). `gpu` requires
+                                                  `using CUDA` (and `using
+                                                  CUDSS` for the shift-invert
+                                                  eigensolver); each MPI rank
+                                                  binds to one GPU of its node.
+    dos =                                       # post-processing of a standard
+                                                  run: any combination of dos
+                                                  (total DOS), pdos (projected
+                                                  DOS) and cohp (crystal orbital
+                                                  Hamilton populations), or all,
+                                                  e.g. `dos = pdos cohp`.
+                                                  Results are written to dos.h5;
+                                                  further settings in the DOS
+                                                  block.
+    rcut = 7.0                                  # Distance beyond which all
+                                                  interactions are neglected.
+    rcut_tol = 1.0                              # offset (zero point) of the
+                                                  cutoff function w.r.t. `rcut`.
+    Rmax = 1                                    # maximum magnitude of
+                                                  translation vectors used for
+                                                  periodic boundaty conditions
+                                                  (default: determined by rcut).
+    poscar = ../data/gaas/POSCAR                # path to POSCAR file to define
+                                                  base system.
+    grid_size = 7.0                             # size of the grid to divide
+                                                  simulation cell.
+    onsite = true                               # use separate parameters for
+                                                  onsite matrix elements.
+    sepNN = false                               # use separate parameters for
+                                                  nearest-neighbor interactions.
+                                                  This can improve accuracy,
+                                                  however, may at the same time
+                                                  affect transferability
+                                                  negatively.
+    itp_xmin = 0.0                              # minimum x value for
+                                                  interpolation.
+    itp_xmax = 9.0                              # maximum x value for
+                                                  interpolation.
+    itp_Ninit = 20                              # number of initial
+                                                  interpolation points.
+    itp_Nmax = 300                              # maximum number of
+                                                  interpolation points.
+    itp_tol = 1.0e-5                            # convergence criterion for
+                                                  interpolation.
+    load_rllm = true                            # read rllm data from a file.
+    interpolate_rllm = true                     # force interpolation of rllm.
+    rllm_file = ../data/gaas/rllm.dat           # path to rllm file.
+    tmethod = rotation                          # method to compute SK
+                                                  transformation matrix
+    tb_model = true                             # build TB model.
+    sp_tol = 1.0e-10                            # tolerance for value to be
+                                                  considered zero.
+    sp_mode = true                              # switches to sparse matrix
+                                                  methods (only affects Hᴿ and
+                                                  gradients).
+    sp_diag = false                             # switches to sparse matrix
+                                                  diagonalization (only affects
+                                                  Hᵏ and diagonalization).
+    xdatcar = XDATCAR                           # path to supercell trajectory
+                                                  file.
+    soc = false                                 # activates soc model.
+    ewald = false                               # activates ewald model.
+================================================================================
+
+Structure Information:
+   POSCAR                    =                      ../data/gaas/POSCAR
+   rcut                      =                                      7.0
+   grid_size                 =                                      7.0
+   Number of atoms           =                                        2
+   Number of R vectors       =                                       49
+   Ion interactions          =                                      196
+   Ion interaction total     =                                      196
+   Structure time            =                              0.000180013
+================================================================================
+
+
+================================================================================
+  TB Model Summary
+--------------------------------------------------------------------------------
+      structures:                  1
+      atoms per structure:         2
+      orbitals per structure:      8 (total 8)
+      R vectors per structure:     49
+      parameters:                  34
+        per shell:                 onsite 4, NN1 30
+        per ion pair:              As+As 12, Ga+As 10, Ga+Ga 12
+      geometry tensor entries:     19160 (0.3 MB)
+================================================================================
+
+Finished run in 0.26 seconds. Exiting Hamster...

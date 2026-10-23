@@ -1,0 +1,23 @@
+# Tutorial 2: band structure of GaAs from existing TB parameters (a standard run: no Optimizer block).
+begin Options
+    poscar = ../data/gaas/POSCAR              # primitive cell
+    kpoints = ../data/gaas/EIGENVAL_bands     # k-points of the band path (taken from a DFT band structure)
+    rcut = 7                                  # cutoff radius (Å), must be the same as in the fit of the parameters
+    init_params = ../data/gaas/params_tb.dat  # fitted TB parameters
+    load_rllm = true                          # read the distance dependence ...
+    rllm_file = ../data/gaas/rllm.dat         # ... from this file instead of computing it
+end
+
+# One block per species: the basis (here four sp3 hybrid orbitals) and the radial functions (n, alpha)
+begin atom Ga
+    n = 3
+    alpha = 9
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+end
+
+begin atom As
+    n = 3
+    alpha = 13
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+    nnaxes = true                             # orient the hybrids along the bonds
+end

@@ -1,0 +1,30 @@
+# Tutorial 3 (exercise): fit the TB parameters of GaAs to DFT eigenvalues of the primitive cell.
+# Replace every ??? (see the tutorial page for hints; `hamster --tag <name>` describes each tag).
+# The solution is in solution/hconf.
+begin Options
+    poscar = ../data/gaas/POSCAR
+    rcut = ???                                  # cutoff radius (Å): include at least the 2nd neighbours of GaAs
+end
+
+begin Optimizer
+    train_data = ../data/gaas/EIGENVAL_train
+    val_data = ../data/gaas/EIGENVAL_val
+    niter = ???                                 # number of iterations (a few hundred)
+    lr = ???                                    # learning rate (Adam): start with 0.1-0.3 for a TB fit
+    loss = MAE
+    wE = ???                                    # weight of each of the 8 bands (e.g. lower weight for the upper ones)
+    wk_1 = 5                                    # the first k-point (Γ) counts more: band gap
+end
+
+begin atom Ga
+    n = ???                                     # principal quantum number of the radial functions
+    alpha = 9
+    orbitals = ???                              # basis: four sp3 hybrids (sp3dr2) per atom
+end
+
+begin atom As
+    n = ???
+    alpha = 13
+    orbitals = ???
+    nnaxes = true                               # hybrids along the bonds to the 4 nearest neighbours
+end
