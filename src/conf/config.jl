@@ -53,18 +53,33 @@ function (conf::Config)(key::String, typekey="none")
     end
 end
 
+"""
+    ConfigTag{T}
+
+An input tag of the config file: its `name`, the `block` it belongs to (`"Options"`, `"Supercell"`, ..., `"atom"` for the
+`begin atom <element>` blocks), the function `default(conf)` that gives its default value (of type `T`), a description,
+the default in words for the documentation (`default_doc`), a `category` within the block, related tags (`see_also`)
+and whether it is set per atom species (`per_atom`). All tags are collected in `CONFIG_TAGS`, from which the
+documentation, the listing in `hamster.out`, `hamster --tag` and the checks of the config file are generated.
+"""
 struct ConfigTag{T,F}
     name::String
     block::String
     default::F           # getter conf -> T
     description::String
+    default_doc::String
+    category::String
+    see_also::Vector{String}
+    per_atom::Bool
 end
 
-ConfigTag{T}(name::String, default::F, desc::String) where {T,F} =
-    ConfigTag{T,F}(name, "Options", default, desc)
+ConfigTag{T}(name::String, default::F, desc::String; kwargs...) where {T,F} = ConfigTag{T}(name, "Options", default, desc; kwargs...)
 
-ConfigTag{T}(name::String, block::String, default::F, desc::String) where {T,F} =
-    ConfigTag{T,F}(name, block, default, desc)
+ConfigTag{T}(name::String, block::String, default::F, desc::String; default_doc="", category="", see_also=String[],
+             per_atom=false) where {T,F} =
+    ConfigTag{T,F}(name, block, default, desc, default_doc, category, collect(String, see_also), per_atom)
+
+tag_type(::ConfigTag{T}) where {T} = T
 
 function get_tag(conf::Config, tag::ConfigTag{T})::T where T
     if tag.block == "Options"
@@ -74,36 +89,90 @@ function get_tag(conf::Config, tag::ConfigTag{T})::T where T
     end
 end
 
-const CONFIG_TAGS = []
+"""
+    tag_value(conf, tag)
 
-macro configtag(name, T, default, desc, block="Options")
+Value of `tag` in `conf` for the listing in hamster.out: the value set in the config file, else the default.
+"""
+function tag_value(conf::Config, tag::ConfigTag)
+    v = tag.block == "Options" ? conf(tag.name) : conf(tag.name, tag.block)
+    return v == "default" ? tag.default(conf) : v
+end
+
+const CONFIG_TAGS = ConfigTag[]
+
+# The default of a tag in words, if it is a literal (number, string, vector); "" for computed defaults, which need a
+# `default_doc`
+function literal_default_doc(default)
+    default isa Union{Number, AbstractString} && return string(default)
+    default isa QuoteNode && return string(default.value)
+    if default isa Expr
+        default.head == :vect && return isempty(default.args) ? "(empty)" : join(string.(default.args), " ")
+        default.head == :ref && length(default.args) == 1 && return "(empty)"        # e.g. String[]
+        default.head == :call && default.args[1] == :- && length(default.args) == 2 && default.args[2] isa Number &&
+            return "-" * string(default.args[2])
+    end
+    return ""
+end
+
+"""
+    @configtag name T default "description" ["Block"] [default_doc="..."] [category="..."] [see_also=[...]] [getter=:custom] [per_atom=true] [value=f]
+
+Define the input tag `name` of type `T` in `Block` (default: `"Options"`) with the default value `default`, which may
+depend on other tags through `conf`, and register it in `CONFIG_TAGS`. A getter `get_<name>(conf)` (for the Options,
+Supercell and Optimizer blocks) or `get_<block>_<name>(conf)` is generated, unless `getter=:custom` (the getter is then
+written by hand, e.g. for tags with their own logic, or `per_atom=true` for the tags of the atom blocks).
+
+- `default_doc`: the default in words for the documentation, required if `default` is not a literal (e.g.
+  `"same as rcut"`).
+- `category`: group within the block in the documentation (e.g. `"structure"`).
+- `see_also`: names of related tags.
+- `value`: function `conf -> value` for the listing in `hamster.out`, for custom getters that need further arguments
+  or return another type.
+"""
+macro configtag(name, T, default, desc, args...)
+    block = "Options"; kw = Dict{Symbol, Any}()
+    for a in args
+        if a isa String
+            block = a
+        elseif a isa Expr && a.head == :(=)
+            kw[a.args[1]] = a.args[2]
+        else
+            error("@configtag $name: unexpected argument $a")
+        end
+    end
+    custom = haskey(kw, :getter) && (kw[:getter] isa QuoteNode ? kw[:getter].value : kw[:getter]) == :custom
+    per_atom = get(kw, :per_atom, false)
+    default_doc = get(kw, :default_doc, literal_default_doc(default))
+    category = get(kw, :category, "")
+    see_also = get(kw, :see_also, :(String[]))
     fname = block ∈ ["Options", "Supercell", "Optimizer"] ? Symbol("get_", name) : Symbol("get_$(lowercase(block))_", name)
     tagname = string(name)
+    default_fn = (custom || per_atom) ? :(conf -> $(fname)(conf)) : :(conf -> $default)
+    per_atom && (default_fn = :(conf -> nothing))
+    haskey(kw, :value) && (default_fn = kw[:value])
 
     docstring = """
-    **$tagname** = $default
+        $tagname = $(isempty(default_doc) ? string(default) : default_doc)   ($block block, $T)
 
     $desc
     """
 
-    return quote
-        # Create tag
-        local tag = ConfigTag{$T}(
-            $tagname,
-            $block,
-            conf -> $default,
-            $desc
-        )
-
-        push!(CONFIG_TAGS, tag)
-
-        #Attach docstring + getter
+    tagvar = gensym("tag")      # unique per call, so that getters defined in the same scope do not share the variable
+    getter = (custom || per_atom) ? nothing : quote
         """
             $(esc($docstring).args[1])
         """
         function $(fname)(conf::Config)::$T
-            get_tag(conf, tag)
+            get_tag(conf, $tagvar)
         end
+    end
+
+    return quote
+        local $tagvar = ConfigTag{$T}($tagname, $block, $default_fn, $desc; default_doc=$default_doc, category=$category,
+                                      see_also=$see_also, per_atom=$per_atom)
+        push!(CONFIG_TAGS, $tagvar)
+        $getter
     end |> esc
 end
 
