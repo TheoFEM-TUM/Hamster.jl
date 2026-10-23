@@ -1,0 +1,40 @@
+# Tutorial 5 (solution): fit the spin-orbit coupling of CsPbBr3 on top of fixed TB parameters
+begin Options
+    poscar = ../../data/cspbbr3/POSCAR
+    rcut = 5.5
+    sp_mode = true
+    load_rllm = true
+    rllm_file = ../../data/cspbbr3/rllm.dat
+    init_params = ../../data/cspbbr3/params_tb.dat
+end
+
+begin Optimizer
+    update_tb = false
+    lr = 0.05
+    niter = 100
+    loss = MAE
+    train_data = ../../data/cspbbr3/EIGENVAL_soc
+    bandmin = 27
+    wE_25-28 = 0.1
+    wk_1 = 5
+end
+
+begin SOC
+    update = true
+    init_params = ones
+end
+
+begin atom Cs
+    alpha = 38.6
+    orbitals = s
+end
+
+begin atom Pb
+    alpha = 37
+    orbitals = s px py pz
+end
+
+begin atom Br
+    alpha = 14.3
+    orbitals = px py pz
+end

@@ -1,0 +1,28 @@
+# Tutorial 5 (solution): band structure with the fitted TB + SOC parameters (params.dat of the fit)
+begin Options
+    poscar = ../../data/cspbbr3/POSCAR
+    kpoints = ../../data/cspbbr3/EIGENVAL_soc
+    rcut = 5.5
+    init_params = params.dat
+    load_rllm = true
+    rllm_file = ../../data/cspbbr3/rllm.dat
+end
+
+begin SOC
+    init_params = params.dat                # the SOC parameters (γ_Pb, ...) are in the same file
+end
+
+begin atom Cs
+    alpha = 38.6
+    orbitals = s
+end
+
+begin atom Pb
+    alpha = 37
+    orbitals = s px py pz
+end
+
+begin atom Br
+    alpha = 14.3
+    orbitals = px py pz
+end

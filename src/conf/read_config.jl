@@ -111,6 +111,8 @@ This function iterates over the lines in a `ConfigBlock`, parses each line to ex
 - `conf::Config`: The configuration object that will be updated with the parsed key-value pairs from the block.
 """
 function read_config_block!(block::ConfigBlock, conf::Config)
+    # an empty block switches on its model as well (e.g. `begin SOC end`)
+    block.header[end] == "Options" || get!(conf.blocks, block.header[end], Dict{String, String}())
     for line in block.content
         if occursin('=', line) && length(filter_comment(line)) > 0
             option_key, option_value = read_config_line(filter_comment(line))

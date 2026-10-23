@@ -41,3 +41,25 @@ end
         @test conf("alpha", "Pb") == 37
     end
 end
+
+@testset "Tutorial config files" begin
+    # Complete config files (examples and solutions) contain only valid tags; every exercise has the same lines as its
+    # solution, with ??? in place of some values
+    tutorials = joinpath(@__DIR__, "..", "..", "tutorials")
+    tag_lines(file) = filter(!isempty, strip.(Hamster.filter_comment.(readlines(file))))
+    files = [joinpath(root, f) for (root, _, fs) in walkdir(tutorials) for f in fs if startswith(f, "hconf")]
+    @test length(files) ≥ 15
+    for file in files
+        if occursin("???", read(file, String))
+            solution = joinpath(dirname(file), "solution", basename(file))
+            @test isfile(solution)
+            lines, solution_lines = tag_lines(file), tag_lines(solution)
+            @test length(lines) == length(solution_lines)
+            @test all(zip(lines, solution_lines)) do (l, s)
+                occursin("???", l) || l == s || replace(l, "../data" => "../../data") == s
+            end
+        else
+            @test_logs get_config(filename=file)
+        end
+    end
+end

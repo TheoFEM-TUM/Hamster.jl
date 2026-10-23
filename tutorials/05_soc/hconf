@@ -1,0 +1,41 @@
+# Tutorial 5 (exercise): fit the spin-orbit coupling (SOC) of CsPbBr3 on top of fixed TB parameters.
+# Replace every ??? (see the tutorial page; `hamster --tag <name>` describes each tag). The solution is in solution/hconf.
+begin Options
+    poscar = ../data/cspbbr3/POSCAR
+    rcut = 5.5                                  # as in the fit of the TB parameters
+    sp_mode = true
+    load_rllm = true
+    rllm_file = ../data/cspbbr3/rllm.dat
+    init_params = ../data/cspbbr3/params_tb.dat # TB parameters fitted without SOC
+end
+
+begin Optimizer
+    update_tb = ???                             # keep the TB parameters fixed, fit only the SOC parameters
+    lr = 0.05
+    niter = 100
+    loss = MAE
+    train_data = ../data/cspbbr3/EIGENVAL_soc   # DFT band structure with SOC
+    bandmin = ???                               # first DFT band described by the model (with SOC, every band appears twice)
+    wE_25-28 = 0.1                              # the highest model bands (Cs s, Pb p) are less important
+    wk_1 = 5
+end
+
+begin ???                                       # the block that switches on the SOC model
+    update = ???
+    init_params = ???                           # start values of the SOC parameters: ones (1 eV), zeros or a file
+end
+
+begin atom Cs
+    alpha = 38.6
+    orbitals = s
+end
+
+begin atom Pb
+    alpha = 37
+    orbitals = s px py pz
+end
+
+begin atom Br
+    alpha = 14.3
+    orbitals = px py pz
+end
