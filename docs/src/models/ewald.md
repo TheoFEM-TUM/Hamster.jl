@@ -80,6 +80,8 @@ where K(r) is the chosen kernel.
   K(r) = \mathrm{erfc}(α r) / r - \mathrm{shift}
 ```
 
+- `wolf`: the shift is the kernel at the cutoff, so the potential vanishes there; `zahn` (damped shifted force)
+  also subtracts the linear term, so that the force vanishes at the cutoff as well
 - No reciprocal-space contribution
 - Faster ``(O(N))``, but approximate
 
