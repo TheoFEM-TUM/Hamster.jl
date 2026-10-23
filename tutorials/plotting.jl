@@ -72,7 +72,9 @@ function plot_losses(file="hamster_out.h5"; out="losses.png")
     L_val = h5open(f -> haskey(f, "L_val") ? read(f["L_val"]) : Float64[], file)
     L_val = all(iszero, L_val) ? Float64[] : L_val                                       # fit without validation
     if HAS_PLOTS
-        p = Plots.plot(L_train, xlabel="iteration", ylabel="loss (eV)", label="training", lw=2, yscale=:log10,
+        L = vcat(L_train, L_val)
+        p = Plots.plot(L_train, xlabel="iteration", ylabel="loss (eV)", label="training", lw=2,
+                       yscale=maximum(L) > 10minimum(L) ? :log10 : :identity,                 # log scale for large ranges
                        framestyle=:box, grid=false, size=(600, 400), color="#2a78d6")
         isempty(L_val) || Plots.plot!(p, L_val, label="validation", lw=2, ls=:dash, color="#eb6834")
         Plots.savefig(p, out); println("Figure written to ", out)
@@ -138,4 +140,28 @@ function band_edges_sparse(file="Es.dat"; eig_target)
     vbm, cbm = maximum(filter(<(eig_target), E)), minimum(filter(>(eig_target), E))
     @printf("Highest state below eig_target: %.3f eV, lowest above: %.3f eV, gap: %.3f eV\n", vbm, cbm, cbm - vbm)
     return vbm, cbm
+end
+
+"""
+    plot_hyperopt(file="hamster_out.h5"; x, y, out="hyperopt.png")
+
+Validation loss of every trial of a hyperparameter optimization over two hyperparameters `x` and `y` (names as in the
+`params` tag, e.g. `"Ga_alpha"`), and the best trial. The score of a trial is its lowest validation loss (or training
+loss, without validation data).
+"""
+function plot_hyperopt(file="hamster_out.h5"; x, y, out="hyperopt.png")
+    X, Y = h5read(file, x), h5read(file, y)
+    L = vec(h5read(file, "L_train"))      # score of every trial: its validation loss (training loss without val_data)
+    best = argmin(L)
+    @printf("Best of %d trials: %s = %.3f, %s = %.3f (loss %.4f eV)\n", length(L), x, X[best], y, Y[best], L[best])
+    if HAS_PLOTS
+        p = Plots.scatter(X, Y, marker_z=L, color=:viridis, ms=7, label="trials", xlabel=x, ylabel=y, framestyle=:box,
+                          grid=false, size=(600, 450), colorbar_title="loss (eV)")
+        Plots.scatter!(p, [X[best]], [Y[best]], marker=:star5, ms=14, color=:red, label="best")
+        Plots.savefig(p, out); println("Figure written to ", out)
+    else
+        csv = replace(out, r"\.\w+$" => ".csv")
+        writedlm(csv, hcat(X, Y, L), ','); println("Trials written to ", csv, " (columns: $x, $y, loss)")
+    end
+    return X[best], Y[best]
 end
