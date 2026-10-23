@@ -10,11 +10,11 @@ abstract type SparsityMode end
 struct Sparse<:SparsityMode end
 struct Dense<:SparsityMode end
 
-@configtag tb_model Bool true "build TB model."
-@configtag sp_tol Float64 1e-10 "tolerance for value to be considered zero."
+@configtag tb_model Bool true "build TB model." category="model"
+@configtag sp_tol Float64 1e-10 "tolerance for value to be considered zero." category="model"
 
 """
-**sp_mode**=false
+**sp_mode**=true
 
 The `sp_mode::Bool` tag switches between dense and sparse matrix methods. 
 This will only affect the computation of Hᴿ (not Hᵏ or diagonalization) and gradient computations when doing optimization.
@@ -26,7 +26,7 @@ function get_sp_mode(conf::Config)::Union{Sparse, Dense}
         conf("sp_mode") ? Sparse() : Dense()
     end
 end
-push!(CONFIG_TAGS, ConfigTag{Bool}("sp_mode", conf->get_sp_mode(conf) isa Sparse, "switches to sparse matrix methods (only affects Hᴿ and gradients)."))
+@configtag sp_mode Bool true "sparse matrices for Hᴿ and the gradients of fits (not for Hᵏ and the diagonalization, see sp_diag)." getter=:custom value=(conf -> get_sp_mode(conf) isa Sparse) category="model" see_also=["sp_diag"]
 
 """
 **sp_diag**=false
@@ -43,4 +43,4 @@ function get_sp_diag(conf::Config)::Union{Sparse, Dense}
         conf("sp_diag") ? Sparse() : Dense()
     end
 end
-push!(CONFIG_TAGS, ConfigTag{Bool}("sp_diag", conf->get_sp_diag(conf) isa Sparse, "switches to sparse matrix diagonalization (only affects Hᵏ and diagonalization)."))
+@configtag sp_diag Bool false "sparse Hᵏ and sparse eigensolvers (only some eigenvalues, see diag_method, neig and eig_target); not in fits." getter=:custom value=(conf -> get_sp_diag(conf) isa Sparse) default_doc="false (with skip_diag = true: same as sp_mode)" category="diagonalization" see_also=["diag_method", "neig", "eig_target"]

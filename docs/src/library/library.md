@@ -67,7 +67,9 @@ Pages = ["main.jl"]
 
 ```@autodocs
 Modules = [Hamster]
-Pages = ["conf/read_config.jl", "conf/config.jl"]
+Pages = ["conf/read_config.jl", "conf/config.jl", "conf/tag_help.jl", "conf/defaults.jl", "strc_defaults.jl", "atom_defaults.jl",
+         "basis_defaults.jl", "model_defaults.jl", "optim_defaults.jl", "supercell_defaults.jl", "ml_defaults.jl",
+         "soc_defaults.jl", "hyperopt_defaults.jl", "ewald_defaults.jl", "dos_defaults.jl"]
 ```
 
 # Output

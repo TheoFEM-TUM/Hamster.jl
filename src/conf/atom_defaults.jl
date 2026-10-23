@@ -33,3 +33,9 @@ get_charge_scale(conf::Config, type)::Float64 = conf("charge_scale", type) == "d
 If `nnaxes::Bool=true`, the orbital axes are rotated along the connecting vectors with the nearest neighbors of the respective orbitals. The number of nearest neighbors depends on the number of orbitals.
 """
 get_nnaxes(conf::Config, type)::Bool = conf("nnaxes", type) == "default" ? false : conf("nnaxes", type)
+
+@configtag alpha Float64 0.0 "decay of the radial functions of the species (effective charge of the hydrogen-like radial functions), which sets how fast the matrix elements fall off with distance." "atom" per_atom=true getter=:custom default_doc="0.7 × atomic number" category="basis" see_also=["n"]
+@configtag n Int64 0 "principal quantum number (order of the polynomial) of the radial functions of the species." "atom" per_atom=true getter=:custom default_doc="period of the element" category="basis" see_also=["alpha"]
+@configtag nnaxes Bool false "orient the orbital axes along the bonds to the nearest neighbours (the number of neighbours depends on the number of orbitals)." "atom" per_atom=true getter=:custom category="basis"
+@configtag qeff Float64 0.0 "effective charge of the species for the Ewald model." "atom" per_atom=true getter=:custom category="electrostatics" see_also=["charge_scale"]
+@configtag charge_scale Float64 0.0 "coupling of the on-site energies of the species to the electrostatic potential." "atom" per_atom=true getter=:custom default_doc="charge_scale of the Ewald block" category="electrostatics" see_also=["qeff"]
