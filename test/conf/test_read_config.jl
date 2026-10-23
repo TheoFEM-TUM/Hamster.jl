@@ -2,12 +2,17 @@ conf_path = string(@__DIR__)*"/hconf"
 conf = get_config(filename=conf_path)
 
 @testset "Config Read" begin
-    @test conf("run_def") == true
+    @test conf("skip_diag") == true
     @test conf("n", "Ga") == 3
     @test conf("orbitals", "Ga") == ["sp3dr2", "sp3dr2", "sp3dr2" ,"sp3dr2"]
+    @test conf("xdatcar", "Supercell") == "SC_XDATCAR"                  # upper-case keys
+    @test conf("we_1-4", "Optimizer") == 0.5
 
-    # test sp_geo=true without spaces
-    @test conf("sp_geo") == true
+    # sp_mode=true without spaces
+    @test conf("sp_mode") == true
+
+    # The example contains only valid tags: reading it gives no warnings
+    @test_logs get_config(filename=conf_path)
 end
 @testset "Comments in the config file" begin
     @test Hamster.filter_comment("# begin Supercell") == ""

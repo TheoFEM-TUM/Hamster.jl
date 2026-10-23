@@ -27,6 +27,11 @@ function read_config(file::String)
         for block in blocks
             read_config_block!(block, conf)
         end
+        # Unknown and misplaced tags (warned once, on the first MPI rank)
+        if !MPI.Initialized() || MPI.Comm_rank(MPI.COMM_WORLD) == 0
+            foreach(message -> @warn(message * " See `hamster --tag <name>` or the list of input tags in the documentation."),
+                    check_config_tags(conf))
+        end
     else
         @info "File $file not found. Using default values."
     end

@@ -1,6 +1,9 @@
 using Documenter
 using Hamster
 
+# The pages of the input tags are generated from the tag definitions (CONFIG_TAGS)
+tag_pages = ["conf/tags/" * f for f in Hamster.write_tag_docs(joinpath(@__DIR__, "src", "conf", "tags"))]
+
 makedocs(
     sitename = "Hamster",
     modules = [Hamster],
@@ -16,8 +19,7 @@ makedocs(
         "Command-Line Interface" => "cli.md",
         "Config File" => [
             "conf/config.md",
-            "conf/general_tags.md",
-            "conf/block_tags.md"
+            "Input Tags" => tag_pages
         ],
         "Calculation Types" => [
             "calc/standard.md",
