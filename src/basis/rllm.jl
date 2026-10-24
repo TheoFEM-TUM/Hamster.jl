@@ -322,7 +322,13 @@ function read_rllm(
 ) where {T}
 
     if occursin(".h5", filename)
-
+        # Without an open file (e.g. a single TB model), the file is opened here
+        if isnothing(file)
+            file = isnothing(comm) ? h5open(filename, "r") : h5open(filename, "r", comm)
+            close_file = true
+        else
+            close_file = false
+        end
         for overlap in overlaps
             overlap_str = string(overlap, apply_oc=true)
 
@@ -331,7 +337,9 @@ function read_rllm(
             rllm_dict[overlap_str] =
                 CubicSpline(data[:, 1], data[:, 2])
         end
-
+        if close_file
+            close(file)
+        end
 
         return rllm_dict
 

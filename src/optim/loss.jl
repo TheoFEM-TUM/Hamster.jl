@@ -128,7 +128,7 @@ function forward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_flag
     w[l.N_VBM+1,k_CBM] *= gap_weight
     #println(maximum(w))
     if isempty(l.wE) && isempty(l.wk)
-        return mean(@. abs(Δy)^l.n)^2
+        return mean(@. abs(Δy)^l.n)
     else
         L = @. abs(Δy)^l.n
         L_n = 1/l.N * 1/l.wStr * (l.wE' * (L .* w) * l.wk)
@@ -198,16 +198,9 @@ function backward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_fla
     w[l.N_VBM,k_VBM] *= l.gap_weight
     w[l.N_VBM+1,k_CBM] *= l.gap_weight
 
-"""    if isempty(l.wE) && isempty(l.wk)
-        L_n = mean(@. abs(Δy)^l.n)
-    else
-        L = @. abs(Δy)^l.n
-        L_n = 1/l.N * 1/l.wStr * (l.wE' * (L .* w) * l.wk)
-    end"""
-
     if isempty(l.wE) && isempty(l.wk)
         N = length(y)
-        return @. 1/N * sign(Δy) * l.n * abs(Δy)^(l.n - 1) * L_n
+        return @. 1/N * sign(Δy) * l.n * abs(Δy)^(l.n - 1)
     else
         #L = @. abs(Δy)^l.n
         #L_n = 1/l.N * 1/l.wStr * (l.wE' * L * l.wk)

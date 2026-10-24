@@ -38,7 +38,7 @@ Constructs a `TBModel` for the given structure `strc` and basis `basis`, based o
 - A `TBModel` object with the geometry tensor `h` and the model's parameters set via `init_params!`.
 """
 function TBModel(strc::Structure, basis::Basis, conf=get_empty_config(); update_tb=get_update_tb(conf, nparams(basis)), initas=get_init_params(conf))
-    h = get_geometry_tensor(strc, basis, conf)
+    h = get_geometry_tensor(strc, basis, nothing, conf)
     Nparams = length(basis.parameters)
     model = TBModel(h, ones(Nparams), basis.parameters, [collect(1:Nparams)], update_tb)
     init_params!(model, conf, initas=initas)
