@@ -413,9 +413,7 @@ function backward(L_train_weight::Float64, ham::EffectiveHamiltonian, index, los
     if uses_device_path(ham); return device_backward(L_train_weight, ham, index, loss, data, cache); end
     Es_tb, vs = cache
     dL_dE = backward(loss, Es_tb, data.Es) .* L_train_weight
-    dE_dHr = get_eigenvalue_gradient(vs, ham.Rs[index], data.kp, ham.sp_mode, ham.sp_iterators[index], nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=ham.sp_tol)
-    dL_dHr = chain_rule(dL_dE, dE_dHr, ham.sp_mode, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=ham.sp_tol)
-    return dL_dHr
+    return get_loss_gradient_hr(dL_dE, vs, ham.Rs[index], data.kp, ham.sp_mode, ham.sp_iterators[index], sp_tol=ham.sp_tol)
 end
 
 backward(ham::EffectiveHamiltonian, index, loss, data::HrData, cache, conf) = backward(loss, cache[1], data.Hr)

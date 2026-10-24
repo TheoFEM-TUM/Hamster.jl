@@ -82,3 +82,32 @@ end
 
     @test mean(abs.(Es_1 .- Es_2)) < 1e-10
 end
+@testset "TB gradient with SOC matches finite differences" begin
+    path = joinpath(@__DIR__, "test_files/")
+    conf = get_config(filename=joinpath(path, "hconf_cspbbr3"))
+    set_value!(conf, "rllm_file", joinpath(path, "rllm_cspbbr3.dat"))
+    set_value!(conf, "poscar", joinpath(path, "POSCAR_CsPbBr3"))
+    set_value!(conf, "init_params", joinpath(path, "params_cspbbr3.dat"))
+    set_value!(conf, "init_params", "SOC", joinpath(path, "params_cspbbr3.dat"))
+    set_value!(conf, "verbosity", 0)
+    strc = Structure(conf); basis = Basis(strc, conf)
+    # Only the TB and SOC models (the gradient of the TB parameters is tested)
+    ham = EffectiveHamiltonian([strc], [basis], comm, conf, rank=rank, nranks=nranks, ml_model=false)
+    ks = Hamster.read_eigenval(joinpath(path, "EIGENVAL_cspbbr3"))[1][:, 1:4]
+
+    # Linear loss L = Σ w E with different weights for the two states of a Kramers pair (the spin-off-diagonal blocks
+    # of dL/dHr do not cancel); dL/dE = w, so the loss functions of the optimizer are not needed
+    Es, vs = diagonalize(get_hamiltonian(ham, 1, ks))
+    w = sin.(reshape(1:length(Es), size(Es)))
+    L() = sum(w .* diagonalize(get_hamiltonian(ham, 1, ks))[1])
+    dL_dHr = Hamster.get_loss_gradient_hr(w, vs, ham.Rs[1], ks, ham.sp_mode, ham.sp_iterators[1])
+    tb = ham.models[findfirst(m -> m isa TBModel, ham.models)]
+    grad = Hamster.get_model_gradient(tb.hs[1], dL_dHr; soc=true)
+    for (v, p) in enumerate(tb.params_per_strc[1])
+        p0 = tb.params[p]; δ = 1e-5
+        tb.params[p] = p0 + δ; L_plus = L()
+        tb.params[p] = p0 - δ; L_minus = L()
+        tb.params[p] = p0
+        @test grad[v] ≈ (L_plus - L_minus) / 2δ atol=1e-7
+    end
+end

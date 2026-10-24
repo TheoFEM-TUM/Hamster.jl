@@ -103,14 +103,7 @@ function get_rllm(overlaps, conf=get_empty_config();
         end
         
         if verbosity > 1; println("     Interpolating distance dependence..."); end
-        time = @elapsed Threads.@threads for overlap in overlaps
-            overlap_str = string(overlap, apply_oc=true)
-            if !haskey(rllm_dict, overlap_str)
-                rllm_dict[overlap_str] = interpolate_overlap(overlap, conf)
-                i += 1
-                if verbosity > 1; println("       ($i / $(length(overlaps))) $overlap_str"); end
-            end
-        end
+        time = @elapsed interpolate_overlaps!(rllm_dict, overlaps, conf, verbosity=verbosity)
         save_rllm(rllm_dict, comm, filename=rank_rllm_file, rank=rank, nranks=nranks)
     end
     if verbosity > 0; println("     Finished in $time s."); end
@@ -162,21 +155,9 @@ function add_to_previous_interpolations!(bases::Any, conf = get_empty_config(); 
     
     if rank == 0 && isfile(rllm_file)
         rllm_dict = Dict{String, CubicSpline{Float64}}()
-        i = 0
-        h5open(rllm_file, "r") do file     
-            tforeach(unique_overlaps)do overlap
-                overlap_str = string(overlap, apply_oc=true)
-
-                if !haskey(file, overlap_str)
-
-                    rllm_dict[overlap_str] = interpolate_overlap(overlap, conf)
-                end
-                i += 1
-                if verbosity > 1
-                    println("       ($i / $(length(unique_overlaps))) $overlap_str")
-                end
-            end
-
+        h5open(rllm_file, "r") do file
+            new_overlaps = filter(overlap -> !haskey(file, string(overlap, apply_oc=true)), unique_overlaps)
+            interpolate_overlaps!(rllm_dict, new_overlaps, conf, verbosity=verbosity)
         end
     end
     if rank == 0
@@ -188,9 +169,27 @@ function add_to_previous_interpolations!(bases::Any, conf = get_empty_config(); 
 end
 
 """
+    interpolate_overlaps!(rllm_dict, overlaps, conf; verbosity=1)
+
+Interpolate the distance dependence of all `overlaps` that are not yet in `rllm_dict` (threaded) and add them to it.
+The interpolations are computed in parallel and inserted afterwards, since `Dict` is not thread-safe.
+"""
+function interpolate_overlaps!(rllm_dict, overlaps, conf; verbosity=1)
+    names = [string(overlap, apply_oc=true) for overlap in overlaps]
+    todo = [n for n in unique(i -> names[i], eachindex(overlaps)) if !haskey(rllm_dict, names[n])]
+    splines = tmap(n -> interpolate_overlap(overlaps[n], conf), todo)
+    for (k, (n, spline)) in enumerate(zip(todo, splines))
+        rllm_dict[names[n]] = spline
+        if verbosity > 1; println("       ($k / $(length(todo))) $(names[n])"); end
+    end
+    return rllm_dict
+end
+
+"""
     interpolate_overlap(overlap, conf::Config)
 
-Interpolates an overlap and stores the resulting cubic spline in the overlap's `rllm` field.
+Interpolates an overlap and stores the resulting cubic spline in the overlap's `rllm` field (deterministic, see
+`interpolate_f`).
 
 # Arguments
 - `overlap`: An overlap object that contains information about the interaction type and orbital configuration.
@@ -220,17 +219,27 @@ Computes the distance-dependent interaction between two orbitals, based on their
 
 # Returns
 - The integral `I` of the overlap function between the two orbitals over the given distance `r`, modified by a sign factor if necessary.
+
+The orbitals sit on the z axis and have the same `m`, so the integrand depends on the azimuth φ only through
+cos(mφ)² or sin(mφ)², a trigonometric polynomial of degree 2|m|: the φ integral is done exactly with the trapezoidal
+rule on 2|m| + 1 points, which leaves a 2D cubature in (ρ, z). The z range is split at the two atoms, where the
+integrand has cusps (exponential radial functions), and the cubature stops at an absolute error of 1e-8 (relative
+1e-6), well below the interpolation tolerance.
 """
 function distance_dependence(ME, orbconfig, r, ns, αs)::Float64
     R₁ = ndict[ns[1]](αs[1]); R₂ = ndict[ns[2]](αs[2])
-    xmin = [-10, -10, -10]; xmax = [15+r/3, 15+r/3, r+15]
     param = string(ME)
     m = mdict_inv[param[3]]
     l₁, l₂ = typeof(orbconfig) == MirrOrb ? (ldict_inv[param[2]], ldict_inv[param[1]]) : (ldict_inv[param[1]], ldict_inv[param[2]])
     sign = l₁ > l₂ ? (-1)^(l₁+l₂) : 1
     Y₁, Y₂ = get_spherical.([l₁, l₂], m)
     f = Overlap(Y₁, R₁, zeros(3), Y₂, R₂, [0., 0., r])
-    I, _ = hcubature(f, xmin, xmax, rtol=1e-5, maxevals=1000000, initdiv=5)
+    nφ = 2abs(m) + 1
+    φs = (0:nφ-1) .* (2π / nφ)
+    g(x) = x[1] * (2π / nφ) * sum(f([x[1] * cos(φ), x[1] * sin(φ), x[2]]) for φ in φs)   # x = (ρ, z)
+    zs = r > 0 ? [-10.0, 0.0, r, r + 15] : [-10.0, 0.0, 15.0]
+    I = sum(hcubature(g, [0.0, zs[k]], [15 + r/3, zs[k+1]], rtol=1e-6, atol=1e-8 / (length(zs) - 1), maxevals=1000000,
+                      initdiv=5)[1] for k in 1:length(zs)-1)
     return sign*I
 end
 
@@ -380,16 +389,7 @@ function precalc_rllm(bases::Any; comm = nothing, rank = 0, nranks = 1, conf,
     println("Rank: $rank calculating $nlocal overlaps")
     rank_rllm_file = nranks > 1 ? get_rank_filename(rllm_file, rank) : rllm_file
     rllm_dict = Dict{String, CubicSpline{Float64}}()
-    i = 0
-    tforeach(local_unique_overlaps_strings) do overlap
-    #for overlap in local_unique_overlaps_strings
-        overlap_str = string(overlap, apply_oc=true)
-        if !haskey(rllm_dict, overlap_str)
-            rllm_dict[overlap_str] = interpolate_overlap(overlap, conf)
-            i += 1
-            if verbosity > 1 && rank == 0; println("       ($i / $(length(local_unique_overlaps_strings))) $overlap_str Rank ($rank/$nranks)"); end
-        end
-    end
+    interpolate_overlaps!(rllm_dict, local_unique_overlaps_strings, conf, verbosity=rank == 0 ? verbosity : 0)
     println("Rank $rank finished rllm")
     #MPI.Barrier(comm)
     save_rllm(rllm_dict, comm, filename=rank_rllm_file, rank=rank, nranks=nranks)

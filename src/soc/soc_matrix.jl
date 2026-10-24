@@ -21,8 +21,7 @@ function get_soc_matrices(strc::Structure, basis::Basis, conf=get_empty_config()
     soc_matrices = OrderedDict{UInt8, Matrix{ComplexF64}}()
     soc_order = OrderedDict{UInt8, Vector{String}}()
 
-    ion_types = number_to_element.(get_ion_types(strc.ions, uniq=true))
-    unique_ion_types = filter(type->haskey(conf.blocks, type), ion_types)
+    unique_ion_types = number_to_element.(get_ion_types(strc.ions, conf, uniq=true, withorbitals=true))
 
     for ion_type in unique_ion_types
         iion = findnext_ion_of_type(ion_type, strc.ions)

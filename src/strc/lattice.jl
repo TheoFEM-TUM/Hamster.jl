@@ -50,7 +50,7 @@ function get_translation_vectors(M::Int64)
 end
 
 """
-    get_Rmax(lattice, conf=get_empty_config(); rcut=get_rcut(conf), Rmax=get_Rmax(conf), upperR=10)
+    get_Rmax(lattice, conf=get_empty_config(); rcut=get_rcut(conf), Rmax=get_Rmax(conf), upperR=20)
 
 Determines the maximum radius `Rmax` for the given lattice and configuration parameters based on the cutoff radius `rcut`.
 
@@ -59,12 +59,12 @@ Determines the maximum radius `Rmax` for the given lattice and configuration par
 - `conf`: (Optional) Configuration object. Defaults to `get_empty_config()`.
 - `rcut`: (Optional) The cutoff radius used to determine the maximum radius. Defaults to `get_rcut(conf)`.
 - `Rmax`: (Optional) Initial guess for the maximum radius. Defaults to `get_Rmax(conf)`.
-- `upperR`: (Optional) Upper limit for the search radius. Defaults to 10.
+- `upperR`: (Optional) Upper limit for the search radius. Defaults to 20.
 
 # Returns
 - `Rmax::Int`: The maximum radius such that the spherical region of radius `Rmax` contains all points within the cutoff radius `rcut`.
 """
-function get_Rmax(lattice, conf=get_empty_config(); rcut=get_rcut(conf), Rmax=get_Rmax(conf), upperR=10)
+function get_Rmax(lattice, conf=get_empty_config(); rcut=get_rcut(conf), Rmax=get_Rmax(conf), upperR=20)
     if rcut == 0.
         return Rmax
     else    

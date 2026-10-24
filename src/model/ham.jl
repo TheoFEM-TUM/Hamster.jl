@@ -31,11 +31,63 @@ function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Dense(); wei
     exp_2πiRk = exp_2πi(Rs, ks)
 
     @tasks for k in eachindex(Hk)
-        @views @inbounds for R in eachindex(Hr)
-            @. Hk[k] += Hr[R] * exp_2πiRk[R, k] * weights[R]
+        @inbounds for R in eachindex(Hr)
+            add_scaled!(Hk[k], Hr[R], exp_2πiRk[R, k] * weights[R])
         end
     end
     return Hk
+end
+
+function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, ::Sparse; weights=ones(size(Rs, 2)))
+    Nε = size(Hr[1], 1)
+    exp_2πiRk = exp_2πi(Rs, ks)
+    # Nonzeros of all Hr[R], collected once; Hk[k] is then assembled in a single step per k-point
+    Is, Js, Vs, Ridx = coo_entries(Hr)
+    Hk = Vector{SparseMatrixCSC{ComplexF64, Int64}}(undef, size(ks, 2))
+    @tasks for k in eachindex(Hk)
+        vals = [Vs[n] * exp_2πiRk[Ridx[n], k] * weights[Ridx[n]] for n in eachindex(Vs)]
+        Hk[k] = sparse(Is, Js, vals, Nε, Nε)
+    end
+    return Hk
+end
+
+"""
+    add_scaled!(H::Matrix, A, c)
+
+Add `c * A` to the dense matrix `H` in place. For sparse `A`, only its nonzeros are visited.
+"""
+add_scaled!(H::Matrix, A::AbstractMatrix, c) = (H .+= c .* A; H)
+function add_scaled!(H::Matrix, A::SparseMatrixCSC, c)
+    rows = rowvals(A); vals = nonzeros(A)
+    @inbounds for col in axes(A, 2), n in nzrange(A, col)
+        H[rows[n], col] += c * vals[n]
+    end
+    return H
+end
+add_scaled!(H::SparseMatrixCSC, A::AbstractMatrix, c) = (H .+= c .* A; H)
+
+"""
+    coo_entries(Hs) -> (Is, Js, Vs, Ridx)
+
+Row and column indices, values and matrix index of the (structural) nonzeros of all matrices in `Hs`.
+"""
+function coo_entries(Hs::AbstractVector{<:AbstractMatrix})
+    return coo_entries([H isa SparseMatrixCSC ? H : sparse(H) for H in Hs])
+end
+
+function coo_entries(Hs::AbstractVector{<:SparseMatrixCSC})
+    N = sum(nnz, Hs; init=0)
+    Is = Vector{Int64}(undef, N); Js = Vector{Int64}(undef, N); Ridx = Vector{Int64}(undef, N)
+    Vs = Vector{promote_type(eltype.(Hs)...)}(undef, N)
+    n = 0
+    @inbounds for (R, H) in enumerate(Hs)
+        rows = rowvals(H); vals = nonzeros(H)
+        for col in axes(H, 2), p in nzrange(H, col)
+            n += 1
+            Is[n] = rows[p]; Js[n] = col; Vs[n] = vals[p]; Ridx[n] = R
+        end
+    end
+    return Is, Js, Vs, Ridx
 end
 
 """
@@ -48,19 +100,31 @@ Diagonalizes a vector of Hamiltonian matrices `Hk` and returns the specified num
 - `Neig::Int=size(Hk[1], 1)`: The number of eigenvalues and corresponding eigenvectors to compute for each Hamiltonian matrix. Defaults to the full diagonalization (`size(Hk[1], 1)`).
 - `target::Real=0`: The target eigenvalue when computing eigenvalues of a sparse matrix.
 - `method::String`: The method to be used for calculating eigenvalues of a sparse matrix.
+- `vectors::Bool=true`: Whether the eigenvectors are computed (dense matrices); without them, `vs` is empty and the full
+  diagonalization is several times faster.
+
+With fewer k-points than threads, the dense diagonalizations use the remaining threads for BLAS.
 
 # Returns:
 - `Es::Matrix{Float64}`: A matrix where each column `Es[:, k]` contains the `Neig` eigenvalues of the `k`-th Hamiltonian matrix in `Hk`.
 - `vs::Array{ComplexF64, 3}`: A 3D array where each `vs[:, :, k]` contains the `Neig` eigenvectors corresponding to the `k`-th Hamiltonian matrix in `Hk`. The dimensions of `vs` are `(Nε, Neig, Nk)`, where `Nε` is the size of each Hamiltonian matrix, `Neig` is the number of eigenvectors, and `Nk` is the number of Hamiltonian matrices.
 """
-function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0, method="shift-invert")
+function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0, method="shift-invert", vectors=true)
     Nε = size(Hk[1], 1)
     Nk = length(Hk)
     Es = zeros(Neig, Nk)
-    vs = zeros(ComplexF64, Nε, Neig, Nk)
+    vs = zeros(ComplexF64, vectors ? Nε : 0, Neig, Nk)
 
-    Threads.@threads for k in eachindex(Hk)
-        Es[:, k], vs[:, :, k] = diagonalize(Hk[k], Neig=Neig, target=target, method=method)
+    blas_threads = BLAS.get_num_threads()
+    dense = !(Hk[1] isa SparseMatrixCSC)
+    dense && Nk < Threads.nthreads() && BLAS.set_num_threads(max(blas_threads, Threads.nthreads() ÷ Nk))
+    try
+        Threads.@threads for k in eachindex(Hk)
+            Es[:, k], v = diagonalize(Hk[k], Neig=Neig, target=target, method=method, vectors=vectors)
+            vectors && (vs[:, :, k] = v)
+        end
+    finally
+        BLAS.set_num_threads(blas_threads)
     end
 
     return Es, vs
@@ -81,18 +145,36 @@ Fully diagonalizes a Hermitian Hamiltonian matrix `Hk` and returns the eigenvalu
 - `real_values::Vector{Float64}`: A vector containing the real parts of the eigenvalues of `Hk`. The eigenvalues are computed using the Hermitian matrix, so they are guaranteed to be real.
 - `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to an eigenvalue of `Hk`. The eigenvectors are computed in the standard basis and are complex-valued.
 """
-function diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0, method="shift-invert")
-
+function diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0, method="shift-invert", vectors=true)
+    if abs(hermiticity_mismatch(Hk)) > 1e-5
+        maxdiff, inds = findmax(abs.(Hk .- Hermitian(Hk)))
+        @warn "Hamiltonian not hermitian! Maximum missmatch: $maxdiff at $inds."
+    end
+    vectors || return real.(eigvals(Hermitian(Hk))), nothing
     eig = eigen(Hermitian(Hk))
     return real.(eig.values), eig.vectors
 end
 
 """
-    if abs(sum(Hk .- Hermitian(Hk))) > 1e-5
-        maxdiff, inds = findmax(abs.(Hk .- Hermitian(Hk)))
-        @warn "Hamiltonian not hermitian! Maximum missmatch: maxdiff at inds."
-    end
+    hermiticity_mismatch(H)
+
+Return `sum(H .- Hermitian(H))` without allocating: `Hermitian(H)` differs from `H` only in the lower triangle
+(where it is the conjugate of the upper triangle) and on the diagonal (where it is real).
 """
+function hermiticity_mismatch(H::AbstractMatrix)
+    s = zero(complex(eltype(H)))
+    @inbounds for j in axes(H, 2)
+        s += H[j, j] - real(H[j, j])
+        for i in j+1:size(H, 1)
+            s += H[i, j] - conj(H[j, i])
+        end
+    end
+    return s
+end
+
+# Arpack keeps internal state between its reverse-communication calls and is not thread-safe, so concurrent calls
+# (e.g. from the threaded loop over k-points) are serialized.
+const ARPACK_LOCK = ReentrantLock()
 
 """
     diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert")
@@ -109,9 +191,9 @@ Diagonalizes a sparse Hermitian matrix `Hk` to find a specified number of eigenv
 - `eigenvalues::Vector{Float64}`: A vector of the real parts of the computed eigenvalues, focusing on those closest to the target. The number of eigenvalues returned is equal to `Neig`.
 - `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to one of the computed eigenvalues.
 """
-function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert")
+function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert", vectors=true)
     if method == "shift-invert"
-        Es, vs, _, _, _, _ = eigs(Hk, nev=Neig, sigma=target)
+        Es, vs, _, _, _, _ = lock(() -> eigs(Hk, nev=Neig, sigma=target), ARPACK_LOCK)
         if abs(Es[1] - target) > abs(Es[end] - target)
             return real.(Es[end-Neig:end]), vs[:, end-Neig:end]
         else
@@ -210,7 +292,8 @@ end
 
 Calculate the gradient of the spin basis applied to a given matrix `dHr`. The output matrix is of size `(Nε/2, Nε/2)`.
 
-This function reshapes the input matrix `dHr`, which is expected to represent a gradient in a spin system, into a form suitable for applying the spin basis transformation. The transformation is performed using the Kronecker product, and the output is computed depending on the specified order of application.
+Since `apply_spin_basis` places `H` in the two spin-diagonal blocks, the gradient is the sum of the spin-diagonal blocks of
+`dHr`; the spin-off-diagonal blocks do not depend on `H`.
 
 # Arguments
 - `dHr::AbstractMatrix`: An abstract matrix containing the gradient data to be transformed. It should have a shape that is compatible with the spin basis operations.
@@ -220,12 +303,10 @@ function gradient_apply_spin_basis(dHr::AbstractMatrix; alternating_order=false)
     Nε = size(dHr, 1) ÷ 2
     if !alternating_order
         # Case 1: kron(H, I_spin)
-        dHr_out = sum(reshape(dHr, 2, Nε, 2, Nε), dims=(1, 3))
-        return dropdims(dHr_out, dims=(1, 3))
+        return Matrix(dHr[1:2:end, 1:2:end] + dHr[2:2:end, 2:2:end])
     else
         # Case 2: kron(I_spin, H)
-        dHr_out = sum(reshape(dHr, Nε, 2, Nε, 2), dims=(2, 4))
-        return dropdims(dHr_out, dims=(2, 4))
+        return Matrix(dHr[1:Nε, 1:Nε] + dHr[Nε+1:end, Nε+1:end])
     end
 end
 

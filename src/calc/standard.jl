@@ -54,7 +54,7 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1,
 
     if rank == 0 && verbosity > 1; println("Getting Hamiltonian models..."); end
     begin_time = MPI.Wtime()
-    ham = EffectiveHamiltonian(strcs, bases, comm, conf, rank=rank, nranks=nranks, simmat_prefix="simmat_standard")
+    ham = EffectiveHamiltonian(strcs, bases, comm, conf, rank=rank, nranks=nranks, simmat_prefix="simmat_standard", sparse_iterators=false)
     ham_time = MPI.Wtime() - begin_time
     if rank == 0 && verbosity > 1; println(" Model time: $ham_time s"); end
 
@@ -109,7 +109,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
             Es = zeros(1, 1); vs = zeros(ComplexF64, 1, 1, 1)
             diag_time_local = @elapsed begin
                 if !skip_diag
-                    Es, vs = diagonalize(Hk, Neig=Neig, target=get_eig_target(conf), method=get_diag_method(conf))
+                    Es, vs = diagonalize(Hk, Neig=Neig, target=get_eig_target(conf), method=get_diag_method(conf), vectors=save_vecs)
                 end
             end
 

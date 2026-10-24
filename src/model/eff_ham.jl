@@ -25,7 +25,8 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
                               rllm_type = "train",
                               simmat_prefix = "simmat_train",
                               device=nothing,
-                              verbosity=get_verbosity(conf))
+                              verbosity=get_verbosity(conf),
+                              sparse_iterators=true)
 
     if isempty(strcs) && isempty(bases)
         return EffectiveHamiltonian(0, Nothing[], String[], Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)], nothing)
@@ -37,8 +38,9 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
     Rs = [strc.Rs for strc in strcs]
     if rank == 0 && verbosity > 1; println("   Getting sparse iterators..."); end
     begin_time = MPI.Wtime()
+    # Only needed for the gradient in sparse mode (training)
     sp_iterators = map(zip(strcs, bases)) do (strc, basis)
-        get_sparse_iterator(strc, basis, conf, soc=soc)
+        sparse_iterators ? get_sparse_iterator(strc, basis, conf, soc=soc) : [Tuple{Int64, Int64}[] for _ in axes(strc.Rs, 2)]
     end
     sp_time = MPI.Wtime() - begin_time
     if rank == 0 && verbosity > 1; println("    Sparse iterator time: $sp_time s"); end
@@ -101,7 +103,8 @@ function EffectiveHamiltonian(strcs, bases, subdirs :: Vector{String}, comm, con
                               systems=[strc.system for strc in strcs],
                               simmat_prefix = "simmat_train",
                               device=nothing,
-                              verbosity=get_verbosity(conf))
+                              verbosity=get_verbosity(conf),
+                              sparse_iterators=true)
 
     if isempty(strcs) && isempty(bases)
         return EffectiveHamiltonian(0, Nothing[], String[], Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)], nothing)
@@ -113,8 +116,9 @@ function EffectiveHamiltonian(strcs, bases, subdirs :: Vector{String}, comm, con
     Rs = [strc.Rs for strc in strcs]
     if rank == 0 && verbosity > 1; println("   Getting sparse iterators..."); end
     begin_time = MPI.Wtime()
+    # Only needed for the gradient in sparse mode (training)
     sp_iterators = map(zip(strcs, bases)) do (strc, basis)
-        get_sparse_iterator(strc, basis, conf, soc=soc)
+        sparse_iterators ? get_sparse_iterator(strc, basis, conf, soc=soc) : [Tuple{Int64, Int64}[] for _ in axes(strc.Rs, 2)]
     end
     sp_time = MPI.Wtime() - begin_time
     if rank == 0 && verbosity > 1; println("    Sparse iterator time: $sp_time s"); end
@@ -305,23 +309,21 @@ Constructs an iterator that generates sparse matrix indices for interactions wit
   and contains tuples `(i, j)` representing the sparse matrix indices for interactions within the cutoff radius.
 """
 function get_sparse_iterator(strc, basis, conf=get_empty_config(), rcut=get_rcut(conf); soc=get_soc(conf))
-    nn_grid_points = iterate_nn_grid_points(strc.point_grid)
     Norb_per_ion = soc ? 2 .* length.(basis.orbitals) : length.(basis.orbitals)
-    ij_map = get_ion_orb_to_index_map(Norb_per_ion)
-    Ts = frac_to_cart(strc.Rs, strc.lattice)
-    indices = [Tuple{Int64, Int64}[] for _ in axes(strc.Rs, 2)]
-    
-    for (iion, jion, R) in nn_grid_points
-        r⃗₁ = strc.ions[iion].pos
-        r⃗₂ = strc.ions[jion].pos - Ts[:, R]
-        r = normdiff(r⃗₁, r⃗₂)
-        if r ≤ rcut
+    offset = cumsum(vcat(0, Norb_per_ion[1:end-1]))
+    TRs = [SVector{3, Float64}(T) for T in eachcol(frac_to_cart(strc.Rs, strc.lattice))]
+    NR = size(strc.Rs, 2)
+    # Ion pairs grid cell by grid cell (every pair is visited once), cells distributed over tasks
+    parts = tmap(grid_cell_chunks(strc.point_grid)) do chunk
+        indices = [Tuple{Int64, Int64}[] for _ in 1:NR]
+        for (grid_point, inds) in chunk, nn_grid_point in nn_grid_points(grid_point, strc.point_grid.dictR),
+            (jion, R) in strc.point_grid.dictR[nn_grid_point], iion in inds
+            normdiff(strc.ions[iion].pos, strc.ions[jion].pos - TRs[R]) ≤ rcut || continue
             for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
-                i = ij_map[(iion, iorb)]
-                j = ij_map[(jion, jorb)]
-                push!(indices[R], (i, j))
+                push!(indices[R], (offset[iion] + iorb, offset[jion] + jorb))
             end
         end
+        indices
     end
-    return indices
+    return [reduce(vcat, [part[R] for part in parts]) for R in 1:NR]
 end
