@@ -205,6 +205,27 @@ V[\mathrm{params\_ per\_ strc}[n]].
 This allows different structures and bases to share the same optimized
 parameters consistently.
 
+## Nearest-Neighbor Parameters
+
+With `sepNN = true`, every overlap has two parameters: one for the nearest neighbors (`NN1`) and one for all farther
+shells (`NN2`). A bond counts as a nearest-neighbor bond if its length is at most the cutoff of its ion pair: the
+midpoint between the first and the second neighbor shell of the reference positions (the `POSCAR`, or the reference
+structure of the `Supercell` block). Neighbor distances within 10 % of each other belong to the same shell. Distorted
+bonds, e.g. in MD snapshots, therefore keep their label as long as they are not stretched or compressed past the
+midpoint; a bond that crosses it switches to the other parameters abruptly. If the reference has no second shell
+within the neighbor search, the cutoff is the nearest-neighbor distance.
+
+The cutoffs and the number of bonds with each label are listed in the [model summary](#Model-Summary).
+
+!!! note "Fits with earlier versions"
+    In Hamster 0.6.0 and earlier, a bond counted as a nearest-neighbor bond only if it was at most 10⁻⁵ Å longer than the
+    shortest bond of its ion pair. In distorted structures (MD snapshots, a distorted `POSCAR`), most stretched
+    nearest-neighbor bonds therefore got the `NN2` parameters. Fits with `sepNN = true` to distorted structures (MD, ML)
+    made with these versions should be redone. Models without `sepNN` and fits to undistorted high-symmetry structures,
+    in which all nearest-neighbor bonds have the same length, are not affected. In reference structures with
+    nearest-neighbor bonds of slightly different lengths (within 10 %, e.g. wurtzite or orthorhombic perovskites), all
+    of them now use the `NN1` parameters, while before only the shortest did.
+
 ## Spin Basis
 
 If spin-orbit coupling or an explicit spin basis is requested, the Hamiltonian
@@ -285,6 +306,17 @@ are not included, since the summary is written at initialization):
       geometry tensor entries:     35056 (0.5 MB)
 ================================================================================
 ```
+
+With `sepNN = true`, the summary also lists the nearest-neighbor cutoff of every ion pair and the number of bonds of
+all structures with the `NN1` and `NN2` parameters:
+
+```
+  Nearest-neighbor labels (sepNN): bonds of all structures
+    ion pair          cutoff (Å)    NN1 bonds    NN2 bonds
+    Si+Si                  3.096          128          768
+```
+
+In distorted structures, all nearest-neighbor bonds should keep the `NN1` label (here 4 bonds per Si atom).
 
 Ranges (`min - max`) are given if the structures differ in size. The geometry tensor entries are the stored non-zero
 elements of ``h_{vR}`` of all structures, which dominate the memory of the TB model.

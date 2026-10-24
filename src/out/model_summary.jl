@@ -136,12 +136,22 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
 end
 
 """
-    write_model_summary(model::TBModel, strcs, bases, comm; kwargs...)
+    write_model_summary(model::TBModel, strcs, bases, comm, conf=get_empty_config(); kwargs...)
 
 Append a summary of the TB model to `hamster.out`.
 """
-function write_model_summary(model::TBModel, strcs, bases, comm; rank=0, label="", filename="hamster.out")
+function write_model_summary(model::TBModel, strcs, bases, comm, conf=get_empty_config(); rank=0, label="", filename="hamster.out",
+        sepNN=get_sepNN(conf))
     natoms = isempty(strcs) ? [0] : [length(strc.ions) for strc in strcs]
+    # sepNN: cutoff (range over the structures) and bonds with label 1 and 2 per ion pair
+    nn_stats = Dict{String, NTuple{4, Float64}}()
+    if sepNN
+        for (strc, basis) in zip(strcs, bases), (pair, (cutoff, n1, n2)) in nn_label_statistics(strc, basis, conf)
+            lo, hi, m1, m2 = get(nn_stats, pair, (Inf, -Inf, 0.0, 0.0))
+            nn_stats[pair] = (min(lo, cutoff), max(hi, cutoff), m1 + n1, m2 + n2)
+        end
+    end
+    all_nn_stats = MPI.gather(nn_stats, comm, root=0)
     norbs = isempty(bases) ? [0] : [length(basis) for basis in bases]
     nRs = isempty(strcs) ? [0] : [size(strc.Rs, 2) for strc in strcs]
     entries = sum((nnz(hvR) for h in model.hs for hvR in h), init=0)
@@ -172,6 +182,26 @@ function write_model_summary(model::TBModel, strcs, bases, comm; rank=0, label="
         write_summary_line(io, "  per shell", join(shell_counts, ", "))
         write_summary_line(io, "  per ion pair", join(pair_counts, ", "))
         write_summary_line(io, "geometry tensor entries", @sprintf("%d (%.1f MB)", entries, entries * 16 / 1024^2))
+        if sepNN
+            merged = Dict{String, NTuple{4, Float64}}()
+            for stats in all_nn_stats, (pair, (lo, hi, n1, n2)) in stats
+                lo0, hi0, m1, m2 = get(merged, pair, (Inf, -Inf, 0.0, 0.0))
+                merged[pair] = (min(lo0, lo), max(hi0, hi), m1 + n1, m2 + n2)
+            end
+            println(io)
+            println(io, "  Nearest-neighbor labels (sepNN): bonds of all structures")
+            widths = [10, 17, 12, 12]
+            write_table_row(io, ["ion pair", "cutoff (Å)", "NN1 bonds", "NN2 bonds"], widths)
+            for pair in sort(collect(keys(merged)))
+                lo, hi, n1, n2 = merged[pair]
+                cutoff = lo ≈ hi ? @sprintf("%.3f", lo) : @sprintf("%.3f - %.3f", lo, hi)
+                write_table_row(io, [pair, cutoff, string(round(Int64, n1)), string(round(Int64, n2))], widths)
+            end
+            println(io)
+            write_legend(io, "Bonds up to the cutoff (midpoint between the first two neighbor shells of the reference " *
+                             "positions) use the NN1 parameters, longer bonds the NN2 parameters. In distorted structures " *
+                             "(MD snapshots), the nearest-neighbor bonds should keep the NN1 label.")
+        end
         write_separator(io)
     end
     return nothing
