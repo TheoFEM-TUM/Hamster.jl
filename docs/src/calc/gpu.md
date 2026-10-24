@@ -11,6 +11,8 @@ julia -e 'using Pkg; Pkg.add(["CUDA", "CUDSS"])'
 julia -e 'using CUDA; CUDA.versioninfo()'   # should list your GPU
 ```
 
+With CUDSS.jl installed, typical GPU runs are compiled when the extension is precompiled (on the first `using CUDSS` after an installation or update), which saves 20-30 s at the start of every run. This needs a GPU: on clusters, precompile on a GPU node (e.g., in a short job running `julia -e 'using Hamster, CUDA, CUDSS'`), not on a login node without GPU. Otherwise, every run compiles the GPU code paths on first use.
+
 CUDA.jl downloads the CUDA runtime (several GB) into `~/.julia` when it is first used. On systems with a small home quota, move the Julia depot to a larger disk, or use a CUDA toolkit installed on the system by adding `[CUDA_Runtime_jll]` with `local = "true"` to the `LocalPreferences.toml` of your default environment.
 
 ## Usage
