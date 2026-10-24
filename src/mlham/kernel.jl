@@ -771,39 +771,62 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 """
 
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
-    dparams = zeros(length(kernel.params))
-    nt = Threads.maxthreadid() 
-    dparams_threads = [zeros(length(kernel.params)) for _ in 1:nt]
-    key_ranges = kernel.kp.key_ranges
-    weights = kernel.kp.weights
-    if kernel.update
-        for (bi, index) in enumerate(indices)
-            
-            for R in eachindex(dL_dHr[bi])
-                @views desc_vec, nnz_ham = kernel.sms[index].feature_vec[R]
-                tforeach(1:nnz_ham) do m
-                    tid = Threads.threadid()
-                    @views desc_vec_small, (i,j,key) =  desc_vec[m]
+    Nparams = length(kernel.params)
+    kernel.update || return zeros(Nparams)
+    # The (structure, R) blocks of the batch; the entries of all blocks are numbered consecutively
+    blocks = [(bi, R) for bi in eachindex(indices) for R in eachindex(dL_dHr[bi])]
+    block_ends = cumsum([kernel.sms[indices[bi]].feature_vec[R][2] for (bi, R) in blocks])
+    Nentries = isempty(block_ends) ? 0 : last(block_ends)
 
-                    if !soc
-                        dparams_threads[tid][key_ranges[key]]  .+= weights[key_ranges[key]] .* desc_vec_small .* real(dL_dHr[bi][R][i, j])
-                    else
-                        i1 = 2*i-1; j1 = 2*j-1
-                        i2 = 2*i; j2 = 2*j
-                        dparams_threads[tid][key_ranges[key]] .+= weights[key_ranges[key]] .* desc_vec_small .* real(dL_dHr[bi][R][i1, j1] + dL_dHr[bi][R][i2, j2])
-                    end
-                    
-                end
-            end
+    # Every task accumulates the (unweighted) contributions of a contiguous range of entries into its own buffer
+    ntasks = clamp(cld(Nentries, 4096), 1, Threads.nthreads())
+    buffers = tmap(chunks(1:Nentries, n=ntasks)) do entry_range
+        dparams_task = zeros(Nparams)
+        isempty(entry_range) && return dparams_task
+        for b in searchsortedfirst(block_ends, first(entry_range)):searchsortedfirst(block_ends, last(entry_range))
+            bi, R = blocks[b]
+            block_start = b == 1 ? 1 : block_ends[b-1] + 1
+            ms = (max(first(entry_range), block_start):min(last(entry_range), block_ends[b])) .- (block_start - 1)
+            accumulate_kernel_gradient!(dparams_task, kernel.sms[indices[bi]].feature_vec[R][1], ms, dL_dHr[bi][R], kernel.kp.key_ranges, soc)
         end
-        for dp in dparams_threads
-            dparams .+= dp
-        end
-        dparams_penal = backward(reg, kernel.params)
-        return dparams .+ dparams_penal
-    else 
-        return dparams
+        return dparams_task
     end
+
+    # Sum the buffers (in a fixed order), apply the weights of the kernel points and add the regularization
+    dparams = backward(reg, kernel.params)
+    weights = kernel.kp.weights
+    tforeach(chunks(1:Nparams, n=Threads.nthreads())) do param_range
+        @inbounds for n in param_range
+            s = 0.0
+            for dparams_task in buffers
+                s += dparams_task[n]
+            end
+            dparams[n] += weights[n] * s
+        end
+    end
+    return dparams
+end
+
+"""
+    accumulate_kernel_gradient!(dparams, entries, ms, dL_dHr_R, key_ranges, soc)
+
+Add the gradient contributions `feature * real(dL_dHr_R[i, j])` of the entries `entries[ms]` of one `R` block to `dparams`,
+visiting only the stored values of the sparse feature vectors. Entries that `get_hr` skips are skipped as well.
+"""
+function accumulate_kernel_gradient!(dparams, entries, ms, dL_dHr_R, key_ranges, soc)
+    for m in ms
+        feature, (i, j, key) = entries[m]
+        param_range = get(key_ranges, key, nothing)
+        (isnothing(param_range) || length(feature) ≠ length(param_range)) && continue
+        g = soc ? real(dL_dHr_R[2i-1, 2j-1] + dL_dHr_R[2i, 2j]) : real(dL_dHr_R[i, j])
+        offset = first(param_range) - 1
+        nzind = SparseArrays.nonzeroinds(feature)
+        nzval = SparseArrays.nonzeros(feature)
+        @inbounds for q in eachindex(nzind)
+            dparams[offset + nzind[q]] += nzval[q] * g
+        end
+    end
+    return dparams
 end
 
 function get_model_gradient_old(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)

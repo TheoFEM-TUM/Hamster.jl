@@ -262,7 +262,11 @@ over the batch; other gradients (w.r.t. the real-space Hamiltonian) are passed o
 """
 model_gradient_input(dL_dHr, model_index) = dL_dHr
 function model_gradient_input(dL_dHr::AbstractVector{DeviceParamGradient}, model_index)
-    return RawModelGradient(sum(g -> g.grads[model_index], dL_dHr))
+    grad = copy(first(dL_dHr).grads[model_index])
+    for n in 2:length(dL_dHr)
+        grad .+= dL_dHr[n].grads[model_index]
+    end
+    return RawModelGradient(grad)
 end
 
 function get_model_gradient(model::TBModel, indices, reg, g::RawModelGradient; soc=false)
