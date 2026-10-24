@@ -47,9 +47,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
                 jtype = strc.ions[jion].type; l_j = l_map[j]
                 #Zs = [proton_to_position(strc.ions[iion].type), proton_to_position(strc.ions[jion].type)]
                 Zs = [strc.ions[iion].type, strc.ions[jion].type]
-                iaxis = basis.orbitals[iion][iorb].axis
-                jaxis = basis.orbitals[jion][jorb].axis
-                φ, θs = get_angular_descriptors(ri, rj, iaxis, jaxis)
+                φ, θs = get_angular_descriptors(ri, rj, basis.orbitals[iion][iorb], basis.orbitals[jion][jorb])
 
                 orbswap = decide_orbswap(itype, jtype, l_i, env[i], l_j, env[j])
                 angleswap = (θs[1] > θs[2] && itype == jtype) || (orbswap && itype ≠ jtype)
@@ -253,6 +251,37 @@ function get_angular_descriptors(ri, rj, iaxis, jaxis)
     φ = calc_angle(iaxis, jaxis)
     θs = Float64[calc_angle(iaxis, Δrij), calc_angle(jaxis, Δrji)]
     return φ, θs
+end
+
+"""
+    get_angular_descriptors(ri, rj, orb_i::Orbital, orb_j::Orbital)
+
+Angular descriptors of two orbitals, using their symmetry axes (see `get_sym_axis`). d orbitals have no single axis,
+so `φ = 0` if either orbital is a d orbital and the angles to the bond are given by `orbital_angle`.
+"""
+function get_angular_descriptors(ri, rj, orb_i::Orbital, orb_j::Orbital)
+    iaxis = get_sym_axis(orb_i)
+    jaxis = get_sym_axis(orb_j)
+    Δr = normdiff(ri, rj)
+    Δrij = Δr > 0 ? normalize(rj - ri) : nothing
+    Δrji = Δr > 0 ? normalize(ri - rj) : nothing
+    φ = orb_i.type.l == 2 || orb_j.type.l == 2 ? 0.0 : calc_angle(iaxis, jaxis)
+    θs = Float64[orbital_angle(orb_i, iaxis, Δrij), orbital_angle(orb_j, jaxis, Δrji)]
+    return φ, θs
+end
+
+"""
+    orbital_angle(orb, axis, n̂) -> Float64
+
+Angle descriptor of an orbital and the bond direction `n̂` (`nothing` on the same site: 0). For s, p and hybrid orbitals
+the angle between the orbital axis and the bond. d orbitals have no single axis: θ = acos(T) with the normalized value
+T = √(4π/5) Y(n̂) of the angular function along the bond (for a p orbital, T is the cosine of the angle between axis and
+bond, so this is the same angle), e.g. 0 for dz2 and a bond along z, 120° for dz2 and a bond in the xy-plane.
+"""
+function orbital_angle(orb, axis, n̂)
+    isnothing(n̂) && return calc_angle(axis, normalize(axis))
+    orb.type.l == 2 || return calc_angle(axis, n̂)
+    return acos(clamp(round(√(4π / 5) * orb.type(n̂[1], n̂[2], n̂[3]), digits=5), -1.0, 1.0))
 end
 
 """

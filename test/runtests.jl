@@ -46,12 +46,14 @@ if test_all || test_only == "Basis"
         include("basis/test_orbconfig.jl")
         include("basis/test_adaptive_intp.jl")
         include("basis/test_orbital.jl")
+        include("basis/test_sh_transforms.jl")
         include("basis/test_label.jl")
         include("basis/test_index.jl")
         include("basis/test_overlap.jl")
         include("basis/test_param.jl")
         include("basis/test_rllm.jl")
         include("basis/test_basis.jl")
+        include("basis/test_sk_overlaps.jl")
     end
 end
 

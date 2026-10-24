@@ -128,15 +128,22 @@ function get_geometry_tensor(strc, basis, file = nothing, conf=get_empty_config(
             r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos .- Ts[:, R])
             r = normdiff(r⃗₁, r⃗₂)
             if r_nd ≤ rcut && r-abs(rcut_tol) < rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
+                # Bond frames for both directions of the bond (the reversed one for swapped orbital pairs)
                 Û = get_sk_transform_matrix(r⃗₁, r⃗₂, basis.orbitals[iion1][1].axis, tmethod)
+                Û_swap = get_sk_transform_matrix(r⃗₂, r⃗₁, basis.orbitals[iion1][1].axis, tmethod)
                 nnlabel = get_nn_label(r, nn_dict[ion_label], conf)
                 for jorb1 in eachindex(basis.orbitals[iion1]), jorb2 in eachindex(basis.orbitals[iion2])
                     orb1 = basis.orbitals[iion1][jorb1]
                     orb2 = basis.orbitals[iion2][jorb2]
                     i = ij_map[(iion1, jorb1)]
                     j = ij_map[(iion2, jorb2)]
-                    θ₁, φ₁ = get_rotated_angles(Û, orb1.axis)
-                    θ₂, φ₂ = get_rotated_angles(Û, orb2.axis)
+                    # Hybrid orbitals (l < 0) are evaluated in the bond frame from atom 1 to atom 2, as before the d orbitals
+                    hybrid = orb1.type.l < 0 || orb2.type.l < 0
+                    bondswap = !hybrid && determine_bondswap(ion_types[iion1], ion_types[iion2], orb1.type, orb2.type, i, j)
+                    U = bondswap ? Û_swap : Û
+                    base = get_base_orb(orb1.type, orb2.type, bondswap=bondswap)
+                    θ₁, φ₁ = get_rotated_angles(U, orb1.axis)
+                    θ₂, φ₂ = get_rotated_angles(U, orb2.axis)
 
                     for k in eachindex(basis.overlaps)
                         Cllm = basis.overlaps[k]
@@ -145,8 +152,18 @@ function get_geometry_tensor(strc, basis, file = nothing, conf=get_empty_config(
                         orbconfig = get_orbconfig(oc_dicts, k, ion_label, jorb1, jorb2)
                         if overlap_contributes_to_matrix_element(Cllm, orb1, orb2, ion_label)
                             v = get_param_index(Cllm, nnlabel, basis.parameters, orb1, orb2, i, j)
+                            # Base orbitals in the order of the parameter definition. Two signs of the bond direction (parity
+                            # (-1)^(l₁ + l₂) for odd l₁ + l₂), which the angular functions of dorbs did not account for:
+                            # - reversing the order of the base orbitals without reversing the bond;
+                            # - parameters with decreasing l (e.g. Ga+As_psσ), whose distance dependence already contains
+                            #   the sign (see distance_dependence), which the angular part applies again.
+                            reversed_base = !hybrid && Cllm.type.base_ls ≠ (base[1].l, base[2].l)
+                            base_k = reversed_base ? reverse(base) : base
+                            odd = !hybrid && isodd(base[1].l + base[2].l)
+                            flips = (reversed_base ? 1 : 0) + (Cllm.type.base_ls[1] > Cllm.type.base_ls[2] ? 1 : 0)
+                            parity = odd && isodd(flips) ? -1.0 : 1.0
 
-                            hval = Cllm(orbconfig, mode, θ₁, φ₁, θ₂, φ₂) * Rllm(r) * fcut(r, rcut, rcut_tol)
+                            hval = parity * Cllm(base_k, orbconfig, mode, θ₁, φ₁, θ₂, φ₂) * Rllm(r) * fcut(r, rcut, rcut_tol)
 
                             if haskey(hs[chunk_id], (v, i, j, R)) && abs(hval) ≥ sp_tol
                                 hs[chunk_id][(v, i, j, R)] += hval
@@ -194,15 +211,22 @@ function get_geometry_tensor(strc, basis,subdir :: String, conf=get_empty_config
             r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos .- Ts[:, R])
             r = normdiff(r⃗₁, r⃗₂)
             if r_nd ≤ rcut && r-abs(rcut_tol) < rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
+                # Bond frames for both directions of the bond (the reversed one for swapped orbital pairs)
                 Û = get_sk_transform_matrix(r⃗₁, r⃗₂, basis.orbitals[iion1][1].axis, tmethod)
+                Û_swap = get_sk_transform_matrix(r⃗₂, r⃗₁, basis.orbitals[iion1][1].axis, tmethod)
                 nnlabel = get_nn_label(r, nn_dict[ion_label], conf)
                 for jorb1 in eachindex(basis.orbitals[iion1]), jorb2 in eachindex(basis.orbitals[iion2])
                     orb1 = basis.orbitals[iion1][jorb1]
                     orb2 = basis.orbitals[iion2][jorb2]
                     i = ij_map[(iion1, jorb1)]
                     j = ij_map[(iion2, jorb2)]
-                    θ₁, φ₁ = get_rotated_angles(Û, orb1.axis)
-                    θ₂, φ₂ = get_rotated_angles(Û, orb2.axis)
+                    # Hybrid orbitals (l < 0) are evaluated in the bond frame from atom 1 to atom 2, as before the d orbitals
+                    hybrid = orb1.type.l < 0 || orb2.type.l < 0
+                    bondswap = !hybrid && determine_bondswap(ion_types[iion1], ion_types[iion2], orb1.type, orb2.type, i, j)
+                    U = bondswap ? Û_swap : Û
+                    base = get_base_orb(orb1.type, orb2.type, bondswap=bondswap)
+                    θ₁, φ₁ = get_rotated_angles(U, orb1.axis)
+                    θ₂, φ₂ = get_rotated_angles(U, orb2.axis)
 
                     for k in eachindex(basis.overlaps)
                         Cllm = basis.overlaps[k]
@@ -211,8 +235,18 @@ function get_geometry_tensor(strc, basis,subdir :: String, conf=get_empty_config
                         orbconfig = get_orbconfig(oc_dicts, k, ion_label, jorb1, jorb2)
                         if overlap_contributes_to_matrix_element(Cllm, orb1, orb2, ion_label)
                             v = get_param_index(Cllm, nnlabel, basis.parameters, orb1, orb2, i, j)
+                            # Base orbitals in the order of the parameter definition. Two signs of the bond direction (parity
+                            # (-1)^(l₁ + l₂) for odd l₁ + l₂), which the angular functions of dorbs did not account for:
+                            # - reversing the order of the base orbitals without reversing the bond;
+                            # - parameters with decreasing l (e.g. Ga+As_psσ), whose distance dependence already contains
+                            #   the sign (see distance_dependence), which the angular part applies again.
+                            reversed_base = !hybrid && Cllm.type.base_ls ≠ (base[1].l, base[2].l)
+                            base_k = reversed_base ? reverse(base) : base
+                            odd = !hybrid && isodd(base[1].l + base[2].l)
+                            flips = (reversed_base ? 1 : 0) + (Cllm.type.base_ls[1] > Cllm.type.base_ls[2] ? 1 : 0)
+                            parity = odd && isodd(flips) ? -1.0 : 1.0
 
-                            hval = Cllm(orbconfig, mode, θ₁, φ₁, θ₂, φ₂) * Rllm(r) * fcut(r, rcut, rcut_tol)
+                            hval = parity * Cllm(base_k, orbconfig, mode, θ₁, φ₁, θ₂, φ₂) * Rllm(r) * fcut(r, rcut, rcut_tol)
 
                             if haskey(hs[chunk_id], (v, i, j, R)) && abs(hval) ≥ sp_tol
                                 hs[chunk_id][(v, i, j, R)] += hval
@@ -261,6 +295,28 @@ function get_geometry_tensors(strcs, bases, subdirs :: Vector{String}, conf=get_
     return hs
 end
 """
+    determine_bondswap(ion_type1, ion_type2, orb1, orb2, i, j)
+
+Determine whether a bond-direction flip is required for a TB matrix element
+given the definition of that interaction.
+
+This accounts for the fact that some hopping parameters (e.g. s-p couplings)
+change sign when the bonding axis is defined in the opposite direction.
+
+Returns `true` if a bond swap is needed, which occurs when:
+  - The two ions appear in reversed order (`areswapped(ion_type1, ion_type2)`), or
+  - The ions are of the same type, but different orbital types (`orb1`, `orb2`)
+    are used with reversed orbital indices (`i > j`).
+
+Otherwise, returns `false`.
+"""
+function determine_bondswap(ion_type1, ion_type2, orb1, orb2, i, j)
+    ionswap = areswapped(ion_type1, ion_type2)
+    sameion_bondflip = ion_type1 == ion_type2 && i > j && typeof(orb1) ≠ typeof(orb2)
+    return ionswap || sameion_bondflip
+end
+
+"""
     overlap_contributes_to_matrix_element(overlap, orb1, orb2, ion_label)
 
 Return true if `overlap` contributes to the matrix element between the orbitals `orb1` and `orb2` for `ion_label`.
@@ -271,13 +327,22 @@ Return true if `overlap` contributes to the matrix element between the orbitals 
 - `orb2`: The second orbital.
 - `ion_label`: The ion label to check if the overlap corresponds to the same type of ions as the orbitals.
 
+Between different elements, the angular momenta of the overlap belong to its elements in order (e.g. `Ga+As_spσ`: s on
+Ga, p on As), so the reversed assignment (p on Ga, s on As) does not contribute. For the same element, both orders
+contribute.
+
 # Returns
 - `Bool`: Returns `true` if the overlap contributes to the matrix element, i.e., if the orbital types of `orb1` and `orb2` match the types in the overlap, and the `ion_label` matches.
 """
 function overlap_contributes_to_matrix_element(overlap, orb1, orb2, ion_label)::Bool
     l₁, l₂ = orb1.type.l, orb2.type.l
-    l₁_ov, l₂_ov = overlap.type.base[1].l, overlap.type.base[2].l
-    return same_ion_label(overlap, ion_label) && ( (l₁ == l₁_ov && l₂ == l₂_ov) || (l₁ == l₂_ov && l₂ == l₁_ov))
+    l₁_ov, l₂_ov = overlap.type.base_ls[1], overlap.type.base_ls[2]
+    same_ion_label(overlap, ion_label) || return false
+    if ion_label.types[1] ≠ ion_label.types[2]
+        ion_label.types[1] == overlap.ion_label.types[1] && return l₁ == l₁_ov && l₂ == l₂_ov
+        return l₁ == l₂_ov && l₂ == l₁_ov
+    end
+    return (l₁ == l₁_ov && l₂ == l₂_ov) || (l₁ == l₂_ov && l₂ == l₁_ov)
 end
 
 """
