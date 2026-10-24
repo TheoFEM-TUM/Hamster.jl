@@ -426,6 +426,9 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; c
         for R in 1:descr_sizes[i][1] ]
         for i in 1:N_mats
         ]
+    bucket_keys = collect(keys(key_ranges))
+    bucket_trees = Dict(zip(bucket_keys, tmap(key -> KeyBucketTree(@view(data_points[key_ranges[key]])), bucket_keys)))
+    radius = similarity_radius(sim_params, sim_tol)
     N_test = zeros(Int64, N_mats)
     N_total = zeros(Int64, N_mats)
     for i in 1:N_mats
@@ -438,11 +441,7 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; c
             tforeach(1:length(touples)) do n
                 i_mat, j_mat, hin = touples[n]
                 key = keyfun(hin)
-                data_points_vector = @view data_points[key_ranges[key]]
-                #val_vec = exp_sim_all(data_points_vector, hin, σ=sim_params, dim_weights = dim_weights)
-                val_vec = exp_sim_all(data_points_vector, hin, σ=sim_params)
-                val_vec[abs.(val_vec) .<= sim_tol] .= 0
-                val_vec = sparse(val_vec)
+                val_vec = kernel_feature(bucket_trees[key], hin, sim_params, sim_tol, radius)
                 covered = nnz(val_vec) > 0 ? 1 : 0
                 N_test_temp[n] = covered
                 Desc_Vec[i][R][1][n] = (val_vec,(i_mat,j_mat, key))
@@ -459,7 +458,6 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; c
         end
     end
     structure_descriptors = nothing
-    GC.gc()
     return [SimMat(Desc_Vec[i], (descr_sizes[i], N_dp), sim_params) for i in 1:N_mats]
 end
 
@@ -690,40 +688,97 @@ function _build_simmat(::Type{SimMatT}, ::Val{nkeys}, descr, N_dp, sim_params, n
 end
 
 """
-    exp_sim2(x1::SVector{9,Float64}, x2::SVector{9,Float64}; σ, dim_weights)
+    exp_sim(x1, x2; σ)
 
-Computes the exponential similarity (Gaussian RBF kernel) between two 9-dimensional vectors.
-
-# Arguments
-- `x1::SVector{9,Float64}`: First input vector.
-- `x2::SVector{9,Float64}`: Second input vector.
-- `σ`: Gaussian width parameter (default: `√0.05`).
-- `dim_weights`: Per-dimension scaling weights (default: `ones(9)`).
-
-# Returns
-- `similarity::Float64`: Exponential similarity value in range [0, 1].
-
-# Formula
-Computes: `exp(-||x1 ⊙ w - x2 ⊙ w||² / (2σ²))` where ⊙ denotes element-wise multiplication.
+Computes the exponential similarity (Gaussian RBF kernel) `exp(-||x1 - x2||² / (2σ²))` between two vectors (default `σ = √0.05`).
 """
-exp_sim2(x1::SVector{9,Float64}, x2::SVector{9,Float64}; σ=√0.05, dim_weights = ones(9)) =
-    exp(-normdiff(x1.*dim_weights, x2.*dim_weights)^2 / (2σ^2))
+exp_sim(x1, x2; σ=√0.05) = exp(-normdiff(x1, x2)^2 / (2σ^2))
 
 """
-    exp_sim_all(x1, x2::SVector{9,Float64}; σ, dim_weights)
+    similarity_radius(σ, sim_tol) -> Float64
 
-Broadcasts the exponential similarity function over a vector of points x1 against a single point x2.
-
-# Arguments
-- `x1`: Vector of 9-dimensional points.
-- `x2::SVector{9,Float64}`: Reference point for comparison.
-- `σ`: Gaussian width parameter (default: `√0.05`).
-- `dim_weights`: Per-dimension scaling weights (default: `ones(9)`).
-
-# Returns
-- `similarities::Vector`: Exponential similarities between each point in x1 and x2.
-
-# Notes
-- Vectorized version of `exp_sim2` for efficient computation against a reference point.
+Distance beyond which the similarity `exp_sim(x1, x2; σ)` is at most `sim_tol`, i.e. `σ √(-2 ln sim_tol)` (with a small safety margin).
 """
-exp_sim_all(x1, x2::SVector{9,Float64}; σ=√0.05, dim_weights = ones(9)) = exp_sim2.(x1, Ref(x2); σ=σ, dim_weights=dim_weights)
+function similarity_radius(σ, sim_tol)
+    sim_tol <= 0 && return Inf
+    sim_tol >= 1 && return 0.0
+    return σ * sqrt(-2log(sim_tol)) * (1 + 1e-8)
+end
+
+"""
+    KeyBucketTree(points; leaf_size=16)
+
+k-d tree of the data points of one key bucket, used to find the data points within a radius of a descriptor.
+Every node covers the points `points[lo[node]:hi[node]]` (stored in tree order, `perm` maps them to their index in the bucket).
+Inner nodes split their points at the median `split_val` along the dimension `split_dim` with the largest spread into the
+children `left` and `right`; leaves have `split_dim = 0`.
+"""
+struct KeyBucketTree{P}
+    points :: Vector{P}
+    perm :: Vector{Int64}
+    split_dim :: Vector{Int64}
+    split_val :: Vector{Float64}
+    lo :: Vector{Int64}
+    hi :: Vector{Int64}
+    left :: Vector{Int64}
+    right :: Vector{Int64}
+end
+
+function KeyBucketTree(points::AbstractVector{P}; leaf_size=16) where {P}
+    perm = collect(eachindex(points))
+    tree = KeyBucketTree{P}(P[], perm, Int64[], Float64[], Int64[], Int64[], Int64[], Int64[])
+    build_node!(tree, points, 1, length(perm), leaf_size)
+    append!(tree.points, points[perm])
+    return tree
+end
+
+function build_node!(tree, points, lo, hi, leaf_size)
+    node = length(tree.lo) + 1
+    push!(tree.split_dim, 0); push!(tree.split_val, 0.0); push!(tree.lo, lo); push!(tree.hi, hi); push!(tree.left, 0); push!(tree.right, 0)
+    hi - lo + 1 <= leaf_size && return node
+    inds = view(tree.perm, lo:hi)
+    spread(d) = (coords = (points[n][d] for n in inds); maximum(coords) - minimum(coords))
+    dim = argmax(spread, 1:length(first(points)))
+    spread(dim) > 0 || return node
+    inds .= inds[sortperm([points[n][dim] for n in inds])]
+    mid = (lo + hi) ÷ 2
+    tree.split_dim[node] = dim
+    tree.split_val[node] = points[tree.perm[mid]][dim]
+    tree.left[node] = build_node!(tree, points, lo, mid, leaf_size)
+    tree.right[node] = build_node!(tree, points, mid + 1, hi, leaf_size)
+    return node
+end
+
+"""
+    kernel_feature(tree, x, σ, sim_tol, radius) -> SparseVector
+
+Similarities `exp_sim(point, x; σ)` of the descriptor `x` to the data points of a key bucket, keeping only the values
+`> sim_tol`. Only the points within `radius` of `x` are evaluated (see `similarity_radius`).
+"""
+function kernel_feature(tree::KeyBucketTree, x, σ, sim_tol, radius)
+    radius2 = radius^2
+    nzind = Int64[]
+    nzval = Float64[]
+    stack = [1]
+    @inbounds while !isempty(stack)
+        node = pop!(stack)
+        dim = tree.split_dim[node]
+        if dim == 0
+            for k in tree.lo[node]:tree.hi[node]
+                point = tree.points[k]
+                # Cheap rejection of the points outside the radius before the exponential is evaluated
+                sum(abs2, point - x) > radius2 && continue
+                val = exp_sim(point, x; σ=σ)
+                if abs(val) > sim_tol && val ≠ 0
+                    push!(nzind, tree.perm[k])
+                    push!(nzval, val)
+                end
+            end
+        else
+            x[dim] - radius <= tree.split_val[node] && push!(stack, tree.left[node])
+            x[dim] + radius >= tree.split_val[node] && push!(stack, tree.right[node])
+        end
+    end
+    p = sortperm(nzind)
+    return SparseVector(length(tree.points), nzind[p], nzval[p])
+end
