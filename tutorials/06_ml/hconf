@@ -1,0 +1,48 @@
+# Tutorial 6 (exercise): machine-learned (ML) corrections to the TB model of GaAs, trained on MD snapshots.
+# Replace every ??? (see the tutorial page; `hamster --tag <name>` describes each tag). The solution is in solution/hconf.
+begin Options
+    poscar = ../data/gaas/POSCAR
+    rcut = 7
+    sp_mode = true
+    init_params = ../data/gaas/params_tb.dat    # TB parameters of the primitive-cell fit (tutorial 3)
+    load_rllm = true
+    rllm_file = ../data/gaas/rllm.dat
+end
+
+begin Supercell                                 # the structures of the MD trajectory
+    poscar = ???                                # reference structure of the snapshots (species and order of the atoms)
+    xdatcar = ???                               # positions (and lattice) of the snapshots
+    Nconf = 10                                  # number of training snapshots ...
+    Nconf_max = ???                             # ... drawn from the snapshots 1 to Nconf_max (the file has 29)
+end
+
+begin Optimizer
+    update_tb = ???                             # keep the TB parameters fixed: only the ML corrections are fitted
+    lr = ???                                    # learning rate: ML fits need a much smaller one than TB fits
+    niter = 200
+    loss = MAE
+    train_data = ../data/gaas/eigenval.h5       # eigenvalues of every snapshot
+    val_data = ../data/gaas/eigenval.h5         # validation snapshots from the same file ...
+    train_mode = ???                            # training and validation data are supercell snapshots, ...
+    val_mode = ???                              # ... not a primitive cell
+    val_ratio = 1                               # ... as many as training snapshots
+    valeachiter = 10
+end
+
+begin ML
+    npoints = ???                               # number of kernel points (descriptors sampled from the snapshots)
+    ncluster = ???                              # number of k-means clusters used to pick them
+end
+
+begin atom Ga
+    n = 3
+    alpha = 9
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+end
+
+begin atom As
+    n = 3
+    alpha = 13
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+    nnaxes = true
+end

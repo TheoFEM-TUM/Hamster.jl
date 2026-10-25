@@ -1,0 +1,47 @@
+# Tutorial 6 (solution): machine-learned (ML) corrections to the TB model of GaAs, trained on MD snapshots
+begin Options
+    poscar = ../../data/gaas/POSCAR
+    rcut = 7
+    sp_mode = true
+    init_params = ../../data/gaas/params_tb.dat
+    load_rllm = true
+    rllm_file = ../../data/gaas/rllm.dat
+end
+
+begin Supercell
+    poscar = ../../data/gaas/SC_POSCAR
+    xdatcar = ../../data/gaas/structures.h5
+    Nconf = 10
+    Nconf_max = 29
+end
+
+begin Optimizer
+    update_tb = false
+    lr = 0.01
+    niter = 200
+    loss = MAE
+    train_data = ../../data/gaas/eigenval.h5
+    val_data = ../../data/gaas/eigenval.h5
+    train_mode = md
+    val_mode = md
+    val_ratio = 1
+    valeachiter = 10
+end
+
+begin ML
+    npoints = 250
+    ncluster = 25
+end
+
+begin atom Ga
+    n = 3
+    alpha = 9
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+end
+
+begin atom As
+    n = 3
+    alpha = 13
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+    nnaxes = true
+end

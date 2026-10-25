@@ -1,0 +1,36 @@
+# Tutorial 4: hyperparameter optimization of the radial functions (alpha of Ga and As) of the GaAs TB model.
+# Every trial is a full TB fit (Optimizer block) with other values of alpha; the trials are chosen by a
+# tree-structured Parzen estimator (tpe) and scored by the validation loss.
+begin Options
+    poscar = ../data/gaas/POSCAR
+    rcut = 7
+end
+
+begin Optimizer
+    train_data = ../data/gaas/EIGENVAL_train
+    val_data = ../data/gaas/EIGENVAL_val
+    niter = 150                       # iterations per trial (fewer than in the final fit)
+    lr = 0.2
+    loss = MAE
+    wE = 1 1 1 1 1 1 0.1 0.1
+    wk_1 = 5
+end
+
+begin HyperOpt
+    params = Ga_alpha As_alpha        # hyperparameters as <atom or block>_<tag>
+    lowerbounds = 1 1                 # search range of each hyperparameter
+    upperbounds = 30 30
+    niter = 20                        # number of trials (use 100-200 for a real model)
+    mode = tpe                        # tree-structured Parzen estimator (also: random, grid)
+end
+
+begin atom Ga
+    n = 3
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+end
+
+begin atom As
+    n = 3
+    orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
+    nnaxes = true
+end

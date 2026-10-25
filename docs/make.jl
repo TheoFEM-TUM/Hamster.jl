@@ -35,11 +35,17 @@ makedocs(
             "models/kernel.md",
             "models/ewald.md"
         ],
-        "Examples" => [
-            "examples/examples.md",
-            "examples/model_eval.md",
-            "examples/gaas_tb_hyperopt.md",
-            "examples/gaas_ml_fit.md"
+        "Tutorials" => [
+            "tutorials/overview.md",
+            "tutorials/workflow.md",
+            "tutorials/01_data.md",
+            "tutorials/02_first_run.md",
+            "tutorials/03_tb_fit.md",
+            "tutorials/04_hyperopt.md",
+            "tutorials/05_soc.md",
+            "tutorials/06_ml.md",
+            "tutorials/07_electrostatics.md",
+            "tutorials/08_applications.md"
         ],
         "Library" => "library/library.md"
     ]

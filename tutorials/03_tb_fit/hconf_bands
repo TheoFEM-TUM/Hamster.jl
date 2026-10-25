@@ -1,0 +1,21 @@
+# Band structure with the fitted parameters (run after the fit: hamster --conf hconf_bands)
+begin Options
+    poscar = ../data/gaas/POSCAR
+    kpoints = ../data/gaas/EIGENVAL_bands
+    rcut = ???                                     # the same as in the fit
+    init_params = params.dat                       # written by the fit
+    load_rllm = true                               # distance dependence written by the fit (rllm.dat)
+end
+
+begin atom Ga
+    n = ???                                        # the same as in the fit
+    alpha = 9
+    orbitals = ???                                 # the same as in the fit
+end
+
+begin atom As
+    n = ???                                        # the same as in the fit
+    alpha = 13
+    orbitals = ???                                 # the same as in the fit
+    nnaxes = true
+end

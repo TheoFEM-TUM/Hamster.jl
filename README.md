@@ -21,7 +21,7 @@ The hardware requirements for running `Hamster.jl` are moderate, but they strong
 
 ## Installation & Dependencies
 
-To get started, you need a working [Julia](https://julialang.org/install/) installation. `Hamster.jl` is tested with Julia **v1.12.5** on **Ubuntu 24.04 LTS (Noble Numbat)**. If you are using a different Julia version or operating system, please verify on your own that everything works as expected (e.g., by running the test suite or one of the [examples](https://theofem-tum.github.io/Hamster.jl/dev/examples/examples/)).
+To get started, you need a working [Julia](https://julialang.org/install/) installation. `Hamster.jl` is tested with Julia **v1.12.5** on **Ubuntu 24.04 LTS (Noble Numbat)**. If you are using a different Julia version or operating system, please verify on your own that everything works as expected (e.g., by running the test suite or one of the [tutorials](https://theofem-tum.github.io/Hamster.jl/dev/tutorials/overview/)).
 
 Since `Hamster.jl` is not (yet) a registered Julia package, it comes with the `hamster` executable, which installs the dependencies and runs calculations. Clone the repository and install Hamster:
 
@@ -68,7 +68,7 @@ You can start Hamster by calling the `hamster` executable. To make use of MPI pa
 [mpiexecjl -n NRANKS / srun] hamster [-t NUMBER_OF_THREADS] [kwargs]
 ```
 
-While keyword arguments can be passed directly via the command line, it is more practical to provide Hamster with a config file `hconf`(see [here](https://theofem-tum.github.io/Hamster.jl/dev/conf/config/)). Examples that can be run on a personal computer in under 10 minutes are available [here](https://theofem-tum.github.io/Hamster.jl/dev/examples/examples/).
+While keyword arguments can be passed directly via the command line, it is more practical to provide Hamster with a config file `hconf`(see [here](https://theofem-tum.github.io/Hamster.jl/dev/conf/config/)). [Tutorials](https://theofem-tum.github.io/Hamster.jl/dev/tutorials/overview/) that run on a laptop within a few minutes show how to fit a model to your material, step by step (inputs in the [`tutorials`](tutorials) folder).
 
 ## Code functionality
 

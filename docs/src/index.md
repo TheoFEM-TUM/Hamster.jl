@@ -37,5 +37,5 @@ You can start Hamster by calling the `hamster` executable. To make use of MPI pa
 [mpiexecjl -n NRANKS / srun] hamster [-t NUMBER_OF_THREADS] [kwargs]
 ```
 
-While keyword arguments can be passed directly via the command line, it is more practical to provide Hamster with a [config file](@ref man-config) `hconf`. Examples can be found [here](@ref examples).
+While keyword arguments can be passed directly via the command line, it is more practical to provide Hamster with a [config file](@ref man-config) `hconf`. The [tutorials](@ref tutorials) show how to fit a model to your material, step by step.
 

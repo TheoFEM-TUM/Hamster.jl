@@ -1,0 +1,59 @@
+# Tutorial 7 (exercise): electrostatic on-site corrections (Wolf summation) for CsPbBr3 MD snapshots (without SOC).
+# Replace every ??? (see the tutorial page; `hamster --tag <name>` describes each tag). The solution is in solution/hconf.
+begin Options
+    poscar = ../data/cspbbr3/POSCAR
+    rcut = 5.5
+    sp_mode = true
+    init_params = ../data/cspbbr3/params_tb.dat
+    load_rllm = true
+    rllm_file = ../data/cspbbr3/rllm.dat
+end
+
+begin Supercell
+    poscar = ../data/cspbbr3/SC_POSCAR          # 2×2×2 supercell, 40 atoms
+    xdatcar = ../data/cspbbr3/structures_md.h5  # 20 MD snapshots
+    Nconf = 10
+    Nconf_max = 20
+end
+
+begin Optimizer
+    update_tb = false
+    lr = 0.05
+    niter = 100
+    loss = MAE
+    train_data = ../data/cspbbr3/eigenval_md.h5
+    val_data = ../data/cspbbr3/eigenval_md.h5
+    train_mode = md
+    val_mode = md
+    val_ratio = 1
+    valeachiter = 5
+    bandmin = ???                               # first DFT band of the model: 8 cells × 9 occupied model bands below the VBM (band 176)
+    wE_96-112 = 0.5                             # the highest model bands are less important
+    wE_72-73 = 5                                # valence band maximum and conduction band minimum
+end
+
+begin Ewald
+    method = ???                                # Wolf summation: damped and short-ranged, transferable to large cells
+    rcut = 15                                   # range of the Wolf sum (Å)
+    alpha = 0.2                                 # damping (1/Å)
+    charge_scale = ???                          # start value of the couplings: 0 = start without electrostatics
+    update = ???                                # fit the coupling of every species
+end
+
+begin atom Cs
+    alpha = 38.6
+    orbitals = s
+    qeff = ???                                  # effective charges (e): the cell must be neutral (Cs + Pb + 3 Br = 0)
+end
+
+begin atom Pb
+    alpha = 37
+    orbitals = s px py pz
+    qeff = 1.248
+end
+
+begin atom Br
+    alpha = 14.3
+    orbitals = px py pz
+    qeff = -0.756
+end

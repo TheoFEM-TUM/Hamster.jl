@@ -1,0 +1,32 @@
+begin unknown
+  rcut = 5.5
+  onsite = true
+  sepNN = false
+  Pb_alpha = 37.0
+  Pb_n = 6
+  Cs_alpha = 38.6
+  Cs_n = 6
+  Br_alpha = 14.3
+  Br_n = 4
+end
+
+NN0_Pb+Pb_diag0          6.300258426212897
+NN0_Pb+Pb_offdiag01      1.0
+NN0_Pb+Pb_diag1          2.859020608643145
+NN0_Pb+Pb_offdiag11      1.0
+NN0_Cs+Cs_diag0          4.56784720067113
+NN0_Br+Br_diag1          -0.7105402592015909
+NN0_Br+Br_offdiag11      1.0
+NN1_Pb+Pb_ssσ            1.0
+NN1_Pb+Pb_spσ            1.0
+NN1_Pb+Pb_ppπ            1.0
+NN1_Pb+Pb_ppσ            1.0
+NN1_Cs+Pb_ssσ            -22.615630652193442
+NN1_Cs+Pb_spσ            -40.79804142420994
+NN1_Br+Pb_spσ            0.028556016381176334
+NN1_Br+Pb_ppπ            7.489798046159364
+NN1_Br+Pb_ppσ            6.667351211371393
+NN1_Cs+Cs_ssσ            1.0
+NN1_Br+Cs_spσ            9.759353282054347
+NN1_Br+Br_ppπ            3.7927268897367834
+NN1_Br+Br_ppσ            2.1046858430506163
