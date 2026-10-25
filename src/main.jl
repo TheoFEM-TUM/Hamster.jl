@@ -40,7 +40,7 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity
                 collapse_files_with(str)
             else 
                 for file in filter(file -> occursin(str, file), readdir(joinpath(pwd(), "tmp")))
-                    cp(joinpath("tmp", file), "Es.dat"; force=true)
+                    cp(joinpath("tmp", file), "$str.dat"; force=true)
                 end
             end
         end
