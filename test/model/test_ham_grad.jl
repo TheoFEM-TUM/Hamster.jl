@@ -94,4 +94,13 @@ end
     direct = Hamster.get_loss_gradient_hr(dL_dE, vs, Rs, ks, Hamster.Sparse(), sp_iterator)
     @test all(Matrix.(direct) .≈ Matrix.(reference))
     @test direct[1] isa SparseMatrixCSC{ComplexF64, Int64}
+
+    # Very uneven numbers of entries per lattice vector (all at R = 1, none at R = 3) and no entries at all
+    sp_uneven = [R == 1 ? [(i, j) for i in 1:6 for j in 1:6] : R == 3 ? Tuple{Int64, Int64}[] : [(R, R)] for R in axes(Rs, 2)]
+    reference = Hamster.chain_rule(dL_dE, Hamster.get_eigenvalue_gradient(vs, Rs, ks, Hamster.Sparse(), sp_uneven), Hamster.Sparse())
+    direct = Hamster.get_loss_gradient_hr(dL_dE, vs, Rs, ks, Hamster.Sparse(), sp_uneven)
+    @test all(Matrix.(direct) .≈ Matrix.(reference))
+    @test nnz(direct[3]) == 0
+    empty = [Tuple{Int64, Int64}[] for _ in axes(Rs, 2)]
+    @test all(R -> nnz(R) == 0, Hamster.get_loss_gradient_hr(dL_dE, vs, Rs, ks, Hamster.Sparse(), empty))
 end
