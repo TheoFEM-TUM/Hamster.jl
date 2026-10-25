@@ -160,8 +160,11 @@ The interaction kernel is selected via `method`:
     electrostatics without reciprocal-space contributions.
 
 - `"zahn"`:
-    Similar to Wolf, but may include additional corrections (e.g. linear/force
-    shifting) to improve smoothness and neutrality at the cutoff.
+    Damped shifted force (Zahn, Fennell and Gezelter)
+
+        erfc(α r) / r - erfc(α rcut) / rcut + (erfc(α rcut) / rcut² + 2α/√π exp(-α² rcut²) / rcut) (r - rcut)
+
+    Potential and force go to zero at `rcut`.
 """
 function ewald_real!(phi, pos, qs, Rs, lattice, point_grid, alpha, rcut; method="ewald")
 
@@ -201,7 +204,9 @@ function get_realspace_kernel(method)
 end
 ewald_kernel(r, α, rcut) = erfc(α * r) / r
 wolf_kernel(r, α, rcut) = ewald_kernel(r, α, rcut) - erfc(α * rcut) / rcut
-zahn_kernel(r, α, rcut) = ewald_kernel(r, α, rcut) - (erfc(α*rcut)/(rcut^2) + 2α/(√π)*exp(-(α*rcut)^2)/rcut)*(r - rcut)
+# damped shifted force (Fennell and Gezelter, J. Chem. Phys. 124, 234104 (2006)): value and derivative vanish at rcut
+zahn_kernel(r, α, rcut) = ewald_kernel(r, α, rcut) - erfc(α * rcut) / rcut +
+                          (erfc(α * rcut) / rcut^2 + 2α / √π * exp(-(α * rcut)^2) / rcut) * (r - rcut)
 
 """
     ewald_recip!(phi, pos, q, box, box_inv, alpha, mesh_spacing)
