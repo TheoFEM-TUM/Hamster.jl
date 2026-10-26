@@ -82,6 +82,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         rcut            = get_ewald_rcut(conf),
         alpha           = get_ewald_alpha(conf),
         mesh_spacing    = get_ewald_mesh_spacing(conf),
+        slab_axis       = get_ewald_slab_axis(conf),
         update          = get_ewald_update(conf),
         label           = "",
         write_summary   = true)
@@ -113,6 +114,11 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         else
             ewald = ewald_sum(pos, charges, strc.lattice, rcut=rcut, method=method, alpha=α)
         end
+        φ = ewald.potentials
+        if slab_axis > 0
+            # long range of a slab: plane-averaged part (wolf, zahn) or dipole correction (ewald), see ewald_slab.jl
+            φ = φ .+ slab_potentials(pos, charges, strc.lattice, slab_axis; method=method, alpha=α)
+        end
 
         ion_indices_with_orbs = collect(1:length(ion_types))
         ion_types_with_orbs = get_ion_types(strc.ions, conf, uniq=true, withorbitals=true)
@@ -120,7 +126,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
 
         push!(types_per_strc, ion_types[ion_indices_with_orbs])
         push!(norb_per_strc, size(bases[n])[ion_indices_with_orbs])
-        push!(potentials, ewald.potentials[ion_indices_with_orbs])
+        push!(potentials, φ[ion_indices_with_orbs])
         Rs_info[1, n] = size(strc.Rs, 2)
         Rs_info[2, n] = findR0(strc.Rs)
     end
@@ -181,7 +187,8 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
 
     model = EwaldOnsites(params, param_labels, potentials, types_per_strc, norb_per_strc, Rs_info, update)
     write_summary && write_model_summary(model, comm, conf, rank=rank, label=label, species_mean=species_mean, structure_means=structure_means,
-                                         method=method, rcut=rcut, alpha=α, alpha_auto=alpha == 0, grid_rebuilt=grid_rebuilt && method == "ewald")
+                                         method=method, rcut=rcut, alpha=α, alpha_auto=alpha == 0, grid_rebuilt=grid_rebuilt && method == "ewald",
+                                         slab_axis=slab_axis)
     return model
 end
 

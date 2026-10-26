@@ -1,6 +1,6 @@
 # Ewald Onsite Correction
 
-An Ewald-based onsite correction is enabled when an `Ewald` block is present in the configuration file. The correction is only applied if effective charges are defined for all atomic species via the `qeff` parameter. For periodic systems, the total charge must be neutral, i.e., the sum over all `qeff` values must be zero.
+An Ewald-based onsite correction is enabled when an `Ewald` block is present in the configuration file. The correction is only applied if effective charges are defined for all atomic species via the `qeff` parameter. For the full Ewald sum (`method = ewald`), the cell must be neutral, i.e., the charges `qeff` of its atoms must add up to zero. Wolf and Zahn also work for charged cells, e.g. slabs or defects with effective charges.
 
 ## Overview
 
@@ -215,8 +215,54 @@ training and the validation set). Settings from the config file are not repeated
   10 meV with 10 structures, 3 meV with 100 (the band gaps of the two runs differ by about 3 meV) and 30-50 meV for a
   single structure, while the estimate for a single 16x16x16 cell is 1-2 meV.
 
+## Slabs
+
+In a slab (a cell with vacuum along one lattice vector), aligned dipoles of successive layers (e.g. alternating bond
+lengths along the surface normal) add up to a potential step across the slab, which shifts the levels of the surface
+layers relative to the interior. This is a long-range effect: the potential of a charged plane does not decay with
+distance. Wolf and Zahn keep only the short-range part ``\mathrm{erfc}(\alpha r)/r`` of the Coulomb interaction and
+miss it, while the full Ewald sum treats the slab as periodic along the normal, so that the dipole of the slab creates
+an artificial field across the vacuum.
+
+With `slab_axis` (1, 2 or 3, the lattice vector across the vacuum; default 0: periodic) in the `Ewald` block:
+
+- **Wolf and Zahn**: the plane-averaged part of the missing long range is added. The average of the smooth part
+  ``\mathrm{erf}(\alpha r)/r`` over the planes parallel to the surface is the potential of Gaussian charge sheets
+  (the ``k_\parallel = 0`` component of the Ewald sum),
+
+  ```math
+  \bar\phi(z) = -\frac{2\pi}{A} \sum_j q_j \left[ u_j \,\mathrm{erf}(\alpha u_j) + \frac{e^{-\alpha^2 u_j^2}}{\alpha\sqrt{\pi}} \right],
+  \qquad u_j = z - z_j,
+  ```
+
+  with the heights ``z_j`` of the atoms along the normal and the area ``A`` of the cell in the plane of the slab. It uses
+  the same α as the Wolf/Zahn sum, so nothing is counted twice, and it describes an isolated slab (no field in the
+  vacuum, i.e. it includes the dipole correction). The components that vary within the planes decay like
+  ``\exp(-G^2/4\alpha^2)`` with the in-plane reciprocal lattice vectors ``G`` and are left out.
+- **Ewald**: the dipole correction of the slab (Yeh and Berkowitz) is added,
+  ``\phi_i \rightarrow \phi_i + 4\pi M z_i / V`` with the dipole moment ``M = \sum_j q_j z_j`` along the normal.
+
+The heights are measured from the vacuum: the atoms are placed so that the largest gap between them along the axis
+(the vacuum) lies at the cell boundary, so a slab may cross the periodic boundary. For the slab terms, the charges are
+made neutral with a uniform background on the atoms (``q_j - \bar q``), so that the potential stays finite in the
+vacuum also for effective charges that do not add up to zero. The potentials then enter the onsite energies through
+the couplings ``\gamma_s`` as before, so no further parameters are needed. The model summary states the slab treatment.
+
+```bash
+begin Ewald
+    method = wolf
+    alpha = 0.2
+    slab_axis = 3          # vacuum along a3
+end
+```
+
+`slab_axis` applies to all structures of a run; use it only for runs with slabs.
+
 ## Real-Space Neighbor Grid
 
 The real-space Ewald sum reuses the neighbor grid and translation vectors of the structure, which cover pairs up to
 the TB cutoff `rcut` and the `grid_size`. If the Ewald `rcut` is larger, both are rebuilt for the Ewald cutoff, and the
-model summary states `real-space neighbor grid: rebuilt`.
+model summary states `real-space neighbor grid: rebuilt`. The rebuilt translation vectors cover each lattice direction
+separately (the cutoff over the height of the cell perpendicular to the two other lattice vectors, plus the extent of
+the atoms), so that cells that are long in one direction, such as slabs with a small in-plane cell, are summed
+completely.

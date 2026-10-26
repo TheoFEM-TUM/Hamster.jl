@@ -106,6 +106,74 @@ end
     end
 end
 
+@testset "Ewald slab" begin
+    # rock-salt slab (in-plane lattice constant 4 Å, 6 layers 2 Å apart, 40 Å vacuum) with dipoles of the upper layers
+    # (anions displaced along z), placed across the periodic boundary along the slab axis
+    a, nl, dz, vac = 4.0, 6, 2.0, 40.0
+    c = (nl - 1) * dz + vac
+    box = [a 0 0; 0 a 0; 0 0 c]
+    pos = Vector{Float64}[]; q = Float64[]
+    for l in 0:nl-1
+        shift = l ≥ 3 ? 0.15 * (l - 2) : 0.0
+        for (x, y, s) in ((0.0, 0.0, 1.0), (a / 2, a / 2, -1.0))
+            qa = isodd(l) ? -s : s
+            z = mod(l * dz + (qa < 0 ? shift : 0.0) + c - 5.0, c)      # the slab crosses z = 0
+            push!(pos, [x + (isodd(l) ? a / 2 : 0.0), y, z]); push!(q, qa)
+        end
+    end
+    # real-space sum in a long cell with a short in-plane period (images along a1, a2 far beyond one lattice constant)
+    for rc in (12.0, 30.0)
+        g = Hamster.ewald_sum(pos, q, box, rcut=rc, alpha=0.2, include_long=false, subtract_self=false).potentials
+        b = zeros(length(q)); nimg = [ceil(Int, rc / norm(box[:, d])) + 1 for d in 1:3]
+        for i in eachindex(pos), j in eachindex(pos), n1 in -nimg[1]:nimg[1], n2 in -nimg[2]:nimg[2], n3 in -nimg[3]:nimg[3]
+            r = norm(pos[i] - pos[j] - box * [n1, n2, n3])
+            1e-12 < r < rc && (b[i] += q[j] * Hamster.erfc(0.2 * r) / r)
+        end
+        @test g ≈ Hamster.ke .* b atol=1e-10
+    end
+    z, A, vacuum = Hamster.slab_heights(pos, box, 3)
+    @test A ≈ a^2
+    @test maximum(z) - minimum(z) < (nl - 1) * dz + 1 && vacuum > vac - 1
+    @test minimum(z) ≈ 0 atol=1e-12
+
+    # full Ewald with dipole correction = Wolf (α = 0.2, large cutoff) + plane-averaged long range, up to a constant per
+    # species (the in-plane components of the smooth part, ∝ exp(-G²/4α²), are negligible for this cell). Reference:
+    # real-space part of ewald_sum plus a direct reciprocal sum (more accurate than the particle mesh for this check)
+    function direct_ewald(pos, q, box; α=0.35, rcut=14.0, kmax=4.0)
+        φ = Hamster.ewald_sum(pos, q, box, rcut=rcut, alpha=α, include_long=false, subtract_self=true).potentials
+        B = 2π * inv(box)'; V = abs(det(box))
+        n = [ceil(Int, kmax / norm(B[:, d])) for d in 1:3]
+        for i in -n[1]:n[1], j in -n[2]:n[2], l in -n[3]:n[3]
+            (i, j, l) == (0, 0, 0) && continue
+            k = B * [i, j, l]; k2 = dot(k, k); k2 > kmax^2 && continue
+            ρ = sum(q[m] * cis(dot(k, pos[m])) for m in eachindex(q))
+            for a in eachindex(pos)
+                φ[a] += Hamster.ke * 4π / V * exp(-k2 / (4α^2)) / k2 * real(ρ * cis(-dot(k, pos[a])))
+            end
+        end
+        return φ
+    end
+    ewald = direct_ewald(pos, q, box) .+ Hamster.slab_potentials(pos, q, box, 3; method="ewald", alpha=0.0)
+    wolf = Hamster.ewald_sum(pos, q, box, rcut=30.0, alpha=0.2, method="wolf").potentials .+
+           Hamster.slab_potentials(pos, q, box, 3; method="wolf", alpha=0.2)
+    centered(φ) = (ψ = copy(φ); for s in (-1.0, 1.0); m = q .== s; ψ[m] .-= sum(φ[m]) / count(m); end; ψ)
+    @test maximum(abs, centered(ewald) .- centered(wolf)) < 1e-4
+    # without the slab terms, Wolf misses the potential differences between the layers that the dipoles create
+    wolf0 = Hamster.ewald_sum(pos, q, box, rcut=30.0, alpha=0.2, method="wolf").potentials
+    @test maximum(abs, centered(ewald) .- centered(wolf0)) > 0.1
+
+    # potential step of a dipole layer (charges ±1, 0.5 Å apart) between points far above and below (zero charges)
+    box2 = [5.0 0 0; 0 5.0 0; 0 0 100.0]
+    pos2 = [[0.0, 0.0, 30.0], [2.5, 2.5, 30.5], [0.0, 0.0, 10.0], [0.0, 0.0, 50.0]]
+    φ2 = Hamster.slab_potentials(pos2, [1.0, -1.0, 0.0, 0.0], box2, 3; method="wolf", alpha=0.5)
+    @test φ2[4] - φ2[3] ≈ 4π * Hamster.ke * (-1.0 * 0.5) / 25.0 rtol=1e-10
+    @test_throws ErrorException Hamster.slab_potentials(pos2, ones(4), box2, 4; method="wolf", alpha=0.5)
+
+    # charged cells: Wolf allowed, full Ewald not
+    @test length(Hamster.ewald_sum(pos2, [1.0, 0.0, 0.0, 0.0], box2, rcut=10.0, alpha=0.3, method="wolf").potentials) == 4
+    @test_throws ErrorException Hamster.ewald_sum(pos2, [1.0, 0.0, 0.0, 0.0], box2, rcut=10.0)
+end
+
 @testset "Ewald Onsites" begin
     conf = get_empty_config()
     set_value!(conf, "orbitals", "Cs", "s")
@@ -155,6 +223,12 @@ end
             end
             @test count("real-space neighbor grid:    rebuilt", out) == 1
             @test occursin(r"σ_strc\s+δφ̄", out)
+
+            # slab_axis: the plane-averaged long range changes the potentials and is reported
+            wolf0 = EwaldOnsites([strc], [basis], comm, conf, method="wolf", rcut=10.0, alpha=0.3, write_summary=false)
+            wolf3 = EwaldOnsites([strc], [basis], comm, conf, method="wolf", rcut=10.0, alpha=0.3, slab_axis=3, label="slab")
+            @test maximum(abs, wolf3.potentials[1] .- wolf0.potentials[1]) > 1e-4
+            @test occursin("slab (vacuum along a3):", read("hamster.out", String))
         end
     end
 end
