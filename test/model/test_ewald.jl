@@ -229,6 +229,10 @@ end
             wolf3 = EwaldOnsites([strc], [basis], comm, conf, method="wolf", rcut=10.0, alpha=0.3, slab_axis=3, label="slab")
             @test maximum(abs, wolf3.potentials[1] .- wolf0.potentials[1]) > 1e-4
             @test occursin("slab (vacuum along a3):", read("hamster.out", String))
+            # slab_scale multiplies the slab term
+            wolf3h = EwaldOnsites([strc], [basis], comm, conf, method="wolf", rcut=10.0, alpha=0.3, slab_axis=3, slab_scale=0.5,
+                                  write_summary=false)
+            @test wolf3h.potentials[1] .- wolf0.potentials[1] ≈ 0.5 .* (wolf3.potentials[1] .- wolf0.potentials[1]) rtol=1e-10 atol=1e-12
         end
     end
 end

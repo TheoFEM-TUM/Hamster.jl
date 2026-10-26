@@ -246,13 +246,19 @@ The heights are measured from the vacuum: the atoms are placed so that the large
 (the vacuum) lies at the cell boundary, so a slab may cross the periodic boundary. For the slab terms, the charges are
 made neutral with a uniform background on the atoms (``q_j - \bar q``), so that the potential stays finite in the
 vacuum also for effective charges that do not add up to zero. The potentials then enter the onsite energies through
-the couplings ``\gamma_s`` as before, so no further parameters are needed. The model summary states the slab treatment.
+the couplings ``\gamma_s`` as before. The model summary states the slab treatment.
+
+The long-range term is screened by the electrons like a macroscopic field (by about ``1/\varepsilon_\infty``), which can
+differ from the screening that the couplings ``\gamma_s`` absorb for the short-range part. `slab_scale` (default 1)
+multiplies the slab term (the plane-averaged potential, or the dipole correction for `method = ewald`):
+``\phi_i = \phi_i^\mathrm{short} + \lambda\, \bar\phi_i``.
 
 ```bash
 begin Ewald
     method = wolf
     alpha = 0.2
     slab_axis = 3          # vacuum along a3
+    slab_scale = 0.4       # screening of the long-range term (optional)
 end
 ```
 

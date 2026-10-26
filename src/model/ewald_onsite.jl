@@ -83,6 +83,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         alpha           = get_ewald_alpha(conf),
         mesh_spacing    = get_ewald_mesh_spacing(conf),
         slab_axis       = get_ewald_slab_axis(conf),
+        slab_scale      = get_ewald_slab_scale(conf),
         update          = get_ewald_update(conf),
         label           = "",
         write_summary   = true)
@@ -117,7 +118,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         φ = ewald.potentials
         if slab_axis > 0
             # long range of a slab: plane-averaged part (wolf, zahn) or dipole correction (ewald), see ewald_slab.jl
-            φ = φ .+ slab_potentials(pos, charges, strc.lattice, slab_axis; method=method, alpha=α)
+            φ = φ .+ slab_scale .* slab_potentials(pos, charges, strc.lattice, slab_axis; method=method, alpha=α)
         end
 
         ion_indices_with_orbs = collect(1:length(ion_types))
@@ -188,7 +189,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     model = EwaldOnsites(params, param_labels, potentials, types_per_strc, norb_per_strc, Rs_info, update)
     write_summary && write_model_summary(model, comm, conf, rank=rank, label=label, species_mean=species_mean, structure_means=structure_means,
                                          method=method, rcut=rcut, alpha=α, alpha_auto=alpha == 0, grid_rebuilt=grid_rebuilt && method == "ewald",
-                                         slab_axis=slab_axis)
+                                         slab_axis=slab_axis, slab_scale=slab_scale)
     return model
 end
 
