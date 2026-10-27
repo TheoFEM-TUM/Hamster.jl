@@ -84,6 +84,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         mesh_spacing    = get_ewald_mesh_spacing(conf),
         slab_axis       = get_ewald_slab_axis(conf),
         slab_scale      = get_ewald_slab_scale(conf),
+        charge_compensation = get_ewald_charge_compensation(conf),
         update          = get_ewald_update(conf),
         label           = "",
         write_summary   = true)
@@ -100,6 +101,10 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
 
         ion_types = get_ion_types(strc.ions)
         charges = [get_qeff(conf, type) for type in number_to_element.(ion_types)]
+        # compensation of the net charge (charge_compensation), from the reference positions, so that it is the same for
+        # all distortions of a structure
+        charges = charges .+ compensation_charges(charge_compensation, get_ion_positions(strc.ions, apply_distortion=false),
+                                                  ion_types, charges, strc.lattice; slab_axis=slab_axis)
 
         reuse_grid = rcut ≤ min(strc.point_grid.grid_size, get_rcut(conf))
         grid_rebuilt |= !reuse_grid
@@ -189,7 +194,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     model = EwaldOnsites(params, param_labels, potentials, types_per_strc, norb_per_strc, Rs_info, update)
     write_summary && write_model_summary(model, comm, conf, rank=rank, label=label, species_mean=species_mean, structure_means=structure_means,
                                          method=method, rcut=rcut, alpha=α, alpha_auto=alpha == 0, grid_rebuilt=grid_rebuilt && method == "ewald",
-                                         slab_axis=slab_axis, slab_scale=slab_scale)
+                                         slab_axis=slab_axis, slab_scale=slab_scale, charge_compensation=charge_compensation)
     return model
 end
 

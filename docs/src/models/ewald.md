@@ -243,10 +243,8 @@ With `slab_axis` (1, 2 or 3, the lattice vector across the vacuum; default 0: pe
   ``\phi_i \rightarrow \phi_i + 4\pi M z_i / V`` with the dipole moment ``M = \sum_j q_j z_j`` along the normal.
 
 The heights are measured from the vacuum: the atoms are placed so that the largest gap between them along the axis
-(the vacuum) lies at the cell boundary, so a slab may cross the periodic boundary. For the slab terms, the charges are
-made neutral with a uniform background on the atoms (``q_j - \bar q``), so that the potential stays finite in the
-vacuum also for effective charges that do not add up to zero. The potentials then enter the onsite energies through
-the couplings ``\gamma_s`` as before. The model summary states the slab treatment.
+(the vacuum) lies at the cell boundary, so a slab may cross the periodic boundary. The potentials enter the onsite
+energies through the couplings ``\gamma_s`` as before. The model summary states the slab treatment.
 
 The long-range term is screened by the electrons like a macroscopic field (by about ``1/\varepsilon_\infty``), which can
 differ from the screening that the couplings ``\gamma_s`` absorb for the short-range part. `slab_scale` (default 1)
@@ -257,12 +255,37 @@ multiplies the slab term (the plane-averaged potential, or the dipole correction
 begin Ewald
     method = wolf
     alpha = 0.2
-    slab_axis = 3          # vacuum along a3
-    slab_scale = 0.4       # screening of the long-range term (optional)
+    slab_axis = 3                   # vacuum along a3
+    slab_scale = 0.4                # screening of the long-range term (optional)
+    charge_compensation = surface   # default with slab_axis
 end
 ```
 
 `slab_axis` applies to all structures of a run; use it only for runs with slabs.
+
+### Charge compensation
+
+The slab terms need a neutral slab, otherwise the potential rises linearly into the vacuum. Effective charges need not
+add up to zero: in a non-stoichiometric slab, or whenever the effective charges of the atomic layers do not cancel. In
+CsPbBr₃ (001), for example, the PbBr₂ and CsBr layers are neutral with formal charges, but with effective charges
+(``q_\mathrm{Pb} \neq -2 q_\mathrm{Br}``) they carry charges ``\mp\sigma``, and a slab terminated by PbBr₂ on both
+sides has a net charge. Where the compensating charge sits matters for the long range, so `charge_compensation` in the
+`Ewald` block sets it:
+
+- `global`: a uniform background on all atoms (``q_j - \bar q`` in the slab terms). The surfaces of a slab with charged
+  layers then stay charged, with a potential step between surface and interior that the electrons would screen.
+- `surface` (default with `slab_axis`): the net charge is placed on the outermost atomic layer of each side and split so
+  that the plane-averaged field between them vanishes on average, as the electrons do at a real surface. For a slab
+  with layers of charge ``\pm\sigma`` and the same termination on both sides, each surface layer takes half of the
+  layer charge; for a polar stacking, the surface charge of the bulk polarization. Layers are separated by gaps of more
+  than 1 Å along the axis.
+- `local`: the net charge is distributed over the atoms with fewer neighbors of opposite charge than the most common
+  number of their species, in proportion to the missing neighbors, e.g. on the cations around an anion vacancy. Meant
+  for defects; the neighbors follow from the first shell of every pair of species.
+
+`global` is the default without `slab_axis`. With `surface` and `local`, the compensating charges are added to the
+effective charges and therefore also enter the short-range Wolf/Zahn/Ewald sum. They are determined from the reference
+positions of each structure, so that they are the same for all of its distortions.
 
 ## Real-Space Neighbor Grid
 

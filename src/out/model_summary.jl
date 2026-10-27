@@ -69,6 +69,7 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         grid_rebuilt=false,
         slab_axis=0,
         slab_scale=1.0,
+        charge_compensation="global",
         filename="hamster.out")
 
     nspecies = length(ewald.param_labels)
@@ -99,6 +100,9 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         slab_axis > 0 && write_summary_line(io, "slab (vacuum along a$slab_axis)",
                                             (lowercase(method) == "ewald" ? "dipole correction" : "plane-averaged long range added") *
                                             (slab_scale == 1 ? "" : @sprintf(" (× %.4g)", slab_scale)))
+        (slab_axis > 0 || charge_compensation ≠ "global") && write_summary_line(io, "net charge compensated",
+            Dict("global" => "uniformly over all atoms", "surface" => "on the outermost layers (no average field inside)",
+                 "local" => "on atoms with missing neighbors")[charge_compensation])
         write_summary_line(io, "subtracted species mean φ̄", join(["$e $(@sprintf("%.4f", m)) V" for (e, m) in zip(elements, species_mean)], ", "))
         println(io)
         println(io, "  Onsite corrections Δε = -γ (φ - φ̄) per species (meV):")
