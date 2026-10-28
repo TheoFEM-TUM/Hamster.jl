@@ -22,6 +22,25 @@ y[r] += Σ_q nzval[q] * x[colval[q]] for a matrix in CSR format.
 end
 
 """
+Y[k, r] = a (Σ_q nzval[q] X[k, colval[q]] - s X[k, r]) + b1 Z1[k, r] + b2 Z2[k, r] for a matrix in CSR format and the
+vectors stored as the rows of X (see `block_matvec!`). Terms with a zero coefficient are not read.
+"""
+@kernel function csr_block_matvec_kernel!(Y, @Const(rowptr), @Const(colval), @Const(nzval), @Const(X), a, s, b1, @Const(Z1),
+                                          b2, @Const(Z2))
+    k, r = @index(Global, NTuple)
+    acc = zero(eltype(Y))
+    @inbounds for q in rowptr[r]:(rowptr[r+1]-1)
+        acc += nzval[q] * X[k, colval[q]]
+    end
+    @inbounds begin
+        y = a * (acc - s * X[k, r])
+        iszero(b1) || (y += b1 * Z1[k, r])
+        iszero(b2) || (y += b2 * Z2[k, r])
+        Y[k, r] = y
+    end
+end
+
+"""
 y[r] = real(Σ_q nzval[q] * x[colval[q]]) for a matrix in CSR format.
 """
 @kernel function csr_real_matvec_kernel!(y, @Const(rowptr), @Const(colval), @Const(nzval), @Const(x))

@@ -24,7 +24,7 @@
 # Diagonalization
 # ====================
 @configtag skip_diag Bool false "if true, no eigenvalues are computed." category="diagonalization"
-@configtag diag_method String "shift-invert" "sparse eigensolver when `sp_diag=true` (shift-invert, krylov-schur)." category="diagonalization" see_also=["sp_diag", "neig", "eig_target"]
+@configtag diag_method String "shift-invert" "sparse eigensolver when `sp_diag=true`: shift-invert (factorization, Arpack/cuDSS), krylov-schur (KrylovKit) or chebyshev (Chebyshev-filtered subspace iteration, only matrix-vector products, threaded and on GPUs)." category="diagonalization" see_also=["sp_diag", "neig", "eig_target"]
 @configtag neig Int64 6 "number of eigenvalues when using sparse eigensolver." category="diagonalization" see_also=["sp_diag", "eig_target"]
 @configtag eig_target Float64 0.0 "target energy when using sparse eigensolver." category="diagonalization" see_also=["sp_diag", "neig"]
 

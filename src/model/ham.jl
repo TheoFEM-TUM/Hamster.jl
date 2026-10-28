@@ -230,7 +230,8 @@ Diagonalizes a sparse Hermitian matrix `Hk` to find a specified number of eigenv
 - `Hk::SparseMatrixCSC`: A sparse Hermitian matrix in compressed sparse column format to be diagonalized. The matrix should be square and Hermitian.
 - `Neig::Int=6`: The number of eigenvalues and corresponding eigenvectors to compute. Defaults to `6`, but can be adjusted based on the required precision or size of the spectrum.
 - `target::Real=0`: The target eigenvalue around which to focus the computation. This is used to prioritize finding eigenvalues closest to this value. Defaults to `0`.
-- `method::String`: The method to be used for calculating eigenvalues of a sparse matrix.
+- `method::String`: The method to be used for calculating eigenvalues of a sparse matrix: `shift-invert` (Arpack),
+  `krylov-schur` (KrylovKit) or `chebyshev` (Chebyshev-filtered subspace iteration, see `chebyshev_eigen`).
 
 # Returns:
 - `eigenvalues::Vector{Float64}`: A vector of the real parts of the computed eigenvalues, focusing on those closest to the target. The number of eigenvalues returned is equal to `Neig`.
@@ -251,6 +252,10 @@ function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert
         else
             return real.(Es[1:Neig]), hcat(vs[1:Neig]...)
         end
+    elseif method == "chebyshev"
+        return chebyshev_diagonalize(Hk, Neig, target)
+    else
+        error("Unknown diag_method '$method'. Valid options are shift-invert, krylov-schur and chebyshev.")
     end
 end
 
