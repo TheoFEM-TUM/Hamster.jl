@@ -10,7 +10,21 @@ begin BLOCK_LABEL
 end
 ```
 
-Tags placed outside their appropriate blocks are ignored. The general [Options](@ref options-block) block is always required, while the presence of [other blocks](@ref block-labels) depends on the type of calculation being performed.
+The general [Options](@ref options-block) block is always required, while the presence of other blocks depends on the
+type of calculation being performed. All input tags are listed in the [index of input tags](@ref block-labels) and
+described on one page per block (in the navigation under Input Tags).
+
+## Finding and checking tags
+
+- `hamster --tag <name>` shows the description, block, type and default of a tag (all blocks in which it exists), and
+  suggests similar names for typos.
+- `hamster --tags <block or term>` lists the tags of a block (e.g. `hamster --tags ML`) or all tags whose name or
+  description contains the term (e.g. `hamster --tags ewald`).
+- When Hamster reads the config file, it warns about unknown tags (with suggestions) and about tags in a block where they
+  have no effect, e.g. `xdatcar` in the `Options` block instead of the `Supercell` block.
+
+Keys with an index, such as the band and k-point weights `wE_3` or `wE_10-20` of the `Optimizer` block, are described
+with their base tag (`wE`, `wk`).
 
 ## Type of Calculation
 

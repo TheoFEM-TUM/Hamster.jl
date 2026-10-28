@@ -7,6 +7,8 @@ hamster [-t THREADS] [--conf FILE] [--TAG VALUE ...]   # run a calculation
 hamster --install [OPTIONS]                           # install the dependencies and precompile Hamster
 hamster --update [--no-pull]                          # pull the latest code, update the dependencies, precompile
 hamster --precompile                                  # precompile Hamster (and its GPU code on a GPU node)
+hamster --tag NAME                                    # description of the input tag NAME (all blocks)
+hamster --tags [BLOCK|TERM]                           # input tags of a block, or all tags matching TERM
 hamster --version                                     # version of Hamster (and the git commit) and Julia
 hamster --help                                        # overview of all commands and options
 ```
@@ -56,6 +58,18 @@ hamster --precompile
 ```
 
 Precompiles Hamster and, if CUDA.jl is installed and a GPU is available, its GPU code. `--install` and `--update` do this automatically. Run it yourself on a GPU node if Hamster was installed or updated on a machine without GPU (e.g., the login node of a cluster): GPU runs then start in a few seconds instead of compiling the GPU code at every start.
+
+## Input tags
+
+```bash
+hamster --tag rcut           # description, block, type and default of rcut (in all blocks where it exists)
+hamster --tag ncluter        # unknown name: suggests ncluster (ML block)
+hamster --tags ML            # all tags of the ML block
+hamster --tags ewald         # all tags whose name or description contains "ewald"
+```
+
+The same information is in the [list of input tags](@ref block-labels). In the Julia REPL, `Hamster.tag_help("rcut")`
+and `Hamster.list_tags("ML")` print the same without starting a new Julia process.
 
 ## Version
 

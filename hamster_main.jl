@@ -18,6 +18,13 @@ conf = haskey(args, "conf") ? get_config(filename=args["conf"]) : get_config()
 for (key, value) in args
     set_value!(conf, key, value)
 end
+# Tags on the command line set Options tags: warn about unknown and misplaced ones
+if rank == 0
+    cli_conf = Hamster.get_empty_config()
+    foreach(((key, value),) -> key == "conf" || set_value!(cli_conf, key, value), args)
+    foreach(message -> @warn(replace(message, "in the Options block" => "on the command line (Options block)")),
+            Hamster.check_config_tags(cli_conf))
+end
 if rank ≠ 0; set_value!(conf, "verbosity", 0); end
 
 # Load the GPU extensions (CUDA.jl and CUDSS.jl must be installed, e.g., in the default environment)

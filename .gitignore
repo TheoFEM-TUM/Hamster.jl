@@ -28,3 +28,6 @@ hamster_test
 
 # Exclude playground
 playground.jl
+
+# Generated documentation of the input tags (docs/make.jl)
+docs/src/conf/tags/

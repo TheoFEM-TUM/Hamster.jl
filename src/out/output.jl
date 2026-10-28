@@ -137,14 +137,15 @@ function write_config_tags(conf::Config; blocks=nothing, show_desc=false, filena
 
         # Organize tags by block
         tags_by_block = Dict{String, Vector{ConfigTag}}()
-        for tag in CONFIG_TAGS
+        for tag in config_tags()
+            tag.per_atom && continue                  # set per species in the atom blocks
             push!(get!(tags_by_block, tag.block, Vector{ConfigTag}()), tag)
         end
 
-        blocks_to_print = blocks === nothing ? sort(collect(keys(tags_by_block))) : blocks
+        blocks_to_print = blocks === nothing ? sort(collect(keys(tags_by_block)), by=block_order) : filter(b -> haskey(tags_by_block, b), blocks)
 
         # Determine column for # comments (fixed for all tags)
-        tagval_col_width = maximum(length("    $(tag.name) = $(get_tag(conf, tag))") for tag in CONFIG_TAGS)
+        tagval_col_width = maximum(length("    $(tag.name) = $(tag_value(conf, tag))") for tags in values(tags_by_block) for tag in tags)
         desc_col_start = tagval_col_width + 4  # 4 spaces before #
 
         for blk in blocks_to_print
@@ -153,8 +154,8 @@ function write_config_tags(conf::Config; blocks=nothing, show_desc=false, filena
             write_separator(io, char='-')
 
             for tag in tags_by_block[blk]
-                tag_val = get_tag(conf, tag)
-                val = isa(tag_val, AbstractString) ? tag_val : join(tag_val, " ")
+                tag_val = tag_value(conf, tag)
+                val = isa(tag_val, AbstractString) ? tag_val : isnothing(tag_val) ? "none" : join(tag_val, " ")
                 tagval_str = "    $(tag.name) = $(val)"
                 tagval_padded = rpad(tagval_str, desc_col_start)
 
