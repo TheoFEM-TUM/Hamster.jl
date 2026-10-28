@@ -76,7 +76,7 @@ end
 # ====================
 # Post-processing
 # ====================
-@configtag dos Vector{String} String[] "post-processing of a standard run: any combination of dos (total DOS), pdos (projected DOS) and cohp (crystal orbital Hamilton populations), or all, e.g. `dos = pdos cohp`. Results are written to dos.h5; further settings in the DOS block." category="post-processing"
+@configtag dos Vector{String} String[] "post-processing of a standard run: any combination of dos (total DOS), pdos (projected DOS), cohp (crystal orbital Hamilton populations) and jdos (joint DOS, needs nelec), or all (dos, pdos and cohp), e.g. `dos = pdos cohp`. Results are written to dos.h5; further settings in the DOS block." category="post-processing"
 
 @configtag nthreads_kpoints Int64 Threads.nthreads() "number of tasks working on k-points simultaneously." getter=:custom default_doc="number of Julia threads" category="device and parallelization"
 @configtag nthreads_bands Int64 Threads.nthreads() "number of tasks working on bands simultaneously." getter=:custom default_doc="number of Julia threads" category="device and parallelization"
