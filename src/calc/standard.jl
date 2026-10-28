@@ -91,11 +91,17 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
         write_hr=get_write_hr(conf),
         ham_file=get_ham_file(conf),
         skip_diag=get_skip_diag(conf),
+        eigen_file="eval_eigenval.h5",
         verbosity=get_verbosity(conf))
     
     strc_ind = 0
     
-    Nstrc_tot = MPI.Reduce(ham.Nstrc, +, comm, root=0)
+    # A single structure of an unnamed system is written to Es.dat (and vs.dat), everything else to `eigen_file`
+    Nstrc_tot = MPI.Allreduce(ham.Nstrc, +, comm)
+    named_systems = MPI.Allreduce(Int(any(!isempty, keys(local_inds))), max, comm) == 1
+    write_h5 = Nstrc_tot > 1 || named_systems
+    if write_h5 && rank == 0 && isfile(eigen_file); rm(eigen_file); end
+    MPI.Barrier(comm)
 
     for (batch_id, indices) in enumerate(chunks(1:ham.Nstrc, n=Nbatch))
         if Nbatch > 1; load_simmats!(ham, indices); end
@@ -120,14 +126,14 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
             if write_hk
                 write_ham(host_hamiltonians(Hk), ks, comm, config_index, filename=ham_file, system=system, rank=rank, nranks=nranks)
             end
-            if !(config_index isa Int) && rank == 0
-                if !skip_diag; write_to_file(Es, "Es"); end
-                if save_vecs && !skip_diag; write_to_file(vs, "vs"); end
-            else
-                if !("tmp" in readdir(pwd())) && rank == 0; mkdir("tmp"); end
-                MPI.Barrier(comm)
-                if !skip_diag; write_to_file(Es, "tmp/Es_$(system)_$config_index"); end
-                if save_vecs && !skip_diag; write_to_file(vs, "tmp/vs_$(system)_$config_index"); end
+            if !skip_diag && write_h5
+                for r in 0:nranks-1
+                    if r == rank; append_eigen_output(Es, vs, system, config_index, filename=eigen_file, save_vecs=save_vecs); end
+                    MPI.Barrier(comm)
+                end
+            elseif !skip_diag
+                write_to_file(Es, "Es")
+                if save_vecs; write_to_file(vs, "vs"); end
             end
             write_time = MPI.Wtime() - write_begin
             prof.timings[1, strc_ind, 3] = write_time
