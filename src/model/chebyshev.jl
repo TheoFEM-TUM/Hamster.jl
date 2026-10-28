@@ -156,12 +156,58 @@ function chebyshev_filter(op, X, deg, σ, α, β)
 end
 
 """
+    rayleigh_ritz_step(op, Y, L, Λ, Neig, σ, β, restol, mindeg, maxdeg)
+
+Rayleigh-Ritz step of `chebyshev_eigen` for the orthonormal block `Y` (rows, orthogonal to the locked vectors `L`): the
+Ritz pairs closest to `σ` that are converged (residual below `restol`) and closer to `σ` than all unconverged ones are
+locked (appended to `L` and `Λ`). Returns the remaining (active) Ritz vectors, `L`, `Λ`, and the cutoff and degree of
+the next filter.
+"""
+function rayleigh_ritz_step(op, Y, L, Λ, Neig, σ, β, restol, mindeg, maxdeg)
+    W = similar(Y)
+    block_matvec!(W, op, Y, 1, 0)
+
+    # Ritz pairs sorted by their distance to the target
+    θ, U = eigen(Hermitian(permutedims(to_host(Y * W'))))
+    order = sortperm(abs.(θ .- σ))
+    θ = θ[order]; Ut = to_device(Y, Matrix(transpose(U[:, order])))
+    X = Ut * Y; HX = Ut * W
+    res = row_norms(HX .- to_device(Y, θ) .* X)
+
+    nconv = something(findfirst(>(restol), res), length(res) + 1) - 1
+    nconv = min(nconv, Neig - length(Λ))
+    if nconv > 0
+        L = vcat(L, X[1:nconv, :]); Λ = vcat(Λ, θ[1:nconv])
+        X = X[nconv+1:end, :]; HX = HX[nconv+1:end, :]
+        θ = θ[nconv+1:end]; res = res[nconv+1:end]
+    end
+    length(Λ) ≥ Neig && return X, L, Λ, 0.0, 0
+
+    # Cutoff: the largest Ritz value of A in the active block (≥ the corresponding eigenvalue of A)
+    R = HX .- σ .* X
+    α = min(eigmax(Hermitian(to_host(R * R'))), 0.5 * β)
+
+    # Degree: enough to converge the slowest wanted pair at its estimated rate, while the amplification within the
+    # wanted pairs stays below 1e10 so that the filtered block keeps its rank
+    nwant = Neig - length(Λ)
+    c = (β + α) / 2; e = (β - α) / 2
+    rate = [acosh(max(1.0, (c - (θ[i] - σ)^2) / e)) for i in 1:nwant]
+    need = [rate[i] > 0 ? log(res[i] / restol) / rate[i] : Inf for i in 1:nwant]
+    spread = maximum(rate) - minimum(rate)
+    maxamp = spread > 0 ? min(maxdeg, log(1e10) / spread) : maxdeg
+    deg = max(mindeg, ceil(Int, clamp(maximum(need), mindeg, maxamp)))
+    return X, L, Λ, α, deg
+end
+
+"""
     chebyshev_eigen(op, proto, Nε, Neig; target=0.0, nex=max(8, Neig ÷ 2), tol=1e-10, maxiter=200, deg0=16,
-                    mindeg=4, maxdeg=200, X0=nothing, seed=1, lanczos_steps=40, lanczos_vectors=4)
+                    mindeg=4, maxdeg=200, X0=nothing, seed=1, lanczos_steps=40, lanczos_vectors=4, verbosity=0)
 
 The `Neig` eigenpairs of the Hermitian operator `op` (dimension `Nε`, see `block_matvec!`) closest to `target`, with
 Chebyshev-filtered subspace iteration on a block of `Neig + nex` vectors. `proto` is an array of the element type and
 device of the vectors. Pairs are converged when their residual is below `tol` times the spectral radius.
+
+`verbosity > 1` prints the degree, block size and cutoff of every iteration.
 
 `X0` (`k × Nε`, rows) are initial guesses for the first `k` vectors, e.g. eigenvectors of a similar matrix; the remaining
 vectors are random. `deg0` is the degree of the first filter, later degrees are chosen between `mindeg` and `maxdeg`.
@@ -170,7 +216,7 @@ Returns the eigenvalues in ascending order, the eigenvectors as the rows of a `N
 a named tuple with the number of iterations and of products of `H` with a vector.
 """
 function chebyshev_eigen(op, proto, Nε, Neig; target=0.0, nex=max(8, Neig ÷ 2), tol=1e-10, maxiter=200, deg0=16,
-                         mindeg=4, maxdeg=200, X0=nothing, seed=1, lanczos_steps=40, lanczos_vectors=4)
+                         mindeg=4, maxdeg=200, X0=nothing, seed=1, lanczos_steps=40, lanczos_vectors=4, verbosity=0)
     T = eltype(proto)
     σ = Float64(target)
     m = min(Neig + nex, Nε)
@@ -199,47 +245,22 @@ function chebyshev_eigen(op, proto, Nε, Neig; target=0.0, nex=max(8, Neig ÷ 2)
     X = orthonormalize_rows!(to_device(proto, Xh), L)
     Λ = Float64[]
     deg = deg0
+    # With an initial guess, the first cutoff and degree follow from its Ritz pairs instead of the Lanczos estimate
+    if !isnothing(X0)
+        X, L, Λ, α, deg = rayleigh_ritz_step(op, X, L, Λ, Neig, σ, β, restol, mindeg, maxdeg)
+        nmatvec += m
+    end
     iter = 0
     while length(Λ) < Neig
         iter += 1
         iter > maxiter && error("Chebyshev eigensolver: $(length(Λ)) of $Neig eigenpairs converged in $maxiter iterations.")
-
         Y = orthonormalize_rows!(chebyshev_filter(op, X, deg, σ, α, β), L)
-        W = similar(Y)
-        block_matvec!(W, op, Y, 1, 0)
         nmatvec += (2deg + 1) * size(Y, 1)
-
-        # Rayleigh-Ritz with H, Ritz pairs sorted by their distance to the target
-        θ, U = eigen(Hermitian(transpose(to_host(Y * W'))))
-        order = sortperm(abs.(θ .- σ))
-        θ = θ[order]; Ut = to_device(Y, Matrix(transpose(U[:, order])))
-        X = Ut * Y; HX = Ut * W
-        res = row_norms(HX .- to_device(Y, θ) .* X)
-
-        # Lock the converged pairs that are closer to the target than all unconverged ones
-        nconv = something(findfirst(>(restol), res), length(res) + 1) - 1
-        nconv = min(nconv, Neig - length(Λ))
-        if nconv > 0
-            L = vcat(L, X[1:nconv, :]); append!(Λ, θ[1:nconv])
-            X = X[nconv+1:end, :]; HX = HX[nconv+1:end, :]
-            θ = θ[nconv+1:end]; res = res[nconv+1:end]
-        end
-        length(Λ) ≥ Neig && break
-
-        # Cutoff: the largest Ritz value of A in the active block (≥ the corresponding eigenvalue of A)
-        R = HX .- σ .* X
-        α = min(eigmax(Hermitian(to_host(R * R'))), 0.5 * β)
-
-        # Degree: enough to converge the slowest wanted pair at its estimated rate, while the amplification within the
-        # wanted pairs stays below 1e10 so that the filtered block keeps its rank
-        nwant = Neig - length(Λ)
-        c = (β + α) / 2; e = (β - α) / 2
-        rate = [acosh(max(1.0, (c - (θ[i] - σ)^2) / e)) for i in 1:nwant]
-        need = [rate[i] > 0 ? log(res[i] / restol) / rate[i] : Inf for i in 1:nwant]
-        spread = maximum(rate) - minimum(rate)
-        deg = ceil(Int, clamp(maximum(need), mindeg, spread > 0 ? min(maxdeg, log(1e10) / spread) : maxdeg))
-        deg = max(deg, mindeg)
+        verbosity > 1 && println("  Chebyshev iteration $iter: degree $deg, active $(size(Y, 1)), cutoff $(round(α, sigdigits=3))")
+        X, L, Λ, α, deg = rayleigh_ritz_step(op, Y, L, Λ, Neig, σ, β, restol, mindeg, maxdeg)
     end
+    verbosity > 1 && println("  Chebyshev: spectrum [$(round(Emin, digits=2)), $(round(Emax, digits=2))], $iter iterations, " *
+                             "$nmatvec matrix-vector products")
 
     perm = sortperm(Λ)
     return Λ[perm], L[perm, :], (iterations=iter, matvecs=nmatvec)
