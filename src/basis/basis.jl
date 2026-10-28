@@ -446,16 +446,19 @@ function get_bonds(strc, basis, conf=get_empty_config();
     nR = size(strc.Rs, 2)
     offset = cumsum(vcat(0, length.(basis.orbitals)[1:end-1]))
 
-    # Bonds of the atom pairs in the neighbouring grid cells, per chunk of grid cells and lattice vector
     parts = tmap(grid_cell_chunks(strc.point_grid)) do chunk
         is = [Int64[] for _ in 1:nR]; js = [Int64[] for _ in 1:nR]; ds = [SVector{3, Float64}[] for _ in 1:nR]
         for (grid_point, inds) in chunk, nn_grid_point in nn_grid_points(grid_point, strc.point_grid.dictR),
             (iion2, R) in strc.point_grid.dictR[nn_grid_point], iion1 in inds
+            
             (isempty(basis.orbitals[iion1]) || isempty(basis.orbitals[iion2])) && continue
+            
             r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
             r⃗₂ = apply_pbc(strc.ions[iion2].pos, Ts[:, R]) - strc.ions[iion2].dist
             bond = SVector{3, Float64}(r⃗₂ .- r⃗₁)
+            
             (normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, Ts[:, R]) ≤ rcut && norm(bond) - abs(rcut_tol) < rcut) || continue
+            
             for jorb1 in eachindex(basis.orbitals[iion1]), jorb2 in eachindex(basis.orbitals[iion2])
                 push!(is[R], offset[iion1] + jorb1); push!(js[R], offset[iion2] + jorb2); push!(ds[R], bond)
             end
@@ -463,11 +466,10 @@ function get_bonds(strc, basis, conf=get_empty_config();
         (is, js, ds)
     end
 
-    # One sparse matrix per lattice vector and component; the three components share the sparsity pattern
     return tmap(1:nR) do R
         I = reduce(vcat, [p[1][R] for p in parts]); J = reduce(vcat, [p[2][R] for p in parts])
         D = reduce(vcat, [p[3][R] for p in parts])
-        order = sparse(I, J, collect(1:length(I)), Nε, Nε)          # position of every entry in CSC order
+        order = sparse(I, J, collect(1:length(I)), Nε, Nε)
         perm = nonzeros(order)
         ntuple(a -> SparseMatrixCSC(Nε, Nε, copy(order.colptr), copy(rowvals(order)), [D[n][a] for n in perm]), 3)
     end
