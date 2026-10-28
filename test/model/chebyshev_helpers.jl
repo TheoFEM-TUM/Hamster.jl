@@ -1,4 +1,4 @@
-using Random: Xoshiro
+const Xoshiro = Hamster.Random.Xoshiro
 
 # Two-band model on a periodic n × n × n cubic lattice: on-site energies ±Δ with disorder and nearest-neighbor hoppings with
 # random phases, so that the spectrum has a gap around zero and no exact degeneracies. With `kramers`, every level is
