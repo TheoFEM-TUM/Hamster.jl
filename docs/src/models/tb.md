@@ -162,6 +162,33 @@ H^{\mathbf{R}}
 V_v^0 h_v^{\mathbf{R}}.
 ```
 
+## Orbitals
+
+The orbitals of an element are given with the `orbitals` tag of its `atom` block:
+
+- pure orbitals: `s`, `px`, `py`, `pz` and the d orbitals `dxy`, `dyz`, `dxz`, `dz2`, `dx2_y2` (e.g.
+  `orbitals = dxy dyz dxz dz2 dx2_y2` for Ti in SrTiO3); their orientation is given by their angular function;
+- hybrid orbitals: `sp3` and `sp3dr2` (one orbital per hybrid, oriented along the bonds with `NNaxes = true`).
+
+For the d orbitals, the Slater-Koster factors are evaluated in the bond frame, with the parity factor ``(-1)^{l_1+l_2}``
+of the bond direction where the order of the orbitals or of the parameter is reversed (e.g. `O+Sr_spσ` for s on Sr and
+p on O). In the descriptor of the ML model, a d orbital (which has no single axis) gets the angle
+``\theta = \arccos T`` with the normalized value ``T = \sqrt{4\pi/5}\, Y(\hat{\mathbf{n}})`` of its angular
+function along the bond; for a p orbital this is the angle between its axis and the bond.
+
+## Slater-Koster Convention
+
+Every parameter scales a distance dependence that is an overlap integral of the orbitals, so the geometry tensor with
+all parameters set to one equals the overlap integrals of the orbitals in their actual geometry,
+
+```math
+\sum_v h_{vij}^{\mathbf{R}} = \langle \phi_i(\mathbf{r} - \boldsymbol{\tau}_i) \,|\, \phi_j(\mathbf{r} - \boldsymbol{\tau}_j + \mathbf{R}) \rangle,
+```
+
+for every pair of orbitals and bond direction (checked by `test/basis/test_sk_overlaps.jl`). Between different
+elements, a parameter belongs to its elements in order: `Ga+As_spσ` couples s on Ga with p on As, and not p on Ga with
+s on As (before version 0.6 it coupled both, which changes models in which both elements have s and p orbitals).
+
 ## Parameter Sharing
 
 For multiple structures, each structure may contain a local parameter ordering.
@@ -177,6 +204,27 @@ V[\mathrm{params\_ per\_ strc}[n]].
 
 This allows different structures and bases to share the same optimized
 parameters consistently.
+
+## Nearest-Neighbor Parameters
+
+With `sepNN = true`, every overlap has two parameters: one for the nearest neighbors (`NN1`) and one for all farther
+shells (`NN2`). A bond counts as a nearest-neighbor bond if its length is at most the cutoff of its ion pair: the
+midpoint between the first and the second neighbor shell of the reference positions (the `POSCAR`, or the reference
+structure of the `Supercell` block). Neighbor distances within 10 % of each other belong to the same shell. Distorted
+bonds, e.g. in MD snapshots, therefore keep their label as long as they are not stretched or compressed past the
+midpoint; a bond that crosses it switches to the other parameters abruptly. If the reference has no second shell
+within the neighbor search, the cutoff is the nearest-neighbor distance.
+
+The cutoffs and the number of bonds with each label are listed in the [model summary](#Model-Summary).
+
+!!! note "Fits with earlier versions"
+    In Hamster 0.6.0 and earlier, a bond counted as a nearest-neighbor bond only if it was at most 10⁻⁵ Å longer than the
+    shortest bond of its ion pair. In distorted structures (MD snapshots, a distorted `POSCAR`), most stretched
+    nearest-neighbor bonds therefore got the `NN2` parameters. Fits with `sepNN = true` to distorted structures (MD, ML)
+    made with these versions should be redone. Models without `sepNN` and fits to undistorted high-symmetry structures,
+    in which all nearest-neighbor bonds have the same length, are not affected. In reference structures with
+    nearest-neighbor bonds of slightly different lengths (within 10 %, e.g. wurtzite or orthorhombic perovskites), all
+    of them now use the `NN1` parameters, while before only the shortest did.
 
 ## Spin Basis
 
@@ -258,6 +306,17 @@ are not included, since the summary is written at initialization):
       geometry tensor entries:     35056 (0.5 MB)
 ================================================================================
 ```
+
+With `sepNN = true`, the summary also lists the nearest-neighbor cutoff of every ion pair and the number of bonds of
+all structures with the `NN1` and `NN2` parameters:
+
+```
+  Nearest-neighbor labels (sepNN): bonds of all structures
+    ion pair          cutoff (Å)    NN1 bonds    NN2 bonds
+    Si+Si                  3.096          128          768
+```
+
+In distorted structures, all nearest-neighbor bonds should keep the `NN1` label (here 4 bonds per Si atom).
 
 Ranges (`min - max`) are given if the structures differ in size. The geometry tensor entries are the stored non-zero
 elements of ``h_{vR}`` of all structures, which dominate the memory of the TB model.

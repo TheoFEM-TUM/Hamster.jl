@@ -1,77 +1,53 @@
-# A more powerful way to validate the model is to use temperature-dependent energy
-# eigenvalues directly. To this end, we use an MD trajectory.
-# Again, optimimal parameters are chosed from the validation minimum.
+# Example config file of a fit to MD data (GaAs), used to test reading config files: comments, values with and
+# without spaces around "=", upper-case keys, vectors, and atom blocks. All tags are valid (the test checks that
+# reading this file gives no warnings).
 #
-# To this end, we now need the following VASP inputs:
-#   - POSCAR (structure file)
-#   - EIGENVAL_DOS (training data, e.g., eigenvalues on k-point grid)
-#   - EIGENVAL_bands (k-point path)
-#   - SC_POSCAR (supercell equilibrium structure)
-#   - SC_XDATCAR (supercell MD trajectory)
-#   - SC_OUTCAR (MD VASP output file; contains energy eigenvalues)
-#
-# The following output files are generated:
-#   - dyntb.out (main DynTB output file)
-#   - params.dat (TB parameter file containing optimal parameter values)
-#   - Vs.dat (TB parameters for each iteration)
-#   - Ls_train.dat (training error for each iteration)
-#   - Ls_val.dat (validation error for each iteration)
-#   - Es.dat (energy eigenvalues from the bandstructure calculation)
-#
-# Options block: this is unchanged
-#
+# Inputs: POSCAR (primitive cell), SC_POSCAR and SC_XDATCAR (supercell and MD trajectory), EIGENVAL_DOS (training data).
+
 begin Options
-    run_def = true                          # bandstructure calculation after parameter optimization
-    onsite = true                           # (default) introduce separate parameters for onsites
-    interpolate_rllm = true                 # interpolate distance dependence using cubic splines
-    POSCAR = POSCAR                         # (default) path to POSCAR file (PC)
-    EIGENVAL = EIGENVAL_bands               # path to EIGENVAL file; provides k-points for bandstructure
-    rcut = 6                                # cut-off radius for interactions
-    sp_geo=true
+    skip_diag = true                        # no eigenvalues after the fit
+    onsite = true                           # (default) separate parameters for the on-site elements
+    interpolate_rllm = true                 # interpolate the distance dependence with cubic splines
+    POSCAR = POSCAR                         # (default) primitive cell
+    kpoints = EIGENVAL_bands                # k-points for a band structure
+    rcut = 6                                # cut-off radius of the interactions
+    sp_mode=true
     sp_tol = 1e-5
     load_rllm = true
+    init_params = params.dat                # TB parameters from a file
 end
 
-# This block now contains all information regarding the supercell
+# Supercell and trajectory
 begin Supercell
-    POSCAR = SC_POSCAR                      # path to SC POSCAR file (default)
-    XDATCAR = SC_XDATCAR                    # path to SC XDATCAR file (default)
-    Nconfig = 10                            # sample size for configurations
-    OUTCAR = SC_OUTCAR
+    POSCAR = SC_POSCAR                      # supercell (default)
+    XDATCAR = SC_XDATCAR                    # MD trajectory
+    Nconf = 10                              # number of configurations
 end
 
-# If an Optimizer block exists, parameter optimization is performed
+# An Optimizer block switches to a fit
 begin Optimizer
-    loss = MAE                              # Mean-Absolute Error
-    Niter = 50                              # number of gradient-descent iterations
-    lr = 0.001                              # learning rate for ADAM optimizer
-    validate = true                         # validation step is not performed
-    init_params = params.dat                # initialize TB parameters from file
-    mode = MD                               # training data consists of PC and MD/Multi data
-
-    train_data = EIGENVAL_DOS               # path to EIGENVAL file to fit TB model   
-    val_mode = MD 
-    grad_mode = analytic                    # gradients are calculated analytically (numeric is default)
-    wPC = 5
+    loss = MAE                              # mean absolute error
+    niter = 50                              # number of iterations
+    lr = 0.001                              # learning rate (Adam)
+    train_data = EIGENVAL_DOS               # training data
+    train_mode = md                         # supercell data
+    val_mode = md
+    wE_1-4 = 0.5                            # lower weight for the lowest bands
 end
 
-begin MLTB
-    optimize = true                         # Switch on optimization for ML model
-    ov_scale = 0.                           # Multiply overlap descriptor by 0
-    delta_ml = true                         # Switch on use of delta ML model
-    simtol = 0.1                            # Dissimilarity threshold
-    kernel_mode = normal
+# Machine-learned corrections
+begin ML
+    npoints = 100                           # kernel data points
+    ncluster = 10
+    sim_params = 0.1
 end
 
 #
-# Finally, we need to specify atom-specific parameter. These are unchanged.
-# Each atom species needs its own block defined as given below. 
-# Block order has no influence.
+# Atom-specific settings, one block per species (the order of the blocks has no influence)
 #
-
 begin atom Ga
-    n = 3                                  # principal quantum number for radial function
-    alpha = 9                              # effective core charge for radial function
+    n = 3                                  # principal quantum number of the radial functions
+    alpha = 9                              # effective charge of the radial functions
     orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2 # sp3dr2 basis set
 end
 
@@ -79,5 +55,5 @@ begin atom As
     n = 3
     alpha = 13
     orbitals = sp3dr2 sp3dr2 sp3dr2 sp3dr2
-    NNaxes = true                          # orbitals are re-oriented towards nearest neighbors
+    NNaxes = true                          # orbital axes along the bonds to the nearest neighbours
 end

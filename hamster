@@ -13,6 +13,8 @@ Usage:
   hamster --install [OPTIONS]                           Install the dependencies and precompile Hamster
   hamster --update [--no-pull]                          Pull the latest code, update the dependencies, precompile
   hamster --precompile                                  Precompile Hamster (and its GPU code on a GPU node)
+  hamster --tag NAME                                    Show the description of the input tag NAME (all blocks)
+  hamster --tags [BLOCK|TERM]                           List the input tags of a block, or all tags matching TERM
   hamster --version                                     Show the version of Hamster and Julia
   hamster --help                                        Show this help
 
@@ -54,7 +56,7 @@ OPTIONS=()
 for arg in "$@"; do
     case $arg in
         -h|--help) HELP=true ;;
-        --version|--install|--update|--precompile)
+        --version|--install|--update|--precompile|--tag|--tags)
             if [[ -n "$COMMAND" && "$COMMAND" != "$arg" ]]; then
                 echo "hamster: $COMMAND and $arg cannot be combined, see hamster --help." >&2
                 exit 1
@@ -75,6 +77,8 @@ case "$COMMAND" in
     --version) print_version; exit 0 ;;
     --install) exec julia "$HAMSTER_DIR/hamster_install.jl" "${OPTIONS[@]}" ;;
     --update) exec julia "$HAMSTER_DIR/hamster_update.jl" "${OPTIONS[@]}" ;;
+    --tag|--tags)
+        exec julia --startup-file=no --project="$HAMSTER_DIR" -e 'using Hamster; Hamster.tag_cli(ARGS)' -- "$COMMAND" "${OPTIONS[@]}" ;;
     --precompile)
         if [[ ${#OPTIONS[@]} -gt 0 ]]; then
             echo "hamster: --precompile takes no options (got ${OPTIONS[*]})." >&2

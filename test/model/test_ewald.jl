@@ -222,6 +222,13 @@ end
     @test Hamster.ewald_alpha("wolf", 15.0, 0) ≈ 0.2
     @test Hamster.ewald_alpha("zahn", 15.0, 0.3) == 0.3
 
+    # Zahn (damped shifted force): potential and its derivative vanish at the cutoff
+    α, rc = 0.3, 9.0
+    @test abs(Hamster.zahn_kernel(rc, α, rc)) < 1e-14
+    h = 1e-6
+    @test abs((Hamster.zahn_kernel(rc + h, α, rc) - Hamster.zahn_kernel(rc - h, α, rc)) / 2h) < 1e-8
+    @test abs(Hamster.wolf_kernel(rc, α, rc)) < 1e-14
+
     function cspbbr3_conf()
         conf = get_empty_config()
         set_value!(conf, "orbitals", "Cs", "s")

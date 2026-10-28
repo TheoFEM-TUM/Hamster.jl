@@ -61,11 +61,12 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config;
                 j = offset[jion] + jorb
                 l_i = l_map[i]; l_j = l_map[j]
                 decide_orthogonal(Δr, i, j, l_i, l_j; apply_orthogonality=apply_orthogonality) && continue
-                iaxis = basis.orbitals[iion][iorb].axis
-                jaxis = basis.orbitals[jion][jorb].axis
-                φ = calc_angle(iaxis, jaxis)
-                θ1 = calc_angle(iaxis, isnothing(Δrij) ? normalize(iaxis) : Δrij)
-                θ2 = calc_angle(jaxis, isnothing(Δrji) ? normalize(jaxis) : Δrji)
+                orb_i = basis.orbitals[iion][iorb]; orb_j = basis.orbitals[jion][jorb]
+                iaxis = get_sym_axis(orb_i)
+                jaxis = get_sym_axis(orb_j)
+                φ = l_i == 2 || l_j == 2 ? 0.0 : calc_angle(iaxis, jaxis)
+                θ1 = orbital_angle(orb_i, iaxis, Δrij)
+                θ2 = orbital_angle(orb_j, jaxis, Δrji)
 
                 orbswap = decide_orbswap(itype, jtype, l_i, env[i], l_j, env[j])
                 angleswap = (θ1 > θ2 && itype == jtype) || (orbswap && itype ≠ jtype)
@@ -149,6 +150,20 @@ function decide_orthogonal(Δr, i, j, l_i, l_j; apply_orthogonality=false)
     Δr != 0 && return false
     (l_i < 0 || l_j < 0) && return false
     return i != j
+end
+
+"""
+    orbital_angle(orb, axis, n̂) -> Float64
+
+Angle descriptor of an orbital and the bond direction `n̂` (`nothing` on the same site: 0). For s, p and hybrid orbitals
+the angle between the orbital axis and the bond. d orbitals have no single axis: θ = acos(T) with the normalized value
+T = √(4π/5) Y(n̂) of the angular function along the bond (for a p orbital, T is the cosine of the angle between axis and
+bond, so this is the same angle), e.g. 0 for dz2 and a bond along z, 120° for dz2 and a bond in the xy-plane.
+"""
+function orbital_angle(orb, axis, n̂)
+    isnothing(n̂) && return calc_angle(axis, normalize(axis))
+    orb.type.l == 2 || return calc_angle(axis, n̂)
+    return acos(clamp(round(√(4π / 5) * orb.type(n̂[1], n̂[2], n̂[3]), digits=5), -1.0, 1.0))
 end
 
 """
