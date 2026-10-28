@@ -208,8 +208,11 @@ function get_config_inds_for_systems(
             end
         end
 
-        system_train_inds, system_val_inds =
+        system_train_inds, system_val_inds = if !optimize && get_filter_config_inds(conf) && !endswith(system, "_PC")
+            get_filtered_config_index_sample(system, conf; Nconf=Nconf, Nconf_max=Nconf_max, rank=rank), Int64[]
+        else
             get_config_index_sample(system, conf; Nconf=Nconf, Nconf_max=Nconf_max)
+        end
 
         # -------------------------------------------------
         # Only rank 0 writes output (serial HDF5)
@@ -261,6 +264,61 @@ end
 
 
 """
+    read_config_inds(system, inds_conf, key; missing_ok=false) -> Vector{Int64}
+
+Reads configuration indices for `system` as specified by the `config_inds`/`val_config_inds` tag value `inds_conf`.
+
+# Arguments
+- `system`: Name of the system, used as the HDF5 group name.
+- `inds_conf`: A vector of indices, a `.dat` file, a `.h5` file, or `"none"`.
+- `key`: Dataset name inside the system group of the `.h5` file (e.g., `"train_config_inds"`).
+- `missing_ok`: If `true`, a missing dataset in the `.h5` file yields an empty vector instead of an error.
+
+# Returns
+- `Vector{Int64}`: The configuration indices (empty if none are given).
+"""
+function read_config_inds(system, inds_conf, key; missing_ok=false)::Vector{Int64}
+    if inds_conf isa Vector{Int64}
+        return copy(inds_conf)
+    elseif inds_conf isa String && occursin(".dat", inds_conf)
+        return vec(read_from_file(inds_conf, type=Int64))
+    elseif inds_conf isa String && occursin(".h5", inds_conf)
+        dataset = system == "" ? key : "$system/$key"
+        if missing_ok && !h5open(file -> haskey(file, dataset), inds_conf, "r")
+            return Int64[]
+        end
+        return vec(h5read(inds_conf, dataset))
+    end
+    return Int64[]
+end
+
+"""
+    get_filtered_config_index_sample(system, conf=get_empty_config(); Nconf=get_Nconf(conf), Nconf_min=get_Nconf_min(conf), Nconf_max=get_Nconf_max(conf), rank=0)
+
+Randomly selects configuration indices from `Nconf_min:Nconf_max` that are neither training (`config_inds`) nor validation (`val_config_inds`) indices.
+Used for standard calculations with `filter_config_inds = true`. If fewer than `Nconf` indices remain, all remaining indices are returned.
+
+# Returns
+- `Vector{Int64}`: The sampled configuration indices.
+"""
+function get_filtered_config_index_sample(system, conf=get_empty_config();
+                                Nconf=get_Nconf(conf),
+                                Nconf_min=get_Nconf_min(conf),
+                                Nconf_max=get_Nconf_max(conf),
+                                inds_conf=get_config_inds(conf),
+                                val_inds_conf=get_val_config_inds(conf),
+                                rank=0)::Vector{Int64}
+    excluded_inds = union(read_config_inds(system, inds_conf, "train_config_inds", missing_ok=true),
+                          read_config_inds(system, val_inds_conf, "val_config_inds", missing_ok=true))
+    remaining_indices = setdiff(Nconf_min:Nconf_max, excluded_inds)
+    Nsample = min(Nconf, length(remaining_indices))
+    if Nsample < Nconf && rank == 0
+        @warn "System $system: only $Nsample configurations remain after filtering out training and validation indices (Nconf = $Nconf)."
+    end
+    return sample(remaining_indices, Nsample, replace=false, ordered=true)
+end
+
+"""
     get_config_index_sample(conf=get_empty_config(); Nconf=get_Nconf(conf), Nconf_min=get_Nconf_min(conf), Nconf_max=get_Nconf_max(conf), val_ratio=get_val_ratio(conf))
 
 Randomly selects training and validation configuration indices from a given range of configurations.
@@ -292,34 +350,22 @@ function get_config_index_sample(system, conf=get_empty_config();
                                 pc_weight_val = get_pc_weight_val(conf),
                                 pc_weight = get_pc_weight(conf)) :: Tuple{Vector{Int64}, Vector{Int64}}
     # Training config inds
-    train_config_inds = Int64[]
-    if inds_conf isa Vector{Int64}
-        train_config_inds = inds_conf
-    elseif inds_conf isa String && occursin(".dat", inds_conf)
-        train_config_inds = read_from_file(inds_conf, type=Int64)
-    elseif inds_conf isa String && occursin(".h5", inds_conf)
-        train_config_inds = h5read(inds_conf, "$system/train_config_inds")
-    end
+    train_config_inds = read_config_inds(system, inds_conf, "train_config_inds")
 
     if (lowercase(train_mode) ∈ ["md", "universal"] || lowercase(train_mode) == lowercase(val_mode)) && length(train_config_inds) < Nconf && endswith(system, "_PC") == false
-        append!(train_config_inds, sample(Nconf_min:Nconf_max, Nconf - length(train_config_inds), replace=false, ordered=true))
+        remaining_indices = setdiff(Nconf_min:Nconf_max, train_config_inds)
+        Ntrain = min(Nconf - length(train_config_inds), length(remaining_indices))
+        append!(train_config_inds, sample(remaining_indices, Ntrain, replace=false, ordered=true))
     elseif length(train_config_inds) == 0
         push!(train_config_inds, 1)
     end
 
     # Validation config inds
-    val_config_inds = Int64[]
-    if val_inds_conf isa Vector{Int64}
-        val_config_inds = val_inds_conf
-    elseif val_inds_conf isa String && occursin(".dat", val_inds_conf)
-        val_config_inds = read_from_file(val_inds_conf, type=Int64)
-    elseif val_inds_conf isa String && occursin(".h5", val_inds_conf)
-        val_config_inds = h5read(val_inds_conf, "$system/val_config_inds")
-    end
+    val_config_inds = read_config_inds(system, val_inds_conf, "val_config_inds")
 
     if length(val_config_inds) < Nconf && (lowercase(val_mode) ∈ ["md", "universal"])  && endswith(system, "_PC") == false
         Nval = train_mode == val_mode ? round(Int64, max(Nconf, 1) * val_ratio) : Nconf
-        Nval -= length(val_config_inds)
+        Nval = max(Nval - length(val_config_inds), 0)
         remaining_indices = lowercase(train_mode) == "pc" ? (Nconf_min:Nconf_max) : setdiff(Nconf_min:Nconf_max, train_config_inds)
         remaining_indices = setdiff(remaining_indices, val_config_inds)
         if length(remaining_indices) ≥ Nval

@@ -27,9 +27,10 @@ end
     Es_dft = h5read(joinpath(path, "eigenval.h5"), "eigenvalues")
     Es_tb = read_from_file("Es.dat")
     inds = h5read("hamster_out.h5", "config_inds")
+    @test h5read("eval_config_inds.h5", "config_inds") == sort(inds)
     for (i, ind) in enumerate(inds)
         @test mean(abs.(Es_dft[:, :, ind] .- Es_tb[:, :, i])) < 0.3
     end
 
-    rm("hamster.out"); rm("Es.dat")
+    rm("hamster.out"); rm("Es.dat"); rm("eval_config_inds.h5")
 end

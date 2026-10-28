@@ -59,6 +59,15 @@ function get_val_config_inds(conf::Config)::Union{String, Vector{Int64}}
         end
     end
 end
+
+"""
+    filter_config_inds=false
+
+The `filter_config_inds::Bool` tag determines whether a standard calculation only samples configurations that are neither in `config_inds` nor in `val_config_inds`
+(e.g., to evaluate a trained model on unseen configurations). From `.h5` files, the indices are read from `<system>/train_config_inds` and `<system>/val_config_inds`.
+"""
+get_filter_config_inds(conf::Config)::Bool = get(conf, "filter_config_inds", "Supercell", false)
+
 """
     nbatch=1
 

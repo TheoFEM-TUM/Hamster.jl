@@ -164,56 +164,93 @@ function read_from_file(filename; type=Float64)
 end
 
 """
-    collapse_files_with!(str)
+    stack_output_files(str; location=joinpath(pwd(), "tmp")) -> Dict{String, Tuple{Vector{Int64}, Array}}
 
-Searches for all output files in the `"tmp"` directory that contain the substring `str` in their filename.  
-Reads and combines their data into a single large array, then writes the merged result to a new file named `str*".dat"`.
+Collects all output files `<str>_<system>_<config_index>.dat` in `location` and stacks the data of each system along a new last axis, sorted by configuration index.
 
-# Arguments
-- `str::String`: A substring to match filenames in the `"tmp"` directory.
+# Returns
+- A dictionary mapping each system name to `(indices, data)`, where `data[..., i]` corresponds to configuration `indices[i]`.
 """
-function collapse_files_with(str; location=joinpath(pwd(), "tmp"))
-    files = [file for file in readdir(location) if occursin(str, file)]
+function stack_output_files(str; location=joinpath(pwd(), "tmp"))
+    files = [file for file in readdir(location) if startswith(file, "$(str)_")]
 
     # Group files by everything between `str` and the final index
     groups = Dict{String, Vector{String}}()
-
     for file in files
         parts = split(replace(file, ".dat" => ""), "_")
         middle = join(parts[2:end-1], "_")
         push!(get!(groups, middle, String[]), file)
     end
-    if isfile("config_inds.h5")
 
-        h5open("config_inds.h5", "w") do h5
-            for (middle, group_files) in groups
+    stacked = Dict{String, Tuple{Vector{Int64}, Array}}()
+    for (middle, group_files) in groups
+        # Extract and sort by trailing index
+        indices = [parse(Int, split(replace(file, ".dat" => ""), "_")[end]) for file in group_files]
+        p = sortperm(indices)
 
-                # Extract and sort by trailing index
-                indices = [
-                    parse(Int, split(replace(file, ".dat" => ""), "_")[end])
-                    for file in group_files
-                ]
+        # Read and concatenate data
+        data = [read_from_file(joinpath(location, file)) for file in group_files[p]]
+        stacked[middle] = (indices[p], cat(data..., dims=ndims(data[1]) + 1))
+    end
+    return stacked
+end
 
-                p = sortperm(indices)
-                indices = indices[p]
-                group_files = group_files[p]
+"""
+    collapse_files_with(str; location=joinpath(pwd(), "tmp"), index_file="eval_config_inds.h5")
 
-                # Read and concatenate data
-                data = [
-                    read_from_file(joinpath(location, file))
-                    for file in group_files
-                ]
+Stacks the output files `<str>_<system>_<config_index>.dat` in `location` per system (see `stack_output_files`) and writes the result
+to `<str>_<system>.dat` (or `<str>.dat` if the system name is empty).
 
-                data_combined = cat(data..., dims=ndims(data[1]) + 1)
+The sorted configuration indices are written to `index_file` with one dataset per system (`config_inds` if the system name is empty),
+such that `data[..., i]` corresponds to configuration `indices[i]`.
 
-                # Write combined data
-                outfile = isempty(middle) ? str : "$(str)_$(middle)"
-                write_to_file(data_combined, outfile)
+# Arguments
+- `str::String`: The prefix of the output files (e.g., `"Es"` or `"vs"`).
+- `location`: Directory containing the output files.
+- `index_file`: HDF5 file the configuration indices are written to.
+"""
+function collapse_files_with(str; location=joinpath(pwd(), "tmp"), index_file="eval_config_inds.h5")
+    h5open(index_file, "w") do h5
+        for (middle, (indices, data)) in stack_output_files(str, location=location)
+            write_to_file(data, isempty(middle) ? str : "$(str)_$(middle)")
+            h5[isempty(middle) ? "config_inds" : middle] = indices
+        end
+    end
+end
 
-                # Store the original indices; position is implicit:
-                # data_combined[..., i] corresponds to indices[i]
-                h5[middle] = indices
+const OUTPUT_DATASETS = Dict("Es" => "eigenvalues", "vs" => "eigenvectors")
+
+"""
+    collect_output_files(strs; location=joinpath(pwd(), "tmp"), index_file="eval_config_inds.h5", h5_file="eval_eigenval.h5")
+
+Writes the final output files from the per-structure output files `<str>_<system>_<config_index>.dat` in `location` for each prefix in `strs`.
+
+- Named systems (e.g., from a universal `.h5` structure file): the data of all systems is written to `h5_file`, with one group per system containing
+  the stacked data (`eigenvalues` for `"Es"`, `eigenvectors` for `"vs"`, with configurations along the last axis) and the corresponding `config_inds`.
+- A single unnamed system: a single output file is copied to `<str>.dat`. Multiple output files are stacked with `collapse_files_with`,
+  and their configuration indices are written to `index_file`.
+"""
+function collect_output_files(strs; location=joinpath(pwd(), "tmp"), index_file="eval_config_inds.h5", h5_file="eval_eigenval.h5")
+    h5_mode = "w"
+    for str in strs
+        files = [file for file in readdir(location) if startswith(file, "$(str)_")]
+        isempty(files) && continue
+        stacked = stack_output_files(str, location=location)
+        if all(isempty, keys(stacked))
+            if length(files) == 1
+                cp(joinpath(location, only(files)), "$str.dat"; force=true)
+            else
+                collapse_files_with(str, location=location, index_file=index_file)
             end
+        else
+            h5open(h5_file, h5_mode) do h5
+                for (system, (indices, data)) in stacked
+                    g = haskey(h5, system) ? h5[system] : create_group(h5, system)
+                    g[get(OUTPUT_DATASETS, str, str)] = data
+                    if !haskey(g, "config_inds"); g["config_inds"] = indices; end
+                end
+            end
+            h5_mode = "cw"
         end
     end
 end
