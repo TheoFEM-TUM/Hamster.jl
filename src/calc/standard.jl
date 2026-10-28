@@ -98,6 +98,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
     
     # A single structure of an unnamed system is written to Es.dat (and vs.dat), everything else to `eigen_file`
     Nstrc_tot = MPI.Allreduce(ham.Nstrc, +, comm)
+    Nstrc_max = MPI.Allreduce(ham.Nstrc, max, comm)
     named_systems = MPI.Allreduce(Int(any(!isempty, keys(local_inds))), max, comm) == 1
     write_h5 = Nstrc_tot > 1 || named_systems
     if write_h5 && rank == 0 && isfile(eigen_file); rm(eigen_file); end
@@ -153,7 +154,19 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
         end
         if Nbatch > 1; unload_simmats!(ham, indices); end
     end
+
+    # Ranks with fewer structures take part in the collective MPI calls of the remaining iterations of the other ranks
+    for _ in ham.Nstrc+1:Nstrc_max
+        if write_hr; wait_for_writing_ranks(comm, nranks); end
+        MPI.Reduce(0.0, +, comm, root=0)
+        MPI.Reduce(0.0, +, comm, root=0)
+        if write_hk; wait_for_writing_ranks(comm, nranks); end
+        if !skip_diag && write_h5; wait_for_writing_ranks(comm, nranks); end
+    end
 end
+
+# Matches the barriers of a rank-by-rank write (e.g., `write_ham`) without writing anything
+wait_for_writing_ranks(comm, nranks) = for _ in 1:nranks; MPI.Barrier(comm); end
 
 function get_kpoints_from_config(conf::Config; kpoints_file=get_kpoints_file(conf), system ="")::Matrix{Float64}
     if occursin("EIGENVAL", kpoints_file)
