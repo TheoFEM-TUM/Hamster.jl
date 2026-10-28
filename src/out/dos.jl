@@ -253,7 +253,7 @@ function joint_dos(Es, occs, wk, settings; pair_weights=nothing)
         Ws = isnothing(pair_weights) ? Matrix{Float64}[] : pair_weights(k, v, c)
         h = zeros(length(ω), 1 + length(Ws))
         for (jc, j) in enumerate(c), (iv, i) in enumerate(v)
-            x = max(E[j] - E[i], 0.0) / dω               # ≥ 0 at zero temperature (rounding aside)
+            x = max(E[j] - E[i], 0.0) / dω
             n = floor(Int64, x)
             n + 2 ≤ length(ω) || continue
             w = f[i] * (1 - f[j]); s = x - n
