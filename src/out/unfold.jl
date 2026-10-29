@@ -318,6 +318,18 @@ function primitive_bands(conf, pc, ks; system="", ml_data_points=nothing)
 end
 
 """
+    unfold_hamiltonians(ham, index) -> (Ks -> Hk)
+
+Hamiltonians of structure `index` at the supercell k-points `Ks` (columns). On the host, the real-space Hamiltonian
+(with an ML model, the expensive part) is evaluated once per structure instead of once per call.
+"""
+function unfold_hamiltonians(ham, index)
+    uses_device_path(ham) && return Ks -> get_hamiltonian(ham, index, Ks)
+    Hr = get_hr(ham, index)
+    return Ks -> get_hamiltonian(Hr, ham.Rs[index], Ks, ham.sp_diag)
+end
+
+"""
     unfold_structure(ham, index, umap, ks, conf; Neig, target, method, memory, bands) -> (Es, Ws[, Wb])
 
 Eigenvalues `Es` and spectral weights `Ws` (`Neig × Nk`) of the supercell states of structure `index` of the effective
@@ -335,8 +347,9 @@ function unfold_structure(ham, index, umap, ks, conf=get_empty_config(); Neig=no
     Es = zeros(Neig, size(ks, 2)); Ws = zeros(Neig, size(ks, 2))
     Wb = isnothing(bands) ? nothing : zeros(umap.Nj, Neig, size(ks, 2))
     batch = clamp(floor(Int64, memory / (16 * Nε * Neig)), 1, max(1, Threads.nthreads()))
+    Hks = unfold_hamiltonians(ham, index)
     for Kbatch in Iterators.partition(axes(Ks, 2), batch)
-        Hk = get_hamiltonian(ham, index, Ks[:, Kbatch])
+        Hk = Hks(Ks[:, Kbatch])
         E, vs = diagonalize(Hk, Neig=Neig, target=target, method=method, vectors=true)
         for (b, n) in enumerate(Kbatch)
             sparse_diag && orthonormalize_degenerate!(view(E, :, b), view(vs, :, :, b))
@@ -418,11 +431,11 @@ end
 `Y = H X` for a Hermitian sparse matrix `H` and the vectors stored as the columns of `transpose(X)`, i.e., `X` is
 Nvec × Nε, so that the entries of all vectors for one orbital are contiguous. Since `H = Hᴴ`, column `j` of `H` gives
 the entries `j` of the products, so the columns are distributed over the threads without write conflicts, and `H` is
-read once for all vectors.
+read once for all vectors. The columns are split into `ntasks` tasks.
 """
-function hermitian_mul!(Y, H::SparseMatrixCSC, X)
+function hermitian_mul!(Y, H::SparseMatrixCSC, X; ntasks=4 * Threads.nthreads())
     rows, vals = rowvals(H), nonzeros(H)
-    tforeach(chunks(1:size(H, 2), n=4 * Threads.nthreads())) do cols
+    tforeach(chunks(1:size(H, 2), n=ntasks)) do cols
         for j in cols
             fill!(view(Y, :, j), 0)
             for p in nzrange(H, j)
@@ -436,7 +449,12 @@ function hermitian_mul!(Y, H::SparseMatrixCSC, X)
     return Y
 end
 
-hermitian_mul(H::SparseMatrixCSC, v::AbstractVector) = vec(hermitian_mul!(similar(v, 1, length(v)), H, reshape(v, 1, :)))
+hermitian_mul(H::SparseMatrixCSC, v::AbstractVector; ntasks=4 * Threads.nthreads()) =
+    vec(hermitian_mul!(similar(v, 1, length(v)), H, reshape(v, 1, :), ntasks=ntasks))
+
+# Below this matrix size, the threads work on different k-points (each Chebyshev recursion runs in one task): splitting
+# the products of small matrices over the threads costs more than it saves
+const KPM_SERIAL_SIZE = 4096
 
 """
     bloch_vectors(ks, umap) -> V
@@ -486,16 +504,17 @@ function chebyshev_step!(t_next, H̃, t_curr, t_prev, columns)
 end
 
 """
-    kpm_unfold_moments(H̃, V, M) -> μ
+    kpm_unfold_moments(H̃, V, M; ntasks) -> μ
 
-Chebyshev moments `μ[m + 1, v] = ⟨v|Tₘ(H̃)|v⟩` (m = 0, …, M-1) of the starting vectors `V` (rows).
+Chebyshev moments `μ[m + 1, v] = ⟨v|Tₘ(H̃)|v⟩` (m = 0, …, M-1) of the starting vectors `V` (rows), with the products
+split into `ntasks` tasks.
 """
-function kpm_unfold_moments(H̃, V, M)
+function kpm_unfold_moments(H̃, V, M; ntasks=4 * Threads.nthreads())
     Nvec, Nε = size(V)
-    columns = chunks(1:Nε, n=4 * Threads.nthreads())
+    columns = chunks(1:Nε, n=ntasks)
     μ = zeros(M, Nvec)
     t_prev = copy(V)
-    t_curr = hermitian_mul!(similar(V), H̃, V)                     # T₁ V
+    t_curr = hermitian_mul!(similar(V), H̃, V, ntasks=ntasks)       # T₁ V
     μ[1, :] .= vec(real(sum(abs2, V, dims=2)))
     M ≥ 2 && (μ[2, :] .= vec(real(sum(conj(V) .* t_curr, dims=2))))
     t_next = similar(V)
@@ -520,15 +539,15 @@ where the reconstruction has the factor 1/√(1 - x²).
 kpm_interval(Emin, Emax, M) = ((Emin + Emax) / 2, (Emax - Emin) / 2 * (1 + 3π / M) / (1 - 0.005))
 
 """
-    spectral_bounds(H; M=nothing, margin=0.01) -> (center, halfwidth)
+    spectral_bounds(H; M=nothing, margin=0.01, ntasks) -> (center, halfwidth)
 
 Center and half width of an interval that contains the spectrum of the Hermitian sparse matrix `H` (extremal
 eigenvalues from Lanczos), widened by the factor 1 + margin, or for a KPM with `M` moments, see `kpm_interval`.
 """
-function spectral_bounds(H; M=nothing, margin=0.01)
+function spectral_bounds(H; M=nothing, margin=0.01, ntasks=4 * Threads.nthreads())
     x0 = rand(Random.MersenneTwister(1), ComplexF64, size(H, 1))
-    Emax = real(eigsolve(x -> hermitian_mul(H, x), x0, 1, :LR, ishermitian=true)[1][1])
-    Emin = real(eigsolve(x -> hermitian_mul(H, x), x0, 1, :SR, ishermitian=true)[1][1])
+    Emax = real(eigsolve(x -> hermitian_mul(H, x, ntasks=ntasks), x0, 1, :LR, ishermitian=true)[1][1])
+    Emin = real(eigsolve(x -> hermitian_mul(H, x, ntasks=ntasks), x0, 1, :SR, ishermitian=true)[1][1])
     return isnothing(M) ? ((Emin + Emax) / 2, (Emax - Emin) / (2 - 2margin)) : kpm_interval(Emin, Emax, M)
 end
 
@@ -539,14 +558,19 @@ Chebyshev moments `μs[:, k]` of the spectral function of structure `index` at t
 rescaling `centers[k]`, `halfwidths[k]` of its supercell k-point. With the eigenvectors `bands` of the primitive cell
 (see `primitive_bands`), the band states |χₙ⟩ = Σⱼ X[j, n] |k, j⟩ are the starting vectors instead of the Bloch states
 of the orbitals (the same space, so the same cost and total moments), and the band-resolved moments `μb[:, n, k]` are
-returned as well (averaged within degenerate bands).
+returned as well (averaged within degenerate bands). Small supercells (fewer than `KPM_SERIAL_SIZE` orbitals) run the
+supercell k-points in parallel, large ones the matrix-vector products.
 """
 function kpm_unfold_structure(ham, index, umap, ks, M; bands=nothing, band_energies=nothing)
     Ks, kgroups = supercell_kpoints(ks, umap)
     μs = zeros(M, size(ks, 2)); centers = zeros(size(ks, 2)); halfwidths = zeros(size(ks, 2))
     μb = isnothing(bands) ? nothing : zeros(M, umap.Nj, size(ks, 2))
-    for n in axes(Ks, 2)
-        Hk = get_hamiltonian(ham, index, Ks[:, n:n])
+    Hks = unfold_hamiltonians(ham, index)
+    parallel_k = !uses_device_path(ham) && length(umap.group) < KPM_SERIAL_SIZE
+    ntasks = parallel_k ? 1 : 4 * Threads.nthreads()
+    # Moments of the starting vectors of all primitive k-points that fold onto the supercell k-point n
+    function moments(n)
+        Hk = Hks(Ks[:, n:n])
         group = kgroups[n]
         V = bloch_vectors(ks[:, group], umap)
         if !isnothing(bands)
@@ -556,13 +580,14 @@ function kpm_unfold_structure(ham, index, umap, ks, M; bands=nothing, band_energ
                 V[rows, :] = transpose(view(bands, :, :, k)) * V[rows, :]
             end
         end
-        μ, center, halfwidth = if Hk isa DeviceHk
-            device_kpm_unfold(Hk, V, M)
-        else
-            H = sparse(first(Hk))
-            c, h = spectral_bounds(H, M=M)
-            kpm_unfold_moments((H - c * I) ./ h, V, M), c, h
-        end
+        Hk isa DeviceHk && return device_kpm_unfold(Hk, V, M)
+        H = sparse(first(Hk))
+        c, h = spectral_bounds(H, M=M, ntasks=ntasks)
+        return kpm_unfold_moments((H - c * I) ./ h, V, M, ntasks=ntasks), c, h
+    end
+    results = parallel_k ? tmap(moments, axes(Ks, 2)) : map(moments, axes(Ks, 2))
+    for (n, (μ, center, halfwidth)) in enumerate(results)
+        group = kgroups[n]
         for (g, k) in enumerate(group)
             μs[:, k] .= vec(sum(μ[:, (g - 1) * umap.Nj + 1:g * umap.Nj], dims=2))
             centers[k], halfwidths[k] = center, halfwidth
