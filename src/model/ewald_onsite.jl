@@ -102,9 +102,11 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         ion_types = get_ion_types(strc.ions)
         charges = [get_qeff(conf, type) for type in number_to_element.(ion_types)]
         # compensation of the net charge (charge_compensation), from the reference positions, so that it is the same for
-        # all distortions of a structure
-        charges = charges .+ compensation_charges(charge_compensation, get_ion_positions(strc.ions, apply_distortion=false),
-                                                  ion_types, charges, strc.lattice; slab_axis=slab_axis)
+        # all distortions of a structure. The surface charges model a smooth electronic charge and enter only the
+        # plane-averaged long range of the slab; the charges next to a defect (local) enter the sum as well.
+        slab_charges = charges .+ compensation_charges(charge_compensation, get_ion_positions(strc.ions, apply_distortion=false),
+                                                       ion_types, charges, strc.lattice; slab_axis=slab_axis)
+        charge_compensation == "local" && (charges = slab_charges)
 
         reuse_grid = rcut ≤ min(strc.point_grid.grid_size, get_rcut(conf))
         grid_rebuilt |= !reuse_grid
@@ -123,7 +125,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         φ = ewald.potentials
         if slab_axis > 0
             # long range of a slab: plane-averaged part (wolf, zahn) or dipole correction (ewald), see ewald_slab.jl
-            φ = φ .+ slab_scale .* slab_potentials(pos, charges, strc.lattice, slab_axis; method=method, alpha=α)
+            φ = φ .+ slab_scale .* slab_potentials(pos, slab_charges, strc.lattice, slab_axis; method=method, alpha=α)
         end
 
         ion_indices_with_orbs = collect(1:length(ion_types))

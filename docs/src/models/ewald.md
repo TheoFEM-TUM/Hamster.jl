@@ -283,9 +283,11 @@ sides has a net charge. Where the compensating charge sits matters for the long 
   number of their species, in proportion to the missing neighbors, e.g. on the cations around an anion vacancy. Meant
   for defects; the neighbors follow from the first shell of every pair of species.
 
-`global` is the default without `slab_axis`. With `surface` and `local`, the compensating charges are added to the
-effective charges and therefore also enter the short-range Wolf/Zahn/Ewald sum. They are determined from the reference
-positions of each structure, so that they are the same for all of its distortions.
+`global` is the default without `slab_axis`. The compensating charges of `surface` stand for a smooth electronic
+charge at the surfaces and enter only the slab terms; the effective charges of the surface atoms in the short-range
+Wolf/Zahn/Ewald sum stay unchanged. Those of `local` sit on the atoms next to the defect and are added to the effective
+charges in the whole sum. Both are determined from the reference positions of each structure, so that they are the
+same for all of its distortions.
 
 ## Real-Space Neighbor Grid
 
