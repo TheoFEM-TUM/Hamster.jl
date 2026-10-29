@@ -18,6 +18,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
 
     rs_ion = get_ion_positions(strc.ions)
     Ts = frac_to_cart(strc.Rs, strc.lattice)
+    R0 = findR0(strc.Rs)
 
     ij_map = get_ion_orb_to_index_map(Norb_per_ion)
     l_map = [basis.orbitals[iion][iorb].type.l for iion in 1:length(Norb_per_ion) for iorb in 1:Norb_per_ion[iion]]
@@ -58,7 +59,8 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
                 orb_i_type = basis.orbitals[iion][iorb].type
                 orb_j_type = basis.orbitals[jion][jorb].type
                 
-                same_ion = iion == jion 
+                # On-site only within the home cell: a hopping to a periodic image of the same atom (small cells) is a neighbor
+                same_ion = iion == jion && R == R0
 
                 Overlap_ID = orbital_pairs_to_id[canonical_pair(lm_to_orbital_map[(orb_i_type.l, orb_i_type.m)], lm_to_orbital_map[(orb_j_type.l, orb_j_type.m)])]
                 if same_ion

@@ -130,4 +130,13 @@ end
         end
     end
     @test all(correct_permutation)
+
+    # The on-site overlap IDs are only used in the home cell: hoppings to a periodic image of the same atom (a = 5.81 Å
+    # < rcut) are neighbor hoppings, as between different atoms in a supercell
+    R0 = Hamster.findR0(strc_1.Rs)
+    onsite(d) = d[1] > length(Hamster.orbital_pairs)
+    images = [d for R in eachindex(descriptors_1) if R ≠ R0 for (i, j, d) in zip(findnz(descriptors_1[R])...)
+              if Hamster.get_index_to_ion_orb_map(size(basis_1))[i][1] == Hamster.get_index_to_ion_orb_map(size(basis_1))[j][1]]
+    @test !isempty(images) && !any(onsite, images)
+    @test all(onsite, [descriptors_1[R0][i, i] for i in axes(descriptors_1[R0], 1)])
 end
