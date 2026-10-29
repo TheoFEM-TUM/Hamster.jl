@@ -51,3 +51,12 @@ Pages = ["optim_defaults.jl"]
 Modules = [Hamster]
 Pages = ["hyperopt_defaults.jl"]
 ```
+
+## [Unfold](@id unfold-tags)
+
+Settings of the [band unfolding](@ref unfold-post-processing), which is switched on by the `Unfold` block.
+
+```@autodocs
+Modules = [Hamster]
+Pages = ["unfold_defaults.jl"]
+```

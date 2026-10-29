@@ -14,6 +14,7 @@ if test_all || test_only == "Parse"
     @testset "Parse" begin
         include("parse/test_utils.jl")
         include("parse/test_poscar.jl")
+        include("parse/test_kpoints.jl")
         include("parse/test_wannier90.jl")
         include("parse/test_commandline.jl")
     end
@@ -88,6 +89,12 @@ if test_all || test_only == "SOC"
         include("soc/test_soc_utils.jl")
         include("soc/test_soc_matrices.jl")
         include("soc/test_soc_model.jl")
+    end
+end
+
+if test_all || test_only == "Out"
+    @testset "Out" begin
+        include("out/test_unfold.jl")
     end
 end
 

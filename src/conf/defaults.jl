@@ -40,7 +40,9 @@ The `kpoints::String` tag specifies the file or method used to define the set of
 Possible options:
 - `gamma`: use only the Gamma point (default).
 - `EIGENVAL`: read k-points from a VASP `EIGENVAL` file.
-- `filename.h5`: read k-points from the `"k-points"` field of an HDF5 file.
+- `KPOINTS`: read k-points from a VASP `KPOINTS` file (any file name containing `KPOINTS`; explicit list, line mode, or
+  Gamma/Monkhorst-Pack grid, in reciprocal coordinates). With several systems, all systems use these k-points.
+- `filename.h5`: read k-points from the `"kpoints"` field of an HDF5 file (`"system/kpoints"` with several systems).
 """
 get_kpoints_file(conf::Config)::String = conf("kpoints") == "default" ? "gamma" : conf("kpoints")
 

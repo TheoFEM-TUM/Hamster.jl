@@ -19,6 +19,7 @@ makedocs(
             "conf/block_tags.md"
         ],
         "GPU Support" => "calc/gpu.md",
+        "Band Unfolding" => "calc/unfold.md",
         "Examples" => [
             "examples/examples.md",
             "examples/model_eval.md",

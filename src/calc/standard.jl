@@ -62,6 +62,11 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1,
     prof = HamsterProfiler(3, conf, Niter=Niter, Nbatch=1)
 
     get_eigenvalues(ham, prof, local_inds, comm, conf, rank=rank, nranks=nranks)
+
+    if haskey(conf, "Unfold")
+        if rank == 0 && verbosity > 0; println("Unfolding bands..."); end
+        run_unfold(ham, strcs, bases, local_inds, systems, comm, conf, rank=rank, nranks=nranks)
+    end
     return prof
 end
 
@@ -168,6 +173,12 @@ end
 # Matches the barriers of a rank-by-rank write (e.g., `write_ham`) without writing anything
 wait_for_writing_ranks(comm, nranks) = for _ in 1:nranks; MPI.Barrier(comm); end
 
+"""
+    get_kpoints_from_config(conf; kpoints_file=get_kpoints_file(conf), system="") -> Matrix{Float64}
+
+The k-points (fractional, 3 × Nk) of `system`: from an `EIGENVAL` or a VASP `KPOINTS` file (the same k-points for all
+systems), from the group `system` of an `.h5` file (dataset `kpoints`), or only the Γ point (`gamma`).
+"""
 function get_kpoints_from_config(conf::Config; kpoints_file=get_kpoints_file(conf), system ="")::Matrix{Float64}
     if occursin("EIGENVAL", kpoints_file)
         ks, _, _ = read_eigenval(kpoints_file)
@@ -179,7 +190,10 @@ function get_kpoints_from_config(conf::Config; kpoints_file=get_kpoints_file(con
         elseif ks isa Array{Float64, 3}
             return ks[:, :, 1]
         end
+    elseif occursin("KPOINTS", basename(kpoints_file))
+        return read_kpoints(kpoints_file)
     elseif occursin("gamma", lowercase(kpoints_file))
         return zeros(3, 1)
     end
+    error("Unknown k-points '$kpoints_file'. Valid options are gamma, an EIGENVAL or KPOINTS file and an .h5 file.")
 end

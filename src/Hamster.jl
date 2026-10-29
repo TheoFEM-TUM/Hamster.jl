@@ -4,13 +4,13 @@ using LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Dates, PeriodicTable
     CubicSplines, HCubature, Statistics, ChunkSplitters, FiniteDiff, StatsBase, HDF5, Printf, OhMyThreads, TreeParzen, Arpack, Random, Distances, Logging, ParallelKMeans,
     KernelAbstractions
 
-include("parse/utils.jl"); include("parse/poscar.jl"); include("parse/eigenval.jl"); include("parse/xdatcar.jl"); include("parse/wannier90.jl")
+include("parse/utils.jl"); include("parse/poscar.jl"); include("parse/eigenval.jl"); include("parse/kpoints.jl"); include("parse/xdatcar.jl"); include("parse/wannier90.jl")
 include("parse/commandline.jl")
 
 include("conf/config.jl"); include("conf/read_config.jl")
 include("conf/defaults.jl"); include("conf/strc_defaults.jl"); include("conf/atom_defaults.jl"); include("conf/basis_defaults.jl")
 include("conf/model_defaults.jl"); include("conf/optim_defaults.jl"); include("conf/supercell_defaults.jl") 
-include("conf/ml_defaults.jl"); include("conf/soc_defaults.jl"); include("conf/hyperopt_defaults.jl")
+include("conf/ml_defaults.jl"); include("conf/soc_defaults.jl"); include("conf/hyperopt_defaults.jl"); include("conf/unfold_defaults.jl")
 
 include("out/output.jl")
 
@@ -33,6 +33,7 @@ include("optim/optimize.jl")
 include("mlham/simmat.jl"); include("mlham/descriptor.jl"); include("mlham/kernel.jl")
 
 include("device/device.jl"); include("device/kernels.jl"); include("device/linear_map.jl"); include("device/device_ham.jl")
+include("out/unfold.jl")
 
 include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hyperopt.jl")
 
