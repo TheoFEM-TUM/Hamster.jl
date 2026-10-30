@@ -313,11 +313,12 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_core_all, N_weight_all,
 
         #println("gapwidth $gap_width       wE    (   $wE  )")
 
-        wE = get_auto_band_weights(conf) ? wE : ones(Nε) 
+        
         wE[N_VBM:N_VBM+1] .= max(sum(wE) * 0.25, 5  )    # valence band maximum
         if N_core > 0
             wE[1:N_core] .= 0.1
         end
+        wE = get_auto_band_weights(conf) ? wE : ones(Nε) 
         wk = weights ? get_kpoint_weights(conf, Nk) : ones(Nk)
 
         #wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
