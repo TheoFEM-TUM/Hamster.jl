@@ -55,6 +55,15 @@ get_band_weights(conf::Config, Nε)::Vector{Float64} = conf("wE", "Optimizer") =
 
 get_auto_band_weights(conf::Config)::Bool = conf("auto_band_weights", "Optimizer") == "default" ? true : conf("auto_band_weights", "Optimizer")
 get_auto_kpoint_weights(conf::Config)::Bool = conf("auto_kpoint_weights", "Optimizer") == "default" ? true : conf("auto_kpoint_weights", "Optimizer")
+
+"""
+    band_edge_weight=max(0.25 * sum(wE), 5)
+
+The `band_edge_weight` tag sets the loss weight of the valence band maximum and conduction band minimum bands,
+independent of `auto_band_weights`. By default, it is a quarter of the summed weights of all bands `wE`, but at least 5.
+Set it to 1 for no extra weight.
+"""
+get_band_edge_weight(conf::Config, wE)::Float64 = conf("band_edge_weight", "Optimizer") == "default" ? max(0.25 * sum(wE), 5) : conf("band_edge_weight", "Optimizer")
 """
     wk=ones
 

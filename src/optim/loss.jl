@@ -314,7 +314,7 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_core_all, N_weight_all,
         wStr = 1
 
         wE = ones(Nε) * 0.1
-        #wE[1:gap_width] .= 0.5 
+        wE[1:gap_width] .= 0.5 
         #wE[gap_width+1:N_VBM - gap_width - 1] .= 1 
         #wE[1] = N_VBM_all[i] == 10 ? 1 : 0.1
         #wE[N_VBM - 2 * gap_width : N_VBM - gap_width ] .= 1
@@ -325,13 +325,11 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_core_all, N_weight_all,
 
         #println("gapwidth $gap_width       wE    (   $wE  )")
 
-        
-        #wE[N_VBM:N_VBM+1] .= max(sum(wE) * 0.25, 5  )    # valence band maximum
-        wE[N_VBM:N_VBM+1] .= 5
+        wE = get_auto_band_weights(conf) ? wE : ones(Nε)
+        wE[N_VBM:N_VBM+1] .= get_band_edge_weight(conf, wE)    # valence band maximum and conduction band minimum
         if N_core > 0
             wE[1:N_core] .= 0.1
         end
-        wE = get_auto_band_weights(conf) ? wE : ones(Nε) 
         wk = weights ? get_kpoint_weights(conf, Nk) : ones(Nk)
 
         #wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
