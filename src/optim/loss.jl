@@ -115,17 +115,20 @@ function forward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_flag
     end
 
     #k_min = argmin(abs.( ŷ[l.N_VBM+1,:] - ŷ[l.N_VBM, :]))
+    wk2 = ones(length(l.wk))
     k_VBM = argmax(ŷ[l.N_VBM, :])
     k_CBM = argmin(ŷ[l.N_VBM+1, :])
-    #l.wk[k_min] = gap_weight
-    #l.N = sum(l.wE)*sum(l.wk)
+    wk2[k_VBM] = gap_weight
+    wk2[k_CBM] = gap_weight
+    l.wk = wk2
+    l.N = sum(l.wE)*sum(l.wk)
     #println("wk after $k_min  $(l.wk[k_min])")
     y_mod = abs.(Δy) .+ min_delta
     L_E_avg = vec(mean(y_mod, dims = 2))
     w =  y_mod ./L_E_avg
     #w[l.N_VBM:l.N_VBM+1,k_min] .*= gap_weight
-    w[l.N_VBM,k_VBM] *= gap_weight
-    w[l.N_VBM+1,k_CBM] *= gap_weight
+    #w[l.N_VBM,k_VBM] *= gap_weight
+    #w[l.N_VBM+1,k_CBM] *= gap_weight
     #println(maximum(w))
     if isempty(l.wE) && isempty(l.wk)
         return mean(@. abs(Δy)^l.n)
@@ -193,10 +196,14 @@ function backward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_fla
     y_mod = abs.(Δy) .+ min_delta
     L_E_avg = vec(mean(y_mod, dims = 2))
     w =  y_mod ./L_E_avg
+    wk2 = ones(length(l.wk))
     k_VBM = argmax(ŷ[l.N_VBM, :])
     k_CBM = argmin(ŷ[l.N_VBM+1, :])
-    w[l.N_VBM,k_VBM] *= l.gap_weight
-    w[l.N_VBM+1,k_CBM] *= l.gap_weight
+    wk2[k_VBM] = gap_weight
+    wk2[k_CBM] = gap_weight
+    l.wk = wk2
+    #w[l.N_VBM,k_VBM] *= l.gap_weight
+    #w[l.N_VBM+1,k_CBM] *= l.gap_weight
 
     if isempty(l.wE) && isempty(l.wk)
         N = length(y)
@@ -297,24 +304,26 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_core_all, N_weight_all,
         N_VBM = N_VBM_all[i]
         N_core = N_core_all[i]
         #gap_width = ceil(Int, 0.05 * Nε)
-        gap_width = ceil(Int, N_VBM/10)
-        SC_size = ceil(Int, N_VBM/10)
+        gap_width = ceil(Int, N_VBM/5)
+        #SC_size = ceil(Int, N_VBM/5)
         wStr = Nk / N_eig_avg
         wStr = 1
 
         wE = ones(Nε) * 0.1
-        wE[1:gap_width] .= 0.5 
-        wE[gap_width+1:N_VBM - gap_width - 1] .= 1 
+        #wE[1:gap_width] .= 0.5 
+        #wE[gap_width+1:N_VBM - gap_width - 1] .= 1 
         #wE[1] = N_VBM_all[i] == 10 ? 1 : 0.1
         #wE[N_VBM - 2 * gap_width : N_VBM - gap_width ] .= 1
         #wE[N_VBM + gap_width + 1 : min(N_VBM + 2 * gap_width + 1, Nε)] .= 1
         #wE[N_VBM - gap_width + 1 : min(N_VBM + gap_width, Nε)] .= 2
-        wE[N_VBM - gap_width : min(N_VBM + 1 + gap_width, Nε)] .= 2 
+        #wE[N_VBM - gap_width : min(N_VBM + 1 + gap_width, Nε)] .= 2
+        wE[1: min(N_VBM + 1 + gap_width, Nε)] .= 1
 
         #println("gapwidth $gap_width       wE    (   $wE  )")
 
         
-        wE[N_VBM:N_VBM+1] .= max(sum(wE) * 0.25, 5  )    # valence band maximum
+        #wE[N_VBM:N_VBM+1] .= max(sum(wE) * 0.25, 5  )    # valence band maximum
+        wE[N_VBM:N_VBM+1] .= 5
         if N_core > 0
             wE[1:N_core] .= 0.1
         end
