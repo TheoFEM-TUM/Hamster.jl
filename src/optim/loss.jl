@@ -118,17 +118,19 @@ function forward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_flag
     wk2 = ones(length(l.wk))
     k_VBM = argmax(ŷ[l.N_VBM, :])
     k_CBM = argmin(ŷ[l.N_VBM+1, :])
-    wk2[k_VBM] = l.gap_weight
-    wk2[k_CBM] = l.gap_weight
-    l.wk = wk2
+    wk2[k_VBM] = 5
+    wk2[k_CBM] = 5
+    if sum(l.wk) > length(l.wk)
+        l.wk = wk2
+    end
     l.N = sum(l.wE)*sum(l.wk)
     #println("wk after $k_min  $(l.wk[k_min])")
     y_mod = abs.(Δy) .+ min_delta
     L_E_avg = vec(mean(y_mod, dims = 2))
     w =  y_mod ./L_E_avg
     #w[l.N_VBM:l.N_VBM+1,k_min] .*= gap_weight
-    #w[l.N_VBM,k_VBM] *= gap_weight
-    #w[l.N_VBM+1,k_CBM] *= gap_weight
+    w[l.N_VBM,k_VBM] *= gap_weight
+    w[l.N_VBM+1,k_CBM] *= gap_weight
     #println(maximum(w))
     if isempty(l.wE) && isempty(l.wk)
         return mean(@. abs(Δy)^l.n)
@@ -199,11 +201,13 @@ function backward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_fla
     wk2 = ones(length(l.wk))
     k_VBM = argmax(ŷ[l.N_VBM, :])
     k_CBM = argmin(ŷ[l.N_VBM+1, :])
-    wk2[k_VBM] = l.gap_weight
-    wk2[k_CBM] = l.gap_weight
-    l.wk = wk2
-    #w[l.N_VBM,k_VBM] *= l.gap_weight
-    #w[l.N_VBM+1,k_CBM] *= l.gap_weight
+    wk2[k_VBM] = 5
+    wk2[k_CBM] = 5
+    if sum(l.wk) > length(l.wk)
+        l.wk = wk2
+    end
+    w[l.N_VBM,k_VBM] *= l.gap_weight
+    w[l.N_VBM+1,k_CBM] *= l.gap_weight
 
     if isempty(l.wE) && isempty(l.wk)
         N = length(y)
@@ -331,8 +335,8 @@ function Losses(Nε_all, Nk_all, N_eig_avg, N_VBM_all, N_core_all, N_weight_all,
         wk = weights ? get_kpoint_weights(conf, Nk) : ones(Nk)
 
         #wE = weights ? get_band_weights(conf, Nε) : ones(Nε)
-
-        wk_min = get_auto_kpoint_weights(conf) ? gap_weight : 1.0
+        wk = get_auto_kpoint_weights(conf) ? 2 * ones(Nk) : ones(Nk)
+        wk_min = gap_weight
         Loss_vec[i] = Loss(wE, wk, sum(wE)*sum(wk), wStr, n, 0, offset_flag, pc_weight, system, N_VBM, min_delta, wk_min)
     end
     
