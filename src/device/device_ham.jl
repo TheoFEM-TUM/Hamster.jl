@@ -239,9 +239,8 @@ function device_forward(ham, index, loss, data::EigData)
     return L_train, (Es, vs, phase), L_train_MAE, L_train_BG
 end
 
-function device_backward(L_train_weight, ham, index, loss, data::EigData, cache)
-    Es, vs, phase = cache
-    dL_dE = backward(loss, Es, data.Es) .* L_train_weight
+function device_backward(L_train_weight, ham, index, loss, data::EigData, cache; dL_dE=backward(loss, cache[1], data.Es) .* L_train_weight)
+    _, vs, phase = cache
     return get_device_param_gradient(ham, index, vs, dL_dE, phase)
 end
 

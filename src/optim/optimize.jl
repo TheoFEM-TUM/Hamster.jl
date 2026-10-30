@@ -52,6 +52,41 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_emp
 end
 
 """
+    get_offset_corrected_dL_dE(L_weights, losses, indices, train_data, caches, comm; rank=0, frozen=false)
+
+Gradients of the loss w.r.t. the eigenvalues of the structures `indices`, including the dependence of the energy offset
+on the eigenvalues. The offset of a structure is the weighted mean `wE' * ΔE * wk / N` of its own energy differences
+(`individual`) or the average of these over the structures of its system in the batch on all ranks. Its gradient thus
+subtracts the summed eigenvalue gradient of these structures, weighted by `wE * wk' / N`. Frozen offsets
+(`frozen = true`, after `offset_step`) are constants and not corrected, except for `individual`.
+"""
+function get_offset_corrected_dL_dE(L_weights, losses, indices, train_data, caches, comm; rank=0, frozen=false)
+    dL_dEs = map(enumerate(indices)) do (i, index)
+        backward(losses[index], caches[i][1], train_data[index].Es) .* L_weights[i]
+    end
+
+    # Summed gradients and number of structures of each system in the batch
+    all_sums = MPI.gather([(losses[index].system, sum(dL_dEs[i])) for (i, index) in enumerate(indices)], comm, root=0)
+    all_sums = MPI.bcast(rank == 0 ? reduce(vcat, all_sums) : nothing, comm, root=0)
+    sums = Dict{String, Float64}()
+    counts = Dict{String, Int}()
+    for (system, s) in all_sums
+        sums[system] = get(sums, system, 0.0) + s
+        counts[system] = get(counts, system, 0) + 1
+    end
+
+    for (i, index) in enumerate(indices)
+        l = losses[index]
+        if l.system == "individual"
+            dL_dEs[i] .-= l.wE * l.wk' ./ l.N .* sum(dL_dEs[i])
+        elseif l.offset_flag && !frozen
+            dL_dEs[i] .-= l.wE * l.wk' ./ l.N .* (sums[l.system] / counts[l.system])
+        end
+    end
+    return dL_dEs
+end
+
+"""
     shift_onsite_params!(ham, losses, comm; rank=0, verbosity=1)
 
 Subtracts the mean energy offset across systems from the diagonal onsite parameters of the `TBModel` in `ham`. The
@@ -139,7 +174,8 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     offset_step = get_offset_step(conf),
     ls_weight = get_ls_weight(conf),
     nbatch = get_nbatch(conf),
-    onsite_shift = get_onsite_shift(conf)
+    onsite_shift = get_onsite_shift(conf),
+    offset_grad = get_offset_grad(conf)
     )
 
     if rank == 0 && offset_step == iter
@@ -231,8 +267,14 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     L_trains_weights = ls_weight ? Ls_train ./ (L_train_sum / pc_weights_tot) .* pc_weights : ones(size(Ls_train)) ./ (L_train_sum / pc_weights_tot) .* pc_weights
     Ls_train = L_trains_weights .* Ls_train
 
+    dL_dEs = nothing
+    if offset_grad && train_data isa AbstractVector{<:EigData}
+        g_time = @elapsed dL_dEs = get_offset_corrected_dL_dE(L_trains_weights, optim.losses, indices, train_data, caches, comm, rank=rank, frozen=offset_step < iter)
+        push!(backward_times, g_time)
+    end
     dL_dHr = map(enumerate(indices)) do (i, index)
-        b_time = @elapsed dL_dHr_index = backward(L_trains_weights[i], ham_train, index, optim.losses[index], train_data[index], caches[i], conf)
+        kwargs = isnothing(dL_dEs) ? (;) : (dL_dE=dL_dEs[i],)
+        b_time = @elapsed dL_dHr_index = backward(L_trains_weights[i], ham_train, index, optim.losses[index], train_data[index], caches[i], conf; kwargs...)
         push!(backward_times, b_time)
         return dL_dHr_index
     end
@@ -451,10 +493,9 @@ The function behavior varies depending on the type of `data`, which can be eithe
 # Returns
 - `gradient`: The computed gradient of the loss with respect to the parameters of `ham`.
 """
-function backward(L_train_weight::Float64, ham::EffectiveHamiltonian, index, loss, data::EigData, cache, conf=get_empty_config(); nthreads_kpoints=get_nthreads_kpoints(conf), nthreads_bands=get_nthreads_bands(conf))
-    if uses_device_path(ham); return device_backward(L_train_weight, ham, index, loss, data, cache); end
-    Es_tb, vs = cache
-    dL_dE = backward(loss, Es_tb, data.Es) .* L_train_weight
+function backward(L_train_weight::Float64, ham::EffectiveHamiltonian, index, loss, data::EigData, cache, conf=get_empty_config(); nthreads_kpoints=get_nthreads_kpoints(conf), nthreads_bands=get_nthreads_bands(conf), dL_dE=backward(loss, cache[1], data.Es) .* L_train_weight)
+    if uses_device_path(ham); return device_backward(L_train_weight, ham, index, loss, data, cache, dL_dE=dL_dE); end
+    _, vs = cache
     return get_loss_gradient_hr(dL_dE, vs, ham.Rs[index], data.kp, ham.sp_mode, ham.sp_iterators[index], sp_tol=ham.sp_tol)
 end
 
