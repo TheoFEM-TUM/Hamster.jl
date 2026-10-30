@@ -256,15 +256,6 @@ get_offset_mode(conf::Config)::String = conf("offset_mode", "Optimizer") == "def
 get_offset_step(conf::Config)::Int64 = conf("offset_step", "Optimizer") == "default" ? get_niter(conf) : conf("offset_step", "Optimizer")
 
 """
-    offset_grad=false
-
-If `offset_grad` is true, the gradient of the loss accounts for the dependence of the energy offset on the eigenvalues
-(as long as the offset is updated, i.e., up to `offset_step`, or always with `offset_mode = individual`). A rigid
-shift of the spectrum then has zero gradient.
-"""
-get_offset_grad(conf::Config)::Bool = conf("offset_grad", "Optimizer") == "default" ? false : conf("offset_grad", "Optimizer")
-
-"""
     onsite_shift="step"
 
 The `onsite_shift` tag determines when the diagonal onsite parameters are shifted by minus the mean energy offset across
