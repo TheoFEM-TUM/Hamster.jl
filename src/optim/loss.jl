@@ -118,8 +118,8 @@ function forward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_flag
     wk2 = ones(length(l.wk))
     k_VBM = argmax(ŷ[l.N_VBM, :])
     k_CBM = argmin(ŷ[l.N_VBM+1, :])
-    wk2[k_VBM] = gap_weight
-    wk2[k_CBM] = gap_weight
+    wk2[k_VBM] = l.gap_weight
+    wk2[k_CBM] = l.gap_weight
     l.wk = wk2
     l.N = sum(l.wE)*sum(l.wk)
     #println("wk after $k_min  $(l.wk[k_min])")
@@ -199,8 +199,8 @@ function backward(l::Loss, y, ŷ; offset = l.offset, offset_flag = l.offset_fla
     wk2 = ones(length(l.wk))
     k_VBM = argmax(ŷ[l.N_VBM, :])
     k_CBM = argmin(ŷ[l.N_VBM+1, :])
-    wk2[k_VBM] = gap_weight
-    wk2[k_CBM] = gap_weight
+    wk2[k_VBM] = l.gap_weight
+    wk2[k_CBM] = l.gap_weight
     l.wk = wk2
     #w[l.N_VBM,k_VBM] *= l.gap_weight
     #w[l.N_VBM+1,k_CBM] *= l.gap_weight
