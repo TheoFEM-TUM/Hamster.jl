@@ -37,6 +37,7 @@ if test_all || test_only == "Structure"
         include("strc/test_sk_transform.jl")
         include("strc//test_structure.jl")
         include("strc/test_methods.jl")
+        include("strc/test_nn_cutoffs.jl")
         include("strc/test_supercell.jl")
     end
 end

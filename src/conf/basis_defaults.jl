@@ -9,8 +9,9 @@ get_onsite(conf::Config)::Bool = conf("onsite") == "default" ? true : conf("onsi
 """
 **sepNN**=false
 
-The `sepNN::Bool` tag switches on the use of an extra parameter set for nearest-neighbor interactions (compared to further away interactions).
-This can improve accuracy, however, may at the same time affect transferability negatively.
+The `sepNN::Bool` tag switches on the use of separate parameters for nearest-neighbor interactions (NN1) and the farther shells (NN2).
+Bonds up to the midpoint between the first two neighbor shells of the reference structure count as nearest neighbors, also when
+they are distorted. This can improve accuracy, however, may at the same time affect transferability negatively.
 """
 get_sepNN(conf::Config)::Bool = conf("sepNN") == "default" ? false : conf("sepNN")
 

@@ -140,7 +140,9 @@ function get_geometry_tensor(strc, basis, rllm_dict::AbstractDict, conf=get_empt
     norbs = length.(basis.orbitals)
     offset = cumsum(vcat(0, norbs[1:end-1]))
     ion_types = get_ion_types(strc.ions)
-    nn_dict = get_nn_thresholds(strc.ions, frac_to_cart(strc.Rs, strc.lattice), strc.point_grid, conf)
+    # Nearest-neighbor cutoffs from the reference positions: midpoint between the first two shells, so that
+    # distorted bonds keep their label (see get_nn_cutoffs)
+    nn_dict = get_nn_cutoffs(strc.ions, frac_to_cart(strc.Rs, strc.lattice), strc.point_grid, conf)
     oc_dicts, mode_dicts = get_oc_and_mode_dicts(basis.overlaps, strc.ions)
 
     Ts = frac_to_cart(strc.Rs, strc.lattice)
