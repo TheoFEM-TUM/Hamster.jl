@@ -237,6 +237,31 @@ The `valeachiter` tag determines at what iteration interval a validation step is
 get_valeachiter(conf::Config)::Int64 = conf("valeachiter", "Optimizer") == "default" ? 1 : conf("valeachiter", "Optimizer")
 
 """
+    early_stopping=0
+
+The `early_stopping` tag sets the patience (in iterations) of early stopping: the optimization stops if the validation
+metric (`early_stopping_metric`) has not improved for `early_stopping` iterations. Requires `validate`; the metric is
+only evaluated every `valeachiter` iterations. `0` switches early stopping off.
+"""
+get_early_stopping(conf::Config)::Int64 = conf("early_stopping", "Optimizer") == "default" ? 0 : conf("early_stopping", "Optimizer")
+
+"""
+    early_stopping_metric=loss
+
+The `early_stopping_metric` tag sets the validation metric that is monitored for early stopping: the validation loss
+(`loss`), the mean absolute error of the eigenvalues (`MAE`) or the band gap error (`BG`).
+"""
+get_early_stopping_metric(conf::Config)::String = conf("early_stopping_metric", "Optimizer") == "default" ? "loss" : lowercase(conf("early_stopping_metric", "Optimizer"))
+
+"""
+    restore_best=false
+
+If `restore_best` is true and early stopping is on, the parameters with the best validation metric are restored at the
+end of the optimization (also if it did not stop early). Otherwise, the parameters of the last iteration are kept.
+"""
+get_restore_best(conf::Config)::Bool = conf("restore_best", "Optimizer") == "default" ? false : conf("restore_best", "Optimizer")
+
+"""
     shuffle_batches=false
 
 If `shuffle_batches` is set to true, the training structures of each MPI rank are shuffled before they are split into `nbatch` batches

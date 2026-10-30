@@ -213,19 +213,20 @@ Prints the final loss, the total time elapsed, and a message indicating that the
 # Arguments
 - `prof`: A HamsterProfiler instance used to compute `final_loss` and `total_time`.
 """
-function print_final_status(prof; verbosity=1)
+function print_final_status(prof; verbosity=1, iter=size(prof.L_train, 2))
     total_time = sum(prof.timings) + sum(prof.val_times)
     forward_time = sum(prof.timings[:, :, 1])
     backward_time = sum(prof.timings[:, :, 2])
     update_time = sum(prof.timings[:, :, 3])
     val_time = sum(prof.val_times)
 
-    final_train_loss = mean(prof.L_train[:, end])
-    final_val_loss = prof.L_val[end]
-    final_train_loss_MAE = mean(prof.L_train_MAE[:, end])
-    final_val_loss_MAE = prof.L_val_MAE[end]
-    final_train_loss_BG = mean(prof.L_train_BG[:, end])
-    final_val_loss_BG = prof.L_val_BG[end]
+    # Losses of iteration `iter` (the last one, or the restored one with early stopping)
+    final_train_loss = mean(prof.L_train[:, iter])
+    final_val_loss = prof.L_val[iter]
+    final_train_loss_MAE = mean(prof.L_train_MAE[:, iter])
+    final_val_loss_MAE = prof.L_val_MAE[iter]
+    final_train_loss_BG = mean(prof.L_train_BG[:, iter])
+    final_val_loss_BG = prof.L_val_BG[iter]
     if verbosity > 0
         println("")
         println("========================================")

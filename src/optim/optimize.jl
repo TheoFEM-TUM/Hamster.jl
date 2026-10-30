@@ -25,8 +25,16 @@ Optimizes the model by performing training and optional validation steps.
 # Returns
 - Updates the HamsterProfiler `prof` and the model parameters in `ham_train` and `ham_val`.
 """
-function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_empty_config(); verbosity=get_verbosity(conf), Nbatch=get_nbatch(conf), validate=get_validate(conf), valeachiter=get_valeachiter(conf), shuffle_batches=get_shuffle_batches(conf), rank=0, nranks=1)
+function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_empty_config(); verbosity=get_verbosity(conf), Nbatch=get_nbatch(conf), validate=get_validate(conf), valeachiter=get_valeachiter(conf), shuffle_batches=get_shuffle_batches(conf), rank=0, nranks=1,
+                         patience=get_early_stopping(conf), es_metric=get_early_stopping_metric(conf), restore_best=get_restore_best(conf))
     print_start_message(prof; verbosity=verbosity)
+    early_stopping = patience > 0 && validate
+    if patience > 0 && !validate && rank == 0; @warn "early_stopping requires validate = true and is switched off."; end
+    # Best validation metric, its iteration and the parameters and energy offsets at that point
+    best_value, best_iter = Inf, 0
+    best_params = [copy(get_params(model)) for model in ham_train.models]
+    best_offsets = [l.offset for l in optim.losses]
+    last_iter = optim.Niter
     for iter in 1:optim.Niter
         iter_begin = MPI.Wtime()
         strc_indices = shuffle_batches ? shuffle(1:ham_train.Nstrc) : (1:ham_train.Nstrc)
@@ -41,14 +49,49 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_emp
             val_step!(ham_val, optim.val_losses, dl.val_data, prof, iter, comm, rank=rank, nranks=nranks, valeachiter=valeachiter, conf = conf)
             print_val_status(prof, iter, verbosity=verbosity)
         end
+        stop = false
+        if early_stopping && mod(iter, valeachiter) == 0
+            value = MPI.bcast(rank == 0 ? get_val_metric(prof, iter, es_metric) : nothing, comm, root=0)
+            if value < best_value
+                best_value, best_iter = value, iter
+                best_params = [copy(get_params(model)) for model in ham_train.models]
+                best_offsets = [l.offset for l in optim.losses]
+            elseif iter - best_iter ≥ patience
+                stop = true
+            end
+        end
         MPI.Barrier(comm)
         iter_time = MPI.Wtime() - iter_begin
         if verbosity > 1 && rank == 0; println("Iteration time: $iter_time s"); end
+        if stop
+            last_iter = iter
+            if verbosity > 0 && rank == 0; println("Early stopping at iteration $iter: no improvement of the validation $es_metric since iteration $best_iter."); end
+            break
+        end
+    end
+    final_iter = last_iter
+    if early_stopping && restore_best && 0 < best_iter < last_iter
+        for (model, params) in zip(ham_train.models, best_params); set_params!(model, params); end
+        for (l, offset) in zip(optim.losses, best_offsets); l.offset = offset; end
+        final_iter = best_iter
+        if verbosity > 0 && rank == 0; println("Restored the parameters of iteration $best_iter (validation $es_metric: $(round(best_value, digits=6)))."); end
     end
     if get_offset(conf) && get_onsite_shift(conf) == "end"
         shift_onsite_params!(ham_train, optim.losses, comm, rank=rank, verbosity=verbosity)
     end
-    print_final_status(prof; verbosity=verbosity)
+    print_final_status(prof; verbosity=verbosity, iter=final_iter)
+end
+
+"""
+    get_val_metric(prof, iter, metric)
+
+Validation metric `metric` (`loss`, `mae` or `bg`) of iteration `iter` stored in the `HamsterProfiler` `prof`.
+"""
+function get_val_metric(prof, iter, metric)
+    metric == "loss" && return prof.L_val[iter]
+    metric == "mae" && return prof.L_val_MAE[iter]
+    metric == "bg" && return prof.L_val_BG[iter]
+    error("Unknown early_stopping_metric $metric (loss, MAE or BG).")
 end
 
 """
