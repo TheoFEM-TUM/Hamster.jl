@@ -45,6 +45,9 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_emp
         iter_time = MPI.Wtime() - iter_begin
         if verbosity > 1 && rank == 0; println("Iteration time: $iter_time s"); end
     end
+    if get_offset(conf) && get_onsite_shift(conf) == "end"
+        shift_onsite_params!(ham_train, optim.losses, comm, rank=rank, verbosity=verbosity)
+    end
     print_final_status(prof; verbosity=verbosity)
 end
 
@@ -135,7 +138,8 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     lr_warmup=get_lr_warmup(conf),
     offset_step = get_offset_step(conf),
     ls_weight = get_ls_weight(conf),
-    nbatch = get_nbatch(conf)
+    nbatch = get_nbatch(conf),
+    onsite_shift = get_onsite_shift(conf)
     )
 
     if rank == 0 && offset_step == iter
@@ -268,7 +272,9 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         MPI.Bcast!(params, comm, root=0)
         set_params!(model, params)
     end
-    if get_offset(conf); shift_onsite_params!(ham_train, optim.losses, comm, rank=rank, verbosity=verbosity); end
+    if get_offset(conf) && onsite_shift == "step"
+        shift_onsite_params!(ham_train, optim.losses, comm, rank=rank, verbosity=verbosity)
+    end
     #optim.adam.eta = lr_min + 0.5 * (lr - lr_min) * (1 + cos(π * iter / optim.Niter))
     update_time_local = MPI.Wtime() - update_begin
 
