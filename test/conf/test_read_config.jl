@@ -10,4 +10,10 @@ conf = get_config(filename=conf_path)
     @test conf("sp_geo") == true
     @test conf("sp_tol") == 1e-5
     @test conf("log_modes", "HyperOpt") == ["log", "log"]
+
+    # option values "begin"/"end" do not open or close blocks
+    blocks = Hamster.split_blocks(["begin Optimizer", "onsite_shift = end", "train_mode = universal", "end",
+                                   "begin Supercell", "XDATCAR = data.h5", "end"])
+    @test [block.header for block in blocks] == [["Optimizer"], ["Supercell"]]
+    @test blocks[1].content == ["onsite_shift = end", "train_mode = universal"]
 end

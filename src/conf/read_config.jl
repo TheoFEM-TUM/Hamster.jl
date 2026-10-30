@@ -49,13 +49,15 @@ function split_blocks(lines)
     found_begin = false; found_end = false
     begin_line = 0; end_line = 0; unclosed_begins = 0
     for (k, line) in enumerate(lines)
-        if "begin" in split_line(line)
+        # Only a leading begin/end marks a block, so that option values like "onsite_shift = end" do not close it
+        marker = first(split_line(line), 1)
+        if marker == ["begin"]
             if unclosed_begins == 0
                 begin_line = k
                 found_begin = true
             end
             unclosed_begins += 1
-        elseif "end" in split_line(line)
+        elseif marker == ["end"]
             if unclosed_begins == 1
                 end_line = k
                 found_end = true
