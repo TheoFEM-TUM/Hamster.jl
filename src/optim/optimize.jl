@@ -49,6 +49,41 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_emp
 end
 
 """
+    shift_onsite_params!(ham, losses, comm; rank=0, verbosity=1)
+
+Subtracts the mean energy offset across systems from the diagonal onsite parameters of the `TBModel` in `ham`. The
+offsets (TB minus reference) are averaged per system first, so that every system counts once. As the diagonal onsites
+enter H as an identity block, this shifts the TB spectra rigidly onto the reference energies on average. The offsets
+stored in `losses` are shifted accordingly. Nothing is done if the TB parameters are not updated.
+"""
+function shift_onsite_params!(ham, losses, comm; rank=0, verbosity=1)
+    any(model -> model isa TBModel && any(model.update), ham.models) || return
+    all_systems_offsets = MPI.gather([(l.system, l.offset) for l in losses], comm, root=0)
+    Δ = Ref(0.0)
+    if rank == 0
+        sums = Dict{String, Float64}()
+        counts = Dict{String, Int}()
+        for (system, offset) in reduce(vcat, all_systems_offsets)
+            sums[system] = get(sums, system, 0.0) + offset
+            counts[system] = get(counts, system, 0) + 1
+        end
+        Δ[] = mean(sums[system] / counts[system] for system in keys(sums))
+    end
+    Δ = MPI.Bcast!(Δ, 0, comm)[]
+
+    for model in ham.models
+        model isa TBModel || continue
+        for (v, label) in enumerate(model.param_labels)
+            if label.nnlabel == 0 && label.overlap_label[3] == 0
+                model.params[v] -= Δ
+            end
+        end
+    end
+    for l in losses; l.offset -= Δ; end
+    if rank == 0 && verbosity > 1; println(" Onsite shift: $(-Δ) eV"); end
+end
+
+"""
     load_simmats!(ham::EffectiveHamiltonian, indices)
     unload_simmats!(ham::EffectiveHamiltonian, indices)
 
@@ -233,6 +268,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         MPI.Bcast!(params, comm, root=0)
         set_params!(model, params)
     end
+    if get_offset(conf); shift_onsite_params!(ham_train, optim.losses, comm, rank=rank, verbosity=verbosity); end
     #optim.adam.eta = lr_min + 0.5 * (lr - lr_min) * (1 + cos(π * iter / optim.Niter))
     update_time_local = MPI.Wtime() - update_begin
 
