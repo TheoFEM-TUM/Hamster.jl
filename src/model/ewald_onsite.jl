@@ -58,7 +58,8 @@ Builds the container by:
 2. Gathering unique species across MPI ranks
 3. Initializing per-species parameters
 4. Computing global per-species mean potentials (MPI-reduced)
-5. Subtracting these means from all site potentials
+5. Subtracting these means from all site potentials (`centering = global`), or the species means of each structure
+   (`centering = structure`)
 
 # Notes
 - Potentials are only defined up to a constant; per-species centering ensures
@@ -82,6 +83,10 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         rcut            = get_ewald_rcut(conf),
         alpha           = get_ewald_alpha(conf),
         mesh_spacing    = get_ewald_mesh_spacing(conf),
+        slab_axis       = get_ewald_slab_axis(conf),
+        slab_scale      = get_ewald_slab_scale(conf),
+        charge_compensation = get_ewald_charge_compensation(conf),
+        centering       = conf("centering", "Ewald") == "default" ? (slab_axis > 0 ? "structure" : "global") : get_ewald_centering(conf),
         update          = get_ewald_update(conf),
         label           = "",
         write_summary   = true)
@@ -98,6 +103,12 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
 
         ion_types = get_ion_types(strc.ions)
         charges = [get_qeff(conf, type) for type in number_to_element.(ion_types)]
+        # compensation of the net charge (charge_compensation), from the reference positions, so that it is the same for
+        # all distortions of a structure. The surface charges model a smooth electronic charge and enter only the
+        # plane-averaged long range of the slab; the charges next to a defect (local) enter the sum as well.
+        slab_charges = charges .+ compensation_charges(charge_compensation, get_ion_positions(strc.ions, apply_distortion=false),
+                                                       ion_types, charges, strc.lattice; slab_axis=slab_axis)
+        charge_compensation == "local" && (charges = slab_charges)
 
         reuse_grid = rcut ≤ min(strc.point_grid.grid_size, get_rcut(conf))
         grid_rebuilt |= !reuse_grid
@@ -113,6 +124,11 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         else
             ewald = ewald_sum(pos, charges, strc.lattice, rcut=rcut, method=method, alpha=α)
         end
+        φ = ewald.potentials
+        if slab_axis > 0
+            # long range of a slab: plane-averaged part (wolf, zahn) or dipole correction (ewald), see ewald_slab.jl
+            φ = φ .+ slab_scale .* slab_potentials(pos, slab_charges, strc.lattice, slab_axis; method=method, alpha=α)
+        end
 
         ion_indices_with_orbs = collect(1:length(ion_types))
         ion_types_with_orbs = get_ion_types(strc.ions, conf, uniq=true, withorbitals=true)
@@ -120,7 +136,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
 
         push!(types_per_strc, ion_types[ion_indices_with_orbs])
         push!(norb_per_strc, size(bases[n])[ion_indices_with_orbs])
-        push!(potentials, ewald.potentials[ion_indices_with_orbs])
+        push!(potentials, φ[ion_indices_with_orbs])
         Rs_info[1, n] = size(strc.Rs, 2)
         Rs_info[2, n] = findR0(strc.Rs)
     end
@@ -166,22 +182,22 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     end
     MPI.Bcast!(species_mean, comm, root=0)
 
+    centering ∈ ("global", "structure") || error("centering = $centering: unknown, use global or structure.")
     structure_means = Tuple{UInt8, Float64}[]
-    for n in eachindex(potentials), type in unique(types_per_strc[n])
-        push!(structure_means, (type, mean(potentials[n][types_per_strc[n] .== type])))
-    end
-
     for n in eachindex(potentials)
+        means = Dict(type => mean(potentials[n][types_per_strc[n] .== type]) for type in unique(types_per_strc[n]))
+        append!(structure_means, [(type, m) for (type, m) in means])
         for i in eachindex(potentials[n])
             typ = types_per_strc[n][i]
-            p = type_to_idx[typ]
-            potentials[n][i] -= species_mean[p]
+            potentials[n][i] -= centering == "structure" ? means[typ] : species_mean[type_to_idx[typ]]
         end
     end
 
     model = EwaldOnsites(params, param_labels, potentials, types_per_strc, norb_per_strc, Rs_info, update)
     write_summary && write_model_summary(model, comm, conf, rank=rank, label=label, species_mean=species_mean, structure_means=structure_means,
-                                         method=method, rcut=rcut, alpha=α, alpha_auto=alpha == 0, grid_rebuilt=grid_rebuilt && method == "ewald")
+                                         method=method, rcut=rcut, alpha=α, alpha_auto=alpha == 0, grid_rebuilt=grid_rebuilt && method == "ewald",
+                                         slab_axis=slab_axis, slab_scale=slab_scale, charge_compensation=charge_compensation,
+                                         centering=centering)
     return model
 end
 

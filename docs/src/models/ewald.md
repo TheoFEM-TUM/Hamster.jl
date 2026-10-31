@@ -1,6 +1,6 @@
 # Ewald Onsite Correction
 
-An Ewald-based onsite correction is enabled when an `Ewald` block is present in the configuration file. The correction is only applied if effective charges are defined for all atomic species via the `qeff` parameter. For periodic systems, the total charge must be neutral, i.e., the sum over all `qeff` values must be zero.
+An Ewald-based onsite correction is enabled when an `Ewald` block is present in the configuration file. The correction is only applied if effective charges are defined for all atomic species via the `qeff` parameter. For the full Ewald sum (`method = ewald`), the cell must be neutral, i.e., the charges `qeff` of its atoms must add up to zero. Wolf and Zahn also work for charged cells, e.g. slabs or defects with effective charges.
 
 ## Overview
 
@@ -172,6 +172,17 @@ This ensures:
 - no arbitrary offset in onsite energies
 - compatibility across different structures
 
+`centering` in the `Ewald` block sets which mean is subtracted:
+
+- `global` (default without `slab_axis`): the mean of each species over all structures of a run. Changes of the
+  species means between structures are kept, but the onsite corrections of a structure depend slightly on the other
+  structures computed together (``\delta\bar\phi`` in the model summary).
+- `structure` (default with `slab_axis`): the means of each structure. The onsite corrections of a structure no longer
+  depend on the run, and a constant potential offset that differs between structures drops out. With species-dependent
+  couplings ``\gamma_s``, such an offset would shift the onsite energies of the species against each other; for slabs,
+  the level of the plane-averaged potential depends on the configuration of the whole slab. In return, a change of the
+  mean potential of one species relative to another between structures is removed as well.
+
 ---
 ## Model Summary
 
@@ -215,8 +226,86 @@ training and the validation set). Settings from the config file are not repeated
   10 meV with 10 structures, 3 meV with 100 (the band gaps of the two runs differ by about 3 meV) and 30-50 meV for a
   single structure, while the estimate for a single 16x16x16 cell is 1-2 meV.
 
+## Slabs
+
+In a slab (a cell with vacuum along one lattice vector), aligned dipoles of successive layers (e.g. alternating bond
+lengths along the surface normal) add up to a potential step across the slab, which shifts the levels of the surface
+layers relative to the interior. This is a long-range effect: the potential of a charged plane does not decay with
+distance. Wolf and Zahn keep only the short-range part ``\mathrm{erfc}(\alpha r)/r`` of the Coulomb interaction and
+miss it, while the full Ewald sum treats the slab as periodic along the normal, so that the dipole of the slab creates
+an artificial field across the vacuum.
+
+With `slab_axis` (1, 2 or 3, the lattice vector across the vacuum; default 0: periodic) in the `Ewald` block:
+
+- **Wolf and Zahn**: the plane-averaged part of the missing long range is added. The average of the smooth part
+  ``\mathrm{erf}(\alpha r)/r`` over the planes parallel to the surface is the potential of Gaussian charge sheets
+  (the ``k_\parallel = 0`` component of the Ewald sum),
+
+  ```math
+  \bar\phi(z) = -\frac{2\pi}{A} \sum_j q_j \left[ u_j \,\mathrm{erf}(\alpha u_j) + \frac{e^{-\alpha^2 u_j^2}}{\alpha\sqrt{\pi}} \right],
+  \qquad u_j = z - z_j,
+  ```
+
+  with the heights ``z_j`` of the atoms along the normal and the area ``A`` of the cell in the plane of the slab. It uses
+  the same α as the Wolf/Zahn sum, so nothing is counted twice, and it describes an isolated slab (no field in the
+  vacuum, i.e. it includes the dipole correction). The components that vary within the planes decay like
+  ``\exp(-G^2/4\alpha^2)`` with the in-plane reciprocal lattice vectors ``G`` and are left out.
+- **Ewald**: the dipole correction of the slab (Yeh and Berkowitz) is added,
+  ``\phi_i \rightarrow \phi_i + 4\pi M z_i / V`` with the dipole moment ``M = \sum_j q_j z_j`` along the normal.
+
+The heights are measured from the vacuum: the atoms are placed so that the largest gap between them along the axis
+(the vacuum) lies at the cell boundary, so a slab may cross the periodic boundary. The potentials enter the onsite
+energies through the couplings ``\gamma_s`` as before. The model summary states the slab treatment.
+
+The long-range term is screened by the electrons like a macroscopic field (by about ``1/\varepsilon_\infty``), which can
+differ from the screening that the couplings ``\gamma_s`` absorb for the short-range part. `slab_scale` (default 1)
+multiplies the slab term (the plane-averaged potential, or the dipole correction for `method = ewald`):
+``\phi_i = \phi_i^\mathrm{short} + \lambda\, \bar\phi_i``.
+
+```bash
+begin Ewald
+    method = wolf
+    alpha = 0.2
+    slab_axis = 3                   # vacuum along a3
+    slab_scale = 0.4                # screening of the long-range term (optional)
+    charge_compensation = surface   # default with slab_axis
+    centering = structure           # default with slab_axis (see Mean Centering)
+end
+```
+
+`slab_axis` applies to all structures of a run; use it only for runs with slabs.
+
+### Charge compensation
+
+The slab terms need a neutral slab, otherwise the potential rises linearly into the vacuum. Effective charges need not
+add up to zero: in a non-stoichiometric slab, or whenever the effective charges of the atomic layers do not cancel. In
+CsPbBr₃ (001), for example, the PbBr₂ and CsBr layers are neutral with formal charges, but with effective charges
+(``q_\mathrm{Pb} \neq -2 q_\mathrm{Br}``) they carry charges ``\mp\sigma``, and a slab terminated by PbBr₂ on both
+sides has a net charge. Where the compensating charge sits matters for the long range, so `charge_compensation` in the
+`Ewald` block sets it:
+
+- `global`: a uniform background on all atoms (``q_j - \bar q`` in the slab terms). The surfaces of a slab with charged
+  layers then stay charged, with a potential step between surface and interior that the electrons would screen.
+- `surface` (default with `slab_axis`): the net charge is placed on the outermost atomic layer of each side and split so
+  that the plane-averaged field between them vanishes on average, as the electrons do at a real surface. For a slab
+  with layers of charge ``\pm\sigma`` and the same termination on both sides, each surface layer takes half of the
+  layer charge; for a polar stacking, the surface charge of the bulk polarization. Layers are separated by gaps of more
+  than 1 Å along the axis.
+- `local`: the net charge is distributed over the atoms with fewer neighbors of opposite charge than the most common
+  number of their species, in proportion to the missing neighbors, e.g. on the cations around an anion vacancy. Meant
+  for defects; the neighbors follow from the first shell of every pair of species.
+
+`global` is the default without `slab_axis`. The compensating charges of `surface` stand for a smooth electronic
+charge at the surfaces and enter only the slab terms; the effective charges of the surface atoms in the short-range
+Wolf/Zahn/Ewald sum stay unchanged. Those of `local` sit on the atoms next to the defect and are added to the effective
+charges in the whole sum. Both are determined from the reference positions of each structure, so that they are the
+same for all of its distortions.
+
 ## Real-Space Neighbor Grid
 
 The real-space Ewald sum reuses the neighbor grid and translation vectors of the structure, which cover pairs up to
 the TB cutoff `rcut` and the `grid_size`. If the Ewald `rcut` is larger, both are rebuilt for the Ewald cutoff, and the
-model summary states `real-space neighbor grid: rebuilt`.
+model summary states `real-space neighbor grid: rebuilt`. The rebuilt translation vectors cover each lattice direction
+separately (the cutoff over the height of the cell perpendicular to the two other lattice vectors, plus the extent of
+the atoms), so that cells that are long in one direction, such as slabs with a small in-plane cell, are summed
+completely.

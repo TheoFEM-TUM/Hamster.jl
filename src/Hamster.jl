@@ -23,7 +23,7 @@ include("basis/label.jl"); include("basis/orbital.jl"); include("basis/overlap.j
 include("basis/basis.jl")
 
 include("model/ham.jl"); include("model/ham_grad.jl"); include("model/ham_write.jl"); include("model/model.jl")
-include("model/ewald_helper.jl"); include("model/ewald.jl"); include("model/ewald_onsite.jl"); include("model/eff_ham.jl")
+include("model/ewald_helper.jl"); include("model/ewald.jl"); include("model/ewald_slab.jl"); include("model/ewald_onsite.jl"); include("model/eff_ham.jl")
 
 include("soc/soc_utils.jl"); include("soc/soc_matrix.jl"); include("soc/soc_model.jl")
 

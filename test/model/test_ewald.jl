@@ -106,6 +106,143 @@ end
     end
 end
 
+@testset "Ewald slab" begin
+    # rock-salt slab (in-plane lattice constant 4 Å, 6 layers 2 Å apart, 40 Å vacuum) with dipoles of the upper layers
+    # (anions displaced along z), placed across the periodic boundary along the slab axis
+    a, nl, dz, vac = 4.0, 6, 2.0, 40.0
+    c = (nl - 1) * dz + vac
+    box = [a 0 0; 0 a 0; 0 0 c]
+    pos = Vector{Float64}[]; q = Float64[]
+    for l in 0:nl-1
+        shift = l ≥ 3 ? 0.15 * (l - 2) : 0.0
+        for (x, y, s) in ((0.0, 0.0, 1.0), (a / 2, a / 2, -1.0))
+            qa = isodd(l) ? -s : s
+            z = mod(l * dz + (qa < 0 ? shift : 0.0) + c - 5.0, c)      # the slab crosses z = 0
+            push!(pos, [x + (isodd(l) ? a / 2 : 0.0), y, z]); push!(q, qa)
+        end
+    end
+    # real-space sum in a long cell with a short in-plane period (images along a1, a2 far beyond one lattice constant)
+    for rc in (12.0, 30.0)
+        g = Hamster.ewald_sum(pos, q, box, rcut=rc, alpha=0.2, include_long=false, subtract_self=false).potentials
+        b = zeros(length(q)); nimg = [ceil(Int, rc / norm(box[:, d])) + 1 for d in 1:3]
+        for i in eachindex(pos), j in eachindex(pos), n1 in -nimg[1]:nimg[1], n2 in -nimg[2]:nimg[2], n3 in -nimg[3]:nimg[3]
+            r = norm(pos[i] - pos[j] - box * [n1, n2, n3])
+            1e-12 < r < rc && (b[i] += q[j] * Hamster.erfc(0.2 * r) / r)
+        end
+        @test g ≈ Hamster.ke .* b atol=1e-10
+    end
+    z, A, vacuum = Hamster.slab_heights(pos, box, 3)
+    @test A ≈ a^2
+    @test maximum(z) - minimum(z) < (nl - 1) * dz + 1 && vacuum > vac - 1
+    @test minimum(z) ≈ 0 atol=1e-12
+
+    # full Ewald with dipole correction = Wolf (α = 0.2, large cutoff) + plane-averaged long range, up to a constant per
+    # species (the in-plane components of the smooth part, ∝ exp(-G²/4α²), are negligible for this cell). Reference:
+    # real-space part of ewald_sum plus a direct reciprocal sum (more accurate than the particle mesh for this check)
+    function direct_ewald(pos, q, box; α=0.35, rcut=14.0, kmax=4.0)
+        φ = Hamster.ewald_sum(pos, q, box, rcut=rcut, alpha=α, include_long=false, subtract_self=true).potentials
+        B = 2π * inv(box)'; V = abs(det(box))
+        n = [ceil(Int, kmax / norm(B[:, d])) for d in 1:3]
+        for i in -n[1]:n[1], j in -n[2]:n[2], l in -n[3]:n[3]
+            (i, j, l) == (0, 0, 0) && continue
+            k = B * [i, j, l]; k2 = dot(k, k); k2 > kmax^2 && continue
+            ρ = sum(q[m] * cis(dot(k, pos[m])) for m in eachindex(q))
+            for a in eachindex(pos)
+                φ[a] += Hamster.ke * 4π / V * exp(-k2 / (4α^2)) / k2 * real(ρ * cis(-dot(k, pos[a])))
+            end
+        end
+        return φ
+    end
+    ewald = direct_ewald(pos, q, box) .+ Hamster.slab_potentials(pos, q, box, 3; method="ewald", alpha=0.0)
+    wolf = Hamster.ewald_sum(pos, q, box, rcut=30.0, alpha=0.2, method="wolf").potentials .+
+           Hamster.slab_potentials(pos, q, box, 3; method="wolf", alpha=0.2)
+    centered(φ) = (ψ = copy(φ); for s in (-1.0, 1.0); m = q .== s; ψ[m] .-= sum(φ[m]) / count(m); end; ψ)
+    @test maximum(abs, centered(ewald) .- centered(wolf)) < 1e-4
+    # without the slab terms, Wolf misses the potential differences between the layers that the dipoles create
+    wolf0 = Hamster.ewald_sum(pos, q, box, rcut=30.0, alpha=0.2, method="wolf").potentials
+    @test maximum(abs, centered(ewald) .- centered(wolf0)) > 0.1
+
+    # potential step of a dipole layer (charges ±1, 0.5 Å apart) between points far above and below (zero charges)
+    box2 = [5.0 0 0; 0 5.0 0; 0 0 100.0]
+    pos2 = [[0.0, 0.0, 30.0], [2.5, 2.5, 30.5], [0.0, 0.0, 10.0], [0.0, 0.0, 50.0]]
+    φ2 = Hamster.slab_potentials(pos2, [1.0, -1.0, 0.0, 0.0], box2, 3; method="wolf", alpha=0.5)
+    @test φ2[4] - φ2[3] ≈ 4π * Hamster.ke * (-1.0 * 0.5) / 25.0 rtol=1e-10
+    @test_throws ErrorException Hamster.slab_potentials(pos2, ones(4), box2, 4; method="wolf", alpha=0.5)
+
+    # charged cells: Wolf allowed, full Ewald not
+    @test length(Hamster.ewald_sum(pos2, [1.0, 0.0, 0.0, 0.0], box2, rcut=10.0, alpha=0.3, method="wolf").potentials) == 4
+    @test_throws ErrorException Hamster.ewald_sum(pos2, [1.0, 0.0, 0.0, 0.0], box2, rcut=10.0)
+end
+
+@testset "Ewald charge compensation" begin
+    # layers along z: one atom per layer (the plane-averaged term only sees the heights)
+    function stack(σs, spacings; a=4.0, vac=40.0)
+        z = cumsum([0.0; spacings]); c = z[end] + vac
+        pos = [[0.0, 0.0, zi + 5.0] for zi in z]
+        return pos, collect(Float64, σs), [a 0 0; 0 a 0; 0 0 c], z
+    end
+    plane(pos, q, box) = Hamster.slab_potentials(pos, q, box, 3; method="wolf", alpha=0.5)
+
+    # symmetric slab with layers ±σ, the same termination on both sides (net charge -σ): half of σ on each surface layer
+    σ = 0.6; nl = 17
+    pos, q, box, z = stack([isodd(l) ? -σ : σ for l in 1:nl], fill(3.0, nl - 1))
+    @test Hamster.slab_layers(z) == 1:nl
+    c = Hamster.surface_compensation(z, q)
+    @test c[1] ≈ σ / 2 && c[end] ≈ σ / 2 && all(iszero, c[2:end-1])
+    @test sum(q .+ c) ≈ 0 atol=1e-12
+    # no drift of the potential through the interior (layers of the same kind two periods apart), unlike the uniform
+    # background, which leaves the surfaces charged
+    φc = plane(pos, q .+ c, box); φg = plane(pos, q, box)
+    @test abs(φc[5] - φc[7]) < 1e-6 && abs(φc[6] - φc[10]) < 1e-6
+    @test abs(φg[5] - φg[7]) > 0.1
+
+    # polar stacking with alternating spacings a, b and no net charge: surface charge σ a / (a + b) of the polarization
+    a, b = 1.5, 3.0; nl = 16
+    pos, q, box, z = stack([isodd(l) ? -σ : σ for l in 1:nl], [isodd(k) ? a : b for k in 1:nl-1])
+    c = Hamster.surface_compensation(z, q)
+    @test c[1] ≈ σ * a / (a + b) && c[end] ≈ -σ * a / (a + b)
+    φc = plane(pos, q .+ c, box)
+    @test abs(φc[5] - φc[7]) < 1e-6 && abs(φc[6] - φc[10]) < 1e-6
+    φu = plane(pos, q, box)
+    @test abs(φu[5] - φu[7]) > 0.1
+    # neutral layers (formal charges): nothing to compensate
+    @test all(iszero, Hamster.surface_compensation(z, zeros(nl)))
+    @test_throws ErrorException Hamster.surface_compensation([0.0, 3.0], [1.0, -1.0])
+
+    # several atoms per layer, slightly buckled: layers by the gaps along the axis
+    zb = [0.0, 0.3, 3.0, 3.2, 6.1, 6.0]
+    @test Hamster.slab_layers(zb) == [1, 1, 2, 2, 3, 3]
+    @test Hamster.surface_compensation(zb, [-0.5, -0.5, 1.0, 1.0, -0.5, -0.5]) ≈ zeros(6) atol=1e-12    # neutral, symmetric
+    cb = Hamster.surface_compensation(zb, [-0.5, -0.5, 0.5, 0.5, -0.5, -0.5])                     # net charge -1
+    @test cb ≈ [0.25, 0.25, 0.0, 0.0, 0.25, 0.25]
+
+    # local: rock salt (4 × 4 × 4 sites) with one anion missing; the six cations around it take the compensation
+    d = 2.8; n = 4
+    sites = [[i, j, k] for i in 0:n-1 for j in 0:n-1 for k in 0:n-1]
+    vacancy = findfirst(s -> s == [1, 2, 2], sites)
+    keep = setdiff(eachindex(sites), [vacancy])
+    pos = [d .* Float64.(sites[i]) .+ 0.05 .* [sin(i), cos(2i), sin(3i)] for i in keep]     # distorted
+    qs = [iseven(sum(sites[i])) ? 0.8 : -0.8 for i in keep]
+    types = [q > 0 ? UInt8(11) : UInt8(17) for q in qs]
+    lat = d * n * Matrix(1.0I, 3, 3)
+    cn = Hamster.coordination_numbers(pos, types, qs, lat)
+    neighbors_of_vacancy = [k for (k, i) in enumerate(keep) if sum(abs, mod.(sites[i] .- sites[vacancy] .+ n ÷ 2, n) .- n ÷ 2) == 1]
+    @test length(neighbors_of_vacancy) == 6 && all(==(5), cn[neighbors_of_vacancy])
+    @test count(==(6), cn) == length(keep) - 6
+    cl = Hamster.local_compensation(pos, types, qs, lat)
+    @test cl[neighbors_of_vacancy] ≈ fill(-sum(qs) / 6, 6)
+    @test sum(qs .+ cl) ≈ 0 atol=1e-12
+    @test count(!iszero, cl) == 6
+    # neutral cell: nothing to compensate; a charged cell without missing neighbors cannot be compensated locally
+    full = [d .* Float64.(s) for s in sites]; qf = [iseven(sum(s)) ? 0.8 : -0.8 for s in sites]; tf = [q > 0 ? UInt8(11) : UInt8(17) for q in qf]
+    @test all(iszero, Hamster.local_compensation(full, tf, qf, lat))
+    @test_throws ErrorException Hamster.local_compensation(full, tf, qf .+ 0.01, lat)
+
+    @test Hamster.compensation_charges("global", pos, types, qs, lat) == zeros(length(qs))
+    @test_throws ErrorException Hamster.compensation_charges("surface", pos, types, qs, lat)
+    @test_throws ErrorException Hamster.compensation_charges("nearby", pos, types, qs, lat)
+end
+
 @testset "Ewald Onsites" begin
     conf = get_empty_config()
     set_value!(conf, "orbitals", "Cs", "s")
@@ -129,6 +266,29 @@ end
     Hr = get_hr(ewald_model, Hamster.Dense(), 1, apply_soc=false)
 
     @test size(Hr[1])[1] == length(basis)
+
+    # centering: species means over all structures (global, default without slab_axis) or of each structure
+    strc2 = deepcopy(strc)
+    for (k, ion) in enumerate(strc2.ions)
+        ion.dist = typeof(ion.dist)(0.08 * sin(k), 0.08 * cos(2k), 0.08 * sin(3k))
+    end
+    kw = (method="wolf", rcut=10.0, alpha=0.3, write_summary=false)
+    mg = EwaldOnsites([strc, strc2], [basis, basis], comm, conf; kw...)
+    ms = EwaldOnsites([strc, strc2], [basis, basis], comm, conf; centering="structure", kw...)
+    @test Hamster.get_ewald_centering(conf) == "global"
+    @test mg.potentials == EwaldOnsites([strc, strc2], [basis, basis], comm, conf; centering="global", kw...).potentials
+    for n in 1:2
+        types = ms.types_per_strc[n]
+        @test all(t -> abs(mean(ms.potentials[n][types .== t])) < 1e-12, unique(types))
+        # global and structure centering differ by a constant per species and structure
+        d = mg.potentials[n] .- ms.potentials[n]
+        @test all(t -> maximum(d[types .== t]) - minimum(d[types .== t]) < 1e-12, unique(types))
+    end
+    @test maximum(abs, mg.potentials[1] .- ms.potentials[1]) > 1e-4
+    # per structure, the onsites of a structure do not depend on the other structures of the run
+    @test ms.potentials[1] ≈ EwaldOnsites([strc], [basis], comm, conf; centering="structure", kw...).potentials[1] atol=1e-12
+    @test !(mg.potentials[1] ≈ EwaldOnsites([strc], [basis], comm, conf; kw...).potentials[1])
+    @test_throws ErrorException EwaldOnsites([strc], [basis], comm, conf; centering="frame", kw...)
 
     s = Hamster.correction_statistics([-2.0, -1.0, 0.0, 1.0, 2.0])
     @test s.n == 5 && s.σ ≈ √2 && s.min == -2 && s.max == 2
@@ -155,6 +315,40 @@ end
             end
             @test count("real-space neighbor grid:    rebuilt", out) == 1
             @test occursin(r"σ_strc\s+δφ̄", out)
+
+            # slab_axis: the plane-averaged long range changes the potentials and is reported
+            wolf0 = EwaldOnsites([strc], [basis], comm, conf, method="wolf", rcut=10.0, alpha=0.3, write_summary=false)
+            wolf3 = EwaldOnsites([strc], [basis], comm, conf, method="wolf", rcut=10.0, alpha=0.3, slab_axis=3, label="slab")
+            @test maximum(abs, wolf3.potentials[1] .- wolf0.potentials[1]) > 1e-4
+            @test occursin("slab (vacuum along a3):", read("hamster.out", String))
+            # slab_scale multiplies the slab term
+            wolf3h = EwaldOnsites([strc], [basis], comm, conf, method="wolf", rcut=10.0, alpha=0.3, slab_axis=3, slab_scale=0.5,
+                                  write_summary=false)
+            @test wolf3h.potentials[1] .- wolf0.potentials[1] ≈ 0.5 .* (wolf3.potentials[1] .- wolf0.potentials[1]) rtol=1e-10 atol=1e-12
+            # charge compensation: default surface with slab_axis (neutral layers here: no change), reported; local in a
+            # neutral cell changes nothing
+            @test occursin("net charge compensated:", read("hamster.out", String))
+            wolfg = EwaldOnsites([strc], [basis], comm, conf, method="wolf", rcut=10.0, alpha=0.3, slab_axis=3,
+                                 charge_compensation="global", write_summary=false)
+            @test wolfg.potentials[1] ≈ wolf3.potentials[1] atol=1e-10
+            wolfl = EwaldOnsites([strc], [basis], comm, conf, method="wolf", rcut=10.0, alpha=0.3, charge_compensation="local",
+                                 write_summary=false)
+            @test wolfl.potentials[1] ≈ wolf0.potentials[1] atol=1e-10
+            @test_throws ErrorException EwaldOnsites([strc], [basis], comm, conf, method="wolf", rcut=10.0, alpha=0.3,
+                                                     charge_compensation="surface", write_summary=false)
+            set_value!(conf, "charge_compensation", "Ewald", "Local")
+            @test Hamster.get_ewald_charge_compensation(conf) == "local"
+            # centering: default structure with slab_axis, reported in the summary (no uncertainty of the means)
+            EwaldOnsites([strc, strc2], [basis, basis], comm, conf, method="wolf", rcut=10.0, alpha=0.3, centering="structure",
+                         label="per structure")
+            out = read("hamster.out", String)
+            @test occursin(r"subtracted species mean φ̄:\s+per structure", out)
+            @test Hamster.get_ewald_centering(conf) == "global"
+            set_value!(conf, "slab_axis", "Ewald", 3)
+            @test Hamster.get_ewald_centering(conf) == "structure"
+            set_value!(conf, "centering", "Ewald", "Global")
+            @test Hamster.get_ewald_centering(conf) == "global"
+            delete!(conf.blocks["Ewald"], "slab_axis"); delete!(conf.blocks["Ewald"], "centering")
         end
     end
 end
