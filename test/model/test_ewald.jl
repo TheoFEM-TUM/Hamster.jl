@@ -267,6 +267,29 @@ end
 
     @test size(Hr[1])[1] == length(basis)
 
+    # centering: species means over all structures (global, default without slab_axis) or of each structure
+    strc2 = deepcopy(strc)
+    for (k, ion) in enumerate(strc2.ions)
+        ion.dist = typeof(ion.dist)(0.08 * sin(k), 0.08 * cos(2k), 0.08 * sin(3k))
+    end
+    kw = (method="wolf", rcut=10.0, alpha=0.3, write_summary=false)
+    mg = EwaldOnsites([strc, strc2], [basis, basis], comm, conf; kw...)
+    ms = EwaldOnsites([strc, strc2], [basis, basis], comm, conf; centering="structure", kw...)
+    @test Hamster.get_ewald_centering(conf) == "global"
+    @test mg.potentials == EwaldOnsites([strc, strc2], [basis, basis], comm, conf; centering="global", kw...).potentials
+    for n in 1:2
+        types = ms.types_per_strc[n]
+        @test all(t -> abs(mean(ms.potentials[n][types .== t])) < 1e-12, unique(types))
+        # global and structure centering differ by a constant per species and structure
+        d = mg.potentials[n] .- ms.potentials[n]
+        @test all(t -> maximum(d[types .== t]) - minimum(d[types .== t]) < 1e-12, unique(types))
+    end
+    @test maximum(abs, mg.potentials[1] .- ms.potentials[1]) > 1e-4
+    # per structure, the onsites of a structure do not depend on the other structures of the run
+    @test ms.potentials[1] ≈ EwaldOnsites([strc], [basis], comm, conf; centering="structure", kw...).potentials[1] atol=1e-12
+    @test !(mg.potentials[1] ≈ EwaldOnsites([strc], [basis], comm, conf; kw...).potentials[1])
+    @test_throws ErrorException EwaldOnsites([strc], [basis], comm, conf; centering="frame", kw...)
+
     s = Hamster.correction_statistics([-2.0, -1.0, 0.0, 1.0, 2.0])
     @test s.n == 5 && s.σ ≈ √2 && s.min == -2 && s.max == 2
     @test s.tail ≈ 2 / √2 && s.frac3σ == 0
@@ -315,6 +338,17 @@ end
                                                      charge_compensation="surface", write_summary=false)
             set_value!(conf, "charge_compensation", "Ewald", "Local")
             @test Hamster.get_ewald_charge_compensation(conf) == "local"
+            # centering: default structure with slab_axis, reported in the summary (no uncertainty of the means)
+            EwaldOnsites([strc, strc2], [basis, basis], comm, conf, method="wolf", rcut=10.0, alpha=0.3, centering="structure",
+                         label="per structure")
+            out = read("hamster.out", String)
+            @test occursin(r"subtracted species mean φ̄:\s+per structure", out)
+            @test Hamster.get_ewald_centering(conf) == "global"
+            set_value!(conf, "slab_axis", "Ewald", 3)
+            @test Hamster.get_ewald_centering(conf) == "structure"
+            set_value!(conf, "centering", "Ewald", "Global")
+            @test Hamster.get_ewald_centering(conf) == "global"
+            delete!(conf.blocks["Ewald"], "slab_axis"); delete!(conf.blocks["Ewald"], "centering")
         end
     end
 end

@@ -172,6 +172,17 @@ This ensures:
 - no arbitrary offset in onsite energies
 - compatibility across different structures
 
+`centering` in the `Ewald` block sets which mean is subtracted:
+
+- `global` (default without `slab_axis`): the mean of each species over all structures of a run. Changes of the
+  species means between structures are kept, but the onsite corrections of a structure depend slightly on the other
+  structures computed together (``\delta\bar\phi`` in the model summary).
+- `structure` (default with `slab_axis`): the means of each structure. The onsite corrections of a structure no longer
+  depend on the run, and a constant potential offset that differs between structures drops out. With species-dependent
+  couplings ``\gamma_s``, such an offset would shift the onsite energies of the species against each other; for slabs,
+  the level of the plane-averaged potential depends on the configuration of the whole slab. In return, a change of the
+  mean potential of one species relative to another between structures is removed as well.
+
 ---
 ## Model Summary
 
@@ -258,6 +269,7 @@ begin Ewald
     slab_axis = 3                   # vacuum along a3
     slab_scale = 0.4                # screening of the long-range term (optional)
     charge_compensation = surface   # default with slab_axis
+    centering = structure           # default with slab_axis (see Mean Centering)
 end
 ```
 

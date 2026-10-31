@@ -28,5 +28,16 @@ function get_ewald_charge_compensation(conf::Config)::String
     mode == "default" && return get_ewald_slab_axis(conf) > 0 ? "surface" : "global"
     return lowercase(string(mode))
 end
-@configtag charge_compensation String "default" "where the net effective charge Σq of a structure is compensated: global (uniform background over all atoms, for the slab terms), surface (on the outermost layers of a slab along slab_axis, split so that no average field remains inside), local (on the atoms with missing neighbors of opposite charge, e.g. next to a vacancy, in proportion to the missing neighbors). surface and local add the compensating charges to the effective charges, so they also change the short-range part." "Ewald" category="electrostatics" getter=:custom default_doc="surface if slab_axis > 0, else global" see_also=["slab_axis"]
+@configtag charge_compensation String "default" "where the net effective charge Σq of a structure is compensated: global (uniform background over all atoms, for the slab terms), surface (on the outermost layers of a slab along slab_axis, split so that no average field remains inside), local (on the atoms with missing neighbors of opposite charge, e.g. next to a vacancy, in proportion to the missing neighbors). surface charges enter only the slab terms, local charges also the short-range sum." "Ewald" category="electrostatics" getter=:custom default_doc="surface if slab_axis > 0, else global" see_also=["slab_axis"]
+"""
+    centering = structure if slab_axis > 0, else global
+
+Which species means are subtracted from the Ewald potentials (see the Ewald documentation).
+"""
+function get_ewald_centering(conf::Config)::String
+    mode = conf("centering", "Ewald")
+    mode == "default" && return get_ewald_slab_axis(conf) > 0 ? "structure" : "global"
+    return lowercase(string(mode))
+end
+@configtag centering String "default" "species means subtracted from the potentials: global (the mean of each species over all structures of a run) or structure (the means of each structure, so that the onsite corrections of a structure do not depend on the other structures and a potential offset that differs between structures, e.g. of the slab terms, drops out)." "Ewald" category="electrostatics" getter=:custom default_doc="structure if slab_axis > 0, else global" see_also=["slab_axis"]
 @configtag check_params Bool true "take method, rcut, alpha and qeff from the header of the parameter file if they are not set, stop if they differ (false: use the config)." "Ewald" category="model"

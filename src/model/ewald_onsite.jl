@@ -58,7 +58,8 @@ Builds the container by:
 2. Gathering unique species across MPI ranks
 3. Initializing per-species parameters
 4. Computing global per-species mean potentials (MPI-reduced)
-5. Subtracting these means from all site potentials
+5. Subtracting these means from all site potentials (`centering = global`), or the species means of each structure
+   (`centering = structure`)
 
 # Notes
 - Potentials are only defined up to a constant; per-species centering ensures
@@ -85,6 +86,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         slab_axis       = get_ewald_slab_axis(conf),
         slab_scale      = get_ewald_slab_scale(conf),
         charge_compensation = get_ewald_charge_compensation(conf),
+        centering       = conf("centering", "Ewald") == "default" ? (slab_axis > 0 ? "structure" : "global") : get_ewald_centering(conf),
         update          = get_ewald_update(conf),
         label           = "",
         write_summary   = true)
@@ -180,23 +182,22 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     end
     MPI.Bcast!(species_mean, comm, root=0)
 
+    centering ∈ ("global", "structure") || error("centering = $centering: unknown, use global or structure.")
     structure_means = Tuple{UInt8, Float64}[]
-    for n in eachindex(potentials), type in unique(types_per_strc[n])
-        push!(structure_means, (type, mean(potentials[n][types_per_strc[n] .== type])))
-    end
-
     for n in eachindex(potentials)
+        means = Dict(type => mean(potentials[n][types_per_strc[n] .== type]) for type in unique(types_per_strc[n]))
+        append!(structure_means, [(type, m) for (type, m) in means])
         for i in eachindex(potentials[n])
             typ = types_per_strc[n][i]
-            p = type_to_idx[typ]
-            potentials[n][i] -= species_mean[p]
+            potentials[n][i] -= centering == "structure" ? means[typ] : species_mean[type_to_idx[typ]]
         end
     end
 
     model = EwaldOnsites(params, param_labels, potentials, types_per_strc, norb_per_strc, Rs_info, update)
     write_summary && write_model_summary(model, comm, conf, rank=rank, label=label, species_mean=species_mean, structure_means=structure_means,
                                          method=method, rcut=rcut, alpha=α, alpha_auto=alpha == 0, grid_rebuilt=grid_rebuilt && method == "ewald",
-                                         slab_axis=slab_axis, slab_scale=slab_scale, charge_compensation=charge_compensation)
+                                         slab_axis=slab_axis, slab_scale=slab_scale, charge_compensation=charge_compensation,
+                                         centering=centering)
     return model
 end
 
