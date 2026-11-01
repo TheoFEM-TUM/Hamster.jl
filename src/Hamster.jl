@@ -36,7 +36,7 @@ include("device/device.jl"); include("device/kernels.jl"); include("device/linea
 include("out/model_summary.jl")
 include("out/dos.jl")
 
-include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hyperopt.jl")
+include("calc/setup.jl"); include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hyperopt.jl")
 
 include("main.jl")
 
