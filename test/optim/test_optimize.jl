@@ -80,3 +80,25 @@ end
     @test mean(prof.L_train[:, end]) < mean(prof.L_train[:, 1:5])
     @test prof.L_val[end] < mean(prof.L_val[1:5])
 end
+@testset "Regularization enters the gradient once over the MPI ranks" begin
+    path = joinpath(@__DIR__, "test_files")
+    conf = get_config(filename = joinpath(path, "hconf"))
+    set_value!(conf, "poscar", joinpath(path, "POSCAR_gaas"))
+    set_value!(conf, "rllm_file", joinpath(path, "rllm.dat"))
+    set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
+    set_value!(conf, "verbosity", 0)
+    strc = Structure(conf); basis = Basis(strc, conf)
+    ham = EffectiveHamiltonian([strc], [basis], comm, conf, rank=rank, nranks=nranks)
+    optim = GDOptimizer(8, 56, conf)
+    data = DataLoader(Dict(""=>[1]), Dict(""=>[1]), Dict(""=>8), Dict(""=>8), conf).train_data[1]
+    _, cache = Hamster.forward(ham, 1, optim.loss, data)
+    dL_dHr = Hamster.backward(ham, 1, optim.loss, data, cache)
+    tb = ham.models[1]
+    reg = Hamster.Regularization(0.0, 0.1, 2)
+    @test any(!iszero, Hamster.backward(reg, tb.params))
+
+    # Two structures on one rank vs. one structure on each of two ranks (whose gradients are summed)
+    serial = Hamster.get_model_gradient(tb, [1, 1], Hamster.rank_regularization(reg, 0), [dL_dHr, dL_dHr])
+    distributed = sum(Hamster.get_model_gradient(tb, [1], Hamster.rank_regularization(reg, r), [dL_dHr]) for r in 0:1)
+    @test distributed ≈ serial
+end
