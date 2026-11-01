@@ -166,7 +166,7 @@ end
         conf = get_device_test_config(sp_mode=true, sp_diag=true)
         set_value!(conf, "neig", 4)
         set_value!(conf, "eig_target", 0.5)
-        set_value!(conf, "diag_method", method)
+        set_value!(conf, "eigsolver", method)
         ham_cpu, ham_dev = get_device_test_hams(conf, ArrayDevice(JLArray))
 
         Hk_cpu = get_hamiltonian(ham_cpu, 1, ks_device_test)

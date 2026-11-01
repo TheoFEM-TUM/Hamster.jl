@@ -22,7 +22,7 @@ function DeviceContext(device, models, strcs, bases, conf=get_empty_config(); so
         host_linear_map(models, index, Nε, size(strcs[index].Rs, 2), soc=soc)
     end
     maps = [DeviceLinearMap(host, device) for host in hosts]
-    return DeviceContext(device, maps, get_neig(conf), get_eig_target(conf), get_diag_method(conf),
+    return DeviceContext(device, maps, get_neig(conf), get_eig_target(conf), get_eigsolver(conf),
         Dict{Tuple{Int64, UInt64}, Any}(), Dict{Int64, Tuple{Vector{Float64}, Any}}())
 end
 

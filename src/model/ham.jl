@@ -255,7 +255,7 @@ function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert
     elseif method == "chebyshev"
         return chebyshev_diagonalize(Hk, Neig, target)
     else
-        error("Unknown diag_method '$method'. Valid options are shift-invert, krylov-schur and chebyshev.")
+        error("Unknown eigsolver '$method'. Valid options are shift-invert, krylov-schur and chebyshev.")
     end
 end
 
