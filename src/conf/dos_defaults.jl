@@ -1,5 +1,5 @@
 # ====================
-# DOS block: settings of the DOS / PDOS / COHP post-processing (switched on by the `dos` tag in the Options block)
+# DOS block: settings of the DOS / PDOS / COHP / JDOS post-processing (switched on by the `dos` tag in the Options block)
 # ====================
 @configtag method String "auto" "method: exact (dense diagonalization at all k-points), kpm (kernel polynomial method, sparse, for large supercells) or auto (exact up to `exact_max_orbitals` orbitals, kpm above)." "DOS" category="method"
 @configtag projection String "element" "projection of PDOS and COHP: element (e.g. Pb, Br) or orbital (e.g. Pb-s, Pb-px; spin-summed with SOC)." "DOS" category="quantities"
@@ -12,6 +12,8 @@
 @configtag kpm_vectors Int64 32 "number of random vectors for the stochastic trace of the kpm method." "DOS" category="method"
 @configtag exact_max_orbitals Int64 4000 "largest number of orbitals for which method = auto uses exact diagonalization." "DOS" category="method"
 @configtag nelec Float64 NaN "number of electrons per structure (optional). If set, the Fermi energy, the integrated DOS and the ICOHP are computed." "DOS" category="electrons" default_doc="not set"
+@configtag jdos_emax Float64 NaN "upper end of the transition-energy grid of the JDOS (eV, from 0 with `ne` points). Default: largest transition energy + 5 sigma." "DOS" category="JDOS" default_doc="automatic (see description)"
+@configtag jdos_velocity String "none" "Cartesian components (any combination of x, y, z, e.g. xyz) for which the JDOS is also computed with every transition weighted by the squared velocity matrix element |⟨v|vₐ|c⟩|² ((Å/fs)², from the current operator); none: only the JDOS." "DOS" category="JDOS"
 @configtag filename String "dos.h5" "output file of the DOS post-processing." "DOS" category="output"
 
 @configtag cohp_pairs Vector{String} String[] "pairs of labels for the COHP, e.g. `cohp_pairs = Pb-Br Cs-Br` (labels as given by `projection`). Default (or all): all pairs coupled by an off-site matrix element, including pairs of the same label on different atoms (e.g. Br-Br)." "DOS" category="quantities" default_doc="all coupled pairs"
