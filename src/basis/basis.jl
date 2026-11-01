@@ -244,7 +244,7 @@ function add_bond_entries!(entries, angles, lookup, basis, iion1, iion2, R, r⃗
             mode = get_mode(lookup.mode_dicts, k, ion_label, jorb1, jorb2)
             evaluate_overlap!(angles, overlap, base_k, orbconfig, mode)
             val = parity * angles[5] * radial[k]
-            abs(val) < sp_tol && continue
+            abs(val) ≥ sp_tol || continue
 
             v = nnlabel ≠ 0 ? get(lookup.param_indices, (k, nnlabel), 0) :
                 get_param_index(overlap, nnlabel, basis.parameters, orb1, orb2, i, j, overlap_label=lookup.overlap_labels[k])
