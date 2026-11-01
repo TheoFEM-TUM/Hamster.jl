@@ -30,7 +30,7 @@ With MPI, start one `hamster` per rank with `mpiexecjl` or `srun`.
 ## Installation
 
 ```bash
-hamster --install [--add_path yes/no] [--bashrc FILE] [--add_test_exec] [--test] [--gpu]
+hamster --install [--add_path yes/no] [--bashrc FILE] [--add_test_exec] [--test] [--gpu] [--mkl]
 ```
 
 Installs the dependencies of Hamster, makes Hamster available in your default Julia environment (e.g., `using Hamster` in the REPL) and precompiles it. The default environment is the one `JULIA_PROJECT` points to, if set (as by the Julia modules on JSC systems), else `~/.julia/environments/v1.x`.
@@ -39,6 +39,7 @@ Installs the dependencies of Hamster, makes Hamster available in your default Ju
 - `--bashrc`: File to add `PATH` to (default: `~/.bashrc`).
 - `--add_test_exec`: Also creates a `hamster_test` executable that runs the test suite.
 - `--test`: Runs the test suite after the installation (up to 10 minutes).
+- `--mkl`: Also installs [MKL.jl](https://github.com/JuliaLinearAlgebra/MKL.jl) (x86_64 only). `hamster` then uses Intel MKL instead of OpenBLAS for BLAS and LAPACK, which makes the dense diagonalization of large matrices considerably faster on Intel CPUs. MKL uses as many threads as Julia unless `MKL_NUM_THREADS` is set. The library in use is listed in the parallelization summary of `hamster.out`.
 - `--gpu`: Also installs [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl) and [CUDSS.jl](https://github.com/exanauts/CUDSS.jl) for GPU runs. The GPU code is precompiled only if a GPU is available. Otherwise (e.g., on the login node of a cluster), run `hamster --precompile` once on a GPU node.
 
 `julia hamster_install.jl [options]` does the same as `hamster --install`. If you installed Hamster before the `hamster` executable became part of the repository, delete the generated `hamster` file in the `Hamster.jl` folder before pulling the new version (git refuses to overwrite it).

@@ -26,7 +26,8 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity
         write_block_summary("Parallelization", num_nodes=num_nodes, nhamster=nranks, 
             nstrc_per_hamster=round(Int64, Nconf/nranks), nstrc_per_node=round(Int64, Nconf/num_nodes), 
             julia_num_threads=julia_num_threads, nthreads_kpoints=nthreads_kpoints, 
-            nthreads_bands=nthreads_bands, nthreads_blas=nthreads_blas)
+            nthreads_bands=nthreads_bands, nthreads_blas=nthreads_blas,
+            blas_library=basename(first(BLAS.get_config().loaded_libs).libname))
     
         blocks_to_write = string.(vcat(["Options"], keys(conf.blocks)...))
         filter!(block -> block ∈ unique([tag.block for tag in CONFIG_TAGS]), blocks_to_write)

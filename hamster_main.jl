@@ -5,6 +5,13 @@ comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
+# Intel MKL for BLAS/LAPACK if it is installed (hamster --install --mkl). MKL's threads follow the Julia threads (by
+# default, MKL takes its thread count from OMP_NUM_THREADS, which is usually 1 for Hamster runs).
+if !isnothing(Base.find_package("MKL"))
+    haskey(ENV, "MKL_NUM_THREADS") || (ENV["MKL_NUM_THREADS"] = string(Threads.nthreads()))
+    @eval using MKL
+end
+
 # Only rank 0 precompiles
 rank == 0 && @eval using Hamster
 MPI.Barrier(comm)

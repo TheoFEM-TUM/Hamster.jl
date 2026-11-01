@@ -73,19 +73,11 @@ end
     @test Es2 ≈ Es_correct
     @test vs_dense ≈ vs2
 
-    # Both strategies (k-points over the threads, or one after the other with all threads in BLAS) give the same
-    # eigenvalues and valid eigenvectors (orthonormal, H v = E v), also without eigenvectors
-    for strategy in (:kpoints, :blas)
-        Es_s, vs_s = diagonalize(Hk1, strategy=strategy)
-        @test Es_s ≈ Es_correct
-        @test all(k -> Hk1[k] * vs_s[:, :, k] ≈ vs_s[:, :, k] * Diagonal(Es_s[:, k]) &&
-                       vs_s[:, :, k]' * vs_s[:, :, k] ≈ I, axes(vs_s, 3))
-        @test diagonalize(Hk1, strategy=strategy, vectors=false)[1] ≈ Es_correct
-    end
-    @test diagonalize(Hk1, large=1)[1] ≈ Es_correct
-    Es_m, vs_m = diagonalize(Hk1, large=1, strategy=:kpoints)          # MRRR solver for "large" matrices with few threads
-    @test Es_m ≈ Es_correct && all(k -> Hk1[k] * vs_m[:, :, k] ≈ vs_m[:, :, k] * Diagonal(Es_m[:, k]), axes(vs_m, 3))
-    @test_throws ErrorException diagonalize(Hk1, strategy=:gpu)
+    # Valid eigenvectors (orthonormal, H v = E v), also without eigenvectors
+    Es_v, vs_v = diagonalize(Hk1)
+    @test all(k -> Hk1[k] * vs_v[:, :, k] ≈ vs_v[:, :, k] * Diagonal(Es_v[:, k]) &&
+                   vs_v[:, :, k]' * vs_v[:, :, k] ≈ I, axes(vs_v, 3))
+    @test diagonalize(Hk1, vectors=false)[1] ≈ Es_correct
 
     # Test Neig
     Hk_sp = get_hamiltonian(Hr_sp, Rs, kpoints, Hamster.Sparse())
@@ -220,3 +212,38 @@ end
     @test Es_only ≈ Es atol=1e-10
     @test size(vs_only) == (0, 20, 3) && size(vs) == (20, 20, 3)
 end
+
+@testset "Dense eigensolvers" begin
+    herm(N) = (A = randn(ComplexF64, N, N); A + A')
+    valid(H, E, V) = H * V ≈ V * Diagonal(E) && V' * V ≈ I
+
+    # Complex matrices: divide and conquer and MRRR give the same eigenpairs
+    H = herm(60)
+    E_ref = eigvals(Hermitian(H))
+    for mrrr in (false, true)
+        V = similar(H)
+        E = Hamster.dense_eigen!(V, H, mrrr=mrrr)
+        @test E ≈ E_ref && valid(H, E, V)
+    end
+    @test Hamster.dense_eigen!(nothing, H) ≈ E_ref
+
+    # Real matrices stored as complex ones (e.g. at Γ without SOC, up to rounding in the phase factors) are
+    # diagonalized in real arithmetic, with the same eigenvalues and valid (real) eigenvectors
+    Hr = real(H) .+ 1e-16im
+    @test Hamster.is_real_matrix(Hr) && !Hamster.is_real_matrix(H) && Hamster.is_real_matrix(real(H))
+    V = similar(Hr)
+    E = Hamster.dense_eigen!(V, Hr)
+    @test E ≈ eigvals(Symmetric(real(H))) && valid(Hr, E, V) && Hamster.is_real_matrix(V)
+    @test Hamster.dense_eigen!(nothing, Hr) ≈ E
+    E1, V1 = diagonalize(real(H))
+    @test E1 ≈ E && eltype(V1) == Float64 && valid(real(H), E1, V1)
+
+    # Large matrices (one after the other with all threads in BLAS) and small ones (parallel over the k-points)
+    for N in (Hamster.DENSE_LARGE, 40)
+        Hs = [herm(N), real(herm(N)) .+ 0im]
+        Es, vs = diagonalize(Hs)
+        @test all(k -> Es[:, k] ≈ eigvals(Hermitian(Hs[k])) && valid(Hs[k], Es[:, k], vs[:, :, k]), 1:2)
+        @test diagonalize(Hs, vectors=false)[1] ≈ Es
+    end
+end
+

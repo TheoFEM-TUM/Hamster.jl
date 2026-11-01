@@ -4,17 +4,20 @@ const hamster_path = @__DIR__
 ENV["JULIA_PKG_PRECOMPILE_AUTO"] = "0"
 
 const usage = """
-Usage: hamster --install [--add_path yes|no] [--bashrc FILE] [--add_test_exec] [--test] [--gpu]
+Usage: hamster --install [--add_path yes|no] [--bashrc FILE] [--add_test_exec] [--test] [--gpu] [--mkl]
        (or: julia hamster_install.jl [options])
   --add_path yes|no   Add the Hamster folder to PATH in the bashrc (default: yes)
   --bashrc FILE       File to add PATH to (default: ~/.bashrc)
   --add_test_exec     Create a hamster_test executable to run the test suite
   --test              Run the test suite after the installation
   --gpu               Also install CUDA.jl and CUDSS.jl for GPU runs
+  --mkl               Also install MKL.jl: Intel MKL instead of OpenBLAS for BLAS/LAPACK (x86_64 only; faster dense
+                      diagonalization of large matrices on Intel CPUs)
 """
 
 function parse_install_args(args)
-    options = Dict{String, Any}("add_path" => "yes", "bashrc" => "default", "add_test_exec" => false, "test" => false, "gpu" => false)
+    options = Dict{String, Any}("add_path" => "yes", "bashrc" => "default", "add_test_exec" => false, "test" => false, "gpu" => false,
+                                    "mkl" => false)
     i = 1
     while i ≤ length(args)
         arg = args[i]
@@ -26,7 +29,7 @@ function parse_install_args(args)
                 options[arg[3:end]] = args[i+1]
             end
             i += 2
-        elseif arg ∈ ("--add_test_exec", "--test", "--gpu")
+        elseif arg ∈ ("--add_test_exec", "--test", "--gpu", "--mkl")
             options[arg[3:end]] = true
             i += 1
         elseif arg ∈ ("-h", "--help")
@@ -37,6 +40,7 @@ function parse_install_args(args)
         end
     end
     options["add_path"] ∈ ("yes", "no") || error("--add_path must be yes or no.\n$usage")
+    options["mkl"] && Sys.ARCH ≠ :x86_64 && error("--mkl: Intel MKL is only available on x86_64 CPUs.")
     options["bashrc"] == "default" && (options["bashrc"] = joinpath(homedir(), ".bashrc"))
     return options
 end
@@ -80,6 +84,12 @@ if options["gpu"]
     println("Installing the GPU dependencies (CUDA.jl, CUDSS.jl) into $default_env...")
     Pkg.activate(default_env)
     Pkg.add(["CUDA", "CUDSS"])
+end
+
+if options["mkl"]
+    println("Installing MKL.jl into $default_env...")
+    Pkg.activate(default_env)
+    Pkg.add("MKL")
 end
 
 println("Precompiling Hamster.jl...")
