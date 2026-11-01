@@ -74,7 +74,7 @@ Return the number of TB overlap parameters defined in `basis`.
 nparams(basis::Basis) = length(basis.parameters)
 
 """
-    get_geometry_tensor(strc, basis, conf=get_empty_config(); tmethod=get_tmethod(conf), rcut=get_rcut(conf))
+    get_geometry_tensor(strc, basis, conf=get_empty_config(); rcut=get_rcut(conf))
 
 Constructs the geometry tensor based on the structure of the system, the orbital basis, and configuration settings.
 
@@ -82,11 +82,9 @@ Constructs the geometry tensor based on the structure of the system, the orbital
 - `strc`: The structure object, containing information about ions, lattice, and geometry of the system.
 - `basis`: The basis object, containing the orbital information and overlap parameters.
 - `conf`: Configuration object, defaults to an empty configuration if not provided.
-- `tmethod`: Transformation method used for coordinate system alignment (default is obtained from the configuration).
 - `rcut`: Cutoff distance for nearest neighbor interactions (default is obtained from the configuration).
 
 # Keyword Arguments
-- `tmethod`: The transformation method for aligning coordinate systems.
 - `rcut`: The distance cutoff for nearest neighbor interactions.
 
 # Returns
@@ -98,7 +96,6 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
                                 rank=0,
                                 nranks=1,
                                 npar=Threads.nthreads(),
-                                tmethod=get_tmethod(conf), 
                                 rcut=get_rcut(conf), 
                                 sp_tol=get_sp_tol(conf), 
                                 rcut_tol=get_rcut_tol(conf))
@@ -154,8 +151,8 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
             r = normdiff(r⃗₁, r⃗₂)
             if r_nd ≤ rcut && r-abs(rcut_tol) < rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
                 # Bond frames for both directions of the bond (the reversed one for swapped orbital pairs)
-                Û = get_sk_transform_matrix(r⃗₁, r⃗₂, orbital_axes[iion1][1], tmethod)
-                Û_swap = get_sk_transform_matrix(r⃗₂, r⃗₁, orbital_axes[iion1][1], tmethod)
+                Û = get_sk_transform_matrix(r⃗₁, r⃗₂)
+                Û_swap = get_sk_transform_matrix(r⃗₂, r⃗₁)
                 nnlabel = get_nn_label(r, nn_dict[ion_label], conf, onsite=onsite, sepNN=sepNN)
                 # The radial part depends only on the overlap and the distance, not on the orbitals
                 f = fcut(r, rcut, rcut_tol)

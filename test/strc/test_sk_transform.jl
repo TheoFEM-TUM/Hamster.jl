@@ -1,4 +1,4 @@
-import Hamster: get_transformed_system
+import Hamster: get_sk_transform_matrix
 
 
 # test if obtained system is orthonormal
@@ -23,47 +23,19 @@ end
 # check if z-axis is along connecting vector
 test_zaxis(Ê, r⃗₁, r⃗₂; ε=1e-4) = norm(Ê[3, :] .- normalize(r⃗₂ .- r⃗₁)) < ε
 
-# test special case when both vectors are 0
-function test_special_cases(method; ε=1e-10)
-    r⃗₁ = Float64[0, 0, 0]; r⃗₂ = Float64[0, 0, 0]; ω = Float64[1, 1, 1]
-    Ê = ifelse(method=="GramSchmidt", get_transformed_system(r⃗₁, r⃗₂, ω),
-                                    get_transformed_system(r⃗₁, r⃗₂))
-    t1 = norm(Ê[3, :] .- [0, 0, 1]) < ε
-    t2 = is_orthonormal(Ê)
-    return t1 && t2
-end
-
-# check special case when omega lies along connecting vector
-function test_omega_along_axis()
-    r⃗₁ = Float64[0, 0, 0]; r⃗₂ = Float64[1, 1, 1]; ω = Float64[1, 1, 1]
-    Ê = get_transformed_system(r⃗₁, r⃗₂, ω)
-    Ê₂ = get_transformed_system(r⃗₁, r⃗₂, -ω)
-    t1 = is_orthonormal(Ê); t2 = is_righthanded(Ê)
-    t3 = test_zaxis(Ê, r⃗₁, r⃗₂)
-    t4 = is_orthonormal(Ê₂); t5 = is_righthanded(Ê₂)
-    t6 = test_zaxis(Ê₂, r⃗₁, r⃗₂)
-    return t1 && t2 && t3 && t4 && t5 && t6
+# special case when both vectors are 0
+function test_special_cases(; ε=1e-10)
+    Ê = get_sk_transform_matrix(Float64[0, 0, 0], Float64[0, 0, 0])
+    return norm(Ê[3, :] .- [0, 0, 1]) < ε && is_orthonormal(Ê)
 end
 
 @testset "TB transform" begin
-    # test GramSchmidt method for obtaining rotated coordinate system
-    @testset "GramSchmidt method" begin
-        r⃗₁ = 2 .* rand(Float64, 3) .- 1; r⃗₂ = 2 .* rand(Float64, 3) .- 1
-        ω = 2 .* rand(Float64, 3) .- 1
-        Ê = get_transformed_system(r⃗₁, r⃗₂, ω)
-        @test is_orthonormal(Ê)
-        @test is_righthanded(Ê)
-        @test test_zaxis(Ê, r⃗₁, r⃗₂)
-        @test test_special_cases("GramSchmidt")
-        @test test_omega_along_axis()
-    end
-    # test rotation method for obtaining rotated coordinate system
-    @testset "Rotation method" begin
-        r⃗₁ = 2 .* rand(Float64, 3) .- 1; r⃗₂ = 2 .* rand(Float64, 3) .- 1
-        Ê = get_transformed_system(r⃗₁, r⃗₂)
-        @test is_orthonormal(Ê)
-        @test is_righthanded(Ê)
-        @test test_zaxis(Ê, r⃗₁, r⃗₂)
-        @test test_special_cases("Rotation")
-    end
+    r⃗₁ = 2 .* rand(Float64, 3) .- 1; r⃗₂ = 2 .* rand(Float64, 3) .- 1
+    Ê = get_sk_transform_matrix(r⃗₁, r⃗₂)
+    @test is_orthonormal(Ê)
+    @test is_righthanded(Ê)
+    @test test_zaxis(Ê, r⃗₁, r⃗₂)
+    @test test_special_cases()
+    # static vectors, as in the geometry tensor
+    @test get_sk_transform_matrix(SVector{3}(r⃗₁), SVector{3}(r⃗₂)) ≈ Ê
 end
