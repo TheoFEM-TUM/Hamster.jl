@@ -104,7 +104,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
 
     update_begin = MPI.Wtime()
     for (model_index, model) in enumerate(ham_train.models)
-        model_grad_local = get_model_gradient(model, indices, optim.reg, model_gradient_input(dL_dHr, model_index); soc=ham_train.soc)
+        model_grad_local = get_model_gradient(model, indices, rank_regularization(optim.reg, rank), model_gradient_input(dL_dHr, model_index); soc=ham_train.soc)
         model_grad = MPI.Reduce(model_grad_local, +, comm, root=0)
         if rank == 0; update!(model, optim.adam, model_grad ./ Nstrc_tot); end
         params = get_params(model)
@@ -131,6 +131,14 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         end
     end
 end
+
+"""
+    rank_regularization(reg, rank)
+
+The regularization that rank `rank` adds to its part of the model gradient: the gradients of all ranks are summed, so
+only rank 0 adds the gradient of the regularization (otherwise it would enter once per MPI rank).
+"""
+rank_regularization(reg::Regularization, rank) = rank == 0 ? reg : Regularization(reg.b, 0.0, reg.n)
 
 """
     val_step!(ham_val, loss, val_data, prof, iter, comm, rank=0)
