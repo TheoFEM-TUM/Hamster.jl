@@ -92,12 +92,15 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     Rs_info = zeros(Int64, 2, length(strcs))
     grid_rebuilt = false
     α = ewald_alpha(method, rcut, alpha)
+    site_counts = Dict{Tuple{String, Float64}, Int64}()
 
     for (n, strc) in enumerate(strcs)
         pos = get_ion_positions(strc.ions, apply_distortion=true)
 
         ion_types = get_ion_types(strc.ions)
-        charges = [get_qeff(conf, type) for type in number_to_element.(ion_types)]
+        charges, sites = get_site_charges(strc, conf, positions=pos)
+        check_neutrality(charges, sites, strc.system, n)
+        for site in zip(sites, charges); site_counts[site] = get(site_counts, site, 0) + 1; end
 
         reuse_grid = rcut ≤ min(strc.point_grid.grid_size, get_rcut(conf))
         grid_rebuilt |= !reuse_grid
@@ -180,9 +183,72 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     end
 
     model = EwaldOnsites(params, param_labels, potentials, types_per_strc, norb_per_strc, Rs_info, update)
+    has_sites = any(!isempty(get_site_qeff(conf, type)) for type in keys(conf.blocks))
     write_summary && write_model_summary(model, comm, conf, rank=rank, label=label, species_mean=species_mean, structure_means=structure_means,
-                                         method=method, rcut=rcut, alpha=α, alpha_auto=alpha == 0, grid_rebuilt=grid_rebuilt && method == "ewald")
+                                         method=method, rcut=rcut, alpha=α, alpha_auto=alpha == 0, grid_rebuilt=grid_rebuilt && method == "ewald",
+                                         site_counts=has_sites ? site_counts : nothing)
     return model
+end
+
+"""
+    get_site_charges(strc, conf; positions=get_ion_positions(strc.ions, apply_distortion=true), site_rcut=get_ewald_site_rcut(conf))
+
+Effective charges of the atoms of `strc` and their site labels. An atom gets the `qeff` of its species, unless the atom
+block of the species has site-dependent charges `qeff_<element>`: then the nearest neighbour among these elements within
+`site_rcut` decides, e.g. with `qeff_N` and `qeff_C` in the block of H, an H atom bonded to N gets `qeff_N` and the site
+label `H(N)`. Atoms without such a neighbour keep `qeff` and the label of the species, which usually breaks the charge
+neutrality of the cell (see `check_neutrality`). The neighbours are searched on a grid with cell size `site_rcut`, so
+the cost is linear in the number of atoms.
+"""
+function get_site_charges(strc::Structure, conf=get_empty_config();
+                          positions=get_ion_positions(strc.ions, apply_distortion=true),
+                          site_rcut=get_ewald_site_rcut(conf))
+    ion_types = get_ion_types(strc.ions)
+    species = string.(number_to_element.(ion_types))
+    charges = [get_qeff(conf, s) for s in species]
+    sites = copy(species)
+    rules = Dict(s => Dict(element_to_number(e) => q for (e, q) in get_site_qeff(conf, s)) for s in unique(species))
+    any(!isempty, values(rules)) || return charges, sites
+    site_rcut ≤ get_rcut(conf) || error("site_rcut = $site_rcut of the Ewald block is larger than rcut = $(get_rcut(conf)).")
+
+    neighbour_types = union((keys(r) for r in values(rules))...)
+    candidates = findall(t -> t ∈ neighbour_types, ion_types)
+    isempty(candidates) && return charges, sites
+    Ts = frac_to_cart(strc.Rs, strc.lattice)
+    grid = get_grid_dict(reduce(hcat, positions[candidates]), Ts, site_rcut)
+    for (i, s) in enumerate(species)
+        isempty(rules[s]) && continue
+        dmin, jmin = Inf, 0
+        for grid_point in nn_grid_points(get_grid_point(positions[i], site_rcut), grid), (c, R) in grid[grid_point]
+            j = candidates[c]
+            (j == i || !haskey(rules[s], ion_types[j])) && continue
+            d = norm(positions[i] - apply_pbc(positions[j], Ts[:, R]))
+            d < dmin && ((dmin, jmin) = (d, j))
+        end
+        if dmin ≤ site_rcut
+            charges[i] = rules[s][ion_types[jmin]]
+            sites[i] = "$s($(species[jmin]))"
+        end
+    end
+    return charges, sites
+end
+
+"""
+    check_neutrality(charges, sites, system="", index=1; tol=1e-8)
+
+Stop with an error if the effective charges of a structure do not add up to zero, listing the charges of the sites.
+With site-dependent charges (`qeff_<element>`), a net charge also indicates an atom without the expected neighbour,
+e.g. an H atom that is not bonded to C or N.
+"""
+function check_neutrality(charges, sites, system="", index=1; tol=1e-8)
+    net = sum(charges)
+    abs(net) < tol && return nothing
+    counts = Dict{Tuple{String, Float64}, Int64}()
+    for site in zip(sites, charges); counts[site] = get(counts, site, 0) + 1; end
+    listing = join(["$(n) × $(site) ($(q))" for ((site, q), n) in sort(collect(counts))], ", ")
+    error("The effective charges of structure $index$(isempty(system) ? "" : " ($system)") are not neutral: net charge " *
+          "$(round(net, sigdigits=6)) e from $listing. Check qeff and qeff_<element> in the atom blocks; with " *
+          "site-dependent charges, atoms without a neighbour of the given elements within site_rcut keep qeff.")
 end
 
 """
@@ -197,11 +263,16 @@ ewald_alpha(method, rcut, alpha) = alpha ≠ 0 ? Float64(alpha) : (lowercase(met
     ewald_settings(conf)
 
 Settings that define the Ewald potentials: method, rcut, the damping α actually used and the charges `qeff`, written
-to the header of the parameter file of a fit (see `apply_ewald_settings!`).
+to the header of the parameter file of a fit (see `apply_ewald_settings!`). Site-dependent charges `qeff_<element>` of
+the species `type` are listed as `<type>_<element>`.
 """
 function ewald_settings(conf)
     method, rcut = get_ewald_method(conf), get_ewald_rcut(conf)
-    qeff = sort([(type, get_qeff(conf, type)) for (type, block) in conf.blocks if haskey(block, "qeff")])
+    qeff = [(type, get_qeff(conf, type)) for (type, block) in conf.blocks if haskey(block, "qeff")]
+    for type in keys(conf.blocks), (element, q) in get_site_qeff(conf, type)
+        push!(qeff, ("$(type)_$(element)", q))
+    end
+    sort!(qeff)
     return (method=method, rcut=rcut, alpha=ewald_alpha(method, rcut, get_ewald_alpha(conf)), qeff=qeff)
 end
 
@@ -265,7 +336,9 @@ function adopt_ewald_settings!(conf; rank=0, verbosity=get_verbosity(conf))
         append!(settings, [("rcut", "Ewald", header["ewald_rcut"]), ("alpha", "Ewald", header["ewald_alpha"])])
     end
     for (key, value) in header
-        startswith(key, "ewald_qeff_") && push!(settings, ("qeff", key[12:end], value))
+        startswith(key, "ewald_qeff_") || continue
+        type, element = (split(key[12:end], "_", limit=2)..., "")[1:2]   # ewald_qeff_H_N: qeff_N of H
+        push!(settings, (isempty(element) ? "qeff" : "qeff_$element", type, value))
     end
 
     same(a, b) = (x = tryparse(Float64, string(a)); y = tryparse(Float64, string(b));

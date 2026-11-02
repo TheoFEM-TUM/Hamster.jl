@@ -1,6 +1,6 @@
 # Ewald Onsite Correction
 
-An Ewald-based onsite correction is enabled when an `Ewald` block is present in the configuration file. The correction is only applied if effective charges are defined for all atomic species via the `qeff` parameter. For periodic systems, the total charge must be neutral, i.e., the sum over all `qeff` values must be zero.
+An Ewald-based onsite correction is enabled when an `Ewald` block is present in the configuration file. The correction is only applied if effective charges are defined for all atomic species via the `qeff` parameter. For periodic systems, the total charge must be neutral, i.e., the sum over all `qeff` values must be zero. Atoms of one species can carry different charges depending on their bonded neighbour (see [Site-Dependent Charges](#Site-Dependent-Charges)).
 
 ## Overview
 
@@ -131,6 +131,33 @@ Without `init_params`, the `ewald_` lines of a parameter file are ignored, so th
 (e.g. in a hyperparameter search) is not overwritten. The effective charges `qeff` and thus the
 electrostatic potential (and its neutrality) are not changed by the coupling.
 
+## Site-Dependent Charges
+
+With one `qeff` per species, all atoms of a species carry the same charge. This is a poor description when a species
+occurs in chemically different sites, e.g. the H atoms of methylammonium (CH₃NH₃⁺): the H atoms of the NH₃ group carry a
+much larger positive charge than those of the CH₃ group, and averaging them moves the positive charge of the molecule
+to the wrong end. Charges per site are set with `qeff_<element>` in the atom block, where `<element>` is the bonded
+neighbour:
+
+```bash
+begin atom H
+    qeff = 0.239      # fallback for H atoms without a C or N neighbour
+    qeff_N = 0.349    # H bonded to N
+    qeff_C = 0.120    # H bonded to C
+end
+```
+
+The bonded neighbour of an atom is its nearest neighbour among the elements of its `qeff_<element>` keys within
+`site_rcut` of the `Ewald` block (default 2 Å, at most `rcut`). It is determined for every structure, from the positions
+used for the potentials, on a neighbour grid (linear in the number of atoms). Atoms without such a neighbour keep `qeff`.
+
+The charges of each structure must add up to zero, also with site-dependent charges. The charges per site are typically
+averages of charges from DFT (e.g. Hirshfeld charges) and have to be adjusted, e.g. in the last digit of one species,
+so that the formula unit is neutral. If a structure is not neutral, Hamster stops and lists the charges of all sites.
+With site-dependent charges, this also catches unexpected bonding, e.g. an H atom that is not bonded to C or N and
+keeps `qeff`. The sites found and their charges are listed in the Ewald model summary in `hamster.out`, e.g.
+`H(N) 0.349 (24)`. The coupling ``\gamma_s`` stays a parameter per species.
+
 ## Settings in the Parameter File
 
 At the end of a fit, the settings that define the potentials are written to the header of `params.dat`, together
@@ -148,6 +175,9 @@ begin unknown_system
   ewald_qeff_Pb = 1.248
 end
 ```
+
+Site-dependent charges are written as `ewald_qeff_<species>_<element>`, e.g. `ewald_qeff_H_N = 0.349` for `qeff_N` in
+the block of H.
 
 When a model is built from this file (`init_params` of the `Ewald` block, otherwise `init_params`), settings that are
 not set in the config are taken from the header, so that a fitted model is used with the settings it was fitted with,
