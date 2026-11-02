@@ -112,3 +112,21 @@ end
     Hamster.save(prof, 1, filename=filename)
     @test !isfile(filename)
 end
+
+# Validation "Hamiltonian" whose loss for structure `index` is `val_data[index]`
+struct MockValHam
+    Nstrc :: Int64
+    systems :: Vector{String}
+end
+Hamster.forward(::MockValHam, index, loss, data) = (data, nothing)
+
+@testset "Profiler validation loss per system" begin
+    # 4 structures of system A with loss 1 and 4 of system B with loss 3 (single rank)
+    ham_val = MockValHam(8, [fill("A", 4); fill("B", 4)])
+    val_data = [fill(1.0, 4); fill(3.0, 4)]
+    prof = HamsterProfiler(3, Niter=1, Nbatch=1)
+    Hamster.val_step!(ham_val, nothing, val_data, prof, 1, MPI.COMM_SELF, valeachiter=1)
+    @test prof.L_val[1] ≈ 2
+    @test prof.L_val_system["A"][1] ≈ 1
+    @test prof.L_val_system["B"][1] ≈ 3
+end
