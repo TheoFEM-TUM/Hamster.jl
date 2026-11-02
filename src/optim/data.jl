@@ -51,8 +51,10 @@ function DataLoader(train_config_inds, val_config_inds, Nε_train, Nε_val, conf
                     train_mode=get_train_mode(conf), 
                     val_mode=get_val_mode(conf), 
                     hr_fit=get_hr_fit(conf), 
-                    eig_val=get_eig_val(conf))
+                    eig_val=get_eig_val(conf),
+                    data_unit=get_data_unit(conf))
 
+    factor = energy_unit_factor(data_unit)
     hr_val = !eig_val
     if hr_fit
         train_data = mapreduce(vcat, train_config_inds, init=HrData[]) do (system, train_inds)
@@ -75,8 +77,33 @@ function DataLoader(train_config_inds, val_config_inds, Nε_train, Nε_val, conf
             bandinclude=bandinclude, bandmultiplicity=bandmultiplicity,empty=!validate, system=system)
         end
     end
+    if factor != 1
+        foreach(d -> scale_energies!(d, factor), train_data)
+        foreach(d -> scale_energies!(d, factor), val_data)
+    end
     return DataLoader(train_data, val_data)
 end
+
+const ENERGY_UNITS_IN_EV = Dict("ev" => 1.0, "hartree" => 27.211386245988, "ry" => 13.605693122994)
+
+"""
+    energy_unit_factor(unit) -> Float64
+
+Factor that converts energies in `unit` (`eV`, `Hartree` or `Ry`; not case sensitive) to eV.
+"""
+function energy_unit_factor(unit)
+    haskey(ENERGY_UNITS_IN_EV, lowercase(unit)) ||
+        throw(ArgumentError("unknown data_unit $unit; use one of eV, Hartree, Ry."))
+    return ENERGY_UNITS_IN_EV[lowercase(unit)]
+end
+
+"""
+    scale_energies!(data, factor)
+
+Multiply the energies of `data` (the eigenvalues of `EigData`, the matrices of `HrData`) by `factor`.
+"""
+scale_energies!(data::EigData, factor) = (data.Es .*= factor; data)
+scale_energies!(data::HrData, factor) = (foreach(H -> H .*= factor, data.Hr); data)
 
 """
     get_neig_and_nk(data::Vector)

@@ -94,6 +94,33 @@ end
     @test_throws ArgumentError DataLoader(Dict(""=>[2, 3]), Dict(""=>[1]), Dict("" => 32), Dict("" => 32), conf)
 end
 
+@testset "DataLoader energy unit" begin
+    path = joinpath(@__DIR__, "test_files")
+    kp, Es = Hamster.read_eigenval(joinpath(path, "EIGENVAL_gaas"), 8)
+    Hr, _, _ = Hamster.read_hrdat(joinpath(path, "wannier90_hr.dat"))
+
+    for (unit, factor) in [("eV", 1.0), ("Hartree", 27.211386245988), ("ry", 13.605693122994)]
+        conf = get_empty_config()
+        set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
+        set_value!(conf, "val_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
+        set_value!(conf, "data_unit", "Optimizer", unit)
+        dl = DataLoader(Dict(""=>[1]), Dict(""=>[1]), Dict("" => 8), Dict("" => 8), conf)
+        @test dl.train_data[1].Es ≈ factor .* Es
+        @test dl.val_data[1].Es ≈ factor .* Es
+        @test dl.train_data[1].kp == kp
+
+        set_value!(conf, "train_data", "Optimizer", joinpath(path, "wannier90_hr.dat"))
+        set_value!(conf, "hr_fit", "Optimizer", true)
+        dl = DataLoader(Dict(""=>[]), Dict(""=>[]), Dict("" => 8), Dict("" => 8), conf)
+        @test all(dl.train_data[1].Hr[R] ≈ factor .* Hr[R] for R in eachindex(Hr))
+    end
+
+    conf = get_empty_config()
+    set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
+    set_value!(conf, "data_unit", "Optimizer", "kcal")
+    @test_throws ArgumentError DataLoader(Dict(""=>[1]), Dict(""=>[1]), Dict("" => 8), Dict("" => 8), conf)
+end
+
 @testset "DataLoader MD Eigs" begin
     path = joinpath(@__DIR__, "test_files")
     conf = get_empty_config()

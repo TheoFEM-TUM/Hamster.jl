@@ -60,6 +60,8 @@ This tag tells Hamster where to load the training dataset used during model eval
   a single structure (`Nstructures = 1`, or the datasets without the last dimension).
 
 The number of bands in the data does *not* need to match the Hamster basis size; only the subset starting at `bandmin` is used.
+
+The energies are expected in eV; for data in Hartree or Rydberg (e.g. from OpenMX), set `data_unit`.
 """
 get_train_data(conf::Config)::String = conf("train_data", "Optimizer") == "default" ? "EIGENVAL" : conf("train_data", "Optimizer")
 @configtag train_data String "EIGENVAL" "path to the training data: a VASP EIGENVAL (pc mode) or an HDF5 file with eigenvalues and kpoints (pc or md mode)." "Optimizer" getter=:custom category="data" see_also=["train_mode", "bandmin"]
@@ -85,9 +87,12 @@ This tag tells Hamster where to load the validation dataset used during model ev
   a single structure (`Nstructures = 1`, or the datasets without the last dimension).
 
 The number of bands in the data does *not* need to match the Hamster basis size; only the subset starting at `val_bandmin` is used.
+
+The energies are converted with the same `data_unit` as the training data.
 """
 get_val_data(conf::Config)::String = conf("val_data", "Optimizer") == "default" ? "EIGENVAL" : conf("val_data", "Optimizer")
 @configtag val_data String "EIGENVAL" "path to the validation data (same formats as train_data)." "Optimizer" getter=:custom category="validation" see_also=["val_mode"]
+@configtag data_unit String "eV" "energy unit of train_data and val_data (eV, Hartree, Ry; not case sensitive); the energies are converted to eV when they are read." "Optimizer" category="data" see_also=["train_data", "val_data"]
 
 
 @configtag bandmin Int64 1 "lowest band index to include in optimization." "Optimizer" category="bands and weights"
