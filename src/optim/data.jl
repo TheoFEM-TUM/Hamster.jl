@@ -122,8 +122,7 @@ function get_eig_data(mode, path, Nε; inds=Int64[], bandmin=1, bandinclude=Int6
     band_indices = get_band_indices(bandmin, Nε, bandinclude, bandmultiplicity, mode=mode)
 
     if (mode == "pc" || mode == "mixed") && !empty
-        kp, Es = read_eigenval(path)
-        push!(data, EigData(kp, Es[band_indices, :]))
+        push!(data, read_pc_eigenvalue_data(path, band_indices))
     end
     if (mode == "md" || mode == "mixed") && !empty
         append!(data, read_eigenvalue_data_from_path(path, inds, band_indices, Nε))
@@ -153,6 +152,7 @@ function read_eigenvalue_data_from_path(path, inds, band_indices, Nε; system=""
             kp = read(g["kpoints"])
             Es = read(g["eigenvalues"])
             inds_ = length(inds) ≤ size(Es, 3) ? inds : collect(1:size(Es, 3))
+            check_band_range(path, size(Es, 1), band_indices)
             if kp isa Matrix{Float64}
                 return [EigData(kp, Es[band_indices, :, n]) for n in inds_]
             elseif kp isa Array{Float64, 3}
@@ -161,8 +161,38 @@ function read_eigenvalue_data_from_path(path, inds, band_indices, Nε; system=""
         end
     else
         kp, Es = read_eigenval(path)
+        check_band_range(path, size(Es, 1), band_indices)
         return [EigData(kp, Es[band_indices, :])]
     end
+end
+
+"""
+    read_pc_eigenvalue_data(path, band_indices) -> EigData
+
+Read the eigenvalues of a single structure (pc mode) from a VASP `EIGENVAL` file or from an HDF5 file with the
+datasets `kpoints` (3 × Nk or 3 × Nk × 1) and `eigenvalues` (Nb × Nk or Nb × Nk × 1).
+"""
+function read_pc_eigenvalue_data(path, band_indices)
+    if occursin(".h5", path)
+        kp, Es = h5read(path, "kpoints"), h5read(path, "eigenvalues")
+        size(Es, 3) == 1 || throw(ArgumentError("$path contains $(size(Es, 3)) structures, but pc mode uses the data of one structure; use md mode or a file with one structure."))
+        check_band_range(path, size(Es, 1), band_indices)
+        return EigData(kp[:, :, 1], Es[band_indices, :, 1])
+    end
+    kp, Es = read_eigenval(path)
+    check_band_range(path, size(Es, 1), band_indices)
+    return EigData(kp, Es[band_indices, :])
+end
+
+"""
+    check_band_range(path, nbands, band_indices)
+
+Throw an `ArgumentError` if the bands selected for the fit (from `bandmin`, `bandinclude`, `bandmultiplicity` and the
+number of orbitals) go beyond the `nbands` bands in the data file `path`.
+"""
+function check_band_range(path, nbands, band_indices)
+    maximum(band_indices) ≤ nbands || throw(ArgumentError("$path has $nbands bands, but bands $(minimum(band_indices)) to $(maximum(band_indices)) are needed ($(length(band_indices)) bands, one per orbital of the structure). Check bandmin/val_bandmin, bandmultiplicity and train_mode/val_mode."))
+    return nothing
 end
 
 function read_hr_data_from_path(path, inds)

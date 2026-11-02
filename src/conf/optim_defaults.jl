@@ -54,13 +54,15 @@ This tag tells Hamster where to load the training dataset used during model eval
 - **HDF5 (`.h5`) file**  
   Must contain the datasets:
   - `eigenvalues` with shape **[Nbands × Nkpoints × Nstructures]**
-  - `kpoints` with shape **[3 × Nkpoints × Nstructures]**
+  - `kpoints` with shape **[3 × Nkpoints × Nstructures]** or **[3 × Nkpoints]**
 
-The datasets must correspond structure-by-structure to the training set.  
+  In *md* mode, the datasets must correspond structure-by-structure to the training set. In *pc* mode, the file must contain
+  a single structure (`Nstructures = 1`, or the datasets without the last dimension).
+
 The number of bands in the data does *not* need to match the Hamster basis size; only the subset starting at `bandmin` is used.
 """
 get_train_data(conf::Config)::String = conf("train_data", "Optimizer") == "default" ? "EIGENVAL" : conf("train_data", "Optimizer")
-@configtag train_data String "EIGENVAL" "path to the training data: a VASP EIGENVAL (pc mode) or an HDF5 file with eigenvalues and kpoints." "Optimizer" getter=:custom category="data" see_also=["train_mode", "bandmin"]
+@configtag train_data String "EIGENVAL" "path to the training data: a VASP EIGENVAL (pc mode) or an HDF5 file with eigenvalues and kpoints (pc or md mode)." "Optimizer" getter=:custom category="data" see_also=["train_mode", "bandmin"]
 
 """
 *val_data*=EIGENVAL
@@ -77,9 +79,11 @@ This tag tells Hamster where to load the validation dataset used during model ev
 - **HDF5 (`.h5`) file**  
   Must contain the datasets:
   - `eigenvalues` with shape **[Nbands × Nkpoints × Nstructures]**
-  - `kpoints` with shape **[3 × Nkpoints × Nstructures]**
+  - `kpoints` with shape **[3 × Nkpoints × Nstructures]** or **[3 × Nkpoints]**
 
-The datasets must correspond structure-by-structure to the validation set.  
+  In *md* mode, the datasets must correspond structure-by-structure to the validation set. In *pc* mode, the file must contain
+  a single structure (`Nstructures = 1`, or the datasets without the last dimension).
+
 The number of bands in the data does *not* need to match the Hamster basis size; only the subset starting at `val_bandmin` is used.
 """
 get_val_data(conf::Config)::String = conf("val_data", "Optimizer") == "default" ? "EIGENVAL" : conf("val_data", "Optimizer")
