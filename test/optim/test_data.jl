@@ -52,6 +52,77 @@ end
     @test Hamster.get_neig_and_nk(dl.train_data) == (8, 56)
 end
 
+@testset "DataLoader PC Eigs from HDF5" begin
+    path = joinpath(@__DIR__, "test_files")
+    kp, Es = Hamster.read_eigenval(joinpath(path, "EIGENVAL_gaas"))
+    dir = mktempdir()
+    h5write(joinpath(dir, "eig_3d.h5"), "kpoints", reshape(kp, 3, :, 1))
+    h5write(joinpath(dir, "eig_3d.h5"), "eigenvalues", reshape(Es, size(Es)..., 1))
+    h5write(joinpath(dir, "eig_2d.h5"), "kpoints", kp)
+    h5write(joinpath(dir, "eig_2d.h5"), "eigenvalues", Es)
+
+    for file in ["eig_3d.h5", "eig_2d.h5"]
+        conf = get_empty_config()
+        set_value!(conf, "train_data", "Optimizer", joinpath(dir, file))
+        set_value!(conf, "val_data", "Optimizer", joinpath(dir, file))
+        set_value!(conf, "bandmin", "Optimizer", 3)
+        set_value!(conf, "val_bandmin", "Optimizer", 1)
+        dl = DataLoader(Dict(""=>[1]), Dict(""=>[1]), Dict("" => 8), Dict("" => 8), conf)
+        @test length(dl.train_data) == 1
+        @test dl.train_data[1].kp == kp
+        @test dl.train_data[1].Es == Es[3:10, :]
+        @test dl.val_data[1].Es == Es[1:8, :]
+    end
+
+    # pc mode uses one structure, so a file with several structures is an error
+    conf = get_empty_config()
+    set_value!(conf, "train_data", "Optimizer", joinpath(path, "eigenvalues_md.h5"))
+    @test_throws ArgumentError DataLoader(Dict(""=>[1]), Dict(""=>[1]), Dict("" => 8), Dict("" => 8), conf)
+end
+
+@testset "DataLoader band range beyond data" begin
+    path = joinpath(@__DIR__, "test_files")
+    conf = get_empty_config()
+    set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
+    set_value!(conf, "bandmin", "Optimizer", 42)
+    @test_throws ArgumentError DataLoader(Dict(""=>[1]), Dict(""=>[1]), Dict("" => 8), Dict("" => 8), conf)
+
+    # 32 bands in the file: bandmin = 2 with 32 orbitals needs band 33
+    set_value!(conf, "train_data", "Optimizer", joinpath(path, "eigenvalues_md.h5"))
+    set_value!(conf, "train_mode", "Optimizer", "MD")
+    set_value!(conf, "bandmin", "Optimizer", 2)
+    @test_throws ArgumentError DataLoader(Dict(""=>[2, 3]), Dict(""=>[1]), Dict("" => 32), Dict("" => 32), conf)
+end
+
+@testset "DataLoader energy unit" begin
+    path = joinpath(@__DIR__, "test_files")
+    kp, Es = Hamster.read_eigenval(joinpath(path, "EIGENVAL_gaas"), 8)
+    Hr, _, _ = Hamster.read_hrdat(joinpath(path, "wannier90_hr.dat"))
+
+    for (unit, factor) in [("eV", 1.0), ("Hartree", 27.211386245988), ("ry", 13.605693122994)]
+        conf = get_empty_config()
+        set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
+        set_value!(conf, "val_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
+        set_value!(conf, "data_unit", "Optimizer", unit)
+        dl = DataLoader(Dict(""=>[1]), Dict(""=>[1]), Dict("" => 8), Dict("" => 8), conf)
+        @test dl.train_data[1].Es ≈ factor .* Es
+        @test dl.val_data[1].Es ≈ factor .* Es
+        @test dl.train_data[1].kp == kp
+
+        set_value!(conf, "train_data", "Optimizer", joinpath(path, "wannier90_hr.dat"))
+        set_value!(conf, "val_data", "Optimizer", joinpath(path, "wannier90_hr.dat"))
+        set_value!(conf, "hr_fit", "Optimizer", true)
+        dl = DataLoader(Dict(""=>[]), Dict(""=>[]), Dict("" => 8), Dict("" => 8), conf)
+        @test all(dl.train_data[1].Hr[R] ≈ factor .* Hr[R] for R in eachindex(Hr))
+        @test all(dl.val_data[1].Hr[R] ≈ factor .* Hr[R] for R in eachindex(Hr))
+    end
+
+    conf = get_empty_config()
+    set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
+    set_value!(conf, "data_unit", "Optimizer", "kcal")
+    @test_throws ArgumentError DataLoader(Dict(""=>[1]), Dict(""=>[1]), Dict("" => 8), Dict("" => 8), conf)
+end
+
 @testset "DataLoader MD Eigs" begin
     path = joinpath(@__DIR__, "test_files")
     conf = get_empty_config()
