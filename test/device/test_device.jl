@@ -1,4 +1,5 @@
 using JLArrays
+@isdefined(chebyshev_test_matrix) || include(joinpath(@__DIR__, "..", "model", "chebyshev_helpers.jl"))
 
 device_path = joinpath(@__DIR__, "..", "calc", "test_files")
 device_soc_path = joinpath(@__DIR__, "..", "soc", "test_files")
@@ -161,22 +162,40 @@ end
 end
 
 @testset "Device sparse diagonalization" begin
-    conf = get_device_test_config(sp_mode=true, sp_diag=true)
-    set_value!(conf, "neig", 4)
-    set_value!(conf, "eig_target", 0.5)
-    set_value!(conf, "diag_method", "krylov-schur")
-    ham_cpu, ham_dev = get_device_test_hams(conf, ArrayDevice(JLArray))
+    for method in ["krylov-schur", "chebyshev"]
+        conf = get_device_test_config(sp_mode=true, sp_diag=true)
+        set_value!(conf, "neig", 4)
+        set_value!(conf, "eig_target", 0.5)
+        set_value!(conf, "eigsolver", method)
+        ham_cpu, ham_dev = get_device_test_hams(conf, ArrayDevice(JLArray))
 
-    Es_full, _ = diagonalize(Matrix.(get_hamiltonian(ham_cpu, 1, ks_device_test)))
-    Hk_dev = get_hamiltonian(ham_dev, 1, ks_device_test)
-    @test Hamster.host_hamiltonians(Hk_dev) isa Vector{<:SparseMatrixCSC}
-    Es_dev, vs_dev = diagonalize(Hk_dev, Neig=4, target=0.5, method="krylov-schur")
-    for k in axes(Es_full, 2)
-        Es_closest = sort(Es_full[sortperm(abs.(Es_full[:, k] .- 0.5))[1:4], k])
-        @test Es_dev[:, k] ≈ Es_closest atol=1e-6
+        Hk_cpu = get_hamiltonian(ham_cpu, 1, ks_device_test)
+        Es_full, _ = diagonalize(Matrix.(Hk_cpu))
+        Hk_dev = get_hamiltonian(ham_dev, 1, ks_device_test)
+        @test Hamster.host_hamiltonians(Hk_dev) isa Vector{<:SparseMatrixCSC}
+        Es_dev, vs_dev = diagonalize(Hk_dev, Neig=4, target=0.5, method=method)
+        for k in axes(Es_full, 2)
+            Es_closest = sort(Es_full[sortperm(abs.(Es_full[:, k] .- 0.5))[1:4], k])
+            @test Es_dev[:, k] ≈ Es_closest atol=1e-6
+            @test norm(Hk_cpu[k] * vs_dev[:, :, k] .- transpose(Es_dev[:, k]) .* vs_dev[:, :, k]) < 1e-6
+        end
+        @test issorted(Es_dev[:, 1])
+        @test size(vs_dev) == (size(Es_full, 1), 4, 3)
     end
-    @test issorted(Es_dev[:, 1])
-    @test size(vs_dev) == (size(Es_full, 1), 4, 3)
+end
+
+@testset "Device Chebyshev eigensolver" begin
+    # The device kernel (CSR) gives the same block products and eigenpairs as the threaded CPU kernel (Hermitian CSC)
+    H = chebyshev_test_matrix(5)
+    Ht = sparse(transpose(H))                        # CSC of the transpose = CSR of H
+    op = Hamster.CSRBlockOperator(JLArray(Int32.(Ht.colptr)), JLArray(Int32.(Ht.rowval)), JLArray(Ht.nzval))
+    X = randn(ComplexF64, 3, size(H, 1)); Z = randn(ComplexF64, 3, size(H, 1))
+    Y = JLArray(similar(X))
+    Hamster.block_matvec!(Y, op, JLArray(X), 2.0, 0.5, -1.5, JLArray(Z))
+    @test Array(Y) ≈ 2 .* (transpose(H * transpose(X)) .- 0.5 .* X) .- 1.5 .* Z
+    Es, V, _ = Hamster.chebyshev_eigen(op, JLArray(ComplexF64[;;]), size(H, 1), 6, target=0.0)
+    @test V isa JLArray
+    @test Es ≈ closest_eigenvalues(eigvals(Hermitian(Matrix(H))), 6, 0.0) atol=1e-8
 end
 
 @testset "Device training step matches CPU training step" begin

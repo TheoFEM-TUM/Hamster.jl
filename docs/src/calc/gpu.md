@@ -47,8 +47,9 @@ All models are linear in their parameters. When the `EffectiveHamiltonian` is co
 2. assembles the sparse k-space Hamiltonians,
 3. diagonalizes them:
    - `sp_diag = false`: dense eigensolver of cuSOLVER for matrices of size 512 and larger; smaller matrices are copied to the host and diagonalized with LAPACK (threaded over k-points), which is faster for them,
-   - `sp_diag = true` and `diag_method = krylov-schur`: Krylov-Schur (KrylovKit.jl) with cuSPARSE matrix-vector products,
-   - `sp_diag = true` and `diag_method = shift-invert`: Krylov-Schur on the shift-inverted Hamiltonian, factorized with cuDSS (requires CUDSS.jl),
+   - `sp_diag = true` and `eigsolver = krylov-schur`: Krylov-Schur (KrylovKit.jl) with cuSPARSE matrix-vector products,
+   - `sp_diag = true` and `eigsolver = shift-invert`: Krylov-Schur on the shift-inverted Hamiltonian, factorized with cuDSS (requires CUDSS.jl),
+   - `sp_diag = true` and `eigsolver = chebyshev`: Chebyshev-filtered subspace iteration with a custom sparse kernel for blocks of vectors (no factorization, so the memory grows only linearly with the system size),
 4. computes the gradient of the loss w.r.t. the model parameters (Hellmann-Feynman theorem).
 
 The optimizer, the loss and the MPI communication remain on the CPU, since they only involve eigenvalues and parameter vectors.

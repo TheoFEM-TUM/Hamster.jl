@@ -114,6 +114,7 @@ function read_config_block!(block::ConfigBlock, conf::Config)
     for line in block.content
         if occursin('=', line) && length(filter_comment(line)) > 0
             option_key, option_value = read_config_line(filter_comment(line))
+            option_key = renamed_tag(option_key)
             if block.header[end] == "Options"
                 set_value!(conf, option_key, option_value)
             else
@@ -121,6 +122,28 @@ function read_config_block!(block::ConfigBlock, conf::Config)
             end
         end
     end
+end
+
+"""
+    RENAMED_TAGS
+
+Input tags that were renamed (old name => new name). Config files with an old name keep working: the value is used for
+the new tag, with a warning.
+"""
+const RENAMED_TAGS = Dict("diag_method" => "eigsolver")
+
+"""
+    renamed_tag(key)
+
+The current name of the input tag `key` (see `RENAMED_TAGS`); warns (on the first MPI rank) if `key` is an old name.
+"""
+function renamed_tag(key)
+    new_key = get(RENAMED_TAGS, lowercase(key), nothing)
+    isnothing(new_key) && return key
+    if !MPI.Initialized() || MPI.Comm_rank(MPI.COMM_WORLD) == 0
+        @warn "Input tag \"$key\" was renamed to \"$new_key\"; please update the config file."
+    end
+    return new_key
 end
 
 """
