@@ -326,3 +326,91 @@ end
     Hamster.apply_ewald_settings!(only_rcut, strcs=[strc])                    # no fit: alpha = 3 / rcut when the model is built
     @test Hamster.ewald_alpha("wolf", Hamster.get_ewald_rcut(only_rcut), Hamster.get_ewald_alpha(only_rcut)) ≈ 0.2
 end
+
+@testset "Site-dependent charges" begin
+    # MAPbBr3 primitive cell: Br 1-3, Pb 4, C 5, N 6, H 7-9 bonded to N, H 10-12 bonded to C; the C-N bond and the
+    # N-H bonds cross the cell boundary
+    function mapbbr3_conf(; sites=true)
+        conf = get_empty_config()
+        set_value!(conf, "orbitals", "Pb", "s px py pz")
+        set_value!(conf, "orbitals", "Br", "px py pz")
+        # neutral: with qeff_N, qeff_C (H = 0.239 is the fallback) or with one charge for all H atoms (0.2345)
+        for (type, q) in (("Pb", 1.094), ("Br", -0.509), ("C", -0.254), ("N", -0.72), ("H", sites ? 0.239 : 0.2345))
+            set_value!(conf, "qeff", type, q)
+        end
+        if sites
+            set_value!(conf, "qeff_N", "H", 0.349)
+            set_value!(conf, "qeff_C", "H", 0.12)
+        end
+        set_value!(conf, "poscar", joinpath(@__DIR__, "test_files/POSCAR_mapbbr3"))
+        set_value!(conf, "rcut", 5.5)
+        set_value!(conf, "method", "Ewald", "wolf")
+        set_value!(conf, "rcut", "Ewald", 12.0)
+        set_value!(conf, "verbosity", 0)
+        return conf
+    end
+    conf = mapbbr3_conf()
+    strc = Structure(conf)
+    pos = Hamster.get_ion_positions(strc.ions, apply_distortion=true)
+
+    @test Hamster.site_charge_element("qeff_N") == "N" && Hamster.site_charge_element("qeff_br") == "Br"
+    @test isnothing(Hamster.site_charge_element("qeff")) && isnothing(Hamster.site_charge_element("qeff_Xy"))
+    @test Hamster.get_site_qeff(conf, "H") == ["C" => 0.12, "N" => 0.349]
+    @test isempty(Hamster.get_site_qeff(conf, "Pb"))
+
+    charges, sites = Hamster.get_site_charges(strc, conf)
+    @test sites == ["Br", "Br", "Br", "Pb", "C", "N", "H(N)", "H(N)", "H(N)", "H(C)", "H(C)", "H(C)"]
+    @test charges == [-0.509, -0.509, -0.509, 1.094, -0.254, -0.72, 0.349, 0.349, 0.349, 0.12, 0.12, 0.12]
+
+    # Potentials with the site charges; without qeff_<element> the species charges as before
+    basis = Basis(strc, conf)
+    model = EwaldOnsites([strc], [basis], comm, conf)
+    direct = Hamster.ewald_sum(pos, charges, strc.lattice, rcut=12.0, method="wolf", alpha=0.25).potentials[1:4]
+    @test model.potentials[1] ≈ direct .- [mean(direct[1:3]), mean(direct[1:3]), mean(direct[1:3]), direct[4]]
+    plain = mapbbr3_conf(sites=false)
+    plain_charges, plain_sites = Hamster.get_site_charges(strc, plain)
+    @test plain_sites == string.(Hamster.number_to_element.(Hamster.get_ion_types(strc.ions)))
+    @test plain_charges == [Hamster.get_qeff(plain, s) for s in plain_sites]
+    @test !(EwaldOnsites([strc], [basis], comm, plain).potentials[1] ≈ model.potentials[1])
+
+    # No neighbour within site_rcut: the H atoms keep qeff and the cell is not neutral
+    short = mapbbr3_conf()
+    set_value!(short, "site_rcut", "Ewald", 0.5)
+    @test Hamster.get_site_charges(strc, short)[2][7:12] == fill("H", 6)
+    @test_throws ErrorException EwaldOnsites([strc], [basis], comm, short)
+    @test_throws ErrorException Hamster.check_neutrality([1.0, -0.5], ["Pb", "Br"])
+    @test isnothing(Hamster.check_neutrality([1.0, -1.0], ["Pb", "Br"]))
+    large = mapbbr3_conf()
+    set_value!(large, "site_rcut", "Ewald", 6.0)
+    @test_throws ErrorException Hamster.get_site_charges(strc, large)
+
+    # Config check: qeff_<element> is a valid key of the atom blocks
+    @test isempty(filter(m -> occursin("qeff_", m), Hamster.check_config_tags(conf)))
+    set_value!(conf, "qeff_Xy", "H", 0.1)
+    @test any(m -> occursin("qeff_xy", m), Hamster.check_config_tags(conf))
+
+    mktempdir() do dir
+        cd(dir) do
+            # Summary in hamster.out
+            touch("hamster.out")
+            model = EwaldOnsites([strc], [basis], comm, mapbbr3_conf(), label="sites")
+            out = read("hamster.out", String)
+            @test occursin("site charges (sites)", out) && occursin("H(C) 0.12 (3)", out) && occursin("H(N) 0.349 (3)", out)
+
+            # Parameter file: written as ewald_qeff_H_N and taken over by a config without them
+            Hamster.write_params(Hamster.ParameterLabel[], Float64[], ["Pb"], [0.25], mapbbr3_conf())
+            Hamster.write_params(model, mapbbr3_conf())
+            header = Hamster.read_params("params.dat")[5]
+            @test parse(Float64, header["ewald_qeff_H_N"]) == 0.349 && parse(Float64, header["ewald_qeff_H_C"]) == 0.12
+            new = mapbbr3_conf(sites=false)
+            set_value!(new, "qeff", "H", 0.239)
+            set_value!(new, "init_params", "Ewald", "params.dat")
+            Hamster.apply_ewald_settings!(new)
+            @test Hamster.get_site_qeff(new, "H") == ["C" => 0.12, "N" => 0.349]
+            different = mapbbr3_conf()
+            set_value!(different, "qeff_N", "H", 0.3)
+            set_value!(different, "init_params", "Ewald", "params.dat")
+            @test_throws ErrorException Hamster.apply_ewald_settings!(different)
+        end
+    end
+end

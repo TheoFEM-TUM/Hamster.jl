@@ -154,6 +154,8 @@ end
 
 # Keys of the Optimizer block with an index (band or k-point weights such as wE_3, wE_10-20, wk_1)
 is_indexed_weight(key, block) = block == "Optimizer" && occursin(r"^w[ek]_[0-9]+(-[0-9]+)?$", lowercase(key))
+# Site-dependent charges qeff_<element> of the atom blocks
+is_site_charge(key, block) = block == "atom" && !isnothing(site_charge_element(key))
 is_atom_block(name) = haskey(elements, Symbol(name))
 
 """
@@ -168,6 +170,7 @@ function check_config_tags(conf::Config)
     function check(key, block, shown_block)
         isempty(find_tags(key, block=block)) || return
         is_indexed_weight(key, block) && return
+        is_site_charge(key, block) && return
         elsewhere = find_tags(key)
         if !isempty(elsewhere)
             push!(messages, "Input tag \"$key\" has no effect in the $shown_block block; it belongs in the " *

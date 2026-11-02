@@ -16,4 +16,5 @@ get_ewald(conf::Config)::Bool = haskey(conf.blocks, "Ewald") || (conf("ewald") â
 @configtag charge_scale Float64 1.0 "scaling factor for charge values" "Ewald" category="model"
 @configtag alpha Float64 0. "Ewald dampening parameter; 0: 4 / rcut for method = ewald, 3 / rcut for wolf and zahn." "Ewald" category="electrostatics" default_doc="0: 4 / rcut for method = ewald, 3 / rcut for wolf and zahn"
 @configtag mesh_spacing Float64 0.5 "Grid spacing for reciprocal-space PME." "Ewald" category="electrostatics"
+@configtag site_rcut Float64 2.0 "search radius (Ã…) for the bonded neighbour of the site-dependent charges qeff_<element> of the atom blocks; at most rcut of the Options block." "Ewald" category="electrostatics" see_also=["qeff"]
 @configtag check_params Bool true "take method, rcut, alpha and qeff from the header of the parameter file if they are not set, stop if they differ (false: use the config)." "Ewald" category="model"
