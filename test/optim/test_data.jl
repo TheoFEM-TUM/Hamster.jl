@@ -110,9 +110,11 @@ end
         @test dl.train_data[1].kp == kp
 
         set_value!(conf, "train_data", "Optimizer", joinpath(path, "wannier90_hr.dat"))
+        set_value!(conf, "val_data", "Optimizer", joinpath(path, "wannier90_hr.dat"))
         set_value!(conf, "hr_fit", "Optimizer", true)
         dl = DataLoader(Dict(""=>[]), Dict(""=>[]), Dict("" => 8), Dict("" => 8), conf)
         @test all(dl.train_data[1].Hr[R] ≈ factor .* Hr[R] for R in eachindex(Hr))
+        @test all(dl.val_data[1].Hr[R] ≈ factor .* Hr[R] for R in eachindex(Hr))
     end
 
     conf = get_empty_config()
