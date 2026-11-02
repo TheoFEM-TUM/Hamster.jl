@@ -74,60 +74,119 @@ Return the number of TB overlap parameters defined in `basis`.
 nparams(basis::Basis) = length(basis.parameters)
 
 """
-    get_geometry_tensor(strc, basis, conf=get_empty_config(); tmethod=get_tmethod(conf), rcut=get_rcut(conf))
+    get_geometry_tensor(strc, basis, conf=get_empty_config(); file=nothing, comm=nothing, npar=Threads.nthreads(),
+                        tmethod=get_tmethod(conf), rcut=get_rcut(conf), sp_tol=get_sp_tol(conf),
+                        rcut_tol=get_rcut_tol(conf))
 
-Constructs the geometry tensor based on the structure of the system, the orbital basis, and configuration settings.
+Geometry tensor of the structure `strc` in the basis `basis`: a matrix `h[v, R]` of sparse `Nε × Nε` matrices with the
+contribution of parameter `v` to the Hamiltonian between the home cell and the translation `R`, such that
+`H(R) = Σᵥ pᵥ h[v, R]`.
 
-# Arguments
-- `strc`: The structure object, containing information about ions, lattice, and geometry of the system.
-- `basis`: The basis object, containing the orbital information and overlap parameters.
-- `conf`: Configuration object, defaults to an empty configuration if not provided.
-- `tmethod`: Transformation method used for coordinate system alignment (default is obtained from the configuration).
-- `rcut`: Cutoff distance for nearest neighbor interactions (default is obtained from the configuration).
+A pair of ions is included if its distance is within `rcut` for the reference positions (`pos`) and within
+`rcut + |rcut_tol|` for the distorted positions (`pos - dist`). The matrix elements use the distorted positions.
 
 # Keyword Arguments
-- `tmethod`: The transformation method for aligning coordinate systems.
-- `rcut`: The distance cutoff for nearest neighbor interactions.
-
-# Returns
-- The reshaped geometry tensor, represented as a matrix of sparse matrices, which encodes the overlap contributions for the system's orbital interactions for each parameter.
+- `file`, `comm`: HDF5 file and MPI communicator to read the radial functions (rllm) from.
+- `npar`: number of threads; the grid cells are split into `4 npar` chunks.
+- `tmethod`: method for the Slater-Koster transformation matrix.
+- `rcut`, `rcut_tol`: cutoff radius and width of the smooth cutoff (above `rcut` if positive, below if negative).
+- `sp_tol`: entries with a smaller absolute value are dropped.
 """
 function get_geometry_tensor(strc, basis, conf=get_empty_config();
-                                file=nothing,
-                                comm=nothing,
-                                rank=0,
-                                nranks=1,
-                                npar=Threads.nthreads(),
-                                tmethod=get_tmethod(conf), 
-                                rcut=get_rcut(conf), 
-                                sp_tol=get_sp_tol(conf), 
-                                rcut_tol=get_rcut_tol(conf))
-
-    norbs = length.(basis.orbitals)
-    offset = cumsum(vcat(0, norbs[1:end-1]))
-    ion_types = get_ion_types(strc.ions)
-    # Nearest-neighbor cutoffs from the reference positions: midpoint between the first two shells, so that
-    # distorted bonds keep their label (see get_nn_cutoffs)
-    nn_dict = get_nn_cutoffs(strc.ions, frac_to_cart(strc.Rs, strc.lattice), strc.point_grid, conf)
-    oc_dicts, mode_dicts = get_oc_and_mode_dicts(basis.overlaps, strc.ions)
-
+                             file=nothing,
+                             comm=nothing,
+                             npar=Threads.nthreads(),
+                             tmethod=get_tmethod(conf),
+                             rcut=get_rcut(conf),
+                             sp_tol=get_sp_tol(conf),
+                             rcut_tol=get_rcut_tol(conf))
     Ts = frac_to_cart(strc.Rs, strc.lattice)
+    lookup = geometry_tensor_lookup(strc, basis, conf, file=file, comm=comm)
+    nn_cutoffs = get_nn_cutoffs(strc.ions, Ts, strc.point_grid, conf)
+    onsite, sepNN = get_onsite(conf), get_sepNN(conf)
 
-    rllm_dict = get_rllm_from_file(basis.overlaps, conf, comm = comm, file=file)
-    # Distance dependence and label of every overlap, looked up once instead of for every matrix element
-    rllms = [rllm_dict[string(Cllm, apply_oc=true)] for Cllm in basis.overlaps]
-    overlap_labels = [me_to_overlap_label(Cllm.type) for Cllm in basis.overlaps]
-    # Whether an overlap contributes to a matrix element depends only on the ion types and the angular momenta
-    # of the two orbitals, so the contributing overlaps are determined once per combination
-    representative_orbitals = Dict{Tuple{Int64, Int64}, eltype(eltype(basis.orbitals))}()
-    for iion in eachindex(basis.orbitals), orb in basis.orbitals[iion]
-        get!(representative_orbitals, (Int64(ion_types[iion]), orb.type.l), orb)
+    parts = tmap(grid_cell_chunks(strc.point_grid, n=4 * npar)) do chunk
+        entries = (v=Int64[], i=Int64[], j=Int64[], R=Int64[], val=Float64[])
+        radial = zeros(length(basis.overlaps))
+        angles = zeros(5)
+        for (grid_point, inds) in chunk, nn_grid_point in nn_grid_points(grid_point, strc.point_grid.dictR),
+            (iion2, R) in strc.point_grid.dictR[nn_grid_point], iion1 in inds
+
+            (isempty(basis.orbitals[iion1]) || isempty(basis.orbitals[iion2])) && continue
+            ion1, ion2 = strc.ions[iion1], strc.ions[iion2]
+            T⃗ = SVector{3, Float64}(Ts[1, R], Ts[2, R], Ts[3, R])
+            r⃗₁ = ion1.pos - ion1.dist
+            r⃗₂ = apply_pbc(ion2.pos, T⃗) - ion2.dist
+            r = normdiff(r⃗₁, r⃗₂)
+            (normdiff(ion1.pos, ion2.pos, T⃗) ≤ rcut && r - abs(rcut_tol) < rcut) || continue
+
+            ion_label = IonLabel(lookup.ion_types[iion1], lookup.ion_types[iion2], sorted=false)
+            nnlabel = get_nn_label(r, nn_cutoffs[ion_label], conf, onsite=onsite, sepNN=sepNN)
+            radial_parts!(radial, lookup, ion_label, r, fcut(r, rcut, rcut_tol))
+            add_bond_entries!(entries, angles, lookup, basis, iion1, iion2, R, r⃗₁, r⃗₂, nnlabel, radial, tmethod, sp_tol)
+        end
+        entries
     end
-    # For neighbors (nnlabel ≠ 0), the parameter index depends only on the overlap and the nearest-neighbor label
+    return assemble_geometry_tensor(parts, length(basis.parameters), size(strc.Rs, 2), length(basis))
+end
+
+"""
+    geometry_tensor_lookup(strc, basis, conf; file=nothing, comm=nothing)
+
+Everything `get_geometry_tensor` needs per bond that depends only on the basis and the ion types, computed once per
+structure:
+- `ion_types`, `offset`: type of each ion and index of its first orbital minus one;
+- `orbital_axes`, `orbital_ls`: axis and angular momentum of every orbital of every ion;
+- `rllms`, `overlap_types`: radial function and sorted ion types of every overlap;
+- `overlap_labels`, `param_indices`: see `get_neighbor_param_indices`;
+- `contributing_overlaps`: see `get_contributing_overlaps`;
+- `oc_dicts`, `mode_dicts`: see `get_oc_and_mode_dicts`.
+"""
+function geometry_tensor_lookup(strc, basis, conf; file=nothing, comm=nothing)
+    ion_types = get_ion_types(strc.ions)
+    rllm_dict = get_rllm_from_file(basis.overlaps, conf, comm=comm, file=file)
+    overlap_labels = [me_to_overlap_label(overlap.type) for overlap in basis.overlaps]
+    oc_dicts, mode_dicts = get_oc_and_mode_dicts(basis.overlaps, strc.ions)
+    return (ion_types = ion_types,
+            offset = cumsum(vcat(0, length.(basis.orbitals)[1:end-1])),
+            orbital_axes = [SVector{3, Float64}[orb.axis for orb in orbs] for orbs in basis.orbitals],
+            orbital_ls = [Int64[orb.type.l for orb in orbs] for orbs in basis.orbitals],
+            rllms = [rllm_dict[string(overlap, apply_oc=true)] for overlap in basis.overlaps],
+            overlap_types = SVector{2, UInt8}[sort(overlap.ion_label.types) for overlap in basis.overlaps],
+            overlap_labels = overlap_labels,
+            param_indices = get_neighbor_param_indices(basis, overlap_labels),
+            contributing_overlaps = get_contributing_overlaps(basis, ion_types),
+            oc_dicts = oc_dicts,
+            mode_dicts = mode_dicts)
+end
+
+"""
+    get_neighbor_param_indices(basis, overlap_labels)
+
+Parameter index for every overlap `k` and nearest-neighbor label `nnlabel ≠ 0` as a dictionary `(k, nnlabel) => v`.
+Unlike on-site parameters, these do not depend on the orbitals.
+"""
+function get_neighbor_param_indices(basis, overlap_labels)
     param_indices = Dict{Tuple{Int64, Int64}, Int64}()
     for k in eachindex(basis.overlaps), nnlabel in unique(Int64(param.nnlabel) for param in basis.parameters)
         nnlabel == 0 && continue
-        param_indices[(k, nnlabel)] = get_param_index(basis.overlaps[k], nnlabel, basis.parameters, nothing, nothing, 0, 0, overlap_label=overlap_labels[k])
+        param_indices[(k, nnlabel)] = get_param_index(basis.overlaps[k], nnlabel, basis.parameters, nothing, nothing,
+                                                      0, 0, overlap_label=overlap_labels[k])
+    end
+    return param_indices
+end
+
+"""
+    get_contributing_overlaps(basis, ion_types)
+
+Indices of the overlaps that contribute to the matrix element between two orbitals as a dictionary
+`(ion_type1, ion_type2, l1, l2) => ks`. This depends only on the ion types and angular momenta of the two orbitals
+(see `overlap_contributes_to_matrix_element`).
+"""
+function get_contributing_overlaps(basis, ion_types)
+    representative_orbitals = Dict{Tuple{Int64, Int64}, eltype(eltype(basis.orbitals))}()
+    for iion in eachindex(basis.orbitals), orb in basis.orbitals[iion]
+        get!(representative_orbitals, (Int64(ion_types[iion]), orb.type.l), orb)
     end
     contributing_overlaps = Dict{NTuple{4, Int64}, Vector{Int64}}()
     for ((type1, l1), orb1) in representative_orbitals, ((type2, l2), orb2) in representative_orbitals
@@ -135,84 +194,90 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
         contributing_overlaps[(type1, type2, l1, l2)] = [k for k in eachindex(basis.overlaps)
             if overlap_contributes_to_matrix_element(basis.overlaps[k], orb1, orb2, ion_label)]
     end
-    orbital_axes = [SVector{3, Float64}[orb.axis for orb in orbs] for orbs in basis.orbitals]
-    orbital_ls = [Int64[orb.type.l for orb in orbs] for orbs in basis.orbitals]
-    overlap_types = SVector{2, UInt8}[sort(Cllm.ion_label.types) for Cllm in basis.overlaps]
-    onsite, sepNN = get_onsite(conf), get_sepNN(conf)
-    parts = tmap(grid_cell_chunks(strc.point_grid, n=4 * npar)) do chunk
-        entries = (v=Int64[], i=Int64[], j=Int64[], R=Int64[], val=Float64[])
-        radial = zeros(length(basis.overlaps))
-        angles = zeros(5)
-        for (grid_point, inds) in chunk, nn_grid_point in nn_grid_points(grid_point, strc.point_grid.dictR),
-            (iion2, R) in strc.point_grid.dictR[nn_grid_point], iion1 in inds
-            ion_label = IonLabel(ion_types[iion1], ion_types[iion2], sorted=false)
-            T⃗ = SVector{3, Float64}(Ts[1, R], Ts[2, R], Ts[3, R])
-            r⃗₁ = strc.ions[iion1].pos - strc.ions[iion1].dist
-            r⃗₂ = apply_pbc(strc.ions[iion2].pos, T⃗) - strc.ions[iion2].dist
-            
-            r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, T⃗)
-            r = normdiff(r⃗₁, r⃗₂)
-            if r_nd ≤ rcut && r-abs(rcut_tol) < rcut && length(basis.orbitals[iion1]) > 0 && length(basis.orbitals[iion2]) > 0
-                # Bond frames for both directions of the bond (the reversed one for swapped orbital pairs)
-                Û = get_sk_transform_matrix(r⃗₁, r⃗₂, orbital_axes[iion1][1], tmethod)
-                Û_swap = get_sk_transform_matrix(r⃗₂, r⃗₁, orbital_axes[iion1][1], tmethod)
-                nnlabel = get_nn_label(r, nn_dict[ion_label], conf, onsite=onsite, sepNN=sepNN)
-                # The radial part depends only on the overlap and the distance, not on the orbitals
-                f = fcut(r, rcut, rcut_tol)
-                types_sorted = sort(ion_label.types)
-                for k in eachindex(basis.overlaps)
-                    radial[k] = overlap_types[k] == types_sorted ? rllms[k](r) * f : 0.0
-                end
-                for jorb1 in eachindex(orbital_axes[iion1]), jorb2 in eachindex(orbital_axes[iion2])
-                    i = offset[iion1] + jorb1
-                    j = offset[iion2] + jorb2
-                    orb1 = basis.orbitals[iion1][jorb1]; orb2 = basis.orbitals[iion2][jorb2]
-                    # Hybrid orbitals (l < 0) are evaluated in the bond frame from atom 1 to atom 2, as before the d orbitals
-                    hybrid = orb1.type.l < 0 || orb2.type.l < 0
-                    bondswap = !hybrid && determine_bondswap(ion_types[iion1], ion_types[iion2], orb1.type, orb2.type, i, j)
-                    U = bondswap ? Û_swap : Û
-                    base = get_base_orb(orb1.type, orb2.type, bondswap=bondswap)
-                    θ₁, φ₁ = get_rotated_angles(U, orbital_axes[iion1][jorb1])
-                    θ₂, φ₂ = get_rotated_angles(U, orbital_axes[iion2][jorb2])
+    return contributing_overlaps
+end
 
-                    for k in contributing_overlaps[(Int64(ion_types[iion1]), Int64(ion_types[iion2]), orbital_ls[iion1][jorb1], orbital_ls[iion2][jorb2])]
-                        Cllm = basis.overlaps[k]
-                        mode = get_mode(mode_dicts, k, ion_label, jorb1, jorb2)
-                        orbconfig = get_orbconfig(oc_dicts, k, ion_label, jorb1, jorb2)
-                        # Base orbitals in the order of the parameter definition. Two signs of the bond direction (parity
-                        # (-1)^(l₁ + l₂) for odd l₁ + l₂), which the angular functions of dorbs did not account for:
-                        # - reversing the order of the base orbitals without reversing the bond;
-                        # - parameters with decreasing l (e.g. Ga+As_psσ), whose distance dependence already contains
-                        #   the sign (see distance_dependence), which the angular part applies again.
-                        reversed_base = !hybrid && Cllm.type.base_ls ≠ (base[1].l, base[2].l)
-                        base_k = reversed_base ? reverse(base) : base
-                        odd = !hybrid && isodd(base[1].l + base[2].l)
-                        flips = (reversed_base ? 1 : 0) + (Cllm.type.base_ls[1] > Cllm.type.base_ls[2] ? 1 : 0)
-                        parity = odd && isodd(flips) ? -1.0 : 1.0
-                        v::Int64 = nnlabel ≠ 0 ? get(param_indices, (k, nnlabel), 0) :
-                            get_param_index(Cllm, nnlabel, basis.parameters, orb1, orb2, i, j, overlap_label=overlap_labels[k])
+"""
+    radial_parts!(radial, lookup, ion_label, r, f)
 
-                        angles[1] = θ₁; angles[2] = φ₁; angles[3] = θ₂; angles[4] = φ₂
-                        evaluate_overlap!(angles, Cllm, base_k, orbconfig, mode)
-                        hval = parity * angles[5] * radial[k]
-
-                        if abs(hval) ≥ sp_tol
-                            push!(entries.v, v); push!(entries.i, i); push!(entries.j, j); push!(entries.R, R); push!(entries.val, hval)
-                        end
-                    end
-                end
-            end
-        end
-        entries
+Writes the radial function of every overlap at distance `r`, times the cutoff function value `f`, to `radial`
+(zero for overlaps of other ion types).
+"""
+function radial_parts!(radial, lookup, ion_label, r, f)
+    types = sort(ion_label.types)
+    for k in eachindex(radial)
+        radial[k] = lookup.overlap_types[k] == types ? lookup.rllms[k](r) * f : 0.0
     end
-    return assemble_geometry_tensor(parts, length(basis.parameters), size(strc.Rs, 2), length(basis)[1])
+    return radial
+end
+
+"""
+    add_bond_entries!(entries, angles, lookup, basis, iion1, iion2, R, r⃗₁, r⃗₂, nnlabel, radial, tmethod, sp_tol)
+
+Appends the geometry tensor entries `(v, i, j, R, val)` of all orbital pairs of the bond from ion `iion1` at `r⃗₁` to
+ion `iion2` at `r⃗₂` (translation `R`) to `entries`. `radial` are the radial parts from `radial_parts!` and `angles` is
+a buffer of length 5 for `evaluate_overlap!`.
+"""
+function add_bond_entries!(entries, angles, lookup, basis, iion1, iion2, R, r⃗₁, r⃗₂, nnlabel, radial, tmethod, sp_tol)
+    type1, type2 = lookup.ion_types[iion1], lookup.ion_types[iion2]
+    ion_label = IonLabel(type1, type2, sorted=false)
+    axes1, axes2 = lookup.orbital_axes[iion1], lookup.orbital_axes[iion2]
+    Û = get_sk_transform_matrix(r⃗₁, r⃗₂, axes1[1], tmethod)
+    Û_swap = get_sk_transform_matrix(r⃗₂, r⃗₁, axes1[1], tmethod)
+
+    for jorb1 in eachindex(axes1), jorb2 in eachindex(axes2)
+        i, j = lookup.offset[iion1] + jorb1, lookup.offset[iion2] + jorb2
+        orb1, orb2 = basis.orbitals[iion1][jorb1], basis.orbitals[iion2][jorb2]
+        # Hybrid orbitals (l < 0) are always evaluated in the bond frame from ion 1 to ion 2
+        hybrid = orb1.type.l < 0 || orb2.type.l < 0
+        bondswap = !hybrid && determine_bondswap(type1, type2, orb1.type, orb2.type, i, j)
+        base = get_base_orb(orb1.type, orb2.type, bondswap=bondswap)
+        U = bondswap ? Û_swap : Û
+        angles[1], angles[2] = get_rotated_angles(U, axes1[jorb1])
+        angles[3], angles[4] = get_rotated_angles(U, axes2[jorb2])
+
+        ls = (Int64(type1), Int64(type2), lookup.orbital_ls[iion1][jorb1], lookup.orbital_ls[iion2][jorb2])
+        for k in lookup.contributing_overlaps[ls]
+            overlap = basis.overlaps[k]
+            base_k, parity = base_in_parameter_order(overlap, base, hybrid)
+            orbconfig = get_orbconfig(lookup.oc_dicts, k, ion_label, jorb1, jorb2)
+            mode = get_mode(lookup.mode_dicts, k, ion_label, jorb1, jorb2)
+            evaluate_overlap!(angles, overlap, base_k, orbconfig, mode)
+            val = parity * angles[5] * radial[k]
+            abs(val) ≥ sp_tol || continue
+
+            v = nnlabel ≠ 0 ? get(lookup.param_indices, (k, nnlabel), 0) :
+                get_param_index(overlap, nnlabel, basis.parameters, orb1, orb2, i, j, overlap_label=lookup.overlap_labels[k])
+            push!(entries.v, v); push!(entries.i, i); push!(entries.j, j); push!(entries.R, R); push!(entries.val, val)
+        end
+    end
+    return entries
+end
+
+"""
+    base_in_parameter_order(overlap, base, hybrid)
+
+The base orbitals `base` in the order of the parameter definition of `overlap`, and the sign of the angular part.
+
+For odd `l₁ + l₂`, the sign changes with the bond direction (parity `(-1)^(l₁ + l₂)`), which the angular functions do
+not account for. This happens when the base orbitals are reversed without reversing the bond, and for parameters with
+decreasing `l` (e.g. `Ga+As_psσ`), whose distance dependence already contains the sign (see `distance_dependence`).
+Hybrid orbitals keep their order and sign.
+"""
+function base_in_parameter_order(overlap, base, hybrid)
+    hybrid && return base, 1.0
+    reversed = overlap.type.base_ls ≠ (base[1].l, base[2].l)
+    decreasing = overlap.type.base_ls[1] > overlap.type.base_ls[2]
+    parity = isodd(base[1].l + base[2].l) && reversed ⊻ decreasing ? -1.0 : 1.0
+    return reversed ? reverse(base) : base, parity
 end
 
 """
     evaluate_overlap!(buffer, overlap, base, orbconfig, mode)
 
 Writes the angular part of `overlap` with the base orbitals `base` for the angles `buffer[1:4]` (θ₁, φ₁, θ₂, φ₂) to
-`buffer[5]`.
+`buffer[5]`. The types of `overlap`, `orbconfig` and `mode` are only known at run time; writing the result to a buffer
+instead of returning it avoids allocations.
 """
 function evaluate_overlap!(buffer, overlap, base, orbconfig, mode)
     @inbounds buffer[5] = overlap(base, orbconfig, mode, buffer[1], buffer[2], buffer[3], buffer[4])
@@ -370,46 +435,6 @@ function get_oc_and_mode_dicts(overlaps, ions)
         push!(mode_dicts, mode_dict)
     end
     return oc_dicts, mode_dicts
-end
-
-"""
-    reshape_geometry_tensor(h_dict, NV, NR, Nε)
-
-Reshapes the geometry tensor from a dictionary `h_dict` into a matrix of sparse matrices.
-
-# Arguments
-- `h_dict::Dict`: A dictionary where keys are tuples of the form `(v, i, j, R)` representing
-  the tensor indices, and values are the corresponding tensor entries.
-- `NV::Int`: Number of rows (vectors) in the reshaped matrix.
-- `NR::Int`: Number of columns (points) in the reshaped matrix.
-- `Nε::Int`: Not used explicitly in this function but typically represents the number of strain components.
-
-# Returns
-- A `NV x NR` matrix `h_out` where each element is a sparse matrix (`SparseMatrixCSC{Float64, Int64}`) formed by the corresponding
-  indices and values from the input dictionary `h_dict`.
-"""
-function reshape_geometry_tensor(h_dict, NV, NR, Nε)
-    # Count the entries first, such that the index vectors can be allocated with their final size
-    counts = zeros(Int64, NV, NR)
-    for (v, _, _, R) in keys(h_dict)
-        counts[v, R] += 1
-    end
-    is = [Vector{Int64}(undef, counts[v, R]) for v in 1:NV, R in 1:NR]
-    js = [Vector{Int64}(undef, counts[v, R]) for v in 1:NV, R in 1:NR]
-    vals = [Vector{Float64}(undef, counts[v, R]) for v in 1:NV, R in 1:NR]
-    fill!(counts, 0)
-    for (key, val) in h_dict
-        v, i, j, R = key
-        n = counts[v, R] += 1
-        is[v, R][n] = i
-        js[v, R][n] = j
-        vals[v, R][n] = val
-    end
-    h_out = Matrix{SparseMatrixCSC{Float64, Int64}}(undef, NV, NR)
-    for R in axes(h_out, 2), v in axes(h_out, 1)
-        h_out[v, R] = sparse(is[v, R], js[v, R], vals[v, R], Nε, Nε)
-    end
-    return h_out
 end
 
 """
