@@ -91,3 +91,43 @@ end
     @test all(mean(abs.(rllm_2[key].(xs) .- rllm_correct[key].(xs))) < 2e-3 for key in keys(rllm))
     rm("rllm.h5")
 end
+# With several MPI ranks, every rank interpolates a part of the overlaps into a temporary file, which rank 0 merges into
+# rllm_file. This also has to work if rllm_file is a text file (it failed before: the temporary .dat files were opened
+# as HDF5). Rank 0 of two ranks is emulated in a single process.
+@testset "Rllm from several ranks" begin
+    conf = get_empty_config()
+    for (element, alpha) in (("Ga", 9), ("As", 13))
+        set_value!(conf, "orbitals", element, "s px py pz"); set_value!(conf, "n", element, 3); set_value!(conf, "alpha", element, alpha)
+    end
+    set_value!(conf, "verbosity", 0)
+    basis = Basis(Structure(conf, poscar_path=gaas_poscar), conf)
+    label(overlap) = string(overlap, apply_oc=true)
+    labels_in(file) = endswith(file, ".h5") ? h5open(keys, file) : collect(keys(Hamster.read_rllm(basis.overlaps[1:0], comm, filename=file)))
+    xs = range(0.0, 5.0, length=50)
+
+    for rllm_file in ("rllm.dat", "rllm.h5")
+        mktempdir() do dir
+            cd(dir) do
+                mkdir("tmp")
+                Hamster.precalc_rllm([basis], conf, comm=comm, rank=0, nranks=2, rllm_file=rllm_file)
+                @test isempty(readdir("tmp"))
+                labels_rank0 = labels_in(rllm_file)
+                @test 0 < length(labels_rank0) < length(unique(label.(basis.overlaps)))
+                rllm_rank0 = Hamster.read_rllm(filter(o -> label(o) in labels_rank0, basis.overlaps), comm, filename=rllm_file)
+
+                # Part of rank 1, with one overlap that is already in the file
+                rank1 = filter(o -> !(label(o) in labels_rank0) || label(o) == labels_rank0[1], basis.overlaps)
+                rllm_rank1 = Hamster.interpolate_overlaps!(Dict{String, Hamster.CubicSpline{Float64}}(), rank1, conf, verbosity=0)
+                rllm_rank1[labels_rank0[1]] = Hamster.CubicSpline(collect(xs), zeros(length(xs)))
+                Hamster.save_rllm(rllm_rank1, comm, filename=Hamster.rank_rllm_filename(rllm_file, 1))
+                Hamster.combine_local_rllm_files(rllm_file, comm, rank=0, nranks=2)
+                @test isempty(readdir("tmp"))
+
+                rllm = Hamster.read_rllm(basis.overlaps, comm, filename=rllm_file)
+                @test sort(labels_in(rllm_file)) == sort(unique(label.(basis.overlaps)))
+                @test all(rllm[key].(xs) == rllm_rank0[key].(xs) for key in labels_rank0)
+                @test all(rllm[key].(xs) == rllm_rank1[key].(xs) for key in keys(rllm_rank1) if !(key in labels_rank0))
+            end
+        end
+    end
+end
