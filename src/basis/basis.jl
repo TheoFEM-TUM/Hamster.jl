@@ -75,8 +75,7 @@ nparams(basis::Basis) = length(basis.parameters)
 
 """
     get_geometry_tensor(strc, basis, conf=get_empty_config(); file=nothing, comm=nothing, npar=Threads.nthreads(),
-                        tmethod=get_tmethod(conf), rcut=get_rcut(conf), sp_tol=get_sp_tol(conf),
-                        rcut_tol=get_rcut_tol(conf))
+                        rcut=get_rcut(conf), sp_tol=get_sp_tol(conf), rcut_tol=get_rcut_tol(conf))
 
 Geometry tensor of the structure `strc` in the basis `basis`: a matrix `h[v, R]` of sparse `Nε × Nε` matrices with the
 contribution of parameter `v` to the Hamiltonian between the home cell and the translation `R`, such that
@@ -88,7 +87,6 @@ A pair of ions is included if its distance is within `rcut` for the reference po
 # Keyword Arguments
 - `file`, `comm`: HDF5 file and MPI communicator to read the radial functions (rllm) from.
 - `npar`: number of threads; the grid cells are split into `4 npar` chunks.
-- `tmethod`: method for the Slater-Koster transformation matrix.
 - `rcut`, `rcut_tol`: cutoff radius and width of the smooth cutoff (above `rcut` if positive, below if negative).
 - `sp_tol`: entries with a smaller absolute value are dropped.
 """
@@ -96,7 +94,6 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
                              file=nothing,
                              comm=nothing,
                              npar=Threads.nthreads(),
-                             tmethod=get_tmethod(conf),
                              rcut=get_rcut(conf),
                              sp_tol=get_sp_tol(conf),
                              rcut_tol=get_rcut_tol(conf))
@@ -123,7 +120,7 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
             ion_label = IonLabel(lookup.ion_types[iion1], lookup.ion_types[iion2], sorted=false)
             nnlabel = get_nn_label(r, nn_cutoffs[ion_label], conf, onsite=onsite, sepNN=sepNN)
             radial_parts!(radial, lookup, ion_label, r, fcut(r, rcut, rcut_tol))
-            add_bond_entries!(entries, angles, lookup, basis, iion1, iion2, R, r⃗₁, r⃗₂, nnlabel, radial, tmethod, sp_tol)
+            add_bond_entries!(entries, angles, lookup, basis, iion1, iion2, R, r⃗₁, r⃗₂, nnlabel, radial, sp_tol)
         end
         entries
     end
@@ -212,18 +209,18 @@ function radial_parts!(radial, lookup, ion_label, r, f)
 end
 
 """
-    add_bond_entries!(entries, angles, lookup, basis, iion1, iion2, R, r⃗₁, r⃗₂, nnlabel, radial, tmethod, sp_tol)
+    add_bond_entries!(entries, angles, lookup, basis, iion1, iion2, R, r⃗₁, r⃗₂, nnlabel, radial, sp_tol)
 
 Appends the geometry tensor entries `(v, i, j, R, val)` of all orbital pairs of the bond from ion `iion1` at `r⃗₁` to
 ion `iion2` at `r⃗₂` (translation `R`) to `entries`. `radial` are the radial parts from `radial_parts!` and `angles` is
 a buffer of length 5 for `evaluate_overlap!`.
 """
-function add_bond_entries!(entries, angles, lookup, basis, iion1, iion2, R, r⃗₁, r⃗₂, nnlabel, radial, tmethod, sp_tol)
+function add_bond_entries!(entries, angles, lookup, basis, iion1, iion2, R, r⃗₁, r⃗₂, nnlabel, radial, sp_tol)
     type1, type2 = lookup.ion_types[iion1], lookup.ion_types[iion2]
     ion_label = IonLabel(type1, type2, sorted=false)
     axes1, axes2 = lookup.orbital_axes[iion1], lookup.orbital_axes[iion2]
-    Û = get_sk_transform_matrix(r⃗₁, r⃗₂, axes1[1], tmethod)
-    Û_swap = get_sk_transform_matrix(r⃗₂, r⃗₁, axes1[1], tmethod)
+    Û = get_sk_transform_matrix(r⃗₁, r⃗₂)
+    Û_swap = get_sk_transform_matrix(r⃗₂, r⃗₁)
 
     for jorb1 in eachindex(axes1), jorb2 in eachindex(axes2)
         i, j = lookup.offset[iion1] + jorb1, lookup.offset[iion2] + jorb2
