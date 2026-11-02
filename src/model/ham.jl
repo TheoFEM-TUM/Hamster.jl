@@ -113,7 +113,7 @@ Diagonalizes a vector of Hamiltonian matrices `Hk` and returns the specified num
 
 Dense matrices are diagonalized with `dense_eigen!` directly into the result array: small matrices (fewer than
 `DENSE_LARGE` orbitals) in parallel over the k-points with one BLAS thread each, larger ones one after the other with
-all threads in BLAS.
+all threads in BLAS. With Intel MKL, the thread count is set per Julia thread (see `mkl_threads_local_function`).
 
 # Returns:
 - `Es::Matrix{Float64}`: A matrix where each column `Es[:, k]` contains the `Neig` eigenvalues of the `k`-th Hamiltonian matrix in `Hk`.
@@ -134,24 +134,51 @@ function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0
     end
 
     blas_threads = BLAS.get_num_threads()
+    mkl_local = mkl_threads_local_function()
+    mkl_threads = 0
     try
         if Nε ≥ DENSE_LARGE
             BLAS.set_num_threads(Threads.nthreads())
+            mkl_threads = set_mkl_threads_local(mkl_local, Threads.nthreads())
             for k in eachindex(Hk)
                 Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k])
             end
         else
             BLAS.set_num_threads(1)
             Threads.@threads for k in eachindex(Hk)
+                previous = set_mkl_threads_local(mkl_local, 1)
                 Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k])
+                set_mkl_threads_local(mkl_local, previous)
             end
         end
     finally
         BLAS.set_num_threads(blas_threads)
+        Nε ≥ DENSE_LARGE && set_mkl_threads_local(mkl_local, mkl_threads)
     end
 
     return Es, vs
 end
+
+"""
+    mkl_threads_local_function() -> Ptr
+
+Pointer to `MKL_Set_Num_Threads_Local` if Julia uses Intel MKL for BLAS/LAPACK (e.g. after `hamster --install --mkl`),
+otherwise `C_NULL`. MKL ignores `BLAS.set_num_threads` for LAPACK calls from other Julia threads and keeps the thread
+count of `MKL_NUM_THREADS`, so `diagonalize` sets the number of MKL threads per Julia thread.
+"""
+function mkl_threads_local_function()
+    lib = first(BLAS.get_config().loaded_libs).libname
+    occursin("mkl", basename(lib)) || return C_NULL
+    return something(Libc.Libdl.dlsym(Libc.Libdl.dlopen(lib), :MKL_Set_Num_Threads_Local; throw_error=false), C_NULL)
+end
+
+"""
+    set_mkl_threads_local(f, n) -> previous
+
+Set the number of MKL threads of the calling thread to `n` (`0`: back to the global setting) with `f` from
+`mkl_threads_local_function` and return the previous value; without MKL (`f = C_NULL`), do nothing and return 0.
+"""
+set_mkl_threads_local(f, n) = f == C_NULL ? 0 : Int(ccall(f, Cint, (Cint,), n))
 
 """
     dense_eigen!(V, H; mrrr=size(H, 1) ≥ DENSE_MRRR) -> eigenvalues
