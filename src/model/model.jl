@@ -63,7 +63,7 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
         end
     end
     hs = map(eachindex(strcs)) do n
-        get_geometry_tensor(strcs[n], bases[n], conf, file=file, comm=comm, rank=rank, nranks=nranks)
+        get_geometry_tensor(strcs[n], bases[n], conf, file=file, comm=comm)
     end
     if occursin(".h5", filename)
         close(file)

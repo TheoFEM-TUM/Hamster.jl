@@ -243,27 +243,62 @@ function save_rllm(rllm_dict, comm; filename="rllm.dat", rank=0, nranks=1)
     end
 end
 
+"""
+    rank_rllm_filename(rllm_file, rank)
+
+Temporary file in which `rank` stores its part of the rllm data during `precalc_rllm`. It is always an HDF5 file,
+also if `rllm_file` is a text file (`.dat`).
+"""
+rank_rllm_filename(rllm_file, rank) = get_rank_filename(splitext(rllm_file)[1] * ".h5", rank)
+
+"""
+    combine_local_rllm_files(filename, comm; rank=0, nranks=1)
+
+Merges the temporary rllm files of all ranks (see `rank_rllm_filename`) into `filename` (HDF5 or text format, by
+its extension) and deletes them. Entries already in `filename` are kept.
+"""
 function combine_local_rllm_files(filename, comm; rank=0, nranks=1)
-    for r in 0:nranks
-        rank_filename = get_rank_filename(filename, r)
-        if rank == 0 && isfile(rank_filename)
-            rllm_dict = Dict{String, Matrix}()
-            h5open(rank_filename, "r") do f1
-                for key in keys(f1)
-                    rllm_dict[key] = read(f1[key])
+    if rank == 0
+        rllm_data = Dict{String, Matrix{Float64}}()
+        for r in 0:nranks-1
+            rank_filename = rank_rllm_filename(filename, r)
+            isfile(rank_filename) || continue
+            h5open(rank_filename, "r") do file
+                for key in keys(file)
+                    rllm_data[key] = read(file[key])
                 end
             end
             rm(rank_filename)
-            h5open(filename, "cw") do f2
-                for (key, data) in rllm_dict
-                    if !haskey(f2, key)
-                        f2[key] = data
-                    end
-                end
+        end
+        isempty(rllm_data) || append_rllm(filename, rllm_data)
+    end
+    MPI.Barrier(comm)
+end
+
+"""
+    append_rllm(filename, rllm_data)
+
+Adds the rllm data `rllm_data` (overlap label => matrix with the columns x and y) to `filename` (HDF5 or text
+format, by its extension), except for overlaps that are already in the file.
+"""
+function append_rllm(filename, rllm_data)
+    if occursin(".h5", filename)
+        h5open(filename, "cw") do file
+            for (key, data) in rllm_data
+                haskey(file, key) || (file[key] = data)
+            end
+        end
+    else
+        existing = isfile(filename) ? Set(line[1] for line in split_lines(open_and_read(filename))[1:3:end]) : Set{String}()
+        open(filename, "a") do file
+            for (key, data) in rllm_data
+                key in existing && continue
+                println(file, key)
+                println(file, join("  " .* string.(data[:, 1])))
+                println(file, join("  " .* string.(data[:, 2])))
             end
         end
     end
-    MPI.Barrier(comm)
 end
 
 """
@@ -367,7 +402,7 @@ function precalc_rllm(bases, conf=get_empty_config();
     start = rank * chunk + 1; stop  = min((rank + 1) * chunk, noverlaps)
     local_unique_overlaps = unique_overlaps[start:stop]
 
-    rank_rllm_file = nranks > 1 ? get_rank_filename(rllm_file, rank) : rllm_file
+    rank_rllm_file = nranks > 1 ? rank_rllm_filename(rllm_file, rank) : rllm_file
     rllm_dict = Dict{String, CubicSpline{Float64}}()
     interpolate_overlaps!(rllm_dict, local_unique_overlaps, conf, verbosity=rank == 0 ? verbosity : 0)
     save_rllm(rllm_dict, comm, filename=rank_rllm_file, rank=rank, nranks=nranks)
