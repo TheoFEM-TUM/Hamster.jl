@@ -71,6 +71,9 @@ end
     set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_cspbbr3_soc"))
     set_value!(conf, "init_params", joinpath(path, "params_cspbbr3.dat"))
 
+    # The ML data points are selected randomly (kmeans, sampling within clusters): seed, so that the loss does not
+    # depend on the tests that ran before
+    Hamster.Random.seed!(1234)
     prof = Hamster.main(comm, conf, rank=rank)
     @test mean(prof.L_train[:, end]) < 0.20
     rm("hamster.out"); rm("params.dat"); rm("ml_params.dat")

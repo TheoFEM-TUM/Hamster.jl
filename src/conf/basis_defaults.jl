@@ -45,16 +45,3 @@ function get_rllm_file(conf::Config)::String
     end
 end
 @configtag rllm_file String "rllm.dat" "path to the file with the distance dependence of the matrix elements (rllm)." getter=:custom default_doc="rllm.dat (rllm.h5 for several systems)" category="basis" see_also=["load_rllm"]
-
-"""
-**tmethod**=rotation
-
-The `tmethod::String` tag selects the method used to compute the Slater-Koster transformation matrix.  
-In practice, this choice should not affect the results, although `rotation` is slightly more efficient.
-
-Possible options:
-- `rotation`: constructs the new reference system from the rotation matrix (default).
-- `gramschmidt`: constructs the new reference system using a Gram-Schmidt procedure.
-"""
-get_tmethod(conf::Config)::String = conf("tmethod") == "default" ? "rotation" : conf("tmethod")
-@configtag tmethod String "rotation" "method for the Slater-Koster transformation matrix (rotation or gramschmidt; the results are the same)." getter=:custom category="basis"

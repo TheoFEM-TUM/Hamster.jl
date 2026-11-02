@@ -273,6 +273,9 @@ Regularization terms can be added to the parameter gradient,
 \frac{\partial L_{\mathrm{reg}}}{\partial V_v}.
 ```
 
+The regularization gradient is added once per batch, independent of the number of MPI ranks. (Up to version 0.6.1,
+every MPI rank added it, so fits with `lambda > 0` on several ranks were regularized more strongly than on one rank.)
+
 Only parameters marked as updateable are modified during optimization.
 
 ## Parameter Initialization

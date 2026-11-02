@@ -1,74 +1,16 @@
 const ê_z = Float64[0, 0, 1]
 
 """
-    get_sk_transform_matrix(r⃗₁, r⃗₂, axis, tmethod)
+    get_sk_transform_matrix(r⃗₁, r⃗₂; ϵ=1e-5)
 
-Returns a transformation matrix that aligns the z-axis along the vector connecting 
-`r⃗₁` and `r⃗₂`. The method of transformation depends on `tmethod`.
-
-# Arguments
-- `r⃗₁::AbstractVector`: The first position vector.
-- `r⃗₂::AbstractVector`: The second position vector.
-- `axis::AbstractVector`: A vector used to define the x-axis in case of Gram-Schmidt transformation.
-- `tmethod::String`: The transformation method. 
-
-# Returns
-- `Ê::AbstractMatrix`: The 3x3 transformation matrix that aligns the z-axis with the vector 
-  between `r⃗₁` and `r⃗₂`.
+Rotation matrix whose rows are the axes of the bond frame of the bond from `r⃗₁` to `r⃗₂`. The z-axis points along
+`r⃗₂ - r⃗₁` (along `[0, 0, 1]` if the positions coincide within `ϵ`); the frame is the global one rotated around
+`ê_z × (r⃗₂ - r⃗₁)`.
 """
-function get_sk_transform_matrix(r⃗₁, r⃗₂, axis, tmethod)
-  if lowercase(tmethod)[1] == 'g'
-      return get_transformed_system(r⃗₁, r⃗₂, axis)
-  else
-      return get_transformed_system(r⃗₁, r⃗₂)
-  end
-end
-
-"""
-    get_transformed_system(r⃗₁, r⃗₂, ω; ϵ=1e-5)
-    get_transformed_system(r⃗₁, r⃗₂)
-
-Construct a new orthonormal coordinate system based on two vectors `r⃗₁` and `r⃗₂`, 
-with the z-axis oriented along the vector connecting `r⃗₁` and `r⃗₂`. Optionally, a 
-third vector `ω` can be provided to influence the initial guess for the x-axis.
-
-# Arguments
-- `r⃗₁::Vector`: A 3D vector representing the first position.
-- `r⃗₂::Vector`: A 3D vector representing the second position.
-- `ω::Vector`: (Optional) A 3D vector used as the initial guess for the x-axis orientation. 
-  If `ω` is omitted, the function assumes a default method for constructing the x-axis.
-- `ϵ::Float64=1e-5`: (Optional) A small tolerance value to handle near-zero differences and near-parallel vectors.
-
-# Returns
-- A 3x3 matrix `Ê` where the rows correspond to the new x-axis, y-axis, and z-axis of the coordinate system.
-
-# Details
-- **Z-axis (ez)**: Always aligned with the normalized vector `r⃗₂ - r⃗₁`. If this vector is zero or near-zero 
-  (within tolerance `ϵ`), the z-axis defaults to `[0, 0, 1]`.
-- **X-axis (ex)**: If `ω` is provided, the x-axis is constructed from the projection of `ω` orthogonal to the 
-  z-axis and is normalized. If `ω` is omitted, an alternative method will define the x-axis.
-- **Y-axis (ey)**: Always computed as the cross-product of the z-axis and x-axis, ensuring orthogonality and 
-  completeness of the coordinate system.
-- **Fallback behavior**: If `ω` is nearly parallel to the z-axis within tolerance `ϵ`, the function reverts to 
-  the simpler version `get_transformed_system(r⃗₁, r⃗₂)` to handle the ambiguity in the x-axis.
-"""
-function get_transformed_system(r⃗₁, r⃗₂, ω; ϵ=1e-5)
-    if (1 - ϵ < abs(normalize(r⃗₂ .- r⃗₁) ⋅ normalize(ω)) < 1 + ϵ) == false
-        Ê = zeros(Float64, (3, 3))
-        ez = ifelse(normdiff(r⃗₂, r⃗₁) > ϵ, normalize(r⃗₂ .- r⃗₁), ê_z)
-        ex = ω .- proj(ez, ω); normalize!(ex)
-        ey = ez × ex; normalize!(ez)
-        Ê[1, :] = ex; Ê[2, :] = ey; Ê[3, :] = ez
-        return SMatrix{3, 3}(Ê)
-    else
-        return get_transformed_system(r⃗₁, r⃗₂)
-    end
-end
-
-function get_transformed_system(r⃗₁, r⃗₂; ϵ=1e-5)
-    z_new = normdiff(r⃗₁, r⃗₂) > ϵ ? normalize(r⃗₂ .- r⃗₁) : ê_z
-    θ = calc_angle(z_new, ê_z)
-    u⃗ = cross(ê_z, z_new)
+function get_sk_transform_matrix(r⃗₁, r⃗₂; ϵ=1e-5)
+    z_new = normdiff(r⃗₁, r⃗₂) > ϵ ? normalize(r⃗₂ .- r⃗₁) : ê_z
+    θ = calc_angle(z_new, ê_z)
+    u⃗ = cross(ê_z, z_new)
     if norm(u⃗) > ϵ; normalize!(u⃗); end
     U = rotation_matrix_around_axis(u⃗, θ)
     return transpose(U)

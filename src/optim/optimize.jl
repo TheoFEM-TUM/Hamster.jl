@@ -104,7 +104,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
 
     update_begin = MPI.Wtime()
     for (model_index, model) in enumerate(ham_train.models)
-        model_grad_local = get_model_gradient(model, indices, optim.reg, model_gradient_input(dL_dHr, model_index); soc=ham_train.soc)
+        model_grad_local = get_model_gradient(model, indices, rank_regularization(optim.reg, rank), model_gradient_input(dL_dHr, model_index); soc=ham_train.soc)
         model_grad = MPI.Reduce(model_grad_local, +, comm, root=0)
         if rank == 0; update!(model, optim.adam, model_grad ./ Nstrc_tot); end
         params = get_params(model)
@@ -133,6 +133,14 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
 end
 
 """
+    rank_regularization(reg, rank)
+
+The regularization that rank `rank` adds to its part of the model gradient: the gradients of all ranks are summed, so
+only rank 0 adds the gradient of the regularization (otherwise it would enter once per MPI rank).
+"""
+rank_regularization(reg::Regularization, rank) = rank == 0 ? reg : Regularization(reg.b, 0.0, reg.n)
+
+"""
     val_step!(ham_val, loss, val_data, prof, iter, comm, rank=0)
 
 Evaluates the validation loss for a Hamiltonian model over a given validation dataset, and stores the results in the `HamsterProfiler` instance. This function also tracks the time taken for validation.
@@ -151,7 +159,7 @@ Evaluates the validation loss for a Hamiltonian model over a given validation da
 function val_step!(ham_val, loss, val_data, prof, iter, comm; rank=0, nranks=1, valeachiter=valeachiter)
     val_begin = MPI.Wtime()
     Ls_val = map(1:ham_val.Nstrc) do index
-        forward(ham_val, index, loss, val_data[index])[1] / ham_val.Nstrc
+        forward(ham_val, index, loss, val_data[index])[1]
     end
 
     all_systems = MPI.gather(ham_val.systems, comm, root=0)
@@ -172,7 +180,7 @@ function val_step!(ham_val, loss, val_data, prof, iter, comm; rank=0, nranks=1, 
     
     val_time_local = MPI.Wtime() - val_begin
     val_time = MPI.Reduce(val_time_local, +, comm, root=0)
-    L_val = MPI.Reduce(sum(Ls_val), +, comm, root=0)
+    L_val = MPI.Reduce(sum(Ls_val ./ ham_val.Nstrc), +, comm, root=0)
     if rank == 0
         prof.val_times[iter] = val_time ./ nranks
         prof.L_val[iter-valeachiter+1:iter] .= L_val ./ nranks

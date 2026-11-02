@@ -133,7 +133,7 @@ end
         xmax = 20
         I_analytic, _ = hcubature(f, [-xmax, -xmax, -xmax], [xmax, xmax, xmax], maxevals=500000, initdiv=5, atol=1e-6)
 
-        Û = Hamster.get_sk_transform_matrix(zeros(3), r0, axis1, "Rotation")
+        Û = Hamster.get_sk_transform_matrix(zeros(3), r0)
         θ₁, φ₁ = Hamster.get_rotated_angles(Û, axis1)
         θ₂, φ₂ = Hamster.get_rotated_angles(Û, axis2)
 
@@ -158,7 +158,7 @@ end
         xmax = 20
         I_analytic, _ = hcubature(f, [-xmax, -xmax, -xmax], [xmax, xmax, xmax], maxevals=500000, initdiv=5, atol=1e-6)
 
-        Û = Hamster.get_sk_transform_matrix(zeros(3), r0, axis1, "Rotation")
+        Û = Hamster.get_sk_transform_matrix(zeros(3), r0)
         θ₁, φ₁ = Hamster.get_rotated_angles(Û, axis1)
         θ₂, φ₂ = Hamster.get_rotated_angles(Û, axis2)
 
@@ -182,7 +182,7 @@ end
         f(r) = orb1(r) * orb2(r)
         I0, _ = hcubature(f, [-10, -10, -10], [15, 15, 15], maxevals=500000, initdiv=5, atol=1e-5)
 
-        Û = Hamster.get_sk_transform_matrix(r0, zeros(3), axis1, "Rotation")
+        Û = Hamster.get_sk_transform_matrix(r0, zeros(3))
         θ₁, φ₁ = Hamster.get_rotated_angles(Û, axis1)
         θ₂, φ₂ = Hamster.get_rotated_angles(Û, axis2)
         Is = get_tb_d_overlap(f1, f2, r0, θ₁, φ₁, θ₂, φ₂, [3, 3], [11., 11.])
@@ -205,7 +205,7 @@ end
         f(r) = orb1(r) * orb2(r)
         I0, _ = hcubature(f, [-10, -10, -10], [15, 15, 15], maxevals=500000, initdiv=5, atol=1e-5)
 
-        Û = Hamster.get_sk_transform_matrix(r0, zeros(3), axis1, "Rotation")
+        Û = Hamster.get_sk_transform_matrix(r0, zeros(3))
         θ₁, φ₁ = Hamster.get_rotated_angles(Û, axis1)
         θ₂, φ₂ = Hamster.get_rotated_angles(Û, axis2)
         Is = get_tb_sd_overlap(f1, f2, r0, θ₁, φ₁, θ₂, φ₂, [3, 3], [11., 11.])
@@ -232,7 +232,7 @@ end
         f(r) = orb1(r) * orb2(r)
         I0, _ = hcubature(f, [-10, -10, -10], [15, 15, 15], maxevals=500000, initdiv=5, atol=1e-5)
 
-        Û = Hamster.get_sk_transform_matrix(zeros(3), r0, axis1, "Rotation")
+        Û = Hamster.get_sk_transform_matrix(zeros(3), r0)
         θ₁, φ₁ = Hamster.get_rotated_angles(Û, axis1)
         θ₂, φ₂ = Hamster.get_rotated_angles(Û, axis2)
 

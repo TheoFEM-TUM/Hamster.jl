@@ -22,7 +22,7 @@ include("basis/adaptive_intp.jl")
 include("basis/label.jl"); include("basis/orbital.jl"); include("basis/overlap.jl"); include("basis/param.jl"); include("basis/rllm.jl")
 include("basis/basis.jl")
 
-include("model/ham.jl"); include("model/ham_grad.jl"); include("model/ham_write.jl"); include("model/model.jl")
+include("model/ham.jl"); include("model/chebyshev.jl"); include("model/ham_grad.jl"); include("model/ham_write.jl"); include("model/model.jl")
 include("model/ewald_helper.jl"); include("model/ewald.jl"); include("model/ewald_onsite.jl"); include("model/eff_ham.jl")
 
 include("soc/soc_utils.jl"); include("soc/soc_matrix.jl"); include("soc/soc_model.jl")
@@ -36,7 +36,7 @@ include("device/device.jl"); include("device/kernels.jl"); include("device/linea
 include("out/model_summary.jl")
 include("out/dos.jl")
 
-include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hyperopt.jl")
+include("calc/setup.jl"); include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hyperopt.jl")
 
 include("main.jl")
 

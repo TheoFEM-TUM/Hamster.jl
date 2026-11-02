@@ -17,7 +17,7 @@ Filter = x -> !(x in [Hamster.run_calculation])
 
 ```@autodocs
 Modules = [Hamster]
-Pages = ["eff_ham.jl", "model/ham.jl", "ham_grad.jl", "ham_write.jl", "model/model.jl"]
+Pages = ["eff_ham.jl", "model/ham.jl", "model/chebyshev.jl", "ham_grad.jl", "ham_write.jl", "model/model.jl"]
 ```
 
 # SOC

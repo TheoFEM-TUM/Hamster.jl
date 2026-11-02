@@ -62,6 +62,7 @@ end
 if test_all || test_only == "Model"
     @testset "Model" begin
         include("model/test_ham.jl")
+        include("model/test_chebyshev.jl")
         include("model/test_ham_grad.jl")
         include("model/test_model.jl")
         include("model/test_ewald.jl")
