@@ -66,6 +66,7 @@ end
         set_value!(conf, "train_data", "Optimizer", joinpath(dir, file))
         set_value!(conf, "val_data", "Optimizer", joinpath(dir, file))
         set_value!(conf, "bandmin", "Optimizer", 3)
+        set_value!(conf, "val_bandmin", "Optimizer", 1)
         dl = DataLoader(Dict(""=>[1]), Dict(""=>[1]), Dict("" => 8), Dict("" => 8), conf)
         @test length(dl.train_data) == 1
         @test dl.train_data[1].kp == kp
