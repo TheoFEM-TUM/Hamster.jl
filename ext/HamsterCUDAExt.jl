@@ -26,18 +26,13 @@ function Hamster.device_eigen(Hk::CuDeviceHk, ::Dense; vectors=true, kwargs...)
         Es, vs = Hamster.diagonalize([Hh[:, :, k] for k in axes(Hh, 3)], vectors=vectors)
         return Es, vectors ? copyto!(H, vs) : similar(H, 0, Hk.Nε, nkpoints(Hk))
     else
-        # Eigenvalues only ('N') skip the back-transformation of the eigenvectors. Real matrices (e.g. at Γ without SOC)
-        # are diagonalized in real arithmetic, as on the host (see Hamster.dense_eigen!).
+        # Eigenvalues only ('N') skip the back-transformation of the eigenvectors
         Es = CuMatrix{Float64}(undef, Hk.Nε, nkpoints(Hk))
         for k in axes(H, 3)
             Hk_k = view(H, :, :, k)
-            if Hamster.is_real_matrix(Hk_k)
-                A = real.(Hk_k)
-                Es[:, k] = vectors ? first(cuSOLVER.Xsyevd!('V', 'U', A)) : cuSOLVER.Xsyevd!('N', 'U', A)
-                vectors && copyto!(Hk_k, A)
-            else
-                Es[:, k] = vectors ? first(cuSOLVER.Xsyevd!('V', 'U', Hk_k)) : cuSOLVER.Xsyevd!('N', 'U', Hk_k)
-            end
+            A = Hamster.is_real_matrix(Hk_k) ? real.(Hk_k) : Hk_k
+            Es[:, k] = vectors ? first(cuSOLVER.Xsyevd!('V', 'U', A)) : cuSOLVER.Xsyevd!('N', 'U', A)
+            vectors && A !== Hk_k && copyto!(Hk_k, A)
         end
         return Array(Es), vectors ? H : similar(H, 0, Hk.Nε, nkpoints(Hk))
     end

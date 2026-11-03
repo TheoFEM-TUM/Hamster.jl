@@ -49,8 +49,8 @@ Name of the BLAS/LAPACK library that Julia uses (OpenBLAS by default, Intel MKL 
 `hamster --install --mkl`) and its file name.
 """
 function linear_algebra_library()
-    libname = basename(first(BLAS.get_config().loaded_libs).libname)
-    name = occursin("mkl", libname) ? "Intel MKL" : occursin("openblas", libname) ? "OpenBLAS" : "other"
+    libname = basename(blas_library())
+    name = uses_mkl() ? "Intel MKL" : occursin("openblas", libname) ? "OpenBLAS" : "other"
     return "$name ($libname)"
 end
 

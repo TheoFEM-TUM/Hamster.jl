@@ -1,7 +1,6 @@
 # Precompiles Hamster and, if CUDA.jl is installed and a GPU is available, its GPU code. Run by `hamster --precompile`
 # with the Hamster folder as active project: then the GPU extensions are compiled together with their precompile
 # workload (with the default environment as active project, the workload of the CUDSS extension is skipped).
-# MKL.jl is precompiled as well if it is installed (hamster --install --mkl).
 using Hamster
 isnothing(Base.find_package("MKL")) || @eval using MKL
 

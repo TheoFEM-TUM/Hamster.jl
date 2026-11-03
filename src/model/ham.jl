@@ -92,12 +92,6 @@ function coo_entries(Hs::AbstractVector{<:SparseMatrixCSC})
     return Is, Js, Vs, Ridx
 end
 
-# Dense diagonalization (measured with OpenBLAS on MAPbBr3 Hamiltonians): matrices with fewer than DENSE_LARGE orbitals
-# are diagonalized fastest in parallel over the k-points with one BLAS thread each; larger ones one after the other with
-# all threads in BLAS, which is at least as fast for any number of k-points (automatic threads_per_kpoint). Real matrices (e.g. at Γ without SOC) use the
-# real divide-and-conquer solver (dsyevd), which is several times faster than the complex one; complex matrices with at
-# least DENSE_MRRR orbitals use the MRRR solver (zheevr), which is then faster than divide and conquer (zheevd) with
-# OpenBLAS; with Intel MKL, divide and conquer is faster for all sizes.
 const DENSE_LARGE = 1000
 const DENSE_MRRR = 4000
 
@@ -141,7 +135,6 @@ function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0
     return Es, vs
 end
 
-# Threads per k-point of all loops over k-points (tag threads_per_kpoint, set by main); 0: automatic
 const THREADS_PER_KPOINT = Ref(0)
 
 """
@@ -169,27 +162,28 @@ end
     kpoint_tmap(f, items, Nε; dense=true, n=threads_per_kpoint(Nε, length(items), dense=dense))
 
 Map `f` over `items` (the k-points of one structure) with `n` threads per item: `nthreads ÷ n` items at a time, each
-with `n` threads for its inner loops (`inner_tforeach`) and for Intel MKL; with all threads (`n = nthreads`), one item
-after the other with all threads also in OpenBLAS. OpenBLAS has one thread count for all calls, so it gets one thread
-when several items run at the same time.
+with `n` threads for its inner loops (`inner_tforeach`) and for Intel MKL. OpenBLAS has one thread count for all calls:
+it gets all threads when the items run one after the other (`n = nthreads`), otherwise one.
 """
 function kpoint_tmap(f, items, Nε; dense=true, n=threads_per_kpoint(Nε, length(items), dense=dense))
     isempty(items) && return map(f, items)
     T = Threads.nthreads()
     blas_threads = BLAS.get_num_threads()
+    BLAS.set_num_threads(n ≥ T ? T : 1)
     try
-        if n ≥ T
-            BLAS.set_num_threads(T)
-            return with_mkl_threads(() -> with_inner_tasks(() -> map(f, items), T), T)
-        end
-        BLAS.set_num_threads(1)
-        return tmap(items; ntasks=min(length(items), T ÷ n)) do x
-            with_mkl_threads(() -> with_inner_tasks(() -> f(x), n), n)
-        end
+        n ≥ T && return with_item_threads(() -> map(f, items), T)
+        return tmap(x -> with_item_threads(() -> f(x), n), items; ntasks=min(length(items), T ÷ n))
     finally
         BLAS.set_num_threads(blas_threads)
     end
 end
+
+"""
+    with_item_threads(f, n)
+
+Call `f()` with `n` tasks for the inner loops and `n` MKL threads.
+"""
+with_item_threads(f, n) = with_mkl_threads(() -> with_inner_tasks(f, n), n)
 
 """
     inner_tasks()
@@ -219,34 +213,28 @@ function inner_tforeach(f, range; chunks_per_task=1)
 end
 
 """
+    blas_library()
+
+Path of the BLAS/LAPACK library that Julia uses (OpenBLAS, or Intel MKL after `hamster --install --mkl`).
+"""
+blas_library() = first(BLAS.get_config().loaded_libs).libname
+
+"""
     uses_mkl()
 
-Whether Julia uses Intel MKL for BLAS/LAPACK (e.g. after `hamster --install --mkl`).
+Whether Julia uses Intel MKL for BLAS/LAPACK.
 """
-uses_mkl() = occursin("mkl", basename(first(BLAS.get_config().loaded_libs).libname))
-
-"""
-    mkl_threads_local_function() -> Ptr
-
-Pointer to `MKL_Set_Num_Threads_Local` if Julia uses Intel MKL for BLAS/LAPACK (e.g. after `hamster --install --mkl`),
-otherwise `C_NULL`.
-"""
-function mkl_threads_local_function()
-    uses_mkl() || return C_NULL
-    lib = first(BLAS.get_config().loaded_libs).libname
-    return something(Libc.Libdl.dlsym(Libc.Libdl.dlopen(lib), :MKL_Set_Num_Threads_Local; throw_error=false), C_NULL)
-end
+uses_mkl() = occursin("mkl", basename(blas_library()))
 
 """
     with_mkl_threads(f, n)
 
-Call `f()` with `n` MKL threads for the calling Julia thread and restore the previous count afterwards; without Intel
-MKL, just call `f()`. MKL ignores `BLAS.set_num_threads` for BLAS/LAPACK calls from Julia threads and uses
-`MKL_NUM_THREADS` threads in each of them; `kpoint_tmap` sets the count with this function.
+Call `f()` with `n` MKL threads for the calling Julia thread; without Intel MKL, just call `f()`. MKL ignores
+`BLAS.set_num_threads` for calls from Julia threads and uses `MKL_NUM_THREADS` threads in each of them.
 """
 function with_mkl_threads(f, n)
-    setlocal = mkl_threads_local_function()
-    setlocal == C_NULL && return f()
+    uses_mkl() || return f()
+    setlocal = Libc.Libdl.dlsym(Libc.Libdl.dlopen(blas_library()), :MKL_Set_Num_Threads_Local)
     previous = ccall(setlocal, Cint, (Cint,), n)
     try
         return f()

@@ -16,8 +16,8 @@ Usage: hamster --install [--add_path yes|no] [--bashrc FILE] [--add_test_exec] [
 """
 
 function parse_install_args(args)
-    options = Dict{String, Any}("add_path" => "yes", "bashrc" => "default", "add_test_exec" => false, "test" => false, "gpu" => false,
-                                    "mkl" => false)
+    options = Dict{String, Any}("add_path" => "yes", "bashrc" => "default", "add_test_exec" => false, "test" => false,
+                                "gpu" => false, "mkl" => false)
     i = 1
     while i ≤ length(args)
         arg = args[i]

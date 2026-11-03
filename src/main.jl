@@ -8,8 +8,7 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity
     
     set_seed!(conf, rank=rank)
     hostnames = MPI.gather(readchomp(`hostname`), comm, root=0)
-    # On every rank: one BLAS thread outside of the loops over k-points (otherwise Julia's default, half of the Julia
-    # threads, oversubscribes); the loops over k-points set their own (threads_per_kpoint)
+    # On every rank (Julia's default is half of the threads); the loops over k-points set their own
     BLAS.set_num_threads(1)
     set_threads_per_kpoint!(get_threads_per_kpoint(conf))
     if rank == 0
