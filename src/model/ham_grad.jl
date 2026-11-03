@@ -148,7 +148,9 @@ function get_loss_gradient_hr(dL_dE, vs, Rs, ks, ::Dense, sp_iterator=nothing; s
     W = Array{ComplexF64, 3}(undef, Nε, Nε, Nk)
     tforeach(1:Nk) do k
         @views Vk = vs[:, :, k]
-        @views mul!(W[:, :, k], conj(Vk), dL_dE[:, k] .* transpose(Vk))
+        with_mkl_threads(1) do
+            @views mul!(W[:, :, k], conj(Vk), dL_dE[:, k] .* transpose(Vk))
+        end
     end
     G = reshape(W, Nε^2, Nk) * transpose(phase)
     return [reshape(G[:, R], Nε, Nε) for R in axes(G, 2)]

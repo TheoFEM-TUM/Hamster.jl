@@ -94,7 +94,8 @@ end
 # are diagonalized in parallel over the k-points with one BLAS thread each; larger ones one after the other with all
 # threads in BLAS, which is at least as fast for any number of k-points. Real matrices (e.g. at Γ without SOC) use the
 # real divide-and-conquer solver (dsyevd), which is several times faster than the complex one; complex matrices with at
-# least DENSE_MRRR orbitals use the MRRR solver (zheevr), which is then faster than divide and conquer (zheevd).
+# least DENSE_MRRR orbitals use the MRRR solver (zheevr), which is then faster than divide and conquer (zheevd) with
+# OpenBLAS; with Intel MKL, divide and conquer is faster for all sizes.
 const DENSE_LARGE = 1000
 const DENSE_MRRR = 4000
 
@@ -113,7 +114,7 @@ Diagonalizes a vector of Hamiltonian matrices `Hk` and returns the specified num
 
 Dense matrices are diagonalized with `dense_eigen!` directly into the result array: small matrices (fewer than
 `DENSE_LARGE` orbitals) in parallel over the k-points with one BLAS thread each, larger ones one after the other with
-all threads in BLAS. With Intel MKL, the thread count is set per Julia thread (see `mkl_threads_local_function`).
+all threads in BLAS. With Intel MKL, the thread count is set per Julia thread (see `with_mkl_threads`).
 
 # Returns:
 - `Es::Matrix{Float64}`: A matrix where each column `Es[:, k]` contains the `Neig` eigenvalues of the `k`-th Hamiltonian matrix in `Hk`.
@@ -134,60 +135,76 @@ function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0
     end
 
     blas_threads = BLAS.get_num_threads()
-    mkl_local = mkl_threads_local_function()
-    mkl_threads = 0
     try
         if Nε ≥ DENSE_LARGE
             BLAS.set_num_threads(Threads.nthreads())
-            mkl_threads = set_mkl_threads_local(mkl_local, Threads.nthreads())
-            for k in eachindex(Hk)
-                Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k])
+            with_mkl_threads(Threads.nthreads()) do
+                for k in eachindex(Hk)
+                    Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k])
+                end
             end
         else
             BLAS.set_num_threads(1)
             Threads.@threads for k in eachindex(Hk)
-                previous = set_mkl_threads_local(mkl_local, 1)
-                Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k])
-                set_mkl_threads_local(mkl_local, previous)
+                with_mkl_threads(1) do
+                    Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k])
+                end
             end
         end
     finally
         BLAS.set_num_threads(blas_threads)
-        Nε ≥ DENSE_LARGE && set_mkl_threads_local(mkl_local, mkl_threads)
     end
 
     return Es, vs
 end
 
 """
+    uses_mkl()
+
+Whether Julia uses Intel MKL for BLAS/LAPACK (e.g. after `hamster --install --mkl`).
+"""
+uses_mkl() = occursin("mkl", basename(first(BLAS.get_config().loaded_libs).libname))
+
+"""
     mkl_threads_local_function() -> Ptr
 
 Pointer to `MKL_Set_Num_Threads_Local` if Julia uses Intel MKL for BLAS/LAPACK (e.g. after `hamster --install --mkl`),
-otherwise `C_NULL`. MKL ignores `BLAS.set_num_threads` for LAPACK calls from other Julia threads and keeps the thread
-count of `MKL_NUM_THREADS`, so `diagonalize` sets the number of MKL threads per Julia thread.
+otherwise `C_NULL`.
 """
 function mkl_threads_local_function()
+    uses_mkl() || return C_NULL
     lib = first(BLAS.get_config().loaded_libs).libname
-    occursin("mkl", basename(lib)) || return C_NULL
     return something(Libc.Libdl.dlsym(Libc.Libdl.dlopen(lib), :MKL_Set_Num_Threads_Local; throw_error=false), C_NULL)
 end
 
 """
-    set_mkl_threads_local(f, n) -> previous
+    with_mkl_threads(f, n)
 
-Set the number of MKL threads of the calling thread to `n` (`0`: back to the global setting) with `f` from
-`mkl_threads_local_function` and return the previous value; without MKL (`f = C_NULL`), do nothing and return 0.
+Call `f()` with `n` MKL threads for the calling Julia thread and restore the previous count afterwards; without Intel
+MKL, just call `f()`. MKL ignores `BLAS.set_num_threads` for BLAS/LAPACK calls from Julia threads and uses
+`MKL_NUM_THREADS` threads in each of them, so code that calls BLAS/LAPACK in parallel over Julia threads runs the
+calls with `with_mkl_threads(1)`.
 """
-set_mkl_threads_local(f, n) = f == C_NULL ? 0 : Int(ccall(f, Cint, (Cint,), n))
+function with_mkl_threads(f, n)
+    setlocal = mkl_threads_local_function()
+    setlocal == C_NULL && return f()
+    previous = ccall(setlocal, Cint, (Cint,), n)
+    try
+        return f()
+    finally
+        ccall(setlocal, Cint, (Cint,), previous)
+    end
+end
 
 """
-    dense_eigen!(V, H; mrrr=size(H, 1) ≥ DENSE_MRRR) -> eigenvalues
+    dense_eigen!(V, H; mrrr=size(H, 1) ≥ DENSE_MRRR && !uses_mkl()) -> eigenvalues
 
 Eigenvalues (ascending) of the Hermitian matrix `H` (upper triangle); the eigenvectors are written to `V` (`nothing`:
 eigenvalues only). Real matrices (see `is_real_matrix`) are diagonalized with the real divide-and-conquer solver
-(`dsyevd`), complex ones with divide and conquer (`zheevd`) or, with `mrrr`, the MRRR solver (`zheevr`).
+(`dsyevd`), complex ones with divide and conquer (`zheevd`) or, with `mrrr` (default: large matrices with OpenBLAS),
+the MRRR solver (`zheevr`).
 """
-function dense_eigen!(V, H; mrrr=size(H, 1) ≥ DENSE_MRRR)
+function dense_eigen!(V, H; mrrr=size(H, 1) ≥ DENSE_MRRR && !uses_mkl())
     if abs(hermiticity_mismatch(H)) > 1e-5
         maxdiff, inds = findmax(abs.(H .- Hermitian(H)))
         @warn "Hamiltonian not hermitian! Maximum missmatch: $maxdiff at $inds."

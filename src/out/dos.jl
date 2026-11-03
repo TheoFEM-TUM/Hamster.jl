@@ -144,20 +144,31 @@ state onto the labels `P` (`nlabels × Nε`) and the COHP contributions of every
 """
 function exact_state_quantities(Hr, Rs, ks, atoms, members, pairs)
     return tmap(axes(ks, 2)) do k
-        H = Matrix(get_hamiltonian(Hr, Rs, ks[:, k:k])[1])
-        E, V = eigen(Hermitian(H))
-        absV = abs2.(V)
-        P = reduce(vcat, [sum(absV[m, :], dims=1) for m in members])
-        Hoff = offsite(H, atoms)
-        C = zeros(length(pairs), length(E))
-        for (p, (a, b)) in enumerate(pairs)
-            A, B = members[a], members[b]
-            X = Hoff[A, B] * V[B, :]
-            # (A, B) and (B, A) contribute equally for a Hermitian H
-            C[p, :] = (a == b ? 1 : 2) .* vec(real(sum(conj(V[A, :]) .* X, dims=1)))
+        with_mkl_threads(1) do
+            exact_state_quantities_k(Hr, Rs, ks[:, k:k], atoms, members, pairs)
         end
-        (E, P, C)
     end
+end
+
+"""
+    exact_state_quantities_k(Hr, Rs, k, atoms, members, pairs)
+
+Eigenvalues, projections and COHP contributions (see `exact_state_quantities`) at the single k-point `k`.
+"""
+function exact_state_quantities_k(Hr, Rs, k, atoms, members, pairs)
+    H = Matrix(get_hamiltonian(Hr, Rs, k)[1])
+    E, V = eigen(Hermitian(H))
+    absV = abs2.(V)
+    P = reduce(vcat, [sum(absV[m, :], dims=1) for m in members])
+    Hoff = offsite(H, atoms)
+    C = zeros(length(pairs), length(E))
+    for (p, (a, b)) in enumerate(pairs)
+        A, B = members[a], members[b]
+        X = Hoff[A, B] * V[B, :]
+        # (A, B) and (B, A) contribute equally for a Hermitian H
+        C[p, :] = (a == b ? 1 : 2) .* vec(real(sum(conj(V[A, :]) .* X, dims=1)))
+    end
+    (E, P, C)
 end
 
 function dos_exact(Hr, Rs, ks, atoms, members, pairs, g, settings; velocity=nothing)
@@ -203,9 +214,11 @@ matrix per component of `velocity` (real-space operators like `Hr`, see `velocit
 the same diagonalization as in `exact_state_quantities`.
 """
 function velocity_weights(Hr, velocity, Rs, k, v, c)
-    U = eigen(Hermitian(Matrix(get_hamiltonian(Hr, Rs, k)[1]))).vectors
-    return map(velocity) do Va
-        abs2.(U[:, v]' * Matrix(get_hamiltonian(Va, Rs, k)[1]) * U[:, c])
+    return with_mkl_threads(1) do
+        U = eigen(Hermitian(Matrix(get_hamiltonian(Hr, Rs, k)[1]))).vectors
+        map(velocity) do Va
+            abs2.(U[:, v]' * Matrix(get_hamiltonian(Va, Rs, k)[1]) * U[:, c])
+        end
     end
 end
 

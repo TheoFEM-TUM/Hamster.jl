@@ -239,8 +239,8 @@ end
     @test E1 ≈ E && eltype(V1) == Float64 && valid(real(H), E1, V1)
 
     # Without MKL (test environment: OpenBLAS), the per-thread MKL thread count is not touched
-    @test Hamster.mkl_threads_local_function() == C_NULL
-    @test Hamster.set_mkl_threads_local(C_NULL, 4) == 0
+    @test !Hamster.uses_mkl() && Hamster.mkl_threads_local_function() == C_NULL
+    @test Hamster.with_mkl_threads(() -> 42, 1) == 42
 
     # Large matrices (one after the other with all threads in BLAS) and small ones (parallel over the k-points)
     for N in (Hamster.DENSE_LARGE, 40)
