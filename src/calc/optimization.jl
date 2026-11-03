@@ -1,5 +1,5 @@
 """
-    run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1)
+    run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1, write_output=true, config_inds=nothing)
 
 Performs the optimization using gradient descent of an effective Hamiltonian model using the specified configuration.  
 The routine iteratively adjusts model parameters to minimize the loss over a training set, while optionally validating performance on a separate validation set.
@@ -9,6 +9,7 @@ The routine iteratively adjusts model parameters to minimize the loss over a tra
 1. **Configuration Sampling**  
    - Partition configuration indices into training (`train_config_inds`) and validation (`val_config_inds`) sets.  
    - Distribute indices among parallel ranks.
+   - Given `config_inds` (training and validation indices per system), these are used instead of a new sample.
 
 2. **Translation Vectors (if `hr_fit`)**
    - Retrieve translation vectors `Rs` for high-rank fitting, used in constructing the Hamiltonian basis.
@@ -53,11 +54,11 @@ The routine iteratively adjusts model parameters to minimize the loss over a tra
   - Loss values over iterations
   - Timings
 """
-function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1, write_output=true)
+function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1, write_output=true, config_inds=nothing)
    # The fits use all bands of the data, sparse eigensolvers only neig of them
    get_sp_diag(conf) isa Sparse && error("sp_diag = true can not be used in fits (the loss needs all eigenvalues); remove sp_diag from the config file.")
    local_train_inds, local_val_inds = local_structure_indices(conf, comm, optimize=true, rank=rank, nranks=nranks,
-                                                              write_output=write_output)
+                                                              write_output=write_output, config_inds=config_inds)
    has_data = !isempty(local_train_inds) && (!isempty(local_val_inds) || !get_validate(conf))
    comm_active = active_communicator(has_data, comm, rank=rank)
 

@@ -2,14 +2,16 @@
 # effective Hamiltonian of the local structures
 
 """
-    local_structure_indices(conf, comm; optimize, rank=0, nranks=1, write_output=true)
+    local_structure_indices(conf, comm; optimize, rank=0, nranks=1, write_output=true, config_inds=nothing)
 
 Sample the configuration indices of all systems (training and validation indices if `optimize = true`) and split them
-over the MPI ranks. Returns the local training and validation indices (per system).
+over the MPI ranks. Returns the local training and validation indices (per system). `config_inds` (training and
+validation indices per system, as returned by `get_config_inds_for_systems`) are used instead of a new sample.
 """
-function local_structure_indices(conf, comm; optimize, rank=0, nranks=1, write_output=true)
-    train_inds, val_inds = get_config_inds_for_systems(get_systems(conf), comm, conf, rank=rank, write_output=write_output,
-                                                       optimize=optimize)
+function local_structure_indices(conf, comm; optimize, rank=0, nranks=1, write_output=true, config_inds=nothing)
+    train_inds, val_inds = isnothing(config_inds) ?
+        get_config_inds_for_systems(get_systems(conf), comm, conf, rank=rank, write_output=write_output, optimize=optimize) :
+        config_inds
     return split_indices_into_chunks(train_inds, nranks, rank=rank), split_indices_into_chunks(val_inds, nranks, rank=rank)
 end
 

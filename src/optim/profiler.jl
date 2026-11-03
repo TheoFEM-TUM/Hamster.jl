@@ -274,31 +274,50 @@ Write the contents of a `HamsterProfiler` object to an HDF5 file (only if `rank=
 function save(prof::HamsterProfiler, rank=0; filename="hamster_out.h5")
     if rank == 0
         h5open(filename, "cw") do file
-            file["L_train"]      = prof.L_train
-            file["L_val"]        = prof.L_val
-            file["timings"]      = prof.timings
-            file["val_times"]    = prof.val_times
-            file["param_values"] = prof.param_values
+            replace_dataset!(file, "L_train", prof.L_train)
+            replace_dataset!(file, "L_val", prof.L_val)
+            replace_dataset!(file, "timings", prof.timings)
+            replace_dataset!(file, "val_times", prof.val_times)
+            replace_dataset!(file, "param_values", prof.param_values)
 
             if length(prof.L_train_system) > 1
                 for (system, L_train_system) in prof.L_train_system
                     g = haskey(file, system) ? file[system] : create_group(file, system)
                     if haskey(file, system)
-                        g["L_train"] = L_train_system
+                        replace_dataset!(g, "L_train", L_train_system)
                     end
                 end
                 for (system, L_val_system) in prof.L_val_system
                     g = haskey(file, system) ? file[system] : create_group(file, system)
                     if haskey(file, system)
-                        g["L_val"] = L_val_system
+                        replace_dataset!(g, "L_val", L_val_system)
                     end
                 end
             end
 
             # write scalars as attributes
-            attrs = attributes(file)
-            attrs["printeachbatch"] = prof.printeachbatch
-            attrs["printeachiter"]  = prof.printeachiter
+            replace_attribute!(file, "printeachbatch", prof.printeachbatch)
+            replace_attribute!(file, "printeachiter", prof.printeachiter)
         end
     end
+end
+"""
+    replace_dataset!(parent, name, value)
+
+Write `value` as the dataset `name` of the HDF5 file or group `parent`, replacing an existing dataset of that name.
+"""
+function replace_dataset!(parent, name, value)
+    haskey(parent, name) && delete_object(parent, name)
+    parent[name] = value
+end
+
+"""
+    replace_attribute!(object, name, value)
+
+Write `value` as the attribute `name` of the HDF5 file, group or dataset `object`, replacing an existing attribute of
+that name.
+"""
+function replace_attribute!(object, name, value)
+    haskey(attributes(object), name) && delete_attribute(object, name)
+    attributes(object)[name] = value
 end
