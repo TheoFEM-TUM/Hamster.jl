@@ -128,7 +128,7 @@ function write_ham(H, vecs, comm, ind=0;
             nranks=1,
             deflate=4)
 
-    filename = temp ? joinpath("tmp", replace(filename, ".h5" => "_$(rank).h5")) : filename
+    filename = temp ? get_rank_filename(filename, rank) : filename
     h5open(filename, "cw") do file
         h_group = ind == 0 ? "H$space" : "H$(space)_$(system)_$ind"
         g = create_group(file, h_group)
@@ -145,20 +145,26 @@ function write_ham(H, vecs, comm, ind=0;
     end
 end
 
-function combine_hams(comm; what="Hk", filename="ham.h5", rank=0, nranks=1)
+"""
+    combine_hams(comm; what="Hk", filename="ham.h5", temp_file="ham.h5", rank=0, nranks=1)
 
+Copy the groups whose names start with `what` from the per-rank temporary files (`get_rank_filename(temp_file, r)`,
+as written by `write_ham` and `write_current` with `temp = true`) into `filename`. Only rank 0 writes. Every rank of
+`comm` must have written its file (in the standard run, ranks without structures are not part of `comm`); a missing
+file is an error, because the output would be incomplete.
+"""
+function combine_hams(comm; what="Hk", filename="ham.h5", temp_file="ham.h5", rank=0, nranks=1)
+    MPI.Barrier(comm)
     if rank != 0
         return
     end
 
+    missing_files = filter(!isfile, [get_rank_filename(temp_file, irank) for irank in 0:nranks-1])
+    isempty(missing_files) || error("The temporary Hamiltonian files $(join(missing_files, ", ")) are missing; " *
+                                    "$filename would be incomplete.")
     h5open(filename, "cw") do outfile
         for irank in 0:nranks-1
-            rankfile = "tmp/ham_$irank.h5"
-
-            if !isfile(rankfile)
-                @warn "Rank file $rankfile not found, skipping."
-                continue
-            end
+            rankfile = get_rank_filename(temp_file, irank)
 
             h5open(rankfile, "r") do infile
                 for gname in keys(infile)
@@ -282,7 +288,7 @@ function write_current(bonds, comm, ind=0; ham_file="ham.h5", filename="ham.h5",
 
     Hr, hr_vecs = read_ham(comm, ind, filename=ham_file, space="r", system=system)
 
-    filename = temp ? joinpath("tmp", replace(filename, ".h5" => "_$(rank).h5")) : filename
+    filename = temp ? get_rank_filename(filename, rank) : filename
     if !skip
         h5open(filename, "cw") do file
             h_group = ind == 0 ? "Cr" : "Cr_$(system)_$ind"
@@ -483,6 +489,15 @@ The dataset is only created if it does not already exist.
 - `ham_file`: Path to the HDF5 Hamiltonian file where the basis is stored.
 """
 function write_orbital_basis(strc, basis, conf=get_empty_config(); system=get_system(conf), ham_file=get_ham_file(conf))
+    write_orbital_labels(Dict(system => get_orbital_labels(strc, basis, conf)), ham_file)
+end
+
+"""
+    get_orbital_labels(strc, basis, conf=get_empty_config()) -> Vector{String}
+
+Labels `<element>-<orbital>` of the orbitals of the Hamiltonian in their order (with `↑`/`↓` if `soc = true`).
+"""
+function get_orbital_labels(strc, basis, conf=get_empty_config())
     Norbs = size(basis)
     soc = get_soc(conf)
     orbitals = String[]
@@ -496,11 +511,37 @@ function write_orbital_basis(strc, basis, conf=get_empty_config(); system=get_sy
             push!(orbitals, "$ion_type-$orb_type↓")
         end
     end
+    return orbitals
+end
+
+"""
+    write_orbital_labels(labels::AbstractDict, ham_file)
+
+Write the orbital labels of every system (`system => labels`) to `ham_file` as `basis` (no system name) or
+`basis_<system>`. Existing entries are kept.
+"""
+function write_orbital_labels(labels::AbstractDict, ham_file)
     h5open(ham_file, "cw") do file
-        key = system == "" ? "basis" : "basis_$system"
-        if !haskey(file, key)
-            file[key] = orbitals
+        for system in sort(collect(keys(labels)))
+            key = system == "" ? "basis" : "basis_$system"
+            haskey(file, key) || (file[key] = labels[system])
         end
     end
+end
+
+"""
+    write_orbital_bases(strcs, bases, local_inds, comm, conf=get_empty_config(); rank=0, ham_file=get_ham_file(conf))
+
+Write the orbital labels of all systems to `ham_file`, also of the systems whose structures are on other ranks: the
+labels of the local systems are gathered on rank 0, which writes them (collective over `comm`).
+"""
+function write_orbital_bases(strcs, bases, local_inds, comm, conf=get_empty_config(); rank=0, ham_file=get_ham_file(conf))
+    labels = Dict{String, Vector{String}}()
+    for index in eachindex(strcs)
+        system, _ = get_system_and_config_index(index, local_inds)
+        haskey(labels, system) || (labels[system] = get_orbital_labels(strcs[index], bases[index], conf))
+    end
+    all_labels = MPI.gather(labels, comm, root=0)
+    rank == 0 && write_orbital_labels(merge(all_labels...), ham_file)
 end
 

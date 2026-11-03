@@ -121,6 +121,7 @@ if test_all || test_only == "calc"
         include("calc/test_standard.jl")
         include("calc/test_hyperopt.jl")
         include("calc/test_universal.jl")
+        include("calc/test_mpi.jl")
     end
 end
 

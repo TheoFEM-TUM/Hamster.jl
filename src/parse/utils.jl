@@ -118,17 +118,49 @@ end
 next_line_with(s::String, lines) = next_line_with([s], lines)
 
 """
-    get_rank_filename(filename::AbstractString, rank::Integer) -> String
+    TEMP_DIR
 
-Return a modified file path of the form `tmp/<basename>_<rank>.<ext>`.
+Folder for the temporary files of a run (per-rank files, eigenvalues of single structures), relative to the run
+folder. `main` sets it to a new folder `hamster_tmp_<random>` for every run and removes that folder at the end;
+outside of `main` it is `tmp`.
+"""
+const TEMP_DIR = Ref("tmp")
+
+"""
+    temp_path(parts...) -> String
+
+Path of a file or folder in the temporary folder of the run (see [`TEMP_DIR`](@ref Hamster.TEMP_DIR)).
+"""
+temp_path(parts...) = joinpath(TEMP_DIR[], parts...)
+
+"""
+    make_temp_dir(parts...) -> String
+
+Create the folder `temp_path(parts...)` (and its parents) if it does not exist and return its path. Several ranks
+may call this at the same time.
+"""
+function make_temp_dir(parts...)
+    path = temp_path(parts...)
+    try
+        mkpath(path)
+    catch
+        isdir(path) || rethrow()
+    end
+    return path
+end
+
+"""
+    get_rank_filename(filename::AbstractString, rank::Integer; temp=true) -> String
+
+Return the per-rank file name `<basename>_<rank>.<ext>`, in the temporary folder of the run if `temp = true`.
 Example:
-    rank_filename("data.h5", 3) == "tmp/data_3.h5"
+    get_rank_filename("data.h5", 3) == "tmp/data_3.h5"   # outside of `main`
 """
 function get_rank_filename(filename::AbstractString, rank::Integer; temp=true)
     base = splitext(basename(filename))[1]
     ext  = splitext(filename)[2]
     if temp
-        return joinpath("tmp", @sprintf("%s_%d%s", base, rank, ext))
+        return temp_path(@sprintf("%s_%d%s", base, rank, ext))
     else
         return @sprintf("%s_%d%s", base, rank, ext)
     end
@@ -164,20 +196,21 @@ function read_from_file(filename; type=Float64)
 end
 
 """
-    collapse_files_with!(str)
+    collapse_files_with(str; location=temp_path(), outname=str)
 
-Searches for all output files in the `"tmp"` directory that contain the substring `str` in their filename.  
-Reads and combines their data into a single large array, then writes the merged result to a new file named `str*".dat"`.
-
-# Arguments
-- `str::String`: A substring to match filenames in the `"tmp"` directory.
+Read the files `<str><index>.dat` in the folder `location`, combine their arrays in the order of `index` along a new
+last dimension and write the result to `<outname>.dat`. Returns `false` (and writes nothing) if there are no such
+files.
 """
-function collapse_files_with(str; location=joinpath(pwd(), "tmp"))
-    files = [file for file in readdir(location) if occursin(str, file)]
-    L_str = length(str)
-    indices = parse.(Int64, [replace(file[L_str+1:end], ".dat"=>"") for file in files])
-    data = [read_from_file(joinpath(location, file)) for file in files[sortperm(indices)]]
+function collapse_files_with(str; location=temp_path(), outname=str)
+    isdir(location) || return false
+    pattern = Regex("^" * str * raw"(\d+)\.dat$")
+    matches = filter(!isnothing, [match(pattern, file) for file in readdir(location)])
+    isempty(matches) && return false
+    indices = [parse(Int64, m[1]) for m in matches]
+    data = [read_from_file(joinpath(location, m.match)) for m in matches[sortperm(indices)]]
     ndims = length(size(data[1]))
     data_combined = cat(data..., dims=ndims+1)
-    write_to_file(data_combined, str)
+    write_to_file(data_combined, outname)
+    return true
 end
