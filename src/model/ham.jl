@@ -202,13 +202,13 @@ with_inner_tasks(f, n) = task_local_storage(f, :hamster_inner_tasks, n)
 """
     inner_tforeach(f, range; chunks_per_task=1)
 
-Call `f` on parts of `range` with `inner_tasks()` tasks (`chunks_per_task` parts per task, for load balancing), or
-once on the whole `range` with a single task.
+Call `f` in parallel on `chunks_per_task * inner_tasks()` parts of `range` (more than one part per task for load
+balancing), or once on the whole `range` with a single task.
 """
 function inner_tforeach(f, range; chunks_per_task=1)
     n = inner_tasks()
     (n == 1 || length(range) ≤ 1) && return (f(range); nothing)
-    tforeach(f, chunks(range, n=min(length(range), chunks_per_task * n)); ntasks=n)
+    tforeach(f, chunks(range, n=min(length(range), chunks_per_task * n)))
     return nothing
 end
 
