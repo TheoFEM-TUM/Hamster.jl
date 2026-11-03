@@ -144,7 +144,7 @@ state onto the labels `P` (`nlabels × Nε`) and the COHP contributions of every
 """
 function exact_state_quantities(Hr, Rs, ks, atoms, members, pairs)
     return tmap(axes(ks, 2)) do k
-        with_mkl_threads(1) do
+        with_mkl_threads(threads_per_task(size(ks, 2))) do
             exact_state_quantities_k(Hr, Rs, ks[:, k:k], atoms, members, pairs)
         end
     end
@@ -214,11 +214,9 @@ matrix per component of `velocity` (real-space operators like `Hr`, see `velocit
 the same diagonalization as in `exact_state_quantities`.
 """
 function velocity_weights(Hr, velocity, Rs, k, v, c)
-    return with_mkl_threads(1) do
-        U = eigen(Hermitian(Matrix(get_hamiltonian(Hr, Rs, k)[1]))).vectors
-        map(velocity) do Va
-            abs2.(U[:, v]' * Matrix(get_hamiltonian(Va, Rs, k)[1]) * U[:, c])
-        end
+    U = eigen(Hermitian(Matrix(get_hamiltonian(Hr, Rs, k)[1]))).vectors
+    return map(velocity) do Va
+        abs2.(U[:, v]' * Matrix(get_hamiltonian(Va, Rs, k)[1]) * U[:, c])
     end
 end
 
@@ -263,7 +261,8 @@ function joint_dos(Es, occs, wk, settings; pair_weights=nothing)
     weights = sum(tmap(eachindex(Es)) do k
         E, f = Es[k], occs[k]
         v = findall(>(1e-12), f); c = findall(<(1 - 1e-12), f)
-        Ws = isnothing(pair_weights) ? Matrix{Float64}[] : pair_weights(k, v, c)
+        Ws = isnothing(pair_weights) ? Matrix{Float64}[] :
+             with_mkl_threads(() -> pair_weights(k, v, c), threads_per_task(length(Es)))
         h = zeros(length(ω), 1 + length(Ws))
         for (jc, j) in enumerate(c), (iv, i) in enumerate(v)
             x = max(E[j] - E[i], 0.0) / dω

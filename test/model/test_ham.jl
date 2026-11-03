@@ -241,6 +241,7 @@ end
     # Without MKL (test environment: OpenBLAS), the per-thread MKL thread count is not touched
     @test !Hamster.uses_mkl() && Hamster.mkl_threads_local_function() == C_NULL
     @test Hamster.with_mkl_threads(() -> 42, 1) == 42
+    @test Hamster.threads_per_task(1) == Threads.nthreads() && Hamster.threads_per_task(10^6) == 1
 
     # Large matrices (one after the other with all threads in BLAS) and small ones (parallel over the k-points)
     for N in (Hamster.DENSE_LARGE, 40)

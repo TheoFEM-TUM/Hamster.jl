@@ -159,6 +159,13 @@ function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0
 end
 
 """
+    threads_per_task(ntasks)
+
+Number of BLAS threads for each of `ntasks` tasks that run in parallel over the Julia threads (at least 1).
+"""
+threads_per_task(ntasks) = max(1, Threads.nthreads() ÷ max(ntasks, 1))
+
+"""
     uses_mkl()
 
 Whether Julia uses Intel MKL for BLAS/LAPACK (e.g. after `hamster --install --mkl`).
@@ -183,7 +190,7 @@ end
 Call `f()` with `n` MKL threads for the calling Julia thread and restore the previous count afterwards; without Intel
 MKL, just call `f()`. MKL ignores `BLAS.set_num_threads` for BLAS/LAPACK calls from Julia threads and uses
 `MKL_NUM_THREADS` threads in each of them, so code that calls BLAS/LAPACK in parallel over Julia threads runs the
-calls with `with_mkl_threads(1)`.
+calls with `with_mkl_threads(threads_per_task(ntasks))`.
 """
 function with_mkl_threads(f, n)
     setlocal = mkl_threads_local_function()
