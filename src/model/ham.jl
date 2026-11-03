@@ -112,9 +112,9 @@ Diagonalizes a vector of Hamiltonian matrices `Hk` and returns the specified num
 - `vectors::Bool=true`: Whether the eigenvectors are computed (dense matrices); without them, `vs` is empty and the full
   diagonalization is several times faster.
 
-Dense matrices are diagonalized with `dense_eigen!` directly into the result array: small matrices (fewer than
-`DENSE_LARGE` orbitals) in parallel over the k-points with one BLAS thread each, larger ones one after the other with
-all threads in BLAS. With Intel MKL, the thread count is set per Julia thread (see `with_mkl_threads`).
+Dense matrices are diagonalized with `dense_eigen!` directly into the result array, with the thread layout of
+`dense_tmap`: small matrices (fewer than `DENSE_LARGE` orbitals) in parallel over the k-points with one BLAS thread
+each, larger ones one after the other with all threads in BLAS.
 
 # Returns:
 - `Es::Matrix{Float64}`: A matrix where each column `Es[:, k]` contains the `Neig` eigenvalues of the `k`-th Hamiltonian matrix in `Hk`.
@@ -134,36 +134,33 @@ function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0
         return Es, vs
     end
 
-    blas_threads = BLAS.get_num_threads()
-    try
-        if Nε ≥ DENSE_LARGE
-            BLAS.set_num_threads(Threads.nthreads())
-            with_mkl_threads(Threads.nthreads()) do
-                for k in eachindex(Hk)
-                    Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k])
-                end
-            end
-        else
-            BLAS.set_num_threads(1)
-            Threads.@threads for k in eachindex(Hk)
-                with_mkl_threads(1) do
-                    Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k])
-                end
-            end
-        end
-    finally
-        BLAS.set_num_threads(blas_threads)
+    dense_tmap(eachindex(Hk), Nε) do k
+        Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k])
     end
-
     return Es, vs
 end
 
 """
-    threads_per_task(ntasks)
+    dense_tmap(f, items, Nε)
 
-Number of BLAS threads for each of `ntasks` tasks that run in parallel over the Julia threads (at least 1).
+Map `f` over `items` (e.g. the k-points) for dense linear algebra on matrices with `Nε` orbitals, with the thread
+layout of the dense diagonalization: for fewer than `DENSE_LARGE` orbitals in parallel over the Julia threads with
+one BLAS thread per call, otherwise one item after the other with all threads in BLAS (OpenBLAS and Intel MKL).
 """
-threads_per_task(ntasks) = max(1, Threads.nthreads() ÷ max(ntasks, 1))
+function dense_tmap(f, items, Nε)
+    blas_threads = BLAS.get_num_threads()
+    try
+        if Nε ≥ DENSE_LARGE
+            BLAS.set_num_threads(Threads.nthreads())
+            return with_mkl_threads(() -> map(f, items), Threads.nthreads())
+        else
+            BLAS.set_num_threads(1)
+            return tmap(x -> with_mkl_threads(() -> f(x), 1), items)
+        end
+    finally
+        BLAS.set_num_threads(blas_threads)
+    end
+end
 
 """
     uses_mkl()
@@ -189,8 +186,7 @@ end
 
 Call `f()` with `n` MKL threads for the calling Julia thread and restore the previous count afterwards; without Intel
 MKL, just call `f()`. MKL ignores `BLAS.set_num_threads` for BLAS/LAPACK calls from Julia threads and uses
-`MKL_NUM_THREADS` threads in each of them, so code that calls BLAS/LAPACK in parallel over Julia threads runs the
-calls with `with_mkl_threads(threads_per_task(ntasks))`.
+`MKL_NUM_THREADS` threads in each of them; `dense_tmap` sets the count with this function.
 """
 function with_mkl_threads(f, n)
     setlocal = mkl_threads_local_function()

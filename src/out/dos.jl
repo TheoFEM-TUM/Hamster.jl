@@ -143,10 +143,8 @@ Diagonalize the Hamiltonian at every k-point and return, per k-point, the eigenv
 state onto the labels `P` (`nlabels × Nε`) and the COHP contributions of every pair `C` (`npairs × Nε`).
 """
 function exact_state_quantities(Hr, Rs, ks, atoms, members, pairs)
-    return tmap(axes(ks, 2)) do k
-        with_mkl_threads(threads_per_task(size(ks, 2))) do
-            exact_state_quantities_k(Hr, Rs, ks[:, k:k], atoms, members, pairs)
-        end
+    return dense_tmap(axes(ks, 2), size(first(Hr), 1)) do k
+        exact_state_quantities_k(Hr, Rs, ks[:, k:k], atoms, members, pairs)
     end
 end
 
@@ -258,11 +256,12 @@ function joint_dos(Es, occs, wk, settings; pair_weights=nothing)
     ωmax = isnan(settings.jdos_emax) ? maximum(maximum(E) - minimum(E) for E in Es) + 5σ : settings.jdos_emax
     ω = collect(range(0.0, ωmax, length=settings.ne))
     dω = ω[2] - ω[1]
+    occupied(k) = (findall(>(1e-12), occs[k]), findall(<(1 - 1e-12), occs[k]))
+    Wall = isnothing(pair_weights) ? nothing : dense_tmap(k -> pair_weights(k, occupied(k)...), eachindex(Es), length(Es[1]))
     weights = sum(tmap(eachindex(Es)) do k
         E, f = Es[k], occs[k]
-        v = findall(>(1e-12), f); c = findall(<(1 - 1e-12), f)
-        Ws = isnothing(pair_weights) ? Matrix{Float64}[] :
-             with_mkl_threads(() -> pair_weights(k, v, c), threads_per_task(length(Es)))
+        v, c = occupied(k)
+        Ws = isnothing(Wall) ? Matrix{Float64}[] : Wall[k]
         h = zeros(length(ω), 1 + length(Ws))
         for (jc, j) in enumerate(c), (iv, i) in enumerate(v)
             x = max(E[j] - E[i], 0.0) / dω
