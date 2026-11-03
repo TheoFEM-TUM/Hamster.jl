@@ -112,3 +112,16 @@ end
     end
     @test maximum(abs.(grad .- fd)) < 1e-7
 end
+
+@testset "SOC parameters from a file with other elements" begin
+    mktempdir() do dir
+        file = joinpath(dir, "params.dat")
+        write(file, "NN1_Ga+Ga_ssσ  2.5\nγ_Ga  0.3\nγ_Pb  1.2\n")
+        types = Hamster.element_to_number.(["Ga", "As"])
+        # Pb is not in the structures (ignored), As is not in the file (starts from zero, with a warning)
+        params = @test_logs (:warn, r"No SOC parameter for As") Hamster.init_soc_params(types, initas=file)
+        @test params == [0.3, 0.0]
+        @test_logs Hamster.init_soc_params(types, initas=file, warn=false)
+        @test Hamster.init_soc_params(types, initas="zeros") == zeros(2)
+    end
+end

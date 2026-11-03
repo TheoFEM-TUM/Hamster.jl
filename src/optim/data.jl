@@ -106,25 +106,27 @@ scale_energies!(data::EigData, factor) = (data.Es .*= factor; data)
 scale_energies!(data::HrData, factor) = (foreach(H -> H .*= factor, data.Hr); data)
 
 """
-    get_neig_and_nk(data::Vector)
+    get_neig_and_nk(data::Vector, comm=nothing)
 
 Get the number of eigenvalues and the number of k-points from a collection of data.
 
 # Arguments
 - `data`: A vector of either `EigData` or `HrData`.
+- `comm`: (Optional) MPI communicator; if given, the data of all ranks is taken into account, so that all ranks get
+  the same result.
 
 # Returns
-- `(Neig, Nk)`: The number of eigenvalues and k-points of the first data point. `Return 0 for HrData`.
+- `(Neig, Nk)`: The number of eigenvalues and k-points if they are the same for all data points, otherwise `(0, 0)`.
+  Returns `(0, 0)` for `HrData`.
 """
-function get_neig_and_nk(data::Vector{EigData})
-    Nε_all = map(d->size(d.Es, 1), data)
-    if length(unique(Nε_all)) == 1
-        return (size(data[1].Es, 1), size(data[1].kp, 2))
-    else
-        return (0, 0)
-    end
+function get_neig_and_nk(data::AbstractVector, comm=nothing)
+    shapes = unique(map(d -> d isa EigData ? size(d.Es) : (0, 0), data))
+    # (Nε, Nk) if all local data has the same shape, (0, 0) if it does not, (-1, -1) if there is no local data
+    local_shape = length(shapes) == 1 ? collect(shapes[1]) : isempty(shapes) ? [-1, -1] : [0, 0]
+    all_shapes = isnothing(comm) ? local_shape : MPI.Allgather(local_shape, comm)
+    shapes = unique(filter(≠((-1, -1)), [(all_shapes[i], all_shapes[i+1]) for i in 1:2:length(all_shapes)]))
+    return length(shapes) == 1 ? shapes[1] : (0, 0)
 end
-get_neig_and_nk(data::Vector{<:HrData}) = (0, 0)
 
 function get_band_indices(bandmin, Nε, bandinclude, bandmultiplicity; mode="pc")
     band_factor = mode == "pc" ? 1 : bandmultiplicity
@@ -145,6 +147,7 @@ function get_band_indices(bandmin, Nε, bandinclude, bandmultiplicity; mode="pc"
 end
 
 function get_eig_data(mode, path, Nε; inds=Int64[], bandmin=1, bandinclude=Int64[], bandmultiplicity=1, empty=false, system="")
+    mode ∈ ("pc", "md", "universal", "mixed") || throw(ArgumentError("unknown train_mode/val_mode $mode for eigenvalue data; use pc, md, universal or mixed."))
     data = EigData[]
     band_indices = get_band_indices(bandmin, Nε, bandinclude, bandmultiplicity, mode=mode)
 
@@ -161,6 +164,8 @@ function get_eig_data(mode, path, Nε; inds=Int64[], bandmin=1, bandinclude=Int6
 end
 
 function get_hr_data(mode, path; inds=Int64[], empty=false)
+    mode == "universal" && !empty && throw(ArgumentError("fits and validation with Hamiltonian data (hr_fit, eig_val = false) are not supported in universal mode; use pc or md."))
+    mode ∈ ("pc", "md", "universal", "mixed") || throw(ArgumentError("unknown train_mode/val_mode $mode for Hamiltonian data; use pc or md."))
     data = HrData[]
     if (mode == "pc" || mode == "mixed") && !empty
         Hr, Rs, _ = read_hrdat(path)

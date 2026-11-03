@@ -213,3 +213,25 @@ end
     @test all([dl.train_data[1].Hr[R] == Hr[:, :, R, 1] for R in axes(Hr, 3)])
     @test all([dl.train_data[2].Hr[R] == Hr[:, :, R, 3] for R in axes(Hr, 3)])
 end
+@testset "Number of bands and k-points of the data" begin
+    d1 = Hamster.EigData(rand(3, 10), rand(5, 10))
+    d2 = Hamster.EigData(rand(3, 10), rand(5, 10))
+    d3 = Hamster.EigData(rand(3, 12), rand(5, 12))
+    @test Hamster.get_neig_and_nk([d1, d2]) == (5, 10)
+    # Same number of bands, different number of k-points
+    @test Hamster.get_neig_and_nk([d1, d3]) == (0, 0)
+    @test Hamster.get_neig_and_nk(Hamster.EigData[]) == (0, 0)
+    # With a communicator, all ranks get the same result
+    @test Hamster.get_neig_and_nk([d1, d2], comm) == (5, 10)
+    @test Hamster.get_neig_and_nk([d1, d3], comm) == (0, 0)
+    @test Hamster.get_neig_and_nk(Hamster.HrData[], comm) == (0, 0)
+end
+
+@testset "Unknown data modes" begin
+    path = joinpath(@__DIR__, "test_files")
+    @test_throws ArgumentError Hamster.get_eig_data("multi", path, 8)
+    @test_throws ArgumentError Hamster.get_hr_data("multi", joinpath(path, "wannier90_hr.dat"))
+    @test_throws ArgumentError Hamster.get_hr_data("universal", joinpath(path, "md_hr.h5"), inds=[1])
+    # Without validation the mode is not used
+    @test isempty(Hamster.get_hr_data("universal", joinpath(path, "md_hr.h5"), empty=true))
+end

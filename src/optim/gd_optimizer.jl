@@ -48,3 +48,36 @@ end
 
 GDOptimizer(conf=get_empty_config()) = GDOptimizer(0, 0, conf)
 
+"""
+    has_weight_tags(conf) -> Bool
+
+Return whether band or k-point weights (`wE`, `wk`, `wE_<n>`, `wk_<n>`) are set in the `Optimizer` block.
+"""
+function has_weight_tags(conf)
+    haskey(conf.blocks, "Optimizer") || return false
+    return any(key -> key ∈ ("we", "wk") || startswith(key, "we_") || startswith(key, "wk_"), lowercase.(keys(conf.blocks["Optimizer"])))
+end
+
+"""
+    weight_warning(dl, Nε, Nk, val_weights, conf; write_output=true)
+
+Warn (and write a line to `hamster.out` if `write_output`) if band or k-point weights are set but cannot be applied:
+in fits to Hamiltonian data, if the training structures differ in the number of bands or k-points (`Nε = Nk = 0`),
+and, with `val_weights = true`, if the validation data has another number of bands or k-points than the training data.
+"""
+function weight_warning(dl, Nε, Nk, val_weights, conf; write_output=true)
+    has_weight_tags(conf) || return nothing
+    message = if eltype(dl.train_data) <: HrData
+        "Band and k-point weights (wE, wk) are ignored in fits to Hamiltonian data."
+    elseif Nε == 0 && Nk == 0
+        "Band and k-point weights (wE, wk) are ignored: the training structures differ in the number of bands or k-points."
+    elseif get_val_weights(conf) && get_validate(conf) && !val_weights
+        "Band and k-point weights (wE, wk) are not used for validation (val_weights = true): the validation data has another number of bands or k-points than the training data."
+    else
+        return nothing
+    end
+    @warn message
+    write_output && append_output_line("Warning: " * message)
+    return nothing
+end
+
