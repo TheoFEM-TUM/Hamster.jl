@@ -263,7 +263,7 @@ end
     # Inner tasks: all threads outside of the loops over k-points, n per k-point inside
     @test Hamster.inner_tasks() == T
     for n in unique([1, 2, T])
-        @test all(==(n), Hamster.kpoint_tmap(k -> Hamster.inner_tasks(), 1:5, 10, n=n))
+        @test all(==(min(n, T)), Hamster.kpoint_tmap(k -> Hamster.inner_tasks(), 1:5, 10, n=n))
     end
     @test Hamster.kpoint_tmap(k -> 2k, 1:5, 10) == 2:2:10 && isempty(Hamster.kpoint_tmap(k -> k, 1:0, 10))
     covered = zeros(Int, 100)
@@ -272,8 +272,11 @@ end
 
     # H(k), dense and sparse diagonalization and the loss gradient do not depend on the threads per k-point
     herm(N) = (A = randn(ComplexF64, N, N); A + A')
-    Nε, NR, Nk = 30, 5, 7
-    Hr = [herm(Nε) for _ in 1:NR]; Rs = Float64.(rand(-1:1, 3, NR)); Rs[:, 1] .= 0; ks = rand(3, Nk) .- 0.5
+    # Hermitian H(k): Hr[R = 0] Hermitian and Hr[-R] = Hr[R]'
+    Nε, Nk = 30, 7
+    A1, A2 = randn(ComplexF64, Nε, Nε), randn(ComplexF64, Nε, Nε)
+    Hr = [herm(Nε), A1, Matrix(A1'), A2, Matrix(A2')]
+    Rs = Float64.([0 1 -1 0 0; 0 0 0 1 -1; 0 1 -1 0 0]); ks = rand(3, Nk) .- 0.5
     dL_dE = randn(Nε, Nk)
     function run_all()
         Hk = get_hamiltonian(Hr, Rs, ks)
