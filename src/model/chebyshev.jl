@@ -43,7 +43,7 @@ other arrays. Terms with a zero coefficient are not read.
 function block_matvec!(Y, op::HermitianCSCOperator, X, a, s, b1=0, Z1=X, b2=0, Z2=X)
     H = op.H
     rows, vals = rowvals(H), nonzeros(H)
-    tforeach(chunks(1:size(H, 2), n=4 * Threads.nthreads())) do cols
+    inner_tforeach(1:size(H, 2), chunks_per_task=4) do cols
         acc = Vector{eltype(Y)}(undef, size(X, 1))
         for j in cols
             fill!(acc, 0)

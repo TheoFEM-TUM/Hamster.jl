@@ -241,7 +241,6 @@ end
     # Without MKL (test environment: OpenBLAS), the per-thread MKL thread count is not touched
     @test !Hamster.uses_mkl() && Hamster.mkl_threads_local_function() == C_NULL
     @test Hamster.with_mkl_threads(() -> 42, 1) == 42
-    @test Hamster.dense_tmap(k -> 2k, 1:5, 10) == Hamster.dense_tmap(k -> 2k, 1:5, Hamster.DENSE_LARGE) == 2:2:10
 
     # Large matrices (one after the other with all threads in BLAS) and small ones (parallel over the k-points)
     for N in (Hamster.DENSE_LARGE, 40)
@@ -252,3 +251,46 @@ end
     end
 end
 
+@testset "Threads per k-point" begin
+    T = Threads.nthreads()
+    # Automatic choice: all threads for large dense Hamiltonians, the k-points in parallel otherwise
+    @test Hamster.threads_per_kpoint(Hamster.DENSE_LARGE, 8) == T
+    @test Hamster.threads_per_kpoint(100, 8) == 1
+    @test Hamster.threads_per_kpoint(100, 1, dense=false) == T
+    @test Hamster.threads_per_kpoint(100, 2T, dense=false) == 1
+    @test Hamster.threads_per_kpoint(100, 8, n=3) == min(3, T) && Hamster.threads_per_kpoint(100, 8, n=10T) == T
+
+    # Inner tasks: all threads outside of the loops over k-points, n per k-point inside
+    @test Hamster.inner_tasks() == T
+    for n in unique([1, 2, T])
+        @test all(==(n), Hamster.kpoint_tmap(k -> Hamster.inner_tasks(), 1:5, 10, n=n))
+    end
+    @test Hamster.kpoint_tmap(k -> 2k, 1:5, 10) == 2:2:10 && isempty(Hamster.kpoint_tmap(k -> k, 1:0, 10))
+    covered = zeros(Int, 100)
+    Hamster.with_inner_tasks(() -> Hamster.inner_tforeach(r -> (covered[r] .+= 1), 1:100, chunks_per_task=4), min(3, T))
+    @test all(==(1), covered)
+
+    # H(k), dense and sparse diagonalization and the loss gradient do not depend on the threads per k-point
+    herm(N) = (A = randn(ComplexF64, N, N); A + A')
+    Nε, NR, Nk = 30, 5, 7
+    Hr = [herm(Nε) for _ in 1:NR]; Rs = Float64.(rand(-1:1, 3, NR)); Rs[:, 1] .= 0; ks = rand(3, Nk) .- 0.5
+    dL_dE = randn(Nε, Nk)
+    function run_all()
+        Hk = get_hamiltonian(Hr, Rs, ks)
+        Es, vs = diagonalize(Hk)
+        Es_sp, _ = diagonalize(get_hamiltonian(sparse.(Hr), Rs, ks, Hamster.Sparse()), Neig=4, target=0.0)
+        return Hk, Es, Es_sp, Hamster.get_loss_gradient_hr(dL_dE, vs, Rs, ks, Hamster.Dense())
+    end
+    reference = run_all()
+    try
+        for n in unique([1, 2, T])
+            Hamster.set_threads_per_kpoint!(n)
+            Hk, Es, Es_sp, grad = run_all()
+            @test Hk == reference[1]
+            @test Es ≈ reference[2] && Es_sp ≈ reference[3]
+            @test all(grad .≈ reference[4])
+        end
+    finally
+        Hamster.set_threads_per_kpoint!(0)
+    end
+end

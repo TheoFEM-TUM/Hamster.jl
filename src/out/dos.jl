@@ -143,7 +143,7 @@ Diagonalize the Hamiltonian at every k-point and return, per k-point, the eigenv
 state onto the labels `P` (`nlabels × Nε`) and the COHP contributions of every pair `C` (`npairs × Nε`).
 """
 function exact_state_quantities(Hr, Rs, ks, atoms, members, pairs)
-    return dense_tmap(axes(ks, 2), size(first(Hr), 1)) do k
+    return kpoint_tmap(axes(ks, 2), size(first(Hr), 1)) do k
         exact_state_quantities_k(Hr, Rs, ks[:, k:k], atoms, members, pairs)
     end
 end
@@ -257,7 +257,7 @@ function joint_dos(Es, occs, wk, settings; pair_weights=nothing)
     ω = collect(range(0.0, ωmax, length=settings.ne))
     dω = ω[2] - ω[1]
     occupied(k) = (findall(>(1e-12), occs[k]), findall(<(1 - 1e-12), occs[k]))
-    Wall = isnothing(pair_weights) ? nothing : dense_tmap(k -> pair_weights(k, occupied(k)...), eachindex(Es), length(Es[1]))
+    Wall = isnothing(pair_weights) ? nothing : kpoint_tmap(k -> pair_weights(k, occupied(k)...), eachindex(Es), length(Es[1]))
     weights = sum(tmap(eachindex(Es)) do k
         E, f = Es[k], occs[k]
         v, c = occupied(k)
@@ -307,7 +307,7 @@ read once for all vectors.
 """
 function hermitian_mul!(Y, H::SparseMatrixCSC, X)
     rows, vals = rowvals(H), nonzeros(H)
-    tforeach(chunks(1:size(H, 2), n=4 * Threads.nthreads())) do cols
+    inner_tforeach(1:size(H, 2), chunks_per_task=4) do cols
         for j in cols
             fill!(view(Y, :, j), 0)
             for p in nzrange(H, j)

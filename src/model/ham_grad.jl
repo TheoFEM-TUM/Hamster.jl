@@ -1,5 +1,5 @@
 """
-    get_eigenvalue_gradient(vs, Rs, ks, sp_mode, sp_iterator; nthreads_bands, nthreads_kpoints)
+    get_eigenvalue_gradient(vs, Rs, ks, sp_mode, sp_iterator)
 
 Compute the gradient `dE_dHr` of each energy eigenvalue at each k-point w.r.t. the real-space Hamiltonian matrix elements.
 
@@ -13,24 +13,20 @@ Compute the gradient `dE_dHr` of each energy eigenvalue at each k-point w.r.t. t
 # Returns
 - `dE_dHr`: An array of shape `(NR, Nε, Nk)` that contains (sparse) matrices of shape `(Nε, Nε)`.
 """
-function get_eigenvalue_gradient(vs, Rs, ks, ::Dense, sp_iterator=nothing; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads(), sp_tol=1e-10)
+function get_eigenvalue_gradient(vs, Rs, ks, ::Dense, sp_iterator=nothing; sp_tol=1e-10)
     Nε = size(vs, 1); NR = size(Rs, 2); Nk = size(ks, 2)
     dE_dHr = Array{Matrix{ComplexF64}}(undef, NR, Nε, Nk)
-    tforeach(axes(vs, 3), nchunks=nthreads_kpoints) do k
-        tforeach(axes(vs, 2), nchunks=nthreads_bands) do m
-            @views for R in 1:NR
-                dE_dHr[R, m, k] = zeros(Nε, Nε)
-            end
-        end
+    for k in axes(vs, 3), m in axes(vs, 2), R in 1:NR
+        dE_dHr[R, m, k] = zeros(Nε, Nε)
     end
-    hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks), nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands)
+    hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks))
     return dE_dHr
 end
 
-function get_eigenvalue_gradient(vs, Rs, ks, ::Sparse, sp_iterator; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads(), sp_tol=1e-10)
+function get_eigenvalue_gradient(vs, Rs, ks, ::Sparse, sp_iterator; sp_tol=1e-10)
     Nε = size(vs, 1); NR = size(Rs, 2); Nk = size(ks, 2)
     dE_dHr = fill(spzeros(ComplexF64, Nε, Nε), NR, Nε, Nk)
-    sparse_hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks), sp_iterator, nthreads_kpoints=nthreads_kpoints, nthreads_bands=nthreads_bands, sp_tol=sp_tol)
+    sparse_hellman_feynman!(dE_dHr, vs, exp_2πi(Rs, ks), sp_iterator, sp_tol=sp_tol)
     return dE_dHr
 end
 
@@ -51,34 +47,25 @@ For each k-point `k` and eigenstate `m`, this function computes the matrix eleme
 
 and stores the real part of this value in `dE_dλ[R, m, k]`. This is done for each lattice vector `R`, eigenstate `m`, and k-point `k`.
 """
-function hellman_feynman!(dE_dHr, Ψ, dHk_dHr; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads())
-    tforeach(axes(Ψ, 3), nchunks=nthreads_kpoints) do k
-        tforeach(axes(Ψ, 2), nchunks=nthreads_bands) do m
-            @views for R in axes(dHk_dHr, 1), j in axes(Ψ, 1), i in axes(Ψ, 1)
+function hellman_feynman!(dE_dHr, Ψ, dHk_dHr)
+    kpoint_tmap(axes(Ψ, 3), size(Ψ, 1)) do k
+        inner_tforeach(axes(Ψ, 2)) do ms
+            @views for m in ms, R in axes(dHk_dHr, 1), j in axes(Ψ, 1), i in axes(Ψ, 1)
                 dE_dHr[R, m, k][i, j] = conj(Ψ[i, m, k]) * dHk_dHr[R, k] * Ψ[j, m, k]
             end
         end
     end
 end
 
-function sparse_hellman_feynman!(dE_dHr, Ψ, dHk_dHr, sp_iterator; nthreads_kpoints=Threads.nthreads(), nthreads_bands=Threads.nthreads(), sp_tol=1e-10)
+function sparse_hellman_feynman!(dE_dHr, Ψ, dHk_dHr, sp_iterator; sp_tol=1e-10)
     max_nnz = maximum([length(inds) for inds in sp_iterator])
-    max_nt = nthreads_bands + nthreads_kpoints
     Nε = size(Ψ, 1)
-    
-    # Preallocate thread-local buffers
-    thread_buffers = Dict(tid => (
-        is = Vector{Int64}(undef, max_nnz),
-        js = Vector{Int64}(undef, max_nnz),
-        vals = Vector{ComplexF64}(undef, max_nnz)
-    ) for tid in 1:max_nt)
 
-    tforeach(axes(Ψ, 3), nchunks=nthreads_kpoints) do k
-        tforeach(axes(Ψ, 2), nchunks=nthreads_bands) do m
-            id = Threads.threadid()
-            buffer = thread_buffers[id]
-            @unpack is, js, vals = buffer
-            @views for (R, inds) in enumerate(sp_iterator)
+    kpoint_tmap(axes(Ψ, 3), Nε, dense=false) do k
+        inner_tforeach(axes(Ψ, 2)) do ms
+            # Buffers per task
+            is = Vector{Int64}(undef, max_nnz); js = Vector{Int64}(undef, max_nnz); vals = Vector{ComplexF64}(undef, max_nnz)
+            @views for m in ms, (R, inds) in enumerate(sp_iterator)
                 nnz = 0
                 for (i, j) in inds
                     val = conj(Ψ[i, m, k]) * dHk_dHr[R, k] * Ψ[j, m, k]
@@ -106,17 +93,16 @@ Applies the chain rule to compute the gradient of the loss with respect to the r
 # Returns
 - `dL_dHr`: A real-space Hamiltonian gradient array, where each element contains the accumulated gradient for a specific lattice vector in `R`. Its shape is determined by the Hamiltonian structure and `mode`.
 """
-function chain_rule(dL_dE, dE_dHr, mode; nthreads_bands=Threads.nthreads(), nthreads_kpoints=Threads.nthreads(), sp_tol=1e-10)
-    max_nt = nthreads_bands + nthreads_kpoints
-    dL_dHr_thread = [get_empty_complex_hamiltonians(size(dE_dHr, 2), size(dE_dHr, 1), mode) for _ in 1:max_nt]
-    tforeach(axes(dE_dHr, 3), nchunks=nthreads_kpoints) do k
-        tforeach(axes(dE_dHr, 2), nchunks=nthreads_bands) do m
-            for R in axes(dE_dHr, 1)
-                @views @. dL_dHr_thread[Threads.threadid()][R] += dL_dE[m , k] * dE_dHr[R, m, k]
-            end
+function chain_rule(dL_dE, dE_dHr, mode; sp_tol=1e-10)
+    # One partial sum per k-point, added up afterwards
+    dL_dHr_k = kpoint_tmap(axes(dE_dHr, 3), size(dE_dHr, 2), dense=mode isa Dense) do k
+        dL_dHr = get_empty_complex_hamiltonians(size(dE_dHr, 2), size(dE_dHr, 1), mode)
+        for m in axes(dE_dHr, 2), R in axes(dE_dHr, 1)
+            @views @. dL_dHr[R] += dL_dE[m, k] * dE_dHr[R, m, k]
         end
+        dL_dHr
     end
-    dL_dHr = sum(dL_dHr_thread)
+    dL_dHr = sum(dL_dHr_k)
     if mode isa Sparse; droptol!(dL_dHr, sp_tol); end
     return dL_dHr
 end
@@ -146,7 +132,7 @@ function get_loss_gradient_hr(dL_dE, vs, Rs, ks, ::Dense, sp_iterator=nothing; s
     phase = exp_2πi(Rs, ks)
     # W[:, :, k] = conj(V_k) * Diagonal(dL_dE[:, k]) * transpose(V_k)
     W = Array{ComplexF64, 3}(undef, Nε, Nε, Nk)
-    dense_tmap(1:Nk, Nε) do k
+    kpoint_tmap(1:Nk, Nε) do k
         @views Vk = vs[:, :, k]
         @views mul!(W[:, :, k], conj(Vk), dL_dE[:, k] .* transpose(Vk))
     end

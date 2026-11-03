@@ -39,3 +39,24 @@ You can start Hamster by calling the `hamster` executable. To make use of MPI pa
 
 While keyword arguments can be passed directly via the command line, it is more practical to provide Hamster with a [config file](@ref man-config) `hconf`. Examples can be found [here](@ref examples).
 
+## [Parallelization](@id parallelization)
+
+Hamster combines MPI and threads:
+
+- **MPI ranks** share the structures of a run (and of the training and validation sets of a fit). This is the most
+  efficient level, in particular for fits with many small structures: use as many ranks as the memory allows, with a
+  few threads each.
+- **Threads** work within one structure. Steps without k-points (neighbor lists, geometry tensor, the real-space
+  Hamiltonian with TB, ML, SOC and electrostatic terms, the gradients of the model parameters) always use all threads.
+  Steps over k-points (the Hamiltonians H(k), the diagonalization, the gradient per k-point and the exact DOS) use the
+  same rule everywhere, set with `threads_per_kpoint` in the `Options` block:
+  - `threads_per_kpoint = 1`: all k-points in parallel, one thread each;
+  - `threads_per_kpoint = n`: `nthreads ÷ n` k-points at a time with `n` threads each;
+  - `threads_per_kpoint = auto` (default): one thread per k-point for dense Hamiltonians with fewer than 1000 orbitals,
+    all threads per k-point (one k-point after the other) for larger ones, and for sparse Hamiltonians the threads
+    that are left over when there are fewer k-points than threads.
+
+  The threads of a k-point are used by Hamster's own loops and by BLAS/LAPACK. OpenBLAS has a single thread count for
+  all calls, so it uses one thread when several k-points run at the same time; Intel MKL (`hamster --install --mkl`)
+  uses `n` threads per k-point.
+

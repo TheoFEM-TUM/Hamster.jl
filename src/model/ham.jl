@@ -30,9 +30,11 @@ function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Dense(); wei
     Hk = get_empty_complex_hamiltonians(Nε, size(ks, 2), mode)
     exp_2πiRk = exp_2πi(Rs, ks)
 
-    @tasks for k in eachindex(Hk)
-        @inbounds for R in eachindex(Hr)
-            add_scaled!(Hk[k], Hr[R], exp_2πiRk[R, k] * weights[R])
+    kpoint_tmap(eachindex(Hk), Nε) do k
+        inner_tforeach(1:Nε) do cols
+            @inbounds for R in eachindex(Hr)
+                add_scaled!(Hk[k], Hr[R], exp_2πiRk[R, k] * weights[R], cols)
+            end
         end
     end
     return Hk
@@ -44,7 +46,7 @@ function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, ::Sparse; weights
     # Nonzeros of all Hr[R], collected once; Hk[k] is then assembled in a single step per k-point
     Is, Js, Vs, Ridx = coo_entries(Hr)
     Hk = Vector{SparseMatrixCSC{ComplexF64, Int64}}(undef, size(ks, 2))
-    @tasks for k in eachindex(Hk)
+    kpoint_tmap(eachindex(Hk), Nε, dense=false) do k
         vals = [Vs[n] * exp_2πiRk[Ridx[n], k] * weights[Ridx[n]] for n in eachindex(Vs)]
         Hk[k] = sparse(Is, Js, vals, Nε, Nε)
     end
@@ -52,14 +54,14 @@ function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, ::Sparse; weights
 end
 
 """
-    add_scaled!(H::Matrix, A, c)
+    add_scaled!(H::Matrix, A, c, cols=axes(A, 2))
 
-Add `c * A` to the dense matrix `H` in place. For sparse `A`, only its nonzeros are visited.
+Add `c * A` to the dense matrix `H` in place, in the columns `cols`. For sparse `A`, only its nonzeros are visited.
 """
-add_scaled!(H::Matrix, A::AbstractMatrix, c) = (H .+= c .* A; H)
-function add_scaled!(H::Matrix, A::SparseMatrixCSC, c)
+add_scaled!(H::Matrix, A::AbstractMatrix, c, cols=axes(A, 2)) = (@views H[:, cols] .+= c .* A[:, cols]; H)
+function add_scaled!(H::Matrix, A::SparseMatrixCSC, c, cols=axes(A, 2))
     rows = rowvals(A); vals = nonzeros(A)
-    @inbounds for col in axes(A, 2), n in nzrange(A, col)
+    @inbounds for col in cols, n in nzrange(A, col)
         H[rows[n], col] += c * vals[n]
     end
     return H
@@ -91,8 +93,8 @@ function coo_entries(Hs::AbstractVector{<:SparseMatrixCSC})
 end
 
 # Dense diagonalization (measured with OpenBLAS on MAPbBr3 Hamiltonians): matrices with fewer than DENSE_LARGE orbitals
-# are diagonalized in parallel over the k-points with one BLAS thread each; larger ones one after the other with all
-# threads in BLAS, which is at least as fast for any number of k-points. Real matrices (e.g. at Γ without SOC) use the
+# are diagonalized fastest in parallel over the k-points with one BLAS thread each; larger ones one after the other with
+# all threads in BLAS, which is at least as fast for any number of k-points (automatic threads_per_kpoint). Real matrices (e.g. at Γ without SOC) use the
 # real divide-and-conquer solver (dsyevd), which is several times faster than the complex one; complex matrices with at
 # least DENSE_MRRR orbitals use the MRRR solver (zheevr), which is then faster than divide and conquer (zheevd) with
 # OpenBLAS; with Intel MKL, divide and conquer is faster for all sizes.
@@ -112,9 +114,8 @@ Diagonalizes a vector of Hamiltonian matrices `Hk` and returns the specified num
 - `vectors::Bool=true`: Whether the eigenvectors are computed (dense matrices); without them, `vs` is empty and the full
   diagonalization is several times faster.
 
-Dense matrices are diagonalized with `dense_eigen!` directly into the result array, with the thread layout of
-`dense_tmap`: small matrices (fewer than `DENSE_LARGE` orbitals) in parallel over the k-points with one BLAS thread
-each, larger ones one after the other with all threads in BLAS.
+Dense matrices are diagonalized with `dense_eigen!` directly into the result array. The threads are distributed over
+the k-points with `kpoint_tmap` (tag `threads_per_kpoint`).
 
 # Returns:
 - `Es::Matrix{Float64}`: A matrix where each column `Es[:, k]` contains the `Neig` eigenvalues of the `k`-th Hamiltonian matrix in `Hk`.
@@ -127,39 +128,94 @@ function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0
     vs = zeros(ComplexF64, vectors ? Nε : 0, Neig, Nk)
 
     if Hk[1] isa SparseMatrixCSC
-        Threads.@threads for k in eachindex(Hk)
+        kpoint_tmap(eachindex(Hk), Nε, dense=false) do k
             Es[:, k], v = diagonalize(Hk[k], Neig=Neig, target=target, method=method, vectors=vectors)
             vectors && (vs[:, :, k] = v)
         end
         return Es, vs
     end
 
-    dense_tmap(eachindex(Hk), Nε) do k
+    kpoint_tmap(eachindex(Hk), Nε) do k
         Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k])
     end
     return Es, vs
 end
 
-"""
-    dense_tmap(f, items, Nε)
+# Threads per k-point of all loops over k-points (tag threads_per_kpoint, set by main); 0: automatic
+const THREADS_PER_KPOINT = Ref(0)
 
-Map `f` over `items` (e.g. the k-points) for dense linear algebra on matrices with `Nε` orbitals, with the thread
-layout of the dense diagonalization: for fewer than `DENSE_LARGE` orbitals in parallel over the Julia threads with
-one BLAS thread per call, otherwise one item after the other with all threads in BLAS (OpenBLAS and Intel MKL).
 """
-function dense_tmap(f, items, Nε)
+    set_threads_per_kpoint!(n)
+
+Set the number of threads per k-point of all loops over k-points (`n = 0`: automatic, see `threads_per_kpoint`).
+"""
+set_threads_per_kpoint!(n::Integer) = (THREADS_PER_KPOINT[] = n; nothing)
+
+"""
+    threads_per_kpoint(Nε, nitems; dense=true, n=THREADS_PER_KPOINT[]) -> Int
+
+Threads per k-point for a loop over `nitems` k-points with Hamiltonians of `Nε` orbitals: `n` if set (at most the
+number of Julia threads), otherwise automatic: all threads for dense Hamiltonians with at least `DENSE_LARGE` orbitals,
+one for smaller dense ones, and the threads left over by the k-points (number of threads ÷ `nitems`) for sparse ones.
+"""
+function threads_per_kpoint(Nε, nitems; dense=true, n=THREADS_PER_KPOINT[])
+    T = Threads.nthreads()
+    n > 0 && return min(n, T)
+    dense && return Nε ≥ DENSE_LARGE ? T : 1
+    return max(1, T ÷ max(nitems, 1))
+end
+
+"""
+    kpoint_tmap(f, items, Nε; dense=true, n=threads_per_kpoint(Nε, length(items), dense=dense))
+
+Map `f` over `items` (the k-points of one structure) with `n` threads per item: `nthreads ÷ n` items at a time, each
+with `n` threads for its inner loops (`inner_tforeach`) and for Intel MKL; with all threads (`n = nthreads`), one item
+after the other with all threads also in OpenBLAS. OpenBLAS has one thread count for all calls, so it gets one thread
+when several items run at the same time.
+"""
+function kpoint_tmap(f, items, Nε; dense=true, n=threads_per_kpoint(Nε, length(items), dense=dense))
+    isempty(items) && return map(f, items)
+    T = Threads.nthreads()
     blas_threads = BLAS.get_num_threads()
     try
-        if Nε ≥ DENSE_LARGE
-            BLAS.set_num_threads(Threads.nthreads())
-            return with_mkl_threads(() -> map(f, items), Threads.nthreads())
-        else
-            BLAS.set_num_threads(1)
-            return tmap(x -> with_mkl_threads(() -> f(x), 1), items)
+        if n ≥ T
+            BLAS.set_num_threads(T)
+            return with_mkl_threads(() -> with_inner_tasks(() -> map(f, items), T), T)
+        end
+        BLAS.set_num_threads(1)
+        return tmap(items; ntasks=min(length(items), T ÷ n)) do x
+            with_mkl_threads(() -> with_inner_tasks(() -> f(x), n), n)
         end
     finally
         BLAS.set_num_threads(blas_threads)
     end
+end
+
+"""
+    inner_tasks()
+
+Number of tasks for the inner loops of the current item of `kpoint_tmap` (the number of Julia threads outside of it).
+"""
+inner_tasks() = get(task_local_storage(), :hamster_inner_tasks, Threads.nthreads())
+
+"""
+    with_inner_tasks(f, n)
+
+Call `f()` with `inner_tasks() == n`.
+"""
+with_inner_tasks(f, n) = task_local_storage(f, :hamster_inner_tasks, n)
+
+"""
+    inner_tforeach(f, range; chunks_per_task=1)
+
+Call `f` on parts of `range` with `inner_tasks()` tasks (`chunks_per_task` parts per task, for load balancing), or
+once on the whole `range` with a single task.
+"""
+function inner_tforeach(f, range; chunks_per_task=1)
+    n = inner_tasks()
+    (n == 1 || length(range) ≤ 1) && return (f(range); nothing)
+    tforeach(f, chunks(range, n=min(length(range), chunks_per_task * n)); ntasks=n)
+    return nothing
 end
 
 """
@@ -186,7 +242,7 @@ end
 
 Call `f()` with `n` MKL threads for the calling Julia thread and restore the previous count afterwards; without Intel
 MKL, just call `f()`. MKL ignores `BLAS.set_num_threads` for BLAS/LAPACK calls from Julia threads and uses
-`MKL_NUM_THREADS` threads in each of them; `dense_tmap` sets the count with this function.
+`MKL_NUM_THREADS` threads in each of them; `kpoint_tmap` sets the count with this function.
 """
 function with_mkl_threads(f, n)
     setlocal = mkl_threads_local_function()
