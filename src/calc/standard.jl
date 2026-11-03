@@ -44,7 +44,7 @@ Performs a standard calculation for an effective Hamiltonian model, computing ei
 - `hamster_out.h5` — HDF5 file containing:
   - Loss values (for iterative calculations, if applicable)  
   - Timings and profiling data
-- `Es.dat` — Plain text file containing computed eigenvalues for each structure (written only if `skip_diag` is `true`; default).
+- `Es.dat` — Plain text file containing computed eigenvalues for each structure (written unless `skip_diag = true`). With several systems (`train_mode = universal`), one file `Es_<system>.dat` per system.
 - `dos.h5` — DOS, PDOS and COHP of every structure, generated if the `dos` tag is set (see [DOS, PDOS and COHP](@ref dos-post-processing)).
 """
 function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1, verbosity=get_verbosity(conf), write_output=true)
@@ -136,8 +136,8 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
                         if !skip_diag; write_to_file(Es, "Es"); end
                         if save_vecs && !skip_diag; write_to_file(vs, "vs"); end
                     else
-                        if !skip_diag; write_to_file(Es, "tmp/Es$config_index"); end
-                        if save_vecs && !skip_diag; write_to_file(vs, "tmp/vs$config_index"); end
+                        if !skip_diag; write_to_file(Es, joinpath(make_temp_dir(system), "Es$config_index")); end
+                        if save_vecs && !skip_diag; write_to_file(vs, joinpath(make_temp_dir(system), "vs$config_index")); end
                     end
                 end
             else
@@ -219,11 +219,8 @@ function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_conf
         MPI.Barrier(comm)
         combine_hams(comm, what="Cr", rank=rank, nranks=nranks, filename=current_file)
     end
-    if (get_write_hk(conf) || get_write_hr(conf)) && rank == 0
-        for index in eachindex(strcs)
-            system, config_index = get_system_and_config_index(index, local_inds)
-            write_orbital_basis(strcs[index], bases[index], conf, system=system, ham_file=ham_file)
-        end
+    if get_write_hk(conf) || get_write_hr(conf)
+        write_orbital_bases(strcs, bases, local_inds, comm, conf, rank=rank, ham_file=ham_file)
     end
     
 end

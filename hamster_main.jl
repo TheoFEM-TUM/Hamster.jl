@@ -38,7 +38,9 @@ if lowercase(Hamster.get_device(conf)) == "gpu"
 end
 
 begin_time = MPI.Wtime()
-Hamster.main(comm, conf, rank=rank, nranks=nranks, num_nodes=num_nodes)
+Hamster.abort_on_error(comm) do
+    Hamster.main(comm, conf, rank=rank, nranks=nranks, num_nodes=num_nodes)
+end
 total_runtime = MPI.Wtime() - begin_time
 
 if rank == 0

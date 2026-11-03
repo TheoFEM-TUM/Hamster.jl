@@ -27,6 +27,15 @@ Only one command can be given per call (combining, e.g., `--update` and `--preco
 
 With MPI, start one `hamster` per rank with `mpiexecjl` or `srun`.
 
+During the run, Hamster keeps its temporary files (per-rank Hamiltonian files, eigenvalues of single structures) in a
+new folder `hamster_tmp_<random>` in the run folder and removes it at the end. Other files and folders in the run
+folder, e.g. a folder `tmp`, are not touched, and several runs can share a folder as long as their output files
+differ. Up to version 0.6.4, Hamster used the folder `tmp` and deleted it at the start and end of every run.
+
+If one MPI rank stops with an error, `hamster` prints the error and stack trace of that rank, adds the error to
+`hamster.out` and stops all ranks (`MPI.Abort`, exit code 1); before, the other ranks waited until the time limit of
+the job. After such an abort, the temporary folder is kept.
+
 ## Installation
 
 ```bash

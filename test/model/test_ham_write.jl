@@ -95,3 +95,35 @@ end
 
     rm("ham.h5", force=true)
 end
+@testset "Combination of the per-rank Hamiltonian files" begin
+    mktempdir() do dir
+        cd(dir) do
+            Hamster.TEMP_DIR[] = "run_tmp"
+            try
+                mkdir("run_tmp")
+                H = [sprand(4, 4, 0.5) for _ in 1:2]
+                write_ham(H, rand(3, 2), comm, 1, temp=true, filename="other.h5", rank=0)
+                @test isfile(joinpath("run_tmp", "other_0.h5"))
+                Hamster.combine_hams(comm, what="Hk", filename="out.h5", temp_file="other.h5", rank=0, nranks=1)
+                H_read, _ = read_ham(comm, 1, filename="out.h5", space="k")
+                @test H_read ≈ H
+                @test_throws ErrorException Hamster.combine_hams(comm, what="Hk", filename="out2.h5", temp_file="other.h5",
+                                                                 rank=0, nranks=2)
+            finally
+                Hamster.TEMP_DIR[] = "tmp"
+            end
+        end
+    end
+end
+
+@testset "Orbital labels of several systems" begin
+    labels = Dict("gaas" => ["Ga-s", "As-s"], "cspbbr3" => ["Cs-s", "Pb-s", "Br-px"])
+    mktempdir() do dir
+        file = joinpath(dir, "ham.h5")
+        Hamster.write_orbital_labels(labels, file)
+        Hamster.write_orbital_labels(Dict("gaas" => ["changed"], "" => ["X-s"]), file)
+        @test h5read(file, "basis_gaas") == ["Ga-s", "As-s"]
+        @test h5read(file, "basis_cspbbr3") == ["Cs-s", "Pb-s", "Br-px"]
+        @test h5read(file, "basis") == ["X-s"]
+    end
+end

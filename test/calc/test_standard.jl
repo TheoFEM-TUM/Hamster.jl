@@ -83,3 +83,26 @@ end
 
     rm("hamster.out"); rm("hamster_out.h5"); rm("Es.dat"); rm("ham.h5")
 end
+@testset "Temporary folder of a run" begin
+    path = joinpath(@__DIR__, "test_files")
+    conf = get_config(filename = joinpath(path, "hconf_std"))
+    set_value!(conf, "poscar", joinpath(path, "POSCAR_gaas"))
+    set_value!(conf, "rllm_file", joinpath(path, "rllm.dat"))
+    set_value!(conf, "kpoints", joinpath(path, "EIGENVAL_gaas"))
+    set_value!(conf, "init_params", joinpath(path, "params.dat"))
+    mktempdir() do dir
+        cd(dir) do
+            mkdir("tmp"); write(joinpath("tmp", "keep.txt"), "user data")
+            Hamster.main(comm, conf, rank=rank)
+            @test read(joinpath("tmp", "keep.txt"), String) == "user data"
+            @test isfile("Es.dat")
+            @test !any(startswith("hamster_tmp_"), readdir())
+            @test Hamster.TEMP_DIR[] == "tmp"
+
+            set_value!(conf, "init_params", "missing_params.dat")
+            @test_throws ErrorException Hamster.main(comm, conf, rank=rank)
+            @test !any(startswith("hamster_tmp_"), readdir())
+            @test Hamster.TEMP_DIR[] == "tmp"
+        end
+    end
+end
