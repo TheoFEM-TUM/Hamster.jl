@@ -54,3 +54,18 @@ test_file_path = joinpath(@__DIR__, "test_files")
     @test nn_dict[Hamster.IonLabel("As", "As", sorted=false)] ≈ Hamster.normdiff(strc_5.ions[1].pos, strc_5.ions[2].pos)
     @test nn_dict[Hamster.IonLabel("Ga", "Ga", sorted=false)] ≈ Hamster.normdiff(strc_5.ions[5].pos, strc_5.ions[6].pos)
 end
+
+@testset "Cutoff checks" begin
+    poscar_path = joinpath(test_file_path, "POSCAR_CsPbBr3")
+    conf = get_empty_config()
+    set_value!(conf, "grid_size", 5.0)
+    @test_throws ErrorException Structure(conf, poscar_path=poscar_path)
+    set_value!(conf, "grid_size", 7.0)
+    @test Structure(conf, poscar_path=poscar_path).point_grid.grid_size == 7.0
+
+    conf = get_empty_config()
+    set_value!(conf, "rcut", "ML", 8.0)
+    @test_throws ErrorException Structure(conf, poscar_path=poscar_path)
+    set_value!(conf, "rcut", "ML", 6.0)
+    @test Structure(conf, poscar_path=poscar_path) isa Structure
+end

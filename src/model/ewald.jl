@@ -110,7 +110,7 @@ center, so an image translated by T can only contain neighbors if |T| ≤ rcut +
 translations without neighbors, which do not change the sum.
 """
 function ewald_translation_vectors(pos, lattice, rcut)
-    Rs = get_translation_vectors(get_Rmax(lattice, rcut=rcut))
+    Rs = get_translation_vectors(get_Rmax(lattice, rcut=rcut, positions=reduce(hcat, pos)))
     center = sum(pos) / length(pos)
     ρ = maximum(r -> norm(r - center), pos)
     Ts = frac_to_cart(Rs, lattice)
