@@ -60,7 +60,7 @@ function SOCModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=g
     MPI.Bcast!(param_labels, comm, root=0)
     MPI.Barrier(comm)
 
-    params = init_soc_params(param_labels, conf)
+    params = init_soc_params(param_labels, conf, warn=rank==0)
     return SOCModel(params, param_labels, types_per_strc, soc_matrices_per_type, Rs_info, update_soc)
 end
 
@@ -141,28 +141,35 @@ Initializes spin-orbit coupling (SOC) parameters for a given set of ions based o
 # Arguments
 - `ions`: A collection of ion objects.
 - `conf`: (Optional) Configuration object used for consistency checks. Defaults to `get_empty_config()`.
-- `initas`: (Optional) Specifies the initialization method:
-  - `'z'`: Initializes all parameters to zero.
-  - `'o'`: Initializes all parameters to one.
-  - `'r'`: Initializes parameters with random values.
-  - File path or identifier: Reads SOC parameters from an external source.
+- `initas`: (Optional) Specifies the initialization method (see [`get_init_mode`](@ref)):
+  - `zeros`: Initializes all parameters to zero.
+  - `ones`: Initializes all parameters to one.
+  - `rand`: Initializes parameters with random values.
+  - File path: Reads SOC parameters from a parameter file. Elements of the file that are not in `ion_types` are
+    ignored; elements without an entry in the file start from zero (with a warning if `warn=true`).
 """
-function init_soc_params(ion_types, conf=get_empty_config(); initas=get_soc_init_params(conf))
+function init_soc_params(ion_types, conf=get_empty_config(); initas=get_soc_init_params(conf), warn=true)
     Nparams = length(ion_types)
-    if initas[1] == 'z'
+    init_mode = get_init_mode(initas)
+    if init_mode == :zeros
         return zeros(Nparams)
-    elseif initas[1] == 'o'
+    elseif init_mode == :ones
         return ones(Nparams)
-    elseif initas[1] == 'r'
+    elseif init_mode == :rand
         return rand(Nparams)
     else
         params = zeros(Nparams)
         _, _, unique_ion_types, soc_params, conf_values = read_params(initas)
         check_consistency(conf_values, conf)
-        for (n, type) in enumerate(element_to_number.(unique_ion_types))
-            params[findfirst(t->type==t, ion_types)] = soc_params[n]
+        file_types = element_to_number.(unique_ion_types)
+        for (n, type) in enumerate(file_types)
+            index = findfirst(t->type==t, ion_types)
+            isnothing(index) || (params[index] = soc_params[n])
         end
-
+        missing_types = filter(t -> t ∉ file_types, ion_types)
+        if warn && !isempty(missing_types)
+            @warn "No SOC parameter for $(join(number_to_element.(missing_types), ", ")) in $initas; it starts from zero."
+        end
         return params
     end
 end

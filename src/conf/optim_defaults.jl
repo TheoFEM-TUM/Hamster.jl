@@ -1,7 +1,7 @@
 """
     update_tb=haskey(conf, "Optimizer")
 
-The `update_tb` tag determines whether/which parameters of the TB model are updated during the optimization. Defaults to `true` if an `Optimizer` block is provided.
+The `update_tb` tag determines whether/which parameters of the TB model are updated during the optimization: `true`, `false`, or a list of parameter indices in the order of `params.dat`. Defaults to `true` if an `Optimizer` block is provided.
 """
 function get_update_tb(conf::Config, NV)::Vector{Bool}
     update_tb = Vector{Bool}(undef, NV)
@@ -11,7 +11,11 @@ function get_update_tb(conf::Config, NV)::Vector{Bool}
         if conf("update_tb", "Optimizer") isa Bool
             update_tb .= conf("update_tb", "Optimizer") ? true : false
         else
-            update_tb .= map(index -> index ∈ conf("update_tb", "Optimizer"), eachindex(update_tb))
+            indices = conf("update_tb", "Optimizer")
+            for index in indices
+                1 ≤ index ≤ NV || error("update_tb: parameter index $index is out of range (the model has $NV TB parameters).")
+            end
+            update_tb .= map(index -> index ∈ indices, eachindex(update_tb))
         end
     end
     return update_tb
@@ -104,7 +108,7 @@ get_val_data(conf::Config)::String = conf("val_data", "Optimizer") == "default" 
 """
     eig_fit=true (false if hr_fit)
 
-The `eig_fit` tag switches on fitting the effective Hamiltonian to eigenvalue data. If both `hr_fit` and `eig_fit` are true, the model is first fit to Hamiltonian data and then to eigenvalue data.
+The `eig_fit` tag states that the effective Hamiltonian is fit to eigenvalue data; the training data is selected by `hr_fit` (Hamiltonian data if `hr_fit = true`, else eigenvalues). At the moment `eig_fit` only sets the default of `eig_val`: a combined fit, first to Hamiltonian and then to eigenvalue data, is not implemented.
 """
 function get_eig_fit(conf::Config)::Bool
     if conf("eig_fit", "Optimizer") == "default"
@@ -146,10 +150,10 @@ end
 """
     val_mode=PC
 
-The `val_mode` flag switches between different modes for model validation (PC, MD, mixed, multi; not case sensitive).
+The `val_mode` flag switches between different modes for model validation (PC, MD, universal, mixed; not case sensitive).
 """
 get_val_mode(conf::Config)::String = conf("val_mode", "Optimizer") == "default" ? get_train_mode(conf) : lowercase(conf("val_mode", "Optimizer"))
-@configtag val_mode String "pc" "type of validation data (pc, md, mixed, multi; not case sensitive)." "Optimizer" getter=:custom default_doc="same as train_mode" category="validation"
+@configtag val_mode String "pc" "type of validation data (pc, md, universal, mixed; not case sensitive)." "Optimizer" getter=:custom default_doc="same as train_mode" category="validation"
 
 """
     validate=false (true if `val_mode` is set)
@@ -172,8 +176,8 @@ end
 @configtag printeachiter Int64 1 "iteration interval for profiler prints." "Optimizer" category="output"
 @configtag valeachiter Int64 1 "iteration interval for validation." "Optimizer" category="validation"
 
-@configtag update_tb Bool true "update the TB parameters in a fit: true, false, or a list of parameter indices." "Optimizer" getter=:custom value=(conf -> conf("update_tb", "Optimizer") == "default" ? haskey(conf, "Optimizer") : conf("update_tb", "Optimizer")) default_doc="true in a fit" category="parameters"
+@configtag update_tb Bool true "update the TB parameters in a fit: true, false, or a list of parameter indices (in the order of params.dat)." "Optimizer" getter=:custom value=(conf -> conf("update_tb", "Optimizer") == "default" ? haskey(conf, "Optimizer") : conf("update_tb", "Optimizer")) default_doc="true in a fit" category="parameters"
 @configtag wE Vector{Float64} Float64[] "weight of each band in the loss; single bands or ranges can be set with wE_<band> or wE_<first>-<last> (e.g. wE_3 = 2, wE_10-20 = 0.5)." "Optimizer" getter=:custom value=(conf -> conf("wE", "Optimizer") == "default" ? "1 for all bands" : conf("wE", "Optimizer")) default_doc="1 for all bands" category="bands and weights" see_also=["wk", "bandmin"]
 @configtag wk Vector{Float64} Float64[] "weight of each k-point in the loss; single k-points or ranges can be set with wk_<k> or wk_<first>-<last> (e.g. wk_1 = 5)." "Optimizer" getter=:custom value=(conf -> conf("wk", "Optimizer") == "default" ? "1 for all k-points" : conf("wk", "Optimizer")) default_doc="1 for all k-points" category="bands and weights" see_also=["wE"]
-@configtag eig_fit Bool true "fit to eigenvalue data (with hr_fit: first to the Hamiltonian, then to the eigenvalues)." "Optimizer" getter=:custom default_doc="true (false if hr_fit = true)" category="data" see_also=["hr_fit"]
+@configtag eig_fit Bool true "fit to eigenvalue data; at the moment only the default of eig_val (the training data is chosen by hr_fit)." "Optimizer" getter=:custom default_doc="true (false if hr_fit = true)" category="data" see_also=["hr_fit"]
 @configtag eig_val Bool true "validate with eigenvalue data." "Optimizer" getter=:custom default_doc="same as eig_fit" category="validation"

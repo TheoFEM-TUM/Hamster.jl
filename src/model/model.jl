@@ -43,7 +43,7 @@ end
 function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=get_empty_config();
                 rank=0,
                 nranks=1,
-                update_tb=get_update_tb(conf, nparams(bases[1])), 
+                update_tb=nothing,
                 filename = get_rllm_file(conf),
                 initas=get_init_params(conf),
                 label="",
@@ -86,10 +86,16 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
     MPI.Bcast!(param_labels, comm, root=0)
     MPI.Barrier(comm)
 
-    update_tb = all(update_tb) ? fill(true, nparams) : fill(false, nparams)
+    # Indices in update_tb refer to the global parameter order (as in params.dat), so the mask is built after the gather
+    if isnothing(update_tb)
+        update_tb = get_update_tb(conf, nparams)
+    elseif length(update_tb) ≠ nparams
+        allequal(update_tb) || error("update_tb has $(length(update_tb)) entries, but the model has $nparams parameters.")
+        update_tb = fill(first(update_tb), nparams)
+    end
     params_per_strc = [[findfirst(p->p==param, param_labels) for param in basis.parameters] for basis in bases]
     model = TBModel(hs, ones(nparams), param_labels, params_per_strc, update_tb)
-    init_params!(model, conf, initas=initas)
+    init_params!(model, conf, initas=initas, warn=rank==0)
     write_summary && write_model_summary(model, strcs, bases, comm, conf, rank=rank, label=label)
     return model
 end
@@ -230,22 +236,32 @@ Initialize the parameters of a `model` based on the provided configuration and i
 
 # Keyword Arguments
 - `conf`: Configuration settings.
-- `initas`: The initialization method or file path for parameters. Defaults to `ones`.
+- `initas`: The initialization method or file path for parameters (see [`get_init_mode`](@ref)). Defaults to `ones`.
+- `warn`: Warn about model parameters that are missing in the parameter file (they keep the value 1).
 """
-function init_params!(model, conf=get_empty_config(); initas=get_init_params(conf))
-    if initas[1] == 'o'
+function init_params!(model, conf=get_empty_config(); initas=get_init_params(conf), warn=true)
+    init_mode = get_init_mode(initas)
+    if init_mode == :ones
         set_params!(model, ones(length(model.params)))
-    elseif initas[1] == 'r'
+    elseif init_mode == :rand
         set_params!(model, rand(length(model.params)))
-    elseif initas[1] == 'z'
+    elseif init_mode == :zeros
         set_params!(model, zeros(length(model.params)))
     else
         parameters, parameter_values, _, _, conf_values = read_params(initas)
         check_consistency(conf_values, conf)
-        for (v1, model_param) in enumerate(model.param_labels), (v2, file_param) in enumerate(parameters)
-            if model_param == file_param
-                model.params[v1] = parameter_values[v2]
+        file_values = Dict(zip(parameters, parameter_values))
+        missing_labels = similar(model.param_labels, 0)
+        for (v, model_param) in enumerate(model.param_labels)
+            if haskey(file_values, model_param)
+                model.params[v] = file_values[model_param]
+            else
+                push!(missing_labels, model_param)
             end
+        end
+        if warn && !isempty(missing_labels)
+            @warn "$(length(missing_labels)) of $(length(model.params)) TB parameters are not in $initas and start from 1: " *
+                  join(string.(missing_labels[1:min(end, 10)]), ", ") * (length(missing_labels) > 10 ? ", ..." : "")
         end
     end
 end
