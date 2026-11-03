@@ -91,5 +91,5 @@ Filter = x -> !(x in [Hamster.compute_dos, Hamster.orbital_labels, Hamster.DOSSe
 
 ```@autodocs
 Modules = [Hamster]
-Pages = ["device/device.jl", "device/kernels.jl", "device/linear_map.jl", "device/device_ham.jl"]
+Pages = ["device/threads.jl", "device/device.jl", "device/kernels.jl", "device/linear_map.jl", "device/device_ham.jl"]
 ```
