@@ -116,7 +116,7 @@ end
             file = joinpath(dir, name)
             write(file, "NN1_Ga+Ga_ssσ  2.5\nNN1_As+Ga_ssσ  -1.5\n")
             @test Hamster.get_init_mode(file) == :file
-            model = TBModel(nothing, zeros(3), labels, [collect(1:3)], fill(true, 3))
+            model = TBModel(nothing, ones(3), labels, [collect(1:3)], fill(true, 3))   # as in the TBModel constructors
             # The parameter that is missing in the file keeps the value 1 and is reported
             @test_logs (:warn, r"1 of 3 TB parameters are not in") Hamster.init_params!(model, initas=file)
             @test model.params == [2.5, -1.5, 1.0]
