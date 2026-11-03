@@ -1,5 +1,3 @@
-# Helpers for the tests with several systems (also used by test_files/mpi_run.jl)
-
 """
     write_universal_strc_file(strc_file)
 

@@ -145,7 +145,6 @@ end
                 @test Hamster.make_temp_dir("cspbbr3") == location
                 write_to_file(ones(2, 3), joinpath(location, "Es2"))
                 write_to_file(2 .* ones(2, 3), joinpath(location, "Es10"))
-                # Not eigenvalue files of single structures: ignored (they used to fail when parsing the index)
                 write_to_file(ones(4), joinpath(location, "Es_other1"))
                 write_to_file(ones(4), joinpath(location, "vs1"))
                 @test Hamster.collapse_files_with("Es", location=location, outname="Es_cspbbr3")

@@ -37,8 +37,6 @@ include("universal_helpers.jl")
 end
 
 @testset "Standard run with several systems" begin
-    # Standard runs with train_mode = universal are not started by main (the Optimizer block starts a fit), so the
-    # standard calculation is called directly
     mktempdir() do dir
         cd(dir) do
             strc_file = joinpath(dir, "strc_file.h5")
@@ -52,7 +50,6 @@ end
             finally
                 Hamster.TEMP_DIR[] = "tmp"
             end
-            # Both systems have configuration index 1: their eigenvalue files used to overwrite each other
             @test !isfile("Es.dat")
             @test size(read_from_file("Es_cspbbr3.dat")) == (14, 1, 1)
             @test size(read_from_file("Es_gaas.dat")) == (8, 1, 1)

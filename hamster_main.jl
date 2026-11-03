@@ -38,7 +38,6 @@ if lowercase(Hamster.get_device(conf)) == "gpu"
 end
 
 begin_time = MPI.Wtime()
-# An error on one rank stops all ranks (instead of the others waiting until the time limit)
 Hamster.abort_on_error(comm) do
     Hamster.main(comm, conf, rank=rank, nranks=nranks, num_nodes=num_nodes)
 end

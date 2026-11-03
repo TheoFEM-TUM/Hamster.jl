@@ -10,15 +10,13 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity
     # Clear output files from previous Hamster runs
     clear_hamster_output()
 
-    # A new temporary folder for this run (folders of the user and of other runs in the same folder are not touched)
     temp_dir = rank == 0 ? basename(mktempdir(pwd(), prefix="hamster_tmp_", cleanup=false)) : ""
     temp_dir = MPI.bcast(temp_dir, 0, comm)
     TEMP_DIR[] = temp_dir
     out = try
         run_main(comm, conf, rank=rank, nranks=nranks, num_nodes=num_nodes, verbosity=verbosity)
     catch
-        # No barrier here: the other ranks may be stuck in another collective. With several ranks the folder is kept
-        # (the `hamster` command aborts all ranks), so that no rank loses files it is still writing.
+        # No barrier: other ranks may be stuck in another collective call
         MPI.Comm_size(comm) == 1 && rm(temp_dir, recursive=true, force=true)
         TEMP_DIR[] = "tmp"
         rethrow()

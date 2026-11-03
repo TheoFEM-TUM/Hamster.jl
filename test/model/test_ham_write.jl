@@ -102,13 +102,11 @@ end
             try
                 mkdir("run_tmp")
                 H = [sprand(4, 4, 0.5) for _ in 1:2]
-                # The temporary file name follows the file name of the writer (it used to be fixed to ham_<rank>.h5)
                 write_ham(H, rand(3, 2), comm, 1, temp=true, filename="other.h5", rank=0)
                 @test isfile(joinpath("run_tmp", "other_0.h5"))
                 Hamster.combine_hams(comm, what="Hk", filename="out.h5", temp_file="other.h5", rank=0, nranks=1)
                 H_read, _ = read_ham(comm, 1, filename="out.h5", space="k")
                 @test H_read ≈ H
-                # A missing rank file is an error (the output would be incomplete)
                 @test_throws ErrorException Hamster.combine_hams(comm, what="Hk", filename="out2.h5", temp_file="other.h5",
                                                                  rank=0, nranks=2)
             finally

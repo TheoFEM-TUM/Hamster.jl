@@ -10,13 +10,11 @@ case, dir = ARGS
 path = @__DIR__
 
 if case == "abort"
-    # Rank 0 waits in a collective call while rank 1 fails
     Hamster.abort_on_error(comm) do
         rank == 1 && error("test error on rank 1")
         MPI.Barrier(comm)
     end
 elseif case == "runs"
-    # MD standard run, one structure per rank
     cd(joinpath(dir, "md")) do
         conf = get_config(filename = joinpath(path, "hconf_std_md"))
         set_value!(conf, "poscar", joinpath(path, "POSCAR_gaas"))
@@ -29,7 +27,6 @@ elseif case == "runs"
         set_value!(conf, "write_hr", true)
         Hamster.main(comm, conf, rank=rank, nranks=nranks)
     end
-    # Standard run with two systems, one system per rank
     cd(joinpath(dir, "universal")) do
         strc_file = joinpath(dir, "universal", "strc_file.h5")
         rank == 0 && write_universal_strc_file(strc_file)

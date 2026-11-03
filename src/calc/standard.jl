@@ -136,7 +136,6 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
                         if !skip_diag; write_to_file(Es, "Es"); end
                         if save_vecs && !skip_diag; write_to_file(vs, "vs"); end
                     else
-                        # One folder per system: the configuration indices of different systems overlap
                         if !skip_diag; write_to_file(Es, joinpath(make_temp_dir(system), "Es$config_index")); end
                         if save_vecs && !skip_diag; write_to_file(vs, joinpath(make_temp_dir(system), "vs$config_index")); end
                     end

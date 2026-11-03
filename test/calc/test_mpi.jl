@@ -21,7 +21,6 @@ end
 @testset "MPI: an error on one rank stops all ranks" begin
     mktempdir() do dir
         finished, exitcode, output = run_with_two_ranks("abort", dir, timeout=600)
-        # Without abort_on_error, rank 0 waits in MPI.Barrier forever
         @test finished
         @test exitcode ≠ 0
         @test occursin("ERROR on MPI rank 1", output)
@@ -36,7 +35,6 @@ end
         @test finished && exitcode == 0
         exitcode == 0 || println(output)
 
-        # MD: both structures in Es.dat and ham.h5, the temporary folder is removed
         cd(joinpath(dir, "md")) do
             inds = h5read("hamster_out.h5", "config_inds")
             @test length(inds) == 2
@@ -48,7 +46,6 @@ end
             @test !any(startswith("hamster_tmp_"), readdir())
         end
 
-        # Two systems: the orbital labels of the system on rank 1 are written, too
         cd(joinpath(dir, "universal")) do
             @test size(read_from_file("Es_cspbbr3.dat"), 1) == 14
             @test size(read_from_file("Es_gaas.dat"), 1) == 8

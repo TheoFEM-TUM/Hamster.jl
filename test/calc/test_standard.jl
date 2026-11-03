@@ -92,7 +92,6 @@ end
     set_value!(conf, "init_params", joinpath(path, "params.dat"))
     mktempdir() do dir
         cd(dir) do
-            # Folders of the user are not touched (main used to delete ./tmp)
             mkdir("tmp"); write(joinpath("tmp", "keep.txt"), "user data")
             Hamster.main(comm, conf, rank=rank)
             @test read(joinpath("tmp", "keep.txt"), String) == "user data"
@@ -100,7 +99,6 @@ end
             @test !any(startswith("hamster_tmp_"), readdir())
             @test Hamster.TEMP_DIR[] == "tmp"
 
-            # The temporary folder is also removed if the run fails
             set_value!(conf, "init_params", "missing_params.dat")
             @test_throws ErrorException Hamster.main(comm, conf, rank=rank)
             @test !any(startswith("hamster_tmp_"), readdir())
