@@ -43,13 +43,17 @@ Create a `Loss` object with band weights, k-point weights, and loss norm based o
 """
 function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk))
     n = loss_to_n[loss]
+    length(wE) == Nε || error("wE has $(length(wE)) entries, but the training data has $Nε bands.")
+    length(wk) == Nk || error("wk has $(length(wk)) entries, but the training data has $Nk k-points.")
 
     for key in keys(conf.blocks["Optimizer"])
         if occursin("wk_", key)
             index_range = get_weight_index_from_key(key)
+            index_range ⊆ 1:Nk || error("$key: k-point indices out of range (the training data has $Nk k-points).")
             wk[index_range] .= conf(key, "Optimizer")
         elseif occursin("we_", key)
             index_range = get_weight_index_from_key(key)
+            index_range ⊆ 1:Nε || error("$key: band indices out of range (the training data has $Nε bands).")
             wE[index_range] .= conf(key, "Optimizer")
         end
     end
@@ -184,7 +188,7 @@ defined in the `Regularization` struct.
 # Returns
 - `Float64`: The total regularization penalty
 """
-forward(R::Regularization, x) = R.λ * mapreduce(y -> abs(y) > R.b ? (y-R.b)^R.n : 0., +, x)
+forward(R::Regularization, x) = R.λ * mapreduce(y -> abs(y) > R.b ? (abs(y)-R.b)^R.n : 0., +, x; init=0.)
 
 """
     backward(R::Regularization, x::AbstractVector) -> AbstractVector
@@ -199,4 +203,4 @@ Compute the gradient of the regularization penalty with respect to the input (pa
 - `AbstractVector`: A vector of the same size as `x`, where each element is the gradient of the penalty
   with respect to the corresponding element in `x`.
 """
-backward(R::Regularization, x) = R.λ .* map(y -> abs(y) > R.b ? R.n * (y-R.b)^(R.n-1) : 0., x)
+backward(R::Regularization, x) = R.λ .* map(y -> abs(y) > R.b ? sign(y) * R.n * (abs(y)-R.b)^(R.n-1) : 0., x)

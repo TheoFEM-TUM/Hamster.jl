@@ -54,6 +54,8 @@ The routine iteratively adjusts model parameters to minimize the loss over a tra
   - Timings
 """
 function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nranks=1, write_output=true)
+   # The fits use all bands of the data, sparse eigensolvers only neig of them
+   get_sp_diag(conf) isa Sparse && error("sp_diag = true can not be used in fits (the loss needs all eigenvalues); remove sp_diag from the config file.")
    local_train_inds, local_val_inds = local_structure_indices(conf, comm, optimize=true, rank=rank, nranks=nranks,
                                                               write_output=write_output)
    has_data = !isempty(local_train_inds) && (!isempty(local_val_inds) || !get_validate(conf))
@@ -75,8 +77,12 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       combine_local_rllm_files(get_rllm_file(conf), comm_active; rank=active_rank, nranks=active_size)
 
       dl = DataLoader(local_train_inds, local_val_inds, Nε_train, Nε_val, conf)
-      Nε, Nk = get_neig_and_nk(dl.train_data)
-      optim = GDOptimizer(Nε, Nk, conf)
+      Nε, Nk = get_neig_and_nk(dl.train_data, comm_active)
+      val_weights = get_val_weights(conf) && get_neig_and_nk(dl.val_data, comm_active) == (Nε, Nk)
+      if active_rank == 0
+         weight_warning(dl, Nε, Nk, val_weights, conf, write_output=write_output)
+      end
+      optim = GDOptimizer(Nε, Nk, conf, val_weights=val_weights)
       prof = HamsterProfiler(3, conf)
       
       optimize_model!(ham_train, ham_val, optim, dl, prof, comm_active, conf, rank=active_rank, nranks=active_size)

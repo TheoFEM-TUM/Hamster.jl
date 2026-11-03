@@ -113,6 +113,17 @@
     @test reg_4(x_3) ≈ 1e-5 * mapreduce(y -> abs(y) > 0.5 ? (y-0.5)^2 : 0., +, x_3)
     @test Hamster.backward(reg_4, x_3) ≈ FiniteDiff.finite_difference_gradient(x->reg_4(x), x_3)
 
+    # Test 11b: the penalty depends on |x| (negative parameters are pulled towards zero, too)
+    x_4 = [-1.6, -0.8, -0.3, 0.3, 0.8, 1.6]
+    for (b, n) in [(0., 1), (0.5, 1), (0.5, 2), (0.5, 3)]
+        reg = Regularization(b, 1e-3, n)
+        @test reg(x_4) ≈ 1e-3 * sum(y -> abs(y) > b ? (abs(y) - b)^n : 0., x_4)
+        @test reg(-x_4) ≈ reg(x_4)
+        @test Hamster.backward(reg, -x_4) ≈ -Hamster.backward(reg, x_4)
+        @test all(Hamster.backward(reg, x_4) .* x_4 .≥ 0)
+        @test Hamster.backward(reg, x_4) ≈ FiniteDiff.finite_difference_gradient(x->reg(x), x_4)
+    end
+
     # Test 12: Test Regularization from conf
     conf = get_empty_config()
     set_value!(conf, "lambda", "Optimizer", 1e-5)
@@ -161,4 +172,28 @@ end
     dL_dHr = Hamster.backward(loss, Hr_1, Hr_2)
     dL_dHr_true = [FiniteDiff.finite_difference_gradient(Hr->mse(Hr, Hr_2[i]), Hr_1[i])/length(Hr_1) for i in eachindex(Hr_1)]
     @test all([dL_dHr ≈ dL_dHr_true for i in eachindex(dL_dHr)])
+end
+@testset "Band and k-point weights are checked against the data" begin
+    conf = get_empty_config()
+    set_value!(conf, "lr", "Optimizer", 0.1)
+    @test Hamster.has_weight_tags(conf) == false
+    set_value!(conf, "wE", "Optimizer", "1 2 3")
+    @test Hamster.has_weight_tags(conf)
+    @test_throws ErrorException Loss(4, 2, conf)
+    @test Loss(3, 2, conf).wE == [1, 2, 3]
+
+    conf = get_empty_config()
+    set_value!(conf, "wk_3-5", "Optimizer", 2)
+    @test Hamster.has_weight_tags(conf)
+    @test_throws ErrorException Loss(3, 4, conf)
+    @test Loss(3, 5, conf).wk == [1, 1, 2, 2, 2]
+
+    # Weights that can not be applied are reported
+    d1 = Hamster.EigData(rand(3, 5), rand(3, 5))
+    d2 = Hamster.EigData(rand(3, 6), rand(3, 6))
+    @test_logs (:warn, r"training structures differ") Hamster.weight_warning(Hamster.DataLoader([d1, d2], [d1]), 0, 0, false, conf, write_output=false)
+    @test_logs Hamster.weight_warning(Hamster.DataLoader([d1], [d1]), 3, 5, false, conf, write_output=false)
+    set_value!(conf, "val_weights", "Optimizer", true)
+    set_value!(conf, "validate", "Optimizer", true)
+    @test_logs (:warn, r"not used for validation") Hamster.weight_warning(Hamster.DataLoader([d1], [d2]), 3, 5, false, conf, write_output=false)
 end

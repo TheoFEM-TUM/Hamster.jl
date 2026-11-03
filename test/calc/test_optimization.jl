@@ -166,3 +166,9 @@ end
 end
 
 rm("hamster_out.h5")
+@testset "Sparse diagonalization is rejected in fits" begin
+    conf = get_empty_config()
+    set_value!(conf, "lr", "Optimizer", 0.1)
+    set_value!(conf, "sp_diag", true)
+    @test_throws ErrorException Hamster.run_calculation(Val{:optimization}(), comm, conf, write_output=false)
+end

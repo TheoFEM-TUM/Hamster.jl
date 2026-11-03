@@ -273,22 +273,40 @@ Regularization terms can be added to the parameter gradient,
 \frac{\partial L_{\mathrm{reg}}}{\partial V_v}.
 ```
 
+with the penalty (`lambda` ``= \lambda``, `barrier` ``= b``, `lreg` ``= n``)
+
+```math
+L_{\mathrm{reg}} = \lambda \sum_{v:\,|V_v| > b} \left(|V_v| - b\right)^n,
+```
+
+which pulls positive and negative parameters alike towards zero once their magnitude exceeds the barrier. (Up to
+version 0.6.3, the penalty used ``(V_v - b)^n``: with `lreg = 1`, or with `lreg = 2` and `barrier > 0`, negative
+parameters were penalized wrongly, and with `lreg = 1` pushed further away from zero. Fits with the default `lreg = 2`
+and `barrier = 0` are not affected.)
+
 The regularization gradient is added once per batch, independent of the number of MPI ranks. (Up to version 0.6.1,
 every MPI rank added it, so fits with `lambda > 0` on several ranks were regularized more strongly than on one rank.)
 
-Only parameters marked as updateable are modified during optimization.
+Only parameters marked as updateable are modified during optimization: with `update_tb = true` (the default in a fit)
+all TB parameters, with `update_tb = false` none, and with a list of indices, e.g. `update_tb = 1 3`, only these
+parameters, counted in the order of `params.dat`. (Up to version 0.6.3, a list of indices froze all TB parameters in
+fits.)
 
 ## Parameter Initialization
 
-TB parameters can be initialized from:
+TB parameters can be initialized (tag `init_params`) from:
 
-* ones
-* random values
-* zeros
-* an external parameter file
+* ones (`ones`, the default)
+* random values (`rand` or `random`)
+* zeros (`zeros`)
+* an external parameter file (any other value: the name of the file, e.g. `params.dat` of an earlier fit)
 
 When parameters are read from a file, they are matched by their parameter
-labels before being inserted into the model.
+labels before being inserted into the model. Parameters of the model that are not in the file start from 1, and a
+warning lists them. A value that is neither a keyword nor an existing file is an error. (Up to version 0.6.3, only the
+first letter of the value was checked, so file names starting with `o`, `r` or `z`, e.g. `old_params.dat` or
+`results/params.dat`, gave ones, random values or zeros instead of the parameters in the file. The same holds for
+`init_params` in the `ML` and `SOC` blocks.)
 
 ## Model Summary
 

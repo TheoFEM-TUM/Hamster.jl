@@ -75,7 +75,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
     external_data_points = !isnothing(data_points)
     if external_data_points
         params = zeros(length(data_points))
-    elseif get_ml_init_params(conf)[1] ∈ ['r', 'z', 'o']
+    elseif get_init_mode(get_ml_init_params(conf)) ≠ :file
         Npoints_local = floor(Int64, Npoints / nranks)
         data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
         local_counts::Int32 = length(data_points_local)
@@ -296,11 +296,11 @@ Initializes ML parameters.
 # Arguments
 - `data_points`: An array of data points associated with the ML parameters.
 - `conf`: A configuration object.
-- `initas`: A string specifying the initialization strategy for **new parameters**:
-  - `"zeros"` or `'z'` : Initialize parameters to zeros.
-  - `"ones"` or `'o'`  : Initialize parameters to ones.
-  - `"rand"` or `'r'`  : Initialize parameters with random values.
-  - `"file"`            : Load parameters from a file (`initas` is interpreted as the filename in eval mode).
+- `initas`: A string specifying the initialization strategy for **new parameters** (see [`get_init_mode`](@ref)):
+  - `"zeros"` or `"z"` : Initialize parameters to zeros.
+  - `"ones"` or `"o"`  : Initialize parameters to ones.
+  - `"rand"` or `"r"`  : Initialize parameters with random values.
+  - any other value     : Load parameters from the file `initas`.
 - `filename`: A string specifying the file from which old parameters can be loaded when `mode="expand"`.
 - `mode`: A string (default: `get_ml_mode(conf)`) specifying the ML training mode:
   - `"refit"`  : Train from scratch.
@@ -320,11 +320,12 @@ function init_ml_params!(data_points, conf=get_empty_config();
 
     Nparams = isnothing(data_points) ? 1 : length(data_points)
 
-    if initas[1] == 'z'
+    init_mode = get_init_mode(initas)
+    if init_mode == :zeros
         params = zeros(Nparams)
-    elseif initas[1] == 'o'
+    elseif init_mode == :ones
         params = ones(Nparams)
-    elseif initas[1] == 'r'
+    elseif init_mode == :rand
         params = rand(Nparams)
     else
         params, data_points = read_ml_params(conf, filename=initas)
