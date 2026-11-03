@@ -57,6 +57,7 @@ Hamster combines MPI and threads:
     that are left over when there are fewer k-points than threads.
 
   The threads of a k-point are used by Hamster's own loops and by BLAS/LAPACK. OpenBLAS has a single thread count for
-  all calls, so it uses one thread when several k-points run at the same time; Intel MKL (`hamster --install --mkl`)
+  all calls, so it uses one thread when several k-points run at the same time and at most 32 threads otherwise (with
+  all cores of a node, single OpenBLAS calls can take many times longer); Intel MKL (`hamster --install --mkl`)
   uses `n` threads per k-point.
 

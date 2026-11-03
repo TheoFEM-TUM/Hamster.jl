@@ -265,6 +265,9 @@ end
     for n in unique([1, 2, T])
         @test all(==(min(n, T)), Hamster.kpoint_tmap(k -> Hamster.inner_tasks(), 1:5, 10, n=n))
     end
+    # OpenBLAS: all threads (at most OPENBLAS_MAX_THREADS) for one k-point after the other, one for parallel k-points
+    @test only(Hamster.kpoint_tmap(k -> BLAS.get_num_threads(), 1:1, 10, n=T)) == min(T, Hamster.OPENBLAS_MAX_THREADS)
+    T > 1 && @test all(==(1), Hamster.kpoint_tmap(k -> BLAS.get_num_threads(), 1:4, 10, n=1))
     @test Hamster.kpoint_tmap(k -> 2k, 1:5, 10) == 2:2:10 && isempty(Hamster.kpoint_tmap(k -> k, 1:0, 10))
     covered = zeros(Int, 100)
     Hamster.with_inner_tasks(() -> Hamster.inner_tforeach(r -> (covered[r] .+= 1), 1:100, chunks_per_task=4), min(3, T))

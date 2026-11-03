@@ -1,4 +1,5 @@
 const DENSE_LARGE = 1000
+const OPENBLAS_MAX_THREADS = 32
 const THREADS_PER_KPOINT = Ref(0)
 
 """
@@ -27,13 +28,14 @@ end
 
 Map `f` over `items` (the k-points of one structure) with `n` threads per item: `nthreads ÷ n` items at a time, each
 with `n` threads for its inner loops (`inner_tforeach`) and for Intel MKL. OpenBLAS has one thread count for all calls:
-it gets all threads when the items run one after the other (`n = nthreads`), otherwise one.
+it gets all threads, at most `OPENBLAS_MAX_THREADS`, when the items run one after the other (`n = nthreads`), otherwise
+one (with all cores, single OpenBLAS calls can take many times longer).
 """
 function kpoint_tmap(f, items, Nε; dense=true, n=threads_per_kpoint(Nε, length(items), dense=dense))
     isempty(items) && return map(f, items)
     T = Threads.nthreads()
     blas_threads = BLAS.get_num_threads()
-    BLAS.set_num_threads(n ≥ T ? T : 1)
+    BLAS.set_num_threads(n ≥ T ? blas_threads_all() : 1)
     try
         n ≥ T && return with_item_threads(() -> map(f, items), T)
         return tmap(x -> with_item_threads(() -> f(x), n), items; ntasks=min(length(items), T ÷ n))
@@ -41,6 +43,14 @@ function kpoint_tmap(f, items, Nε; dense=true, n=threads_per_kpoint(Nε, length
         BLAS.set_num_threads(blas_threads)
     end
 end
+
+"""
+    blas_threads_all()
+
+BLAS threads when one item of `kpoint_tmap` uses all threads: the number of Julia threads, for OpenBLAS at most
+`OPENBLAS_MAX_THREADS`.
+"""
+blas_threads_all() = uses_mkl() ? Threads.nthreads() : min(Threads.nthreads(), OPENBLAS_MAX_THREADS)
 
 """
     with_item_threads(f, n)
