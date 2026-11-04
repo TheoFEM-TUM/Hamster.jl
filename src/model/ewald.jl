@@ -56,7 +56,6 @@ function ewald_sum(pos, q, lattice;
 )
 
     @assert length(q) == length(pos) "length(q) must equal number of atoms"
-    # Wolf and Zahn are defined for charged cells (e.g. slabs or defects with effective charges); the full Ewald sum is not
     lowercase(method) ∈ ("wolf", "zahn") || abs(sum(q)) < 1e-8 ||
         error("The Ewald sum (method = ewald) needs a neutral cell: the charges add up to $(sum(q)). Use method = wolf or zahn.")
 

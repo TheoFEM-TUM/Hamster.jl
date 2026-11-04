@@ -1,20 +1,9 @@
-# Long-range electrostatics of slabs (cells with vacuum along one lattice vector, `slab_axis` of the Ewald block) and of
-# isolated clusters (vacuum in all directions, `cluster`, see `cluster_positions`).
-#
-# Wolf and Zahn keep only the short-range part erfc(αr)/r of the Coulomb interaction. In a slab, the long-range part that
-# matters is its average over the planes parallel to the surface (the k_∥ = 0 Fourier component): aligned dipoles of
-# successive layers add up to a potential step across the slab, which a truncated sum cannot see. For an isolated slab
-# (vacuum on both sides), the plane-averaged potential of the smooth part erf(αr)/r of point charges q_j at heights z_j is
-# the potential of Gaussian charge sheets,
-#   φ̄(z) = -(2π/A) ke Σ_j q_j [u erf(αu) + exp(-α²u²)/(α√π)],   u = z - z_j,
-# with the area A of the cell in the plane of the slab. Added to the Wolf/Zahn potentials with the same α, it completes
-# them by the plane-averaged long range without double counting. The isolated-slab form has no field in the vacuum,
-# i.e. it includes the dipole correction. For the full Ewald sum (method = ewald), which already contains the long range
-# but treats the slab as periodic along the axis, `slab_axis` adds the dipole correction (Yeh and Berkowitz) instead:
-#   φ_i += 4π ke M z_i / V,   M = Σ_j q_j z_j.
-# The charges are made neutral with a uniform background on the atoms (q_j - mean(q)), so that the potential of the
-# slab stays finite in the vacuum also for effective charges that do not add up to zero. Where the net charge is
-# compensated instead (`charge_compensation`), see the second part of this file.
+# Long-range electrostatics of slabs (vacuum along one lattice vector, `slab_axis`) and isolated clusters (vacuum in all
+# directions, `cluster`), and the compensation of net effective charges (`charge_compensation`). The derivations are on
+# the Ewald page of the manual.
+#   slab, Wolf/Zahn:  φ̄(z) = -(2π/A) ke Σ_j q_j [u erf(αu) + exp(-α²u²)/(α√π)],  u = z - z_j  (plane-averaged erf(αr)/r)
+#   slab, Ewald:      φ_i += 4π ke M z_i / V,  M = Σ_j q_j z_j  (dipole correction, Yeh and Berkowitz)
+#   cluster, Ewald:   φ_i += 4π ke M·(r_i - c) / (3V),  M = Σ_j q_j (r_j - c)  (vacuum boundary, cubic box)
 
 """
     slab_heights(pos, lattice, axis)
@@ -27,7 +16,7 @@ the width of the vacuum.
 function slab_heights(pos, lattice, axis)
     a, b = [i for i in 1:3 if i ≠ axis]
     A = norm(cross(lattice[:, a], lattice[:, b]))
-    h = abs(det(lattice)) / A                          # height of the cell along the normal
+    h = abs(det(lattice)) / A
     lattice_inv = inv(lattice)
     f, gap = shift_vacuum_to_boundary([(lattice_inv * r)[axis] for r in pos])
     return f .* h, A, gap * h
@@ -44,18 +33,9 @@ function shift_vacuum_to_boundary(f)
     fs = sort(f)
     gaps = vcat(diff(fs), fs[1] + 1 - fs[end])         # gap after each sorted atom (the last one across the boundary)
     k = argmax(gaps)
-    start = k == length(fs) ? fs[1] : fs[k+1]          # the atoms start above the largest gap
+    start = k == length(fs) ? fs[1] : fs[k+1]
     return mod.(f .- start, 1.0), gaps[k]
 end
-
-# Isolated clusters (`cluster` of the Ewald block), e.g. quantum dots in a vacuum box. The Ewald sum treats the box as
-# periodic with tinfoil boundary conditions: the dipole moments M of the images add up to a uniform field across the
-# cluster, -4π N M / V with the depolarization tensor N of the box shape (N = 1/3 for a cube). The dipole correction
-# removes it (vacuum boundary conditions, spherical summation of the images):
-#   φ_i += 4π ke M·(r_i - c) / (3V),   M = Σ_j q_j (r_j - c),
-# with the center c of the atoms. For a cubic box, the images then only contribute through their quadrupole moments
-# (a constant, removed by the centering of the potentials) and higher multipoles, which decay with the box size like
-# 1/L⁵. For boxes that are far from cubic, N differs from 1/3 and the correction is approximate.
 
 """
     cluster_positions(pos, lattice)
@@ -79,7 +59,7 @@ end
 Dipole correction (eV per elementary charge) of an isolated cluster in a vacuum box `lattice`, to be added to the
 potentials of the full Ewald sum (`method = ewald`): removes the uniform field of the periodic images of the cluster
 dipole (vacuum instead of tinfoil boundary conditions, exact to dipole order for a cubic box). The charges are
-neutralized by a uniform background on the atoms. See the comment above `cluster_positions`.
+neutralized by a uniform background on the atoms. See the Clusters section of the Ewald page in the manual.
 """
 function cluster_potentials(pos, q, lattice; method)
     lowercase(method) == "ewald" || error("cluster = true needs method = ewald (the full Ewald sum with the dipole " *
@@ -122,13 +102,6 @@ function slab_potentials(pos, q, lattice, axis; method, alpha)
     end
     return φ
 end
-
-# Compensation of the net effective charge Q = Σ q of a structure (`charge_compensation` of the Ewald block). Effective
-# charges need not add up to zero (non-stoichiometric slabs, vacancies), and where the compensating charge -Q sits
-# matters for the long range of a slab: spread over all atoms (`global`, the uniform background of `slab_potentials`),
-# the layers of a slab whose effective charges do not cancel (e.g. ±σ alternating, PbBr2-terminated on both sides)
-# leave the surfaces charged, with a potential step of volts between surface and interior. The electrons compensate
-# such charges at the surfaces (`surface`), so that no macroscopic field remains inside, or next to a defect (`local`).
 
 """
     slab_layers(z; layer_gap=1.0)
@@ -186,7 +159,6 @@ function coordination_numbers(pos, types, q, lattice; shell_gap=1.1)
     N = length(pos)
     pairs = [(i, j) for i in 1:N, j in 1:N if q[i] * q[j] < 0]
     isempty(pairs) && return zeros(Int, N)
-    # images of the cell that can hold a neighbor within twice the shortest distance of opposite charges
     minimum_image(d) = d - lattice * round.(lattice \ d)
     dmin = minimum(norm(minimum_image(pos[j] - pos[i])) for (i, j) in pairs)
     h = [abs(det(lattice)) / norm(cross(lattice[:, mod1(d + 1, 3)], lattice[:, mod1(d + 2, 3)])) for d in 1:3]

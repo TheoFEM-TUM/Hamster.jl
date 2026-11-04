@@ -112,16 +112,12 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
 
         ion_types = get_ion_types(strc.ions)
         charges, sites = get_site_charges(strc, conf, positions=pos)
-        # a net charge is an error unless it is compensated (slabs, clusters, defects; charge_compensation)
         compensated || check_neutrality(charges, sites, strc.system, n)
         for site in zip(sites, charges); site_counts[site] = get(site_counts, site, 0) + 1; end
-        # compensation of the net charge (charge_compensation), from the reference positions, so that it is the same for
-        # all distortions of a structure. The surface charges model a smooth electronic charge and enter only the
-        # plane-averaged long range of the slab; the charges next to a defect (local) enter the sum as well.
+        # from the reference positions: the same compensation for all distortions of a structure
         slab_charges = charges .+ compensation_charges(charge_compensation, get_ion_positions(strc.ions, apply_distortion=false),
                                                        ion_types, charges, strc.lattice; slab_axis=slab_axis)
         charge_compensation == "local" && (charges = slab_charges)
-        # a cluster in vacuum: the uniform background of global compensation sits on its atoms, also in the Ewald sum
         cluster && charge_compensation == "global" && (charges = charges .- sum(charges) / length(charges))
 
         reuse_grid = rcut ≤ min(strc.point_grid.grid_size, get_rcut(conf))
@@ -140,10 +136,8 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         end
         φ = ewald.potentials
         if slab_axis > 0
-            # long range of a slab: plane-averaged part (wolf, zahn) or dipole correction (ewald), see ewald_slab.jl
             φ = φ .+ slab_scale .* slab_potentials(pos, slab_charges, strc.lattice, slab_axis; method=method, alpha=α)
         elseif cluster
-            # isolated cluster: dipole correction of the periodic images, see ewald_slab.jl
             φ = φ .+ cluster_potentials(pos, charges, strc.lattice; method=method)
         end
 
