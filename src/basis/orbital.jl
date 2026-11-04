@@ -38,12 +38,14 @@ function get_orbitals(strc::Structure, conf=get_empty_config())
     orbitals = Vector{Orbital}[]
 
     Norbs = Int64[]
+    rs_ion = get_ion_positions(strc.ions)
+    Ts = frac_to_cart(strc.Rs, strc.lattice)
 
     for iion in eachindex(strc.ions)
         ion_orbitals = Orbital[]
         orbital_list = str_to_orb.(get_orbitals(conf, number_to_element(strc.ions[iion].type)))
         push!(Norbs, length(orbital_list))
-        axes = get_axes(iion, strc, orbital_list, conf)
+        axes = get_axes(iion, strc, orbital_list, conf, rs_ion=rs_ion, Ts=Ts)
         for jorb in eachindex(orbital_list)
             push!(ion_orbitals, Orbital(strc.ions[iion].type, orbital_list[jorb], normalize(axes[jorb])))
         end
@@ -76,12 +78,16 @@ Compute the axes (or orientations) for a set of orbitals associated with a speci
 - `orbital_list::Vector{Angular}`: A vector containing angular orbital types (e.g., `s`, `p`, `sp3`) for which axes need to be computed.
 - `conf`: Configuration object (optional) that contains settings for computing axes. Default is `get_empty_config()`.
 - `NNaxes`: A Boolean flag that determines whether to compute nearest-neighbor axes (`true`) or directly use predefined orbital axes (`false`).
+- `rs_ion`, `Ts`: The ion positions and the Cartesian translation vectors of `strc`; computed from `strc` if not given
+  (pass them when calling `get_axes` for all ions, so they are computed only once).
 """
-function get_axes(iion::Int64, strc::Structure, orbital_list, conf=get_empty_config(); NNaxes=get_nnaxes(conf, number_to_element(strc.ions[iion].type)))
+function get_axes(iion::Int64, strc::Structure, orbital_list, conf=get_empty_config(); NNaxes=get_nnaxes(conf, number_to_element(strc.ions[iion].type)),
+                  rs_ion=nothing, Ts=nothing)
     axes = SVector{3, Float64}[]
     if NNaxes
-        rs_ion = get_ion_positions(strc.ions)
-        rNNs = get_nearest_neighbors(strc.ions[iion].pos, rs_ion, frac_to_cart(strc.Rs, strc.lattice), strc.point_grid, kNN=length(orbital_list))
+        rs_ion = isnothing(rs_ion) ? get_ion_positions(strc.ions) : rs_ion
+        Ts = isnothing(Ts) ? frac_to_cart(strc.Rs, strc.lattice) : Ts
+        rNNs = get_nearest_neighbors(strc.ions[iion].pos, rs_ion, Ts, strc.point_grid, kNN=length(orbital_list))
         return sort([rNN - strc.ions[iion].pos for rNN in rNNs], rev=true)
     else
         if all(h->typeof(h)==sp3, orbital_list) || all(h->typeof(h)==sp3dr2, orbital_list)
