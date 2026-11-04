@@ -4,8 +4,14 @@
 Hamster.get_eigenvalues
 ```
 
+## Hyperparameter optimization
+
 ```@docs
 Hamster.hyper_optimize
+Hamster.hyperopt_tag
+Hamster.check_hyperopt_settings
+Hamster.split_depends_on
+Hamster.write_hyperopt_results
 ```
 
 ## Setup of the calculations
