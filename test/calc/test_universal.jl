@@ -1,3 +1,5 @@
+include("universal_helpers.jl")
+
 @testset "Simple Universal Model" begin
     path = joinpath(@__DIR__, "test_files")
     strc_file = joinpath(path, "strc_file.h5") 
@@ -5,24 +7,11 @@
     if isfile(strc_file); rm(strc_file); end
     if isfile(eig_file); rm(eig_file); end
     
-    poscar_gaas = Hamster.read_poscar(joinpath(path, "POSCAR_gaas"))
-    poscar_cspbrbr3 = Hamster.read_poscar(joinpath(path, "POSCAR_cspbbr3"))
-
     kp_gaas, Es_gaas, _ = Hamster.read_eigenval(joinpath(path, "EIGENVAL_gaas"))
     kp_cspbbr3, Es_cspbbr3, _ = Hamster.read_eigenval(joinpath(path, "EIGENVAL_cspbbr3"))
 
     # Generate dataset for structures
-    h5open(strc_file, "cw") do f
-        g1 = create_group(f, "cspbbr3")
-        write(g1, "positions", reshape(poscar_cspbrbr3.rs_atom, 3, 5, 1))
-        write(g1, "lattice", reshape(poscar_cspbrbr3.lattice, 3, 3, 1))
-        write(g1, "atom_types", poscar_cspbrbr3.atom_types)
-
-        g2 = create_group(f, "gaas")
-        write(g2, "positions", reshape(poscar_gaas.rs_atom, 3, 2, 1))
-        write(g2, "lattice", reshape(poscar_gaas.lattice, 3, 3, 1))
-        write(g2, "atom_types", poscar_gaas.atom_types)
-    end
+    write_universal_strc_file(strc_file)
 
     # Generate dataset for eigenvalues
     h5open(eig_file, "cw") do f
@@ -45,4 +34,29 @@
     prof = Hamster.main(comm, conf, rank=rank)
     @test mean(prof.L_train[:, end]) < 0.2
     rm("hamster.out"); rm("hamster_out.h5"); rm("params.dat"); rm(strc_file); rm(eig_file)
+end
+
+@testset "Standard run with several systems" begin
+    mktempdir() do dir
+        cd(dir) do
+            strc_file = joinpath(dir, "strc_file.h5")
+            write_universal_strc_file(strc_file)
+            conf = universal_standard_config(strc_file)
+            Hamster.TEMP_DIR[] = "run_tmp"
+            mkdir("run_tmp")
+            try
+                Hamster.run_calculation(Val{:standard}(), comm, conf, rank=rank, write_output=false)
+                Hamster.collapse_eigenvalue_files(conf)
+            finally
+                Hamster.TEMP_DIR[] = "tmp"
+            end
+            @test !isfile("Es.dat")
+            @test size(read_from_file("Es_cspbbr3.dat")) == (14, 1, 1)
+            @test size(read_from_file("Es_gaas.dat")) == (8, 1, 1)
+            labels_cspbbr3 = h5read("ham.h5", "basis_cspbbr3")
+            @test length(labels_cspbbr3) == 14 && "Cs-s" in labels_cspbbr3 && "Br-px" in labels_cspbbr3
+            @test h5read("ham.h5", "basis_gaas") == vcat(fill("Ga-sp3dr2", 4), fill("As-sp3dr2", 4))
+            @test h5open(file -> haskey(file, "Hr_cspbbr3_1") && haskey(file, "Hr_gaas_1"), "ham.h5")
+        end
+    end
 end

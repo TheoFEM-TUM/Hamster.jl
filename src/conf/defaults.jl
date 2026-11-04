@@ -24,31 +24,26 @@
 # Diagonalization
 # ====================
 @configtag skip_diag Bool false "if true, no eigenvalues are computed." category="diagonalization"
-@configtag diag_method String "shift-invert" "sparse eigensolver when `sp_diag=true` (shift-invert, krylov-schur)." category="diagonalization" see_also=["sp_diag", "neig", "eig_target"]
+@configtag eigsolver String "shift-invert" "sparse eigensolver when `sp_diag=true`: shift-invert (factorization, Arpack/cuDSS), krylov-schur (KrylovKit) or chebyshev (Chebyshev-filtered subspace iteration, only matrix-vector products, threaded and on GPUs). Formerly `diag_method`." category="diagonalization" see_also=["sp_diag", "neig", "eig_target"]
 @configtag neig Int64 6 "number of eigenvalues when using sparse eigensolver." category="diagonalization" see_also=["sp_diag", "eig_target"]
 @configtag eig_target Float64 0.0 "target energy when using sparse eigensolver." category="diagonalization" see_also=["sp_diag", "neig"]
 
 
 """
-**nthreads_kpoints**=JULIA_NUM_THREADS
+**threads_per_kpoint**=auto
 
-The `nthreads_kpoints::Int` tag sets the number of tasks to work on kpoints simultaneously.
+The `threads_per_kpoint` tag sets how the threads of every loop over k-points (H(k), diagonalization, fit gradient,
+exact DOS) are used: `n` threads per k-point, with `nthreads ÷ n` k-points at a time. `1` diagonalizes all k-points in
+parallel with one thread each, the number of Julia threads one k-point after the other with all threads. `auto`
+(returned as 0) uses all threads per k-point for dense Hamiltonians with at least `DENSE_LARGE` orbitals and otherwise
+gives the threads that are left over when there are fewer k-points than threads to the k-points.
 """
-get_nthreads_kpoints(conf::Config)::Int64 = conf("nthreads_kpoints") == "default" ? Threads.nthreads() : conf("nthreads_kpoints") 
-
-"""
-**nthreads_bands**=JULIA_NUM_THREADS
-
-The `nthreads_bands::Int` tag sets the number of tasks to work on energy bands simultaneously.
-"""
-get_nthreads_bands(conf::Config)::Int64 = conf("nthreads_bands") == "default" ? Threads.nthreads() : conf("nthreads_bands")
-
-"""
-**nthreads_blas**=1
-
-The `nthreads_blas::Int` tag sets the number of threads used by the BLAS library.
-"""
-get_nthreads_blas(conf::Config)::Int64 = conf("nthreads_blas") == "default" ? 1 : conf("nthreads_blas")
+function get_threads_per_kpoint(conf::Config)::Int64
+    n = conf("threads_per_kpoint")
+    (n == "default" || lowercase(string(n)) == "auto") && return 0
+    n isa Integer && n ≥ 1 || throw(ArgumentError("threads_per_kpoint must be auto or a positive integer, not $n."))
+    return n
+end
 
 """
     nhamster=1
@@ -76,10 +71,8 @@ end
 # ====================
 # Post-processing
 # ====================
-@configtag dos Vector{String} String[] "post-processing of a standard run: any combination of dos (total DOS), pdos (projected DOS) and cohp (crystal orbital Hamilton populations), or all, e.g. `dos = pdos cohp`. Results are written to dos.h5; further settings in the DOS block." category="post-processing"
+@configtag dos Vector{String} String[] "post-processing of a standard run: any combination of dos (total DOS), pdos (projected DOS), cohp (crystal orbital Hamilton populations) and jdos (joint DOS, needs nelec), or all (dos, pdos and cohp), e.g. `dos = pdos cohp`. Results are written to dos.h5; further settings in the DOS block." category="post-processing"
 
-@configtag nthreads_kpoints Int64 Threads.nthreads() "number of tasks working on k-points simultaneously." getter=:custom default_doc="number of Julia threads" category="device and parallelization"
-@configtag nthreads_bands Int64 Threads.nthreads() "number of tasks working on bands simultaneously." getter=:custom default_doc="number of Julia threads" category="device and parallelization"
-@configtag nthreads_blas Int64 1 "number of BLAS threads (diagonalizations with fewer k-points than threads use more)." getter=:custom category="device and parallelization"
+@configtag threads_per_kpoint String "auto" "threads per k-point in all loops over k-points (H(k), diagonalization, fit gradient, exact DOS): n threads per k-point and nthreads ÷ n k-points at a time, or auto (all threads per k-point for dense Hamiltonians with at least 1000 orbitals, otherwise the k-points in parallel)." getter=:custom value=(conf -> (n = get_threads_per_kpoint(conf); n == 0 ? "auto" : string(n))) category="device and parallelization"
 @configtag nhamster Int64 1 "number of Hamster processes for parallel tasks." getter=:custom category="device and parallelization"
 @configtag seed Int64 0 "seed of the random number generator (plus the MPI rank); without it, runs are not reproducible." getter=:custom value=(conf -> conf("seed") == "default" ? "none" : conf("seed")) default_doc="none" category="model"

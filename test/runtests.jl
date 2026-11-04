@@ -14,6 +14,7 @@ if test_all || test_only == "Parse"
     @testset "Parse" begin
         include("parse/test_utils.jl")
         include("parse/test_poscar.jl")
+        include("parse/test_xdatcar_eigenval.jl")
         include("parse/test_wannier90.jl")
         include("parse/test_commandline.jl")
         include("parse/test_executable.jl")
@@ -62,11 +63,13 @@ end
 if test_all || test_only == "Model"
     @testset "Model" begin
         include("model/test_ham.jl")
+        include("model/test_chebyshev.jl")
         include("model/test_ham_grad.jl")
         include("model/test_model.jl")
         include("model/test_ewald.jl")
         include("model/test_eff_ham.jl")
         include("model/test_ham_write.jl")
+        include("model/test_linear_scaling.jl")
     end
 end
 
@@ -120,6 +123,7 @@ if test_all || test_only == "calc"
         include("calc/test_standard.jl")
         include("calc/test_hyperopt.jl")
         include("calc/test_universal.jl")
+        include("calc/test_mpi.jl")
     end
 end
 

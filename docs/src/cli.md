@@ -27,10 +27,19 @@ Only one command can be given per call (combining, e.g., `--update` and `--preco
 
 With MPI, start one `hamster` per rank with `mpiexecjl` or `srun`.
 
+During the run, Hamster keeps its temporary files (per-rank Hamiltonian files, eigenvalues of single structures) in a
+new folder `hamster_tmp_<random>` in the run folder and removes it at the end. Other files and folders in the run
+folder, e.g. a folder `tmp`, are not touched, and several runs can share a folder as long as their output files
+differ. Up to version 0.6.4, Hamster used the folder `tmp` and deleted it at the start and end of every run.
+
+If one MPI rank stops with an error, `hamster` prints the error and stack trace of that rank, adds the error to
+`hamster.out` and stops all ranks (`MPI.Abort`, exit code 1); before, the other ranks waited until the time limit of
+the job. After such an abort, the temporary folder is kept.
+
 ## Installation
 
 ```bash
-hamster --install [--add_path yes/no] [--bashrc FILE] [--add_test_exec] [--test] [--gpu]
+hamster --install [--add_path yes/no] [--bashrc FILE] [--add_test_exec] [--test] [--gpu] [--mkl]
 ```
 
 Installs the dependencies of Hamster, makes Hamster available in your default Julia environment (e.g., `using Hamster` in the REPL) and precompiles it. The default environment is the one `JULIA_PROJECT` points to, if set (as by the Julia modules on JSC systems), else `~/.julia/environments/v1.x`.
@@ -39,6 +48,7 @@ Installs the dependencies of Hamster, makes Hamster available in your default Ju
 - `--bashrc`: File to add `PATH` to (default: `~/.bashrc`).
 - `--add_test_exec`: Also creates a `hamster_test` executable that runs the test suite.
 - `--test`: Runs the test suite after the installation (up to 10 minutes).
+- `--mkl`: Also installs [MKL.jl](https://github.com/JuliaLinearAlgebra/MKL.jl) (x86_64 only). `hamster` then uses Intel MKL instead of OpenBLAS for BLAS and LAPACK, which makes the dense diagonalization of large matrices considerably faster on Intel CPUs. MKL uses as many threads as Julia unless `MKL_NUM_THREADS` is set. The library in use is shown at the top of `hamster.out`.
 - `--gpu`: Also installs [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl) and [CUDSS.jl](https://github.com/exanauts/CUDSS.jl) for GPU runs. The GPU code is precompiled only if a GPU is available. Otherwise (e.g., on the login node of a cluster), run `hamster --precompile` once on a GPU node.
 
 `julia hamster_install.jl [options]` does the same as `hamster --install`. If you installed Hamster before the `hamster` executable became part of the repository, delete the generated `hamster` file in the `Hamster.jl` folder before pulling the new version (git refuses to overwrite it).

@@ -5,6 +5,12 @@ comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
+# Intel MKL if installed (hamster --install --mkl), with as many threads as Julia (its default is OMP_NUM_THREADS)
+if !isnothing(Base.find_package("MKL"))
+    haskey(ENV, "MKL_NUM_THREADS") || (ENV["MKL_NUM_THREADS"] = string(Threads.nthreads()))
+    @eval using MKL
+end
+
 # Only rank 0 precompiles
 rank == 0 && @eval using Hamster
 MPI.Barrier(comm)
@@ -38,7 +44,9 @@ if lowercase(Hamster.get_device(conf)) == "gpu"
 end
 
 begin_time = MPI.Wtime()
-Hamster.main(comm, conf, rank=rank, nranks=nranks, num_nodes=num_nodes)
+Hamster.abort_on_error(comm) do
+    Hamster.main(comm, conf, rank=rank, nranks=nranks, num_nodes=num_nodes)
+end
 total_runtime = MPI.Wtime() - begin_time
 
 if rank == 0

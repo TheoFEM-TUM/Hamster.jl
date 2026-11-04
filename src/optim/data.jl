@@ -51,8 +51,10 @@ function DataLoader(train_config_inds, val_config_inds, Nε_train, Nε_val, conf
                     train_mode=get_train_mode(conf), 
                     val_mode=get_val_mode(conf), 
                     hr_fit=get_hr_fit(conf), 
-                    eig_val=get_eig_val(conf))
+                    eig_val=get_eig_val(conf),
+                    data_unit=get_data_unit(conf))
 
+    factor = energy_unit_factor(data_unit)
     hr_val = !eig_val
     if hr_fit
         train_data = mapreduce(vcat, train_config_inds, init=HrData[]) do (system, train_inds)
@@ -75,29 +77,56 @@ function DataLoader(train_config_inds, val_config_inds, Nε_train, Nε_val, conf
             bandinclude=bandinclude, bandmultiplicity=bandmultiplicity,empty=!validate, system=system)
         end
     end
+    if factor != 1
+        foreach(d -> scale_energies!(d, factor), train_data)
+        foreach(d -> scale_energies!(d, factor), val_data)
+    end
     return DataLoader(train_data, val_data)
 end
 
+const ENERGY_UNITS_IN_EV = Dict("ev" => 1.0, "hartree" => 27.211386245988, "ry" => 13.605693122994)
+
 """
-    get_neig_and_nk(data::Vector)
+    energy_unit_factor(unit) -> Float64
+
+Factor that converts energies in `unit` (`eV`, `Hartree` or `Ry`; not case sensitive) to eV.
+"""
+function energy_unit_factor(unit)
+    haskey(ENERGY_UNITS_IN_EV, lowercase(unit)) ||
+        throw(ArgumentError("unknown data_unit $unit; use one of eV, Hartree, Ry."))
+    return ENERGY_UNITS_IN_EV[lowercase(unit)]
+end
+
+"""
+    scale_energies!(data, factor)
+
+Multiply the energies of `data` (the eigenvalues of `EigData`, the matrices of `HrData`) by `factor`.
+"""
+scale_energies!(data::EigData, factor) = (data.Es .*= factor; data)
+scale_energies!(data::HrData, factor) = (foreach(H -> H .*= factor, data.Hr); data)
+
+"""
+    get_neig_and_nk(data::Vector, comm=nothing)
 
 Get the number of eigenvalues and the number of k-points from a collection of data.
 
 # Arguments
 - `data`: A vector of either `EigData` or `HrData`.
+- `comm`: (Optional) MPI communicator; if given, the data of all ranks is taken into account, so that all ranks get
+  the same result.
 
 # Returns
-- `(Neig, Nk)`: The number of eigenvalues and k-points of the first data point. `Return 0 for HrData`.
+- `(Neig, Nk)`: The number of eigenvalues and k-points if they are the same for all data points, otherwise `(0, 0)`.
+  Returns `(0, 0)` for `HrData`.
 """
-function get_neig_and_nk(data::Vector{EigData})
-    Nε_all = map(d->size(d.Es, 1), data)
-    if length(unique(Nε_all)) == 1
-        return (size(data[1].Es, 1), size(data[1].kp, 2))
-    else
-        return (0, 0)
-    end
+function get_neig_and_nk(data::AbstractVector, comm=nothing)
+    shapes = unique(map(d -> d isa EigData ? size(d.Es) : (0, 0), data))
+    # (Nε, Nk) if all local data has the same shape, (0, 0) if it does not, (-1, -1) if there is no local data
+    local_shape = length(shapes) == 1 ? collect(shapes[1]) : isempty(shapes) ? [-1, -1] : [0, 0]
+    all_shapes = isnothing(comm) ? local_shape : MPI.Allgather(local_shape, comm)
+    shapes = unique(filter(≠((-1, -1)), [(all_shapes[i], all_shapes[i+1]) for i in 1:2:length(all_shapes)]))
+    return length(shapes) == 1 ? shapes[1] : (0, 0)
 end
-get_neig_and_nk(data::Vector{<:HrData}) = (0, 0)
 
 function get_band_indices(bandmin, Nε, bandinclude, bandmultiplicity; mode="pc")
     band_factor = mode == "pc" ? 1 : bandmultiplicity
@@ -118,12 +147,12 @@ function get_band_indices(bandmin, Nε, bandinclude, bandmultiplicity; mode="pc"
 end
 
 function get_eig_data(mode, path, Nε; inds=Int64[], bandmin=1, bandinclude=Int64[], bandmultiplicity=1, empty=false, system="")
+    mode ∈ ("pc", "md", "universal", "mixed") || throw(ArgumentError("unknown train_mode/val_mode $mode for eigenvalue data; use pc, md, universal or mixed."))
     data = EigData[]
     band_indices = get_band_indices(bandmin, Nε, bandinclude, bandmultiplicity, mode=mode)
 
     if (mode == "pc" || mode == "mixed") && !empty
-        kp, Es = read_eigenval(path)
-        push!(data, EigData(kp, Es[band_indices, :]))
+        push!(data, read_pc_eigenvalue_data(path, band_indices))
     end
     if (mode == "md" || mode == "mixed") && !empty
         append!(data, read_eigenvalue_data_from_path(path, inds, band_indices, Nε))
@@ -135,10 +164,11 @@ function get_eig_data(mode, path, Nε; inds=Int64[], bandmin=1, bandinclude=Int6
 end
 
 function get_hr_data(mode, path; inds=Int64[], empty=false)
+    mode == "universal" && !empty && throw(ArgumentError("fits and validation with Hamiltonian data (hr_fit, eig_val = false) are not supported in universal mode; use pc or md."))
+    mode ∈ ("pc", "md", "universal", "mixed") || throw(ArgumentError("unknown train_mode/val_mode $mode for Hamiltonian data; use pc or md."))
     data = HrData[]
     if (mode == "pc" || mode == "mixed") && !empty
-        Hr, Rs, _ = read_hrdat(path)
-        push!(data, HrData(Rs, Hr))
+        push!(data, read_hrdat_data(path))
     end
     if (mode == "md" || mode == "mixed") && !empty
         append!(data, read_hr_data_from_path(path, inds))
@@ -153,6 +183,7 @@ function read_eigenvalue_data_from_path(path, inds, band_indices, Nε; system=""
             kp = read(g["kpoints"])
             Es = read(g["eigenvalues"])
             inds_ = length(inds) ≤ size(Es, 3) ? inds : collect(1:size(Es, 3))
+            check_band_range(path, size(Es, 1), band_indices)
             if kp isa Matrix{Float64}
                 return [EigData(kp, Es[band_indices, :, n]) for n in inds_]
             elseif kp isa Array{Float64, 3}
@@ -161,8 +192,50 @@ function read_eigenvalue_data_from_path(path, inds, band_indices, Nε; system=""
         end
     else
         kp, Es = read_eigenval(path)
+        check_band_range(path, size(Es, 1), band_indices)
         return [EigData(kp, Es[band_indices, :])]
     end
+end
+
+"""
+    read_pc_eigenvalue_data(path, band_indices) -> EigData
+
+Read the eigenvalues of a single structure (pc mode) from a VASP `EIGENVAL` file or from an HDF5 file with the
+datasets `kpoints` (3 × Nk or 3 × Nk × 1) and `eigenvalues` (Nb × Nk or Nb × Nk × 1).
+"""
+function read_pc_eigenvalue_data(path, band_indices)
+    if occursin(".h5", path)
+        kp, Es = h5read(path, "kpoints"), h5read(path, "eigenvalues")
+        size(Es, 3) == 1 || throw(ArgumentError("$path contains $(size(Es, 3)) structures, but pc mode uses the data of one structure; use md mode or a file with one structure."))
+        check_band_range(path, size(Es, 1), band_indices)
+        return EigData(kp[:, :, 1], Es[band_indices, :, 1])
+    end
+    kp, Es = read_eigenval(path)
+    check_band_range(path, size(Es, 1), band_indices)
+    return EigData(kp, Es[band_indices, :])
+end
+
+"""
+    check_band_range(path, nbands, band_indices)
+
+Throw an `ArgumentError` if the bands selected for the fit (from `bandmin`, `bandinclude`, `bandmultiplicity` and the
+number of orbitals) go beyond the `nbands` bands in the data file `path`.
+"""
+function check_band_range(path, nbands, band_indices)
+    maximum(band_indices) ≤ nbands || throw(ArgumentError("$path has $nbands bands, but bands $(minimum(band_indices)) to $(maximum(band_indices)) are needed ($(length(band_indices)) bands, one per orbital of the structure). Check bandmin/val_bandmin, bandmultiplicity and train_mode/val_mode."))
+    return nothing
+end
+
+"""
+    read_hrdat_data(path) -> HrData
+
+Hamiltonian data of a Wannier90 `hr.dat` file. The matrices H(R) are divided by the degeneracies of the translation
+vectors R in the file, as in the Fourier sum of Wannier90 (H(k) = Σ_R exp(ik⋅R) H(R) / deg(R)), so that they are the
+H(R) of Hamster (H(k) = Σ_R exp(ik⋅R) H(R)).
+"""
+function read_hrdat_data(path)
+    Hr, Rs, deg = read_hrdat(path)
+    return HrData(Rs, Hr ./ deg)
 end
 
 function read_hr_data_from_path(path, inds)
@@ -175,8 +248,7 @@ function read_hr_data_from_path(path, inds)
         end
         return data
     else
-        Hr, Rs, _ = read_hrdat(path)
-        return [HrData(Rs, Hr)]
+        return [read_hrdat_data(path)]
     end
 end
 

@@ -30,9 +30,11 @@ function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, mode=Dense(); wei
     Hk = get_empty_complex_hamiltonians(Nε, size(ks, 2), mode)
     exp_2πiRk = exp_2πi(Rs, ks)
 
-    @tasks for k in eachindex(Hk)
-        @inbounds for R in eachindex(Hr)
-            add_scaled!(Hk[k], Hr[R], exp_2πiRk[R, k] * weights[R])
+    kpoint_tmap(eachindex(Hk), Nε) do k
+        inner_tforeach(1:Nε) do cols
+            @inbounds for R in eachindex(Hr)
+                add_scaled!(Hk[k], Hr[R], exp_2πiRk[R, k] * weights[R], cols)
+            end
         end
     end
     return Hk
@@ -44,7 +46,7 @@ function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, ::Sparse; weights
     # Nonzeros of all Hr[R], collected once; Hk[k] is then assembled in a single step per k-point
     Is, Js, Vs, Ridx = coo_entries(Hr)
     Hk = Vector{SparseMatrixCSC{ComplexF64, Int64}}(undef, size(ks, 2))
-    @tasks for k in eachindex(Hk)
+    kpoint_tmap(eachindex(Hk), Nε, dense=false) do k
         vals = [Vs[n] * exp_2πiRk[Ridx[n], k] * weights[Ridx[n]] for n in eachindex(Vs)]
         Hk[k] = sparse(Is, Js, vals, Nε, Nε)
     end
@@ -52,14 +54,14 @@ function get_hamiltonian(Hr::Vector{<:AbstractMatrix}, Rs, ks, ::Sparse; weights
 end
 
 """
-    add_scaled!(H::Matrix, A, c)
+    add_scaled!(H::Matrix, A, c, cols=axes(A, 2))
 
-Add `c * A` to the dense matrix `H` in place. For sparse `A`, only its nonzeros are visited.
+Add `c * A` to the dense matrix `H` in place, in the columns `cols`. For sparse `A`, only its nonzeros are visited.
 """
-add_scaled!(H::Matrix, A::AbstractMatrix, c) = (H .+= c .* A; H)
-function add_scaled!(H::Matrix, A::SparseMatrixCSC, c)
+add_scaled!(H::Matrix, A::AbstractMatrix, c, cols=axes(A, 2)) = (@views H[:, cols] .+= c .* A[:, cols]; H)
+function add_scaled!(H::Matrix, A::SparseMatrixCSC, c, cols=axes(A, 2))
     rows = rowvals(A); vals = nonzeros(A)
-    @inbounds for col in axes(A, 2), n in nzrange(A, col)
+    @inbounds for col in cols, n in nzrange(A, col)
         H[rows[n], col] += c * vals[n]
     end
     return H
@@ -90,8 +92,10 @@ function coo_entries(Hs::AbstractVector{<:SparseMatrixCSC})
     return Is, Js, Vs, Ridx
 end
 
+const DENSE_MRRR = 4000
+
 """
-    diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0, method="shift-invert")
+    diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0, method="shift-invert", vectors=true)
 
 Diagonalizes a vector of Hamiltonian matrices `Hk` and returns the specified number of eigenvalues and eigenvectors for each matrix.
 
@@ -103,67 +107,52 @@ Diagonalizes a vector of Hamiltonian matrices `Hk` and returns the specified num
 - `vectors::Bool=true`: Whether the eigenvectors are computed (dense matrices); without them, `vs` is empty and the full
   diagonalization is several times faster.
 
-Dense matrices are diagonalized directly into the result array. With fewer k-points than threads, large matrices (at
-least `large` orbitals, with eigenvectors) are diagonalized one after the other with all threads in BLAS; otherwise the
-k-points are distributed over the threads (with the remaining threads for BLAS). `strategy` (`:auto`, `:kpoints` or
-`:blas`) overrides this choice. The eigenvectors are computed with LAPACK's divide-and-conquer solver (`zheevd`), except
-for large matrices with fewer than 4 BLAS threads, where the MRRR solver (`zheevr`) is faster.
+Dense matrices are diagonalized with `dense_eigen!` directly into the result array. The threads are distributed over
+the k-points with `kpoint_tmap` (tag `threads_per_kpoint`).
 
 # Returns:
 - `Es::Matrix{Float64}`: A matrix where each column `Es[:, k]` contains the `Neig` eigenvalues of the `k`-th Hamiltonian matrix in `Hk`.
 - `vs::Array{ComplexF64, 3}`: A 3D array where each `vs[:, :, k]` contains the `Neig` eigenvectors corresponding to the `k`-th Hamiltonian matrix in `Hk`. The dimensions of `vs` are `(Nε, Neig, Nk)`, where `Nε` is the size of each Hamiltonian matrix, `Neig` is the number of eigenvectors, and `Nk` is the number of Hamiltonian matrices.
 """
-function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0, method="shift-invert", vectors=true,
-                     large=1000, strategy=:auto)
+function diagonalize(Hk::Vector{<:AbstractMatrix}; Neig=size(Hk[1], 1), target=0, method="shift-invert", vectors=true)
     Nε = size(Hk[1], 1)
     Nk = length(Hk)
     Es = zeros(Neig, Nk)
     vs = zeros(ComplexF64, vectors ? Nε : 0, Neig, Nk)
-    nthreads = Threads.nthreads()
-    blas_threads = BLAS.get_num_threads()
 
     if Hk[1] isa SparseMatrixCSC
-        Threads.@threads for k in eachindex(Hk)
+        kpoint_tmap(eachindex(Hk), Nε, dense=false) do k
             Es[:, k], v = diagonalize(Hk[k], Neig=Neig, target=target, method=method, vectors=vectors)
             vectors && (vs[:, :, k] = v)
         end
         return Es, vs
     end
 
-    strategy == :auto && (strategy = vectors && Nk < nthreads && Nε ≥ large ? :blas : :kpoints)
-    strategy ∈ (:kpoints, :blas) || error("Unknown diagonalization strategy $strategy (auto, kpoints or blas).")
-    try
-        if strategy == :blas
-            # Few large matrices: one after the other, with all threads in BLAS
-            BLAS.set_num_threads(nthreads)
-            mrrr = Nε ≥ large && nthreads < 4
-            for k in eachindex(Hk)
-                Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k], mrrr=mrrr)
-            end
-        else
-            Nk < nthreads && BLAS.set_num_threads(max(blas_threads, nthreads ÷ Nk))
-            mrrr = Nε ≥ large && BLAS.get_num_threads() < 4
-            Threads.@threads for k in eachindex(Hk)
-                Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k], mrrr=mrrr)
-            end
-        end
-    finally
-        BLAS.set_num_threads(blas_threads)
+    kpoint_tmap(eachindex(Hk), Nε) do k
+        Es[:, k] = dense_eigen!(vectors ? view(vs, :, :, k) : nothing, Hk[k])
     end
-
     return Es, vs
 end
 
 """
-    dense_eigen!(V, H; mrrr=false) -> eigenvalues
+    dense_eigen!(V, H; mrrr=size(H, 1) ≥ DENSE_MRRR && !uses_mkl()) -> eigenvalues
 
-Eigenvalues of the Hermitian matrix `H` (upper triangle); the eigenvectors are written to `V` (`nothing`: eigenvalues
-only), computed with LAPACK's divide-and-conquer solver (`zheevd`) or, with `mrrr`, the MRRR solver (`zheevr`).
+Eigenvalues (ascending) of the Hermitian matrix `H` (upper triangle); the eigenvectors are written to `V` (`nothing`:
+eigenvalues only). Real matrices (see `is_real_matrix`) are diagonalized with the real divide-and-conquer solver
+(`dsyevd`), complex ones with divide and conquer (`zheevd`) or, with `mrrr` (default: large matrices with OpenBLAS),
+the MRRR solver (`zheevr`).
 """
-function dense_eigen!(V, H; mrrr=false)
+function dense_eigen!(V, H; mrrr=size(H, 1) ≥ DENSE_MRRR && !uses_mkl())
     if abs(hermiticity_mismatch(H)) > 1e-5
         maxdiff, inds = findmax(abs.(H .- Hermitian(H)))
         @warn "Hamiltonian not hermitian! Maximum missmatch: $maxdiff at $inds."
+    end
+    if is_real_matrix(H)
+        A = Matrix{Float64}(real(H))
+        isnothing(V) && return LAPACK.syevd!('N', 'U', A)
+        E, Z = LAPACK.syevd!('V', 'U', A)
+        copyto!(V, Z)
+        return E
     end
     isnothing(V) && return real.(eigvals(Hermitian(H)))
     if mrrr
@@ -176,9 +165,22 @@ function dense_eigen!(V, H; mrrr=false)
 end
 
 """
-    diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0, method="shift-invert")
+    is_real_matrix(H; rtol=1e-12)
 
-Fully diagonalizes a Hermitian Hamiltonian matrix `Hk` and returns the eigenvalues and eigenvectors.
+Whether the imaginary parts of all entries of `H` are below `rtol` times its largest entry, e.g., at Γ and the other
+time-reversal invariant k-points without SOC (where the phase factors are real up to rounding). Works for host and
+device arrays.
+"""
+function is_real_matrix(H::AbstractMatrix; rtol=1e-12)
+    eltype(H) <: Real && return true
+    return maximum(abs ∘ imag, H) ≤ rtol * maximum(abs, H)
+end
+
+"""
+    diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0, method="shift-invert", vectors=true)
+
+Fully diagonalizes a Hermitian Hamiltonian matrix `Hk` with `dense_eigen!` and returns the eigenvalues and eigenvectors
+(`nothing` with `vectors = false`).
 
 # Arguments:
 - `Hk::AbstractMatrix`: A Hermitian matrix (Hamiltonian) to be diagonalized. The matrix should be square and typically complex-valued.
@@ -187,17 +189,12 @@ Fully diagonalizes a Hermitian Hamiltonian matrix `Hk` and returns the eigenvalu
 - `method::String`: The method to be used for calculating eigenvalues of a sparse matrix.
 
 # Returns:
-- `real_values::Vector{Float64}`: A vector containing the real parts of the eigenvalues of `Hk`. The eigenvalues are computed using the Hermitian matrix, so they are guaranteed to be real.
-- `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to an eigenvalue of `Hk`. The eigenvectors are computed in the standard basis and are complex-valued.
+- `real_values::Vector{Float64}`: A vector containing the eigenvalues of `Hk` in ascending order.
+- `eigenvectors::Matrix`: A matrix where each column is an eigenvector corresponding to an eigenvalue of `Hk`.
 """
 function diagonalize(Hk::AbstractMatrix; Neig=size(Hk, 1), target=0, method="shift-invert", vectors=true)
-    if abs(hermiticity_mismatch(Hk)) > 1e-5
-        maxdiff, inds = findmax(abs.(Hk .- Hermitian(Hk)))
-        @warn "Hamiltonian not hermitian! Maximum missmatch: $maxdiff at $inds."
-    end
-    vectors || return real.(eigvals(Hermitian(Hk))), nothing
-    eig = eigen(Hermitian(Hk))
-    return real.(eig.values), eig.vectors
+    V = vectors ? similar(Hk, float(eltype(Hk))) : nothing
+    return dense_eigen!(V, Hk), V
 end
 
 """
@@ -230,28 +227,37 @@ Diagonalizes a sparse Hermitian matrix `Hk` to find a specified number of eigenv
 - `Hk::SparseMatrixCSC`: A sparse Hermitian matrix in compressed sparse column format to be diagonalized. The matrix should be square and Hermitian.
 - `Neig::Int=6`: The number of eigenvalues and corresponding eigenvectors to compute. Defaults to `6`, but can be adjusted based on the required precision or size of the spectrum.
 - `target::Real=0`: The target eigenvalue around which to focus the computation. This is used to prioritize finding eigenvalues closest to this value. Defaults to `0`.
-- `method::String`: The method to be used for calculating eigenvalues of a sparse matrix.
+- `method::String`: The method to be used for calculating eigenvalues of a sparse matrix: `shift-invert` (Arpack),
+  `krylov-schur` (KrylovKit) or `chebyshev` (Chebyshev-filtered subspace iteration, see `chebyshev_eigen`).
 
 # Returns:
-- `eigenvalues::Vector{Float64}`: A vector of the real parts of the computed eigenvalues, focusing on those closest to the target. The number of eigenvalues returned is equal to `Neig`.
+- `eigenvalues::Vector{Float64}`: The real parts of the `Neig` eigenvalues closest to the target, sorted by energy.
 - `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to one of the computed eigenvalues.
 """
 function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert", vectors=true)
     if method == "shift-invert"
         Es, vs, _, _, _, _ = lock(() -> eigs(Hk, nev=Neig, sigma=target), ARPACK_LOCK)
-        if abs(Es[1] - target) > abs(Es[end] - target)
-            return real.(Es[end-Neig:end]), vs[:, end-Neig:end]
-        else
-            return real.(Es[1:Neig]), vs[:, 1:Neig]
-        end
+        return closest_eigenpairs(Es, vs, Neig, target)
     elseif method == "krylov-schur"
         Es, vs = eigsolve(Hk, Neig, EigSorter(λ->abs(target-λ), rev=false), ishermitian=true, maxiter=500)
-        if abs(Es[1] - target) > abs(Es[end] - target)
-            return real.(Es[end-Neig:end]), hcat(vs[end-Neig:end]...)
-        else
-            return real.(Es[1:Neig]), hcat(vs[1:Neig]...)
-        end
+        return closest_eigenpairs(Es, reduce(hcat, vs), Neig, target)
+    elseif method == "chebyshev"
+        return chebyshev_diagonalize(Hk, Neig, target)
+    else
+        error("Unknown eigsolver '$method'. Valid options are shift-invert, krylov-schur and chebyshev.")
     end
+end
+
+"""
+    closest_eigenpairs(Es, vs, Neig, target)
+
+The (at most) `Neig` eigenvalues `Es` closest to `target` and their eigenvectors (columns of `vs`), sorted by energy.
+"""
+function closest_eigenpairs(Es, vs, Neig, target)
+    Es = real.(Es)
+    inds = partialsortperm(abs.(Es .- target), 1:min(Neig, length(Es)))
+    inds = inds[sortperm(Es[inds])]
+    return Es[inds], vs[:, inds]
 end
 
 """
@@ -338,7 +344,7 @@ end
 Calculate the gradient of the spin basis applied to a given matrix `dHr`. The output matrix is of size `(Nε/2, Nε/2)`.
 
 Since `apply_spin_basis` places `H` in the two spin-diagonal blocks, the gradient is the sum of the spin-diagonal blocks of
-`dHr`; the spin-off-diagonal blocks do not depend on `H`.
+`dHr`; the spin-off-diagonal blocks do not depend on `H`. A sparse `dHr` gives a sparse result.
 
 # Arguments
 - `dHr::AbstractMatrix`: An abstract matrix containing the gradient data to be transformed. It should have a shape that is compatible with the spin basis operations.
@@ -348,10 +354,10 @@ function gradient_apply_spin_basis(dHr::AbstractMatrix; alternating_order=false)
     Nε = size(dHr, 1) ÷ 2
     if !alternating_order
         # Case 1: kron(H, I_spin)
-        return Matrix(dHr[1:2:end, 1:2:end] + dHr[2:2:end, 2:2:end])
+        return dHr[1:2:end, 1:2:end] + dHr[2:2:end, 2:2:end]
     else
         # Case 2: kron(I_spin, H)
-        return Matrix(dHr[1:Nε, 1:Nε] + dHr[Nε+1:end, Nε+1:end])
+        return dHr[1:Nε, 1:Nε] + dHr[Nε+1:end, Nε+1:end]
     end
 end
 

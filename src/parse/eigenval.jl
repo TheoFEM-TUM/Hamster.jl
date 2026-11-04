@@ -1,7 +1,8 @@
 """
     read_eigenval(file::AbstractString, nmax::Int=1000000)
 
-Read the `EIGENVAL` VASP output file and extract the k-points, energy bands and occupancies.
+Read the `EIGENVAL` VASP output file and extract the k-points, energy bands and occupancies. Files of spin-polarized
+calculations (`ISPIN = 2`) are not supported and give an error.
 
 # Arguments
 - `file::AbstractString`: The path to the `EIGENVAL` file.
@@ -15,6 +16,8 @@ Read the `EIGENVAL` VASP output file and extract the k-points, energy bands and 
 function read_eigenval(file::AbstractString, nmax::Int=1000000)
     lines = open_and_read(file)
     lines = split_lines(lines)
+    length(lines[1]) ≥ 4 && lines[1][4] == "2" &&
+        error("$file is from a spin-polarized calculation (ISPIN = 2), which is not supported.")
     meta = Dict{String, Float64}()
     @views begin
         nelec = parse(Int64, lines[6][1]); meta["nelec"] = nelec

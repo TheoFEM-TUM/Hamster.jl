@@ -1,7 +1,7 @@
-# [DOS, PDOS and COHP](@id dos-post-processing)
+# [DOS, PDOS, COHP and JDOS](@id dos-post-processing)
 
-Hamster can compute the density of states (DOS), the projected DOS (PDOS) and crystal orbital Hamilton populations (COHP)
-as a post-processing step of a [standard run](@ref standard-run). The quantities are computed from the real-space
+Hamster can compute the density of states (DOS), the projected DOS (PDOS), crystal orbital Hamilton populations (COHP)
+and the joint density of states (JDOS) as a post-processing step of a [standard run](@ref standard-run). The quantities are computed from the real-space
 Hamiltonian of every structure, so no additional input is needed.
 
 ## Usage
@@ -10,7 +10,7 @@ Add the `dos` tag to the `Options` block:
 
 ```bash
 begin Options
-    dos = pdos cohp      # any combination of dos, pdos and cohp; dos = all computes all three
+    dos = pdos cohp      # any combination of dos, pdos, cohp and jdos; dos = all computes dos, pdos and cohp
 end
 ```
 
@@ -22,6 +22,7 @@ begin DOS
     cohp_pairs = Pb-Br      # default: all coupled pairs
     nelec = 8               # electrons per structure (here: GaAs primitive cell): Fermi energy, IDOS and ICOHP
     sigma = 0.05            # broadening (eV) of the exact method
+    jdos_velocity = xyz     # with dos = jdos: also the velocity-weighted JDOS of these components
 end
 ```
 
@@ -40,6 +41,12 @@ the default) is usually sufficient.
   1/√(orbitals × `kpm_vectors`).
 - `method = auto` (default) uses the exact method up to `exact_max_orbitals` orbitals (default 4000) and KPM above.
 
+The JDOS is only available with the exact method (it needs the individual eigenvalues). Its grid runs from 0 to
+`jdos_emax` (default: the largest transition energy + 5 `sigma`) with `ne` points and uses the same broadening as the DOS.
+Since there are (occupied × empty) transitions per k-point, every transition energy is first split linearly between the
+two neighbouring grid points and the result is broadened afterwards; this is accurate as long as the grid spacing is
+small compared with `sigma`.
+
 ## Conventions
 
 - **Spin:** without SOC, all quantities contain the spin degeneracy 2. With SOC (`soc = true`), every orbital is a spin
@@ -57,6 +64,24 @@ the default) is usually sufficient.
   equals ``E \cdot \mathrm{DOS}(E)``.
 - **ICOHP:** with `nelec`, the integrated COHP up to the Fermi energy is written for every pair, together with the
   integrated curves.
+- **JDOS:** the density of vertical transitions between occupied and empty states,
+  ```math
+  \mathrm{JDOS}(\omega) = g \sum_k w_k \sum_{v, c} f_{vk} (1 - f_{ck})\, \delta\left(\omega - (E_{ck} - E_{vk})\right),
+  ```
+  with the zero-temperature occupations ``f`` for `nelec` electrons (required). It contains no transition matrix
+  elements, so it is the spectrum of possible excitation energies, not an absorption spectrum. Spin-conserving
+  transitions are counted (without SOC: twice, once per spin). For an insulator,
+  ``\int \mathrm{JDOS}\, d\omega = g \sum_k w_k N_v N_c`` (occupied × empty bands).
+- **Velocity-weighted JDOS:** with `jdos_velocity = xyz` (any combination of components), the JDOS is also computed
+  with every transition weighted by the squared velocity matrix element,
+  ```math
+  J_a(\omega) = g \sum_k w_k \sum_{v, c} f_{vk} (1 - f_{ck})\, |\langle vk | \hat v_a | ck \rangle|^2\, \delta\left(\omega - (E_{ck} - E_{vk})\right)
+  ```
+  in (Å/fs)²/eV. The velocity operator is the one of the current operator (`write_current`),
+  ``v_a(R) = -\tfrac{i}{\hbar} d_a(R) \circ H(R)`` with the bond vectors ``d``: it only contains the hopping between
+  different sites, not intra-atomic dipole matrix elements (e.g. between the s and p orbitals of one atom). In the
+  independent-particle approximation, the absorptive part of the dielectric function is
+  ``\varepsilon_{2,aa}(\omega) \propto J_a(\omega) / \omega^2`` (divided by the cell volume).
 
 ## Output
 
@@ -72,6 +97,8 @@ configuration index, prefixed with the system name for multiple systems):
 | `fermi_energy` | Fermi energy (only with `nelec`) |
 | `idos`, `icohp/<A-B>` | integrated DOS and COHP on the energy grid (only with `nelec`) |
 | `icohp_fermi/<A-B>` | ICOHP at the Fermi energy (only with `nelec`) |
+| `jdos_energies`, `jdos` | transition-energy grid (eV) and JDOS (transitions/eV), only with `jdos` |
+| `jdos_velocity/<a>` | velocity-weighted JDOS of component `a` ((Å/fs)²/eV), only with `jdos_velocity` |
 
 The group attributes contain the method and its settings. Reading the data, e.g. in Julia:
 

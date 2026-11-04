@@ -17,7 +17,7 @@ Filter = x -> !(x in [Hamster.run_calculation])
 
 ```@autodocs
 Modules = [Hamster]
-Pages = ["eff_ham.jl", "model/ham.jl", "ham_grad.jl", "ham_write.jl", "model/model.jl"]
+Pages = ["eff_ham.jl", "model/ham.jl", "model/chebyshev.jl", "ham_grad.jl", "ham_write.jl", "model/model.jl"]
 ```
 
 # SOC
@@ -91,5 +91,5 @@ Filter = x -> !(x in [Hamster.compute_dos, Hamster.orbital_labels, Hamster.DOSSe
 
 ```@autodocs
 Modules = [Hamster]
-Pages = ["device/device.jl", "device/kernels.jl", "device/linear_map.jl", "device/device_ham.jl"]
+Pages = ["device/threads.jl", "device/device.jl", "device/kernels.jl", "device/linear_map.jl", "device/device_ham.jl"]
 ```

@@ -10,6 +10,8 @@
     prof = Hamster.main(comm, conf, rank=rank)
     @test mean(prof.L_train[:, end]) < 0.15
     @test prof.L_val[end] < 0.15
+    # The linear algebra library is listed at the top of hamster.out
+    @test any(line -> occursin("Linear algebra (BLAS/LAPACK): OpenBLAS", line), readlines("hamster.out")[1:30])
     rm("hamster.out"); rm("params.dat")
 end
 
@@ -69,6 +71,9 @@ end
     set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_cspbbr3_soc"))
     set_value!(conf, "init_params", joinpath(path, "params_cspbbr3.dat"))
 
+    # The ML data points are selected randomly (kmeans, sampling within clusters): seed, so that the loss does not
+    # depend on the tests that ran before
+    Hamster.Random.seed!(1234)
     prof = Hamster.main(comm, conf, rank=rank)
     @test mean(prof.L_train[:, end]) < 0.20
     rm("hamster.out"); rm("params.dat"); rm("ml_params.dat")
@@ -161,3 +166,9 @@ end
 end
 
 rm("hamster_out.h5")
+@testset "Sparse diagonalization is rejected in fits" begin
+    conf = get_empty_config()
+    set_value!(conf, "lr", "Optimizer", 0.1)
+    set_value!(conf, "sp_diag", true)
+    @test_throws ErrorException Hamster.run_calculation(Val{:optimization}(), comm, conf, write_output=false)
+end

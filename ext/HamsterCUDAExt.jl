@@ -23,28 +23,23 @@ function Hamster.device_eigen(Hk::CuDeviceHk, ::Dense; vectors=true, kwargs...)
     H = densify(Hk)
     if Hk.Nε < MIN_GPU_EIGEN_SIZE
         Hh = Array(H)
-        Es = zeros(Hk.Nε, nkpoints(Hk))
-        Threads.@threads for k in axes(Hh, 3)
-            if vectors
-                eig = eigen!(Hermitian(Hh[:, :, k]))
-                Es[:, k] = eig.values
-                Hh[:, :, k] = eig.vectors
-            else
-                Es[:, k] = eigvals!(Hermitian(Hh[:, :, k]))
-            end
-        end
-        return Es, vectors ? copyto!(H, Hh) : similar(H, 0, Hk.Nε, nkpoints(Hk))
+        Es, vs = Hamster.diagonalize([Hh[:, :, k] for k in axes(Hh, 3)], vectors=vectors)
+        return Es, vectors ? copyto!(H, vs) : similar(H, 0, Hk.Nε, nkpoints(Hk))
     else
         # Eigenvalues only ('N') skip the back-transformation of the eigenvectors
         Es = CuMatrix{Float64}(undef, Hk.Nε, nkpoints(Hk))
         for k in axes(H, 3)
-            Es[:, k] = vectors ? first(cuSOLVER.Xsyevd!('V', 'U', view(H, :, :, k))) : cuSOLVER.Xsyevd!('N', 'U', view(H, :, :, k))
+            Hk_k = view(H, :, :, k)
+            A = Hamster.is_real_matrix(Hk_k) ? real.(Hk_k) : Hk_k
+            Es[:, k] = vectors ? first(cuSOLVER.Xsyevd!('V', 'U', A)) : cuSOLVER.Xsyevd!('N', 'U', A)
+            vectors && A !== Hk_k && copyto!(Hk_k, A)
         end
         return Array(Es), vectors ? H : similar(H, 0, Hk.Nε, nkpoints(Hk))
     end
 end
 
 function Hamster.device_eigen(Hk::CuDeviceHk, ::Sparse; Neig=6, target=0.0, method="shift-invert", vectors=true)
+    method == "chebyshev" && return Hamster.device_chebyshev(Hk, Neig, target)
     Es = zeros(Neig, nkpoints(Hk))
     vs = CuArray{ComplexF64}(undef, Hk.Nε, Neig, nkpoints(Hk))
     krylovdim = max(30, 2Neig + 10)      # the KrylovKit default (30) is too small for more than about 25 eigenvalues
@@ -54,7 +49,7 @@ function Hamster.device_eigen(Hk::CuDeviceHk, ::Sparse; Neig=6, target=0.0, meth
             nzval[Hk.diag_pos] .-= target
             A = CuSparseMatrixCSR{ComplexF64, Int32}(Hk.rowptr, Hk.colval, nzval, (Hk.Nε, Hk.Nε))
             if isempty(methods(shift_invert_operator))
-                error("diag_method = shift-invert on the GPU requires the CUDSS extension. Load it with `using CUDSS`.")
+                error("eigsolver = shift-invert on the GPU requires the CUDSS extension. Load it with `using CUDSS`.")
             end
             op = shift_invert_operator(A)
             μs, xs = eigsolve(op, CuArray(rand(ComplexF64, Hk.Nε)), Neig, :LM, ishermitian=true, maxiter=500, krylovdim=krylovdim)
@@ -66,7 +61,7 @@ function Hamster.device_eigen(Hk::CuDeviceHk, ::Sparse; Neig=6, target=0.0, meth
                               maxiter=500, krylovdim=krylovdim)
             λs = real.(λs)
         else
-            error("Unknown diag_method '$method'. Valid options are shift-invert and krylov-schur.")
+            error("Unknown eigsolver '$method'. Valid options are shift-invert, krylov-schur and chebyshev.")
         end
         length(λs) ≥ Neig || error("Sparse eigensolver converged only $(length(λs)) of $Neig eigenvalues at k-point $k.")
         # Keep the Neig eigenvalues closest to the target, sorted in ascending order

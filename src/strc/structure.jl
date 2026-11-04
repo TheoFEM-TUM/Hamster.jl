@@ -42,7 +42,7 @@ function Structure(conf=get_empty_config(); Rs=zeros(3, 1), poscar_path=get_posc
     if verbosity > 0
         append_output_block("Structure Information:", 
         ["POSCAR", "rcut", "grid_size", "Number of atoms", "Number of R vectors", "Ion interactions", "Ion interaction total", "Structure time"], 
-        [poscar_path, rcut, grid_size, length(strc.ions), size(strc.Rs, 2), length(iterate_nn_grid_points(strc.point_grid)), length(strc.ions)^2 * size(strc.Rs, 2), time])
+        [poscar_path, rcut, grid_size, length(strc.ions), size(strc.Rs, 2), count_nn_pairs(strc.point_grid), length(strc.ions)^2 * size(strc.Rs, 2), time])
     end
     return strc
 end
@@ -67,6 +67,7 @@ Create a `Structure` instance from atomic information.
 - `Structure`: A `Structure` instance.
 """
 function Structure(Rs::M1, rs_ion::M2, δrs_ion::M3, ion_types, lattice::M4, conf::Config=get_empty_config(); rcut=get_rcut(conf), grid_size=get_grid_size(conf), system=get_system(conf)) where {M1,M2,M3,M4<:Matrix{Float64}}
+    check_cutoffs(conf, rcut=rcut, grid_size=grid_size)
     point_grid = PointGrid(rs_ion, frac_to_cart(Rs, lattice), grid_size=grid_size)
     ions = get_ions(rs_ion, ion_types, δrs_ion)
 
@@ -75,4 +76,20 @@ end
 
 function Structure(Rs::M1, rs_ion::M2, ion_types, lattice::M3, conf::Config=get_empty_config(); rcut=get_rcut(conf), grid_size=get_grid_size(conf), system=get_system(conf)) where {M1,M2,M3<:Matrix{Float64}}
     return Structure(Rs, rs_ion, zeros(3, size(rs_ion, 2)), ion_types, lattice, conf; rcut=rcut, grid_size=grid_size, system=system)
+end
+
+"""
+    check_cutoffs(conf=get_empty_config(); rcut=get_rcut(conf), grid_size=get_grid_size(conf))
+
+Error if neighbors within a cutoff would be missed: the neighbor grid only searches adjacent grid cells, so
+`grid_size` must be at least `rcut`, and the translations and the grid of a structure are built for `rcut`, so the
+`rcut` of the `ML` block must not be larger.
+"""
+function check_cutoffs(conf=get_empty_config(); rcut=get_rcut(conf), grid_size=get_grid_size(conf))
+    grid_size ≥ rcut || error("grid_size = $grid_size is smaller than rcut = $rcut, neighbors would be missed. " *
+                              "Remove grid_size or set it to at least rcut.")
+    if get_ml_model(conf) && get_ml_rcut(conf) > rcut
+        error("rcut = $(get_ml_rcut(conf)) of the ML block is larger than rcut = $rcut of the Options block, the ML " *
+              "model would miss neighbors. Set rcut in the Options block to at least the ML rcut.")
+    end
 end

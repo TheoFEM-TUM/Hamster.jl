@@ -44,51 +44,21 @@ Performs a standard calculation for an effective Hamiltonian model, computing ei
 - `hamster_out.h5` — HDF5 file containing:
   - Loss values (for iterative calculations, if applicable)  
   - Timings and profiling data
-- `Es.dat` — Plain text file containing computed eigenvalues for each structure (written only if `skip_diag` is `true`; default).
+- `Es.dat` — Plain text file containing computed eigenvalues for each structure (written unless `skip_diag = true`). With several systems (`train_mode = universal`), one file `Es_<system>.dat` per system.
 - `dos.h5` — DOS, PDOS and COHP of every structure, generated if the `dos` tag is set (see [DOS, PDOS and COHP](@ref dos-post-processing)).
 """
 function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1, verbosity=get_verbosity(conf), write_output=true)
-    
-    systems = get_systems(conf)
-    config_inds, _ = get_config_inds_for_systems(systems, comm, conf, rank=rank, write_output=write_output, optimize=false)
-    local_inds = split_indices_into_chunks(config_inds, nranks, rank=rank)
-
+    local_inds, _ = local_structure_indices(conf, comm, optimize=false, rank=rank, nranks=nranks, write_output=write_output)
     has_data = !isempty(local_inds)
-    color = has_data ? 1 : nothing
-    comm_active = MPI.Comm_split(comm, color, rank)
-
-    all_has_data = MPI.gather(Int(has_data), comm, root=0)
-    if rank == 0
-        for (r, flag) in enumerate(all_has_data)
-            if flag == 0
-                append_output_line("Warning: Rank $(r-1) has no data and will be idle. Revise your parallelization settings!")
-            end
-        end
-    end
+    comm_active = active_communicator(has_data, comm, rank=rank)
 
     if has_data
         active_rank = MPI.Comm_rank(comm_active)
         active_size = MPI.Comm_size(comm_active)
+        systems = get_systems(conf)
         mode = haskey(conf, "Supercell") ? (length(systems) > 1 ? "universal" : "md") : "pc"
-        if rank == 0 && verbosity > 1; println("Getting structures..."); end
-        begin_time = MPI.Wtime()
-        strcs = mapreduce(vcat, local_inds, init=Structure[]) do (system, inds)
-            get_structures(conf, config_indices=inds, mode=mode, system=system)
-        end
-        strc_time = MPI.Wtime() - begin_time
-        if rank == 0 && verbosity > 1; println(" Structure time: $strc_time s"); end
-
-        if rank == 0 && verbosity > 1; println("Getting bases..."); end
-        begin_time = MPI.Wtime()
-        bases = Basis[Basis(strc, conf, comm=comm_active) for strc in strcs]
-        bases_time = MPI.Wtime() - begin_time
-        if rank == 0 && verbosity > 1; println(" Basis time: $bases_time s"); end
-
-        if rank == 0 && verbosity > 1; println("Getting Hamiltonian models..."); end
-        begin_time = MPI.Wtime()
-        ham = EffectiveHamiltonian(strcs, bases, comm_active, conf, rank=active_rank, nranks=active_size, sparse_iterators=false)
-        ham_time = MPI.Wtime() - begin_time
-        if rank == 0 && verbosity > 1; println(" Model time: $ham_time s"); end
+        ham, strcs, bases = build_hamiltonian(conf, comm_active, local_inds, mode=mode, rank=active_rank, nranks=active_size,
+                                              verbosity=verbosity, sparse_iterators=false)
 
         Niter = sum(length.(values(local_inds)))
         prof = HamsterProfiler(3, conf, Niter=Niter, Nbatch=1)
@@ -154,7 +124,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
                 Es = zeros(1, 1); vs = zeros(ComplexF64, 1, 1, 1)
                 diag_time_local = @elapsed begin
                     if !skip_diag
-                        Es, vs = diagonalize(Hk, Neig=Neig, target=get_eig_target(conf), method=get_diag_method(conf), vectors=save_vecs)
+                        Es, vs = diagonalize(Hk, Neig=Neig, target=get_eig_target(conf), method=get_eigsolver(conf), vectors=save_vecs)
                     end
                 end
 
@@ -166,8 +136,8 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
                         if !skip_diag; write_to_file(Es, "Es"); end
                         if save_vecs && !skip_diag; write_to_file(vs, "vs"); end
                     else
-                        if !skip_diag; write_to_file(Es, "tmp/Es$config_index"); end
-                        if save_vecs && !skip_diag; write_to_file(vs, "tmp/vs$config_index"); end
+                        if !skip_diag; write_to_file(Es, joinpath(make_temp_dir(system), "Es$config_index")); end
+                        if save_vecs && !skip_diag; write_to_file(vs, joinpath(make_temp_dir(system), "vs$config_index")); end
                     end
                 end
             else
@@ -249,11 +219,8 @@ function run_post_processing(strcs, bases, local_inds, comm, conf=get_empty_conf
         MPI.Barrier(comm)
         combine_hams(comm, what="Cr", rank=rank, nranks=nranks, filename=current_file)
     end
-    if (get_write_hk(conf) || get_write_hr(conf)) && rank == 0
-        for index in eachindex(strcs)
-            system, config_index = get_system_and_config_index(index, local_inds)
-            write_orbital_basis(strcs[index], bases[index], conf, system=system, ham_file=ham_file)
-        end
+    if get_write_hk(conf) || get_write_hr(conf)
+        write_orbital_bases(strcs, bases, local_inds, comm, conf, rank=rank, ham_file=ham_file)
     end
     
 end

@@ -41,3 +41,17 @@ end
         @test conf("alpha", "Pb") == 37
     end
 end
+
+@testset "Renamed input tags" begin
+    mktempdir() do dir
+        file = joinpath(dir, "hconf")
+        write(file, """
+        begin Options
+            diag_method = chebyshev
+        end
+        """)
+        conf = @test_logs (:warn, r"\"diag_method\" was renamed to \"eigsolver\"") Hamster.read_config(file)
+        @test Hamster.get_eigsolver(conf) == "chebyshev"
+        @test !haskey(conf.options, "diag_method")
+    end
+end

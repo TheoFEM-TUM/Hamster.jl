@@ -37,8 +37,21 @@ function generate_output(conf::Config=get_empty_config(); hostnames=hostnames)
         hostlist = string.(unique(hostnames))
         hostlist = replace("$hostlist", "["=>"", "]"=>"")
         println(hamster_out, "  Hamster is running on host(s): $hostlist")
+        println(hamster_out, "  Linear algebra (BLAS/LAPACK): $(linear_algebra_library())")
         write_separator(hamster_out)
     end
+end
+
+"""
+    linear_algebra_library()
+
+Name of the BLAS/LAPACK library that Julia uses (OpenBLAS by default, Intel MKL if MKL.jl is loaded, e.g., after
+`hamster --install --mkl`) and its file name.
+"""
+function linear_algebra_library()
+    libname = basename(blas_library())
+    name = uses_mkl() ? "Intel MKL" : occursin("openblas", libname) ? "OpenBLAS" : "other"
+    return "$name ($libname)"
 end
 
 """

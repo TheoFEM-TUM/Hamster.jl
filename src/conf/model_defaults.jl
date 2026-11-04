@@ -43,4 +43,4 @@ function get_sp_diag(conf::Config)::Union{Sparse, Dense}
         conf("sp_diag") ? Sparse() : Dense()
     end
 end
-@configtag sp_diag Bool false "sparse Hᵏ and sparse eigensolvers (only some eigenvalues, see diag_method, neig and eig_target); not in fits." getter=:custom value=(conf -> get_sp_diag(conf) isa Sparse) default_doc="false (with skip_diag = true: same as sp_mode)" category="diagonalization" see_also=["diag_method", "neig", "eig_target"]
+@configtag sp_diag Bool false "sparse Hᵏ and sparse eigensolvers (only some eigenvalues, see eigsolver, neig and eig_target); not in fits." getter=:custom value=(conf -> get_sp_diag(conf) isa Sparse) default_doc="false (with skip_diag = true: same as sp_mode)" category="diagonalization" see_also=["eigsolver", "neig", "eig_target"]

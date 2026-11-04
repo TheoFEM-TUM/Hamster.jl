@@ -62,7 +62,7 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         label="",
         species_mean,
         structure_means,
-        method=get_ewald_method(conf),
+        method=ewald_method(get_ewald_method(conf)),
         rcut=get_ewald_rcut(conf),
         alpha=ewald_alpha(method, rcut, get_ewald_alpha(conf)),
         alpha_auto=get_ewald_alpha(conf) == 0,
@@ -72,8 +72,10 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         cluster=false,
         charge_compensation="global",
         centering="global",
+        site_counts=nothing,
         filename="hamster.out")
 
+    all_site_counts = isnothing(site_counts) ? nothing : MPI.gather(site_counts, comm, root=0)
     nspecies = length(ewald.param_labels)
     local_Δε = [Float64[] for _ in 1:nspecies]
     for n in eachindex(ewald.potentials), (ϕ, type) in zip(ewald.potentials[n], ewald.types_per_strc[n])
@@ -108,6 +110,10 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
                  "local" => "on atoms with missing neighbors")[charge_compensation])
         means = join(["$e $(@sprintf("%.4f", m)) V" for (e, m) in zip(elements, species_mean)], ", ")
         write_summary_line(io, "subtracted species mean φ̄", centering == "structure" ? "per structure (mean over all: $means)" : means)
+        if !isnothing(all_site_counts)
+            counts = mergewith(+, all_site_counts...)
+            write_summary_line(io, "site charges (sites)", join(["$site $q ($n)" for ((site, q), n) in sort(collect(counts))], ", "))
+        end
         println(io)
         println(io, "  Onsite corrections Δε = -γ (φ - φ̄) per species (meV):")
         widths = [7, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6]

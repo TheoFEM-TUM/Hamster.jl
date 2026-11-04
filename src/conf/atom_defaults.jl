@@ -20,6 +20,38 @@ The `qeff::Float` determines the effective charge of the ion for Ewald summation
 get_qeff(conf::Config, type)::Float64 = conf("qeff", type) == "default" ? 0. : conf("qeff", type)
 
 """
+**qeff_<element>**=qeff
+
+Site-dependent effective charge: `qeff_<element>` in the atom block of a species sets the charge of the atoms of this
+species whose nearest neighbour among the elements of its `qeff_<element>` keys is `<element>` (within `site_rcut` of the
+Ewald block), e.g. `qeff_N = 0.349` and `qeff_C = 0.120` in the block of H for the H atoms bonded to N and C. Atoms
+without such a neighbour keep `qeff`. Returns the element of the key `qeff_<element>`, or `nothing` for other keys.
+See `get_site_charges`.
+"""
+function site_charge_element(key)
+    m = match(r"^qeff_([a-z]{1,2})$", lowercase(key))
+    isnothing(m) && return nothing
+    element = uppercasefirst(m[1])
+    return haskey(elements, Symbol(element)) ? element : nothing
+end
+
+"""
+    get_site_qeff(conf, type) -> Vector{Pair{String, Float64}}
+
+The site-dependent charges `qeff_<element>` of the species `type` as pairs `element => charge`, sorted by element
+(empty if the atom block has none).
+"""
+function get_site_qeff(conf::Config, type)
+    haskey(conf.blocks, type) || return Pair{String, Float64}[]
+    rules = Pair{String, Float64}[]
+    for key in keys(conf.blocks[type])
+        element = site_charge_element(key)
+        isnothing(element) || push!(rules, element => Float64(conf(key, type)))
+    end
+    return sort(rules)
+end
+
+"""
 **charge_scale**=charge_scale of the Ewald block
 
 The `charge_scale::Float` is the coupling of the onsite energies of the ion type to the electrostatic potential of the
@@ -37,5 +69,5 @@ get_nnaxes(conf::Config, type)::Bool = conf("nnaxes", type) == "default" ? false
 @configtag alpha Float64 0.0 "decay of the radial functions of the species (effective charge of the hydrogen-like radial functions), which sets how fast the matrix elements fall off with distance." "atom" per_atom=true getter=:custom default_doc="0.7 × atomic number" category="basis" see_also=["n"]
 @configtag n Int64 0 "principal quantum number (order of the polynomial) of the radial functions of the species." "atom" per_atom=true getter=:custom default_doc="period of the element" category="basis" see_also=["alpha"]
 @configtag nnaxes Bool false "orient the orbital axes along the bonds to the nearest neighbours (the number of neighbours depends on the number of orbitals)." "atom" per_atom=true getter=:custom category="basis"
-@configtag qeff Float64 0.0 "effective charge of the species for the Ewald model." "atom" per_atom=true getter=:custom category="electrostatics" see_also=["charge_scale"]
+@configtag qeff Float64 0.0 "effective charge of the species for the Ewald model; qeff_<element> (e.g. qeff_N = 0.349 in the block of H) sets the charge of the atoms bonded to <element>." "atom" per_atom=true getter=:custom category="electrostatics" see_also=["charge_scale", "site_rcut"]
 @configtag charge_scale Float64 0.0 "coupling of the on-site energies of the species to the electrostatic potential." "atom" per_atom=true getter=:custom default_doc="charge_scale of the Ewald block" category="electrostatics" see_also=["qeff"]

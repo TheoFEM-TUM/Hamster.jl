@@ -132,3 +132,30 @@ end
     result = Hamster.parse_lines_as_array(lines_int, type=Int)
     @test result == [1 2 3; 4 5 6]
 end
+@testset "Temporary folder and combination of eigenvalue files" begin
+    @test Hamster.TEMP_DIR[] == "tmp"
+    @test Hamster.temp_path("Es1") == joinpath("tmp", "Es1")
+    mktempdir() do dir
+        cd(dir) do
+            Hamster.TEMP_DIR[] = "run_tmp"
+            try
+                @test Hamster.get_rank_filename("ham.h5", 2) == joinpath("run_tmp", "ham_2.h5")
+                location = Hamster.make_temp_dir("cspbbr3")
+                @test isdir(location)
+                @test Hamster.make_temp_dir("cspbbr3") == location
+                write_to_file(ones(2, 3), joinpath(location, "Es2"))
+                write_to_file(2 .* ones(2, 3), joinpath(location, "Es10"))
+                write_to_file(ones(4), joinpath(location, "Es_other1"))
+                write_to_file(ones(4), joinpath(location, "vs1"))
+                @test Hamster.collapse_files_with("Es", location=location, outname="Es_cspbbr3")
+                Es = read_from_file("Es_cspbbr3.dat")
+                @test size(Es) == (2, 3, 2)
+                @test Es[:, :, 1] == ones(2, 3) && Es[:, :, 2] == 2 .* ones(2, 3)
+                @test !Hamster.collapse_files_with("Es", location=Hamster.temp_path("gaas"))
+                @test !Hamster.collapse_files_with("Ws", location=location)
+            finally
+                Hamster.TEMP_DIR[] = "tmp"
+            end
+        end
+    end
+end

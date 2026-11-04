@@ -22,7 +22,7 @@ function DeviceContext(device, models, strcs, bases, conf=get_empty_config(); so
         host_linear_map(models, index, Nε, size(strcs[index].Rs, 2), soc=soc)
     end
     maps = [DeviceLinearMap(host, device) for host in hosts]
-    return DeviceContext(device, maps, get_neig(conf), get_eig_target(conf), get_diag_method(conf),
+    return DeviceContext(device, maps, get_neig(conf), get_eig_target(conf), get_eigsolver(conf),
         Dict{Tuple{Int64, UInt64}, Any}(), Dict{Int64, Tuple{Vector{Float64}, Any}}())
 end
 
@@ -166,12 +166,27 @@ function device_eigen(Hk::DeviceHk, ::Dense; vectors=true, kwargs...)
 end
 
 function device_eigen(Hk::DeviceHk, ::Sparse; Neig=6, target=0.0, method="shift-invert", vectors=true)
+    method == "chebyshev" && return device_chebyshev(Hk, Neig, target)
     Es, vs = diagonalize(host_hamiltonians(Hk), Neig=Neig, target=target, method=method)
-    for k in axes(Es, 2)
-        perm = sortperm(Es[:, k])
-        Es[:, k] = Es[perm, k]; vs[:, :, k] = vs[:, perm, k]
-    end
     return Es, copyto!(similar(Hk.nzval, ComplexF64, size(vs)), vs)
+end
+
+"""
+    device_chebyshev(Hk::DeviceHk, Neig, target; kwargs...)
+
+The `Neig` eigenpairs closest to `target` of all k-points with the Chebyshev eigensolver on the device of `Hk` (see
+`chebyshev_eigen`). Returns the eigenvalues as a host matrix `(Neig, Nk)` in ascending order and the eigenvectors as a
+device array `(Nε, Neig, Nk)`.
+"""
+function device_chebyshev(Hk::DeviceHk, Neig, target; kwargs...)
+    Es = zeros(Neig, nkpoints(Hk))
+    vs = similar(Hk.nzval, ComplexF64, Hk.Nε, Neig, nkpoints(Hk))
+    for k in axes(Hk.nzval, 2)
+        op = CSRBlockOperator(Hk.rowptr, Hk.colval, Hk.nzval[:, k])
+        Es[:, k], V, _ = chebyshev_eigen(op, Hk.nzval, Hk.Nε, Neig; target=target, kwargs...)
+        vs[:, :, k] = permutedims(V)
+    end
+    return Es, vs
 end
 
 function diagonalize(Hk::DeviceHk; Neig=Hk.Nε, target=0, method="shift-invert", vectors=true)

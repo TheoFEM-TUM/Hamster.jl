@@ -106,24 +106,13 @@ end
     ewald_translation_vectors(pos, lattice, rcut)
 
 Lattice translations (fractional) of all periodic images that can contain atoms within `rcut` of an atom of the
-cell. The range along each lattice vector d follows from the height h_d of the cell perpendicular to the two other
-vectors and the extent s_d of the fractional coordinates of the atoms: an image n can contain a neighbor only if
-|n_d| ≤ rcut / h_d + s_d (a single range for all directions, as `get_Rmax`, misses images of cells that are long in one
-direction, e.g. slabs). Instead of checking all atom pairs (as `get_translation_vectors`, which is very slow for large
-cells and large cutoffs), images are then discarded with a bounding-sphere estimate: the atoms lie within a sphere of
-radius ρ around their center, so an image translated by T can only contain neighbors if |T| ≤ rcut + 2ρ. The result can
-contain a few translations without neighbors, which do not change the sum.
+cell. Instead of checking all atom pairs (as `get_translation_vectors`, which is very slow for large cells and large
+cutoffs), images are discarded with a bounding-sphere estimate: the atoms lie within a sphere of radius ρ around their
+center, so an image translated by T can only contain neighbors if |T| ≤ rcut + 2ρ. The result can contain a few
+translations without neighbors, which do not change the sum.
 """
 function ewald_translation_vectors(pos, lattice, rcut)
-    V = abs(det(lattice)); lattice_inv = inv(lattice)
-    f = reduce(hcat, (lattice_inv * r for r in pos))
-    n = map(1:3) do d
-        a, b = [i for i in 1:3 if i ≠ d]
-        h = V / norm(cross(lattice[:, a], lattice[:, b]))
-        ceil(Int, rcut / h + maximum(f[d, :]) - minimum(f[d, :]))
-    end
-    Rs = reduce(hcat, ([i, j, k] for i in -n[1]:n[1] for j in -n[2]:n[2] for k in -n[3]:n[3]))
-    Rs = Float64.(Rs)
+    Rs = get_translation_vectors(get_Rmax(lattice, rcut=rcut, positions=reduce(hcat, pos)))
     center = sum(pos) / length(pos)
     ρ = maximum(r -> norm(r - center), pos)
     Ts = frac_to_cart(Rs, lattice)
