@@ -21,7 +21,7 @@ function get_update_tb(conf::Config, NV)::Vector{Bool}
     return update_tb
 end
 
-@configtag loss String "MAE" " loss function for optimization (MAE, MSE)." "Optimizer" category="loss and learning rate"
+@configtag loss String "MAE" " loss function for optimization (MAE, MSE)." "Optimizer" category="loss and learning rate" values=["MAE", "MSE"]
 @configtag lr Float64 0.1 "learning rate for gradient descent." "Optimizer" category="loss and learning rate" see_also=["lr_min"]
 @configtag lr_min Float64 get_lr(conf) "final learning rate when using learning rate decay if lr≠lr_min." "Optimizer" category="loss and learning rate" default_doc="same as lr (no decay)"
 @configtag niter Int64 1 "number of gradient descent steps." "Optimizer" category="loss and learning rate"
@@ -96,7 +96,7 @@ The energies are converted with the same `data_unit` as the training data.
 """
 get_val_data(conf::Config)::String = conf("val_data", "Optimizer") == "default" ? "EIGENVAL" : conf("val_data", "Optimizer")
 @configtag val_data String "EIGENVAL" "path to the validation data (same formats as train_data)." "Optimizer" getter=:custom category="validation" see_also=["val_mode"]
-@configtag data_unit String "eV" "energy unit of train_data and val_data (eV, Hartree, Ry; not case sensitive); the energies are converted to eV when they are read." "Optimizer" category="data" see_also=["train_data", "val_data"]
+@configtag data_unit String "eV" "energy unit of train_data and val_data (eV, Hartree, Ry; not case sensitive); the energies are converted to eV when they are read." "Optimizer" category="data" see_also=["train_data", "val_data"] values=["eV", "Hartree", "Ry"]
 
 
 @configtag bandmin Int64 1 "lowest band index to include in optimization." "Optimizer" category="bands and weights"
@@ -145,7 +145,7 @@ function get_train_mode(conf)::String
         return lowercase(conf("train_mode", "Optimizer"))
     end
 end
-@configtag train_mode String "pc" "type of training data: pc (primitive cell), md (supercells), universal or mixed (not case sensitive)." "Optimizer" getter=:custom default_doc="md with a Supercell block, else pc" category="data"
+@configtag train_mode String "pc" "type of training data: pc (primitive cell), md (supercells), universal or mixed (not case sensitive)." "Optimizer" getter=:custom default_doc="md with a Supercell block, else pc" category="data" values=["pc", "md", "universal", "mixed"]
 
 """
     val_mode=PC
@@ -153,7 +153,7 @@ end
 The `val_mode` flag switches between different modes for model validation (PC, MD, universal, mixed; not case sensitive).
 """
 get_val_mode(conf::Config)::String = conf("val_mode", "Optimizer") == "default" ? get_train_mode(conf) : lowercase(conf("val_mode", "Optimizer"))
-@configtag val_mode String "pc" "type of validation data (pc, md, universal, mixed; not case sensitive)." "Optimizer" getter=:custom default_doc="same as train_mode" category="validation"
+@configtag val_mode String "pc" "type of validation data (pc, md, universal, mixed; not case sensitive)." "Optimizer" getter=:custom default_doc="same as train_mode" category="validation" values=["pc", "md", "universal", "mixed"]
 
 """
     validate=false (true if `val_mode` is set)

@@ -6,4 +6,4 @@
 @configtag upperbounds Vector{Float64} [0.] "upper bounds of the search space." "HyperOpt" category="search"
 @configtag stepsizes Vector{Float64} ones(length(get_hyperopt_params(conf)))*1e-5 "minimum difference between two hyperparameter samples" "HyperOpt" category="search" default_doc="1e-5 for each parameter"
 @configtag niter Int64 1 "number of candidates of random search and TPE (grid search evaluates all grid points)." "HyperOpt" category="search"
-@configtag mode String "random" "hyperparameter optimization strategy (random=random search, grid=grid search, tpe=tree-structured Parzen Estimator)" "HyperOpt" category="search"
+@configtag mode String "random" "hyperparameter optimization strategy (random=random search, grid=grid search, tpe=tree-structured Parzen Estimator)" "HyperOpt" category="search" values=["random", "grid", "tpe"]

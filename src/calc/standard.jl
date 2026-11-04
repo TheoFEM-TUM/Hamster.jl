@@ -175,6 +175,11 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
 end
 
 function get_kpoints_from_config(conf::Config; kpoints_file=get_kpoints(conf))::Matrix{Float64}
+    lowercase(strip(kpoints_file)) == "gamma" && return zeros(3, 1)
+    formats = "gamma, a VASP EIGENVAL file (with EIGENVAL in its name) or an HDF5 file (.h5) with the dataset kpoints"
+    (occursin("EIGENVAL", kpoints_file) || occursin(".h5", kpoints_file)) ||
+        error("kpoints = $kpoints_file: unknown format; use $formats.")
+    isfile(kpoints_file) || error("kpoints = $kpoints_file: no such file; use $formats.")
     if occursin("EIGENVAL", kpoints_file)
         ks, _, _ = read_eigenval(kpoints_file)
         return ks
@@ -185,8 +190,7 @@ function get_kpoints_from_config(conf::Config; kpoints_file=get_kpoints(conf))::
         elseif ks isa Array{Float64, 3}
             return ks[:, :, 1]
         end
-    elseif occursin("gamma", lowercase(kpoints_file))
-        return zeros(3, 1)
+        error("kpoints = $kpoints_file: the dataset kpoints must be 3 × Nk (or 3 × Nk × Nstructures) Float64.")
     end
 end
 

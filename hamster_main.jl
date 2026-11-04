@@ -31,6 +31,7 @@ if rank == 0
     foreach(message -> @warn(replace(message, "in the Options block" => "on the command line (Options block)")),
             Hamster.check_config_tags(cli_conf))
 end
+Hamster.assert_valid_config(conf, source=(haskey(args, "conf") ? args["conf"] : "hconf") * " and the command line")
 if rank ≠ 0; set_value!(conf, "verbosity", 0); end
 
 # Load the GPU extensions (CUDA.jl and CUDSS.jl must be installed, e.g., in the default environment)

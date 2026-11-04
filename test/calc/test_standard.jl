@@ -106,3 +106,16 @@ end
         end
     end
 end
+
+@testset "k-points of the config" begin
+    conf = get_empty_config()
+    kpoints(value) = (set_value!(conf, "kpoints", value); Hamster.get_kpoints_from_config(conf))
+    @test kpoints("Gamma") == zeros(3, 1) && kpoints("gamma") == zeros(3, 1)
+    mktempdir() do dir
+        ks = [0.0 0.5; 0.0 0.0; 0.0 0.5]
+        h5write(joinpath(dir, "kpoints.h5"), "kpoints", ks)
+        @test kpoints(joinpath(dir, "kpoints.h5")) == ks
+        @test_throws r"kpoints = .*missing.h5: no such file" kpoints(joinpath(dir, "missing.h5"))
+        @test_throws r"kpoints = my_gamma.dat: unknown format" kpoints("my_gamma.dat")
+    end
+end

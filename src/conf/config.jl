@@ -58,8 +58,9 @@ end
 
 An input tag of the config file: its `name`, the `block` it belongs to (`"Options"`, `"Supercell"`, ..., `"atom"` for the
 `begin atom <element>` blocks), the function `default(conf)` that gives its default value (of type `T`), a description,
-the default in words for the documentation (`default_doc`), a `category` within the block, related tags (`see_also`)
-and whether it is set per atom species (`per_atom`). All tags are collected in `CONFIG_TAGS`, from which the
+the default in words for the documentation (`default_doc`), a `category` within the block, related tags (`see_also`),
+whether it is set per atom species (`per_atom`) and the allowed values (`values`, not case sensitive; empty: any value
+of type `T`). All tags are collected in `CONFIG_TAGS`, from which the
 documentation, the listing in `hamster.out`, `hamster --tag` and the checks of the config file are generated.
 """
 struct ConfigTag{T,F}
@@ -71,22 +72,33 @@ struct ConfigTag{T,F}
     category::String
     see_also::Vector{String}
     per_atom::Bool
+    values::Vector{String}
 end
 
 ConfigTag{T}(name::String, default::F, desc::String; kwargs...) where {T,F} = ConfigTag{T}(name, "Options", default, desc; kwargs...)
 
 ConfigTag{T}(name::String, block::String, default::F, desc::String; default_doc="", category="", see_also=String[],
-             per_atom=false) where {T,F} =
-    ConfigTag{T,F}(name, block, default, desc, default_doc, category, collect(String, see_also), per_atom)
+             per_atom=false, values=String[]) where {T,F} =
+    ConfigTag{T,F}(name, block, default, desc, default_doc, category, collect(String, see_also), per_atom,
+                   collect(String, values))
 
 tag_type(::ConfigTag{T}) where {T} = T
 
 function get_tag(conf::Config, tag::ConfigTag{T})::T where T
-    if tag.block == "Options"
-        return get(conf, tag.name, tag.default(conf))
-    else
-        return get(conf, tag.name, tag.block, tag.default(conf))
-    end
+    value = tag.block == "Options" ? get(conf, tag.name, tag.default(conf)) : get(conf, tag.name, tag.block, tag.default(conf))
+    return allowed_value(tag, value)
+end
+
+"""
+    allowed_value(tag, value)
+
+The allowed value of `tag` (see `ConfigTag`) that equals `value` up to case, i.e. in the spelling of the tag definition;
+`value` itself for tags without a list of allowed values or if it is not one of them (see `check_config_values`).
+"""
+function allowed_value(tag::ConfigTag, value)
+    (isempty(tag.values) || !(value isa AbstractString)) && return value
+    n = findfirst(v -> lowercase(v) == lowercase(value), tag.values)
+    return isnothing(n) ? value : tag.values[n]
 end
 
 """
@@ -129,6 +141,8 @@ written by hand, e.g. for tags with their own logic, or `per_atom=true` for the 
 - `see_also`: names of related tags.
 - `value`: function `conf -> value` for the listing in `hamster.out`, for custom getters that need further arguments
   or return another type.
+- `values`: the allowed values (not case sensitive), e.g. `values=["MAE", "MSE"]`. Generated getters return them in the
+  spelling given here; values that are not allowed raise an error when the config is read (`check_config_values`).
 """
 macro configtag(name, T, default, desc, args...)
     block = "Options"; kw = Dict{Symbol, Any}()
@@ -146,6 +160,7 @@ macro configtag(name, T, default, desc, args...)
     default_doc = get(kw, :default_doc, literal_default_doc(default))
     category = get(kw, :category, "")
     see_also = get(kw, :see_also, :(String[]))
+    values = get(kw, :values, :(String[]))
     fname = block ∈ ["Options", "Supercell", "Optimizer"] ? Symbol("get_", name) : Symbol("get_$(lowercase(block))_", name)
     tagname = string(name)
     default_fn = (custom || per_atom) ? :(conf -> $(fname)(conf)) : :(conf -> $default)
@@ -170,7 +185,7 @@ macro configtag(name, T, default, desc, args...)
 
     return quote
         local $tagvar = ConfigTag{$T}($tagname, $block, $default_fn, $desc; default_doc=$default_doc, category=$category,
-                                      see_also=$see_also, per_atom=$per_atom)
+                                      see_also=$see_also, per_atom=$per_atom, values=$values)
         push!(CONFIG_TAGS, $tagvar)
         $getter
     end |> esc
@@ -181,7 +196,8 @@ end
      Base.get(conf::Config, key, typekey, default::T) :: T where {T}
 
 Retrieve a value associated with `key` (and `typekey`) from a configuration object `conf`. If the value
-returned by `conf(key)` is `"default"`, the fallback value `default` is returned instead.
+returned by `conf(key)` is `"default"`, the fallback value `default` is returned instead. For a `String` default, the value is returned as written (e.g. `"2024"` instead of the
+number 2024).
 
 # Arguments
 - `conf::Config`: A configuration object, typically implementing callable behavior for key lookups.
@@ -195,6 +211,8 @@ returned by `conf(key)` is `"default"`, the fallback value `default` is returned
 function Base.get(conf::Config, key, default::T)::T where {T}
     if conf(key) == "default"
         return default
+    elseif T <: AbstractString
+        return conf.options[lowercase(key)]
     else
         val = conf(key)
         if T <: AbstractVector && !(val isa AbstractVector)
@@ -208,6 +226,8 @@ end
 function Base.get(conf::Config, key, typekey, default::T)::T where {T}
     if conf(key, typekey) == "default"
         return default
+    elseif T <: AbstractString
+        return conf.blocks[typekey][lowercase(key)]
     else
         val = conf(key, typekey)
         if T <: AbstractVector && !(val isa AbstractVector)

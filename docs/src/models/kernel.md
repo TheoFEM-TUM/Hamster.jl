@@ -37,3 +37,12 @@ below `sim_tol` and 0.5. The validation
 and evaluation models use the data points of the training (or loaded) model, so their coverage shows how well the
 training data cover new structures, e.g. larger cells.
 
+
+## Parameter file
+
+A fit writes the ML parameters and data points to `ml_params.dat` (tag `filename` of the `ML` block). Its header lists
+the settings that define the model: `rcut`, `sim_params`, `env_scale`, `strc_scale`, `apply_distortion`,
+`apply_distance_distortion`, `apply_orthogonality` and `key_dims` (if set). When the file is loaded (`init_params` of
+the `ML` block, or `filename` with `mode = expand`), settings that are not given in the `ML` block are taken from the
+header, so the model is used with the settings it was fitted with. Settings that are given and differ raise an error.
+Files of earlier versions, whose header has only some of these settings, use the defaults for the others.

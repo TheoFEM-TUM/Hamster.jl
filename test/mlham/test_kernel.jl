@@ -99,3 +99,42 @@ end
     end
     @test all(dishermitian)
 end
+@testset "Settings in the header of the ML parameter file" begin
+    mktempdir() do dir
+        file = joinpath(dir, "ml_fit")
+        fitted = get_empty_config()
+        for (key, value) in (("rcut", 5.5), ("sim_params", 0.2), ("strc_scale", 0.7), ("apply_distance_distortion", true),
+                             ("key_dims", "1 3"))
+            set_value!(fitted, key, "ML", value)
+        end
+        kernel = HamiltonianKernel([1.0, 2.0], [SVector(0.1, 0.2), SVector(0.3, 0.4)], 0.2, [], false)
+        write_params(kernel, fitted, filename=file)
+        header = Hamster.read_ml_header(file)
+        @test Set(keys(header)) == Set(Hamster.ML_HEADER_TAGS)
+        @test header["key_dims"] == "1 3" && header["strc_scale"] == "0.7"
+
+        # Settings not in the ML block are taken from the file
+        conf = get_empty_config()
+        set_value!(conf, "init_params", "ML", file * ".dat")
+        Hamster.apply_ml_settings!(conf)
+        @test Hamster.get_ml_sim_params(conf) == 0.2 && Hamster.get_ml_strc_scale(conf) == 0.7
+        @test Hamster.get_ml_apply_distance_distortion(conf) && Hamster.get_ml_key_dims(conf) == [1, 3]
+        @test Hamster.read_ml_params(conf, filename=file)[1] == [1.0, 2.0]
+
+        # Settings in the ML block must agree (up to rounding)
+        set_value!(conf, "sim_params", "ML", 0.2 + 1e-14)
+        Hamster.apply_ml_settings!(conf)
+        set_value!(conf, "sim_params", "ML", 0.3)
+        @test_throws r"fitted with sim_params = 0.2, but sim_params = 0.3" Hamster.apply_ml_settings!(conf)
+        @test_throws r"fitted with sim_params = 0.2" Hamster.read_ml_params(conf, filename=file)
+
+        # Files with the header of earlier versions keep the defaults for the missing settings
+        write(file * "_old.dat", "begin unknown\n  rcut = 5.5\n  sim_params = 0.2\n  env_scale = 1.0\n" *
+                                 "  apply_distortion = false\n  apply_orthogonality = false\nend\n\n1.0 0.1 0.2\n")
+        old = get_empty_config()
+        set_value!(old, "init_params", "ML", file * "_old.dat")
+        Hamster.apply_ml_settings!(old)
+        @test Hamster.get_ml_strc_scale(old) == 1.0 && Hamster.get_ml_sim_params(old) == 0.2
+        @test Hamster.read_ml_params(old, filename=file * "_old")[1] == [1.0]
+    end
+end
