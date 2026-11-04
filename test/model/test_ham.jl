@@ -73,19 +73,11 @@ end
     @test Es2 ≈ Es_correct
     @test vs_dense ≈ vs2
 
-    # Both strategies (k-points over the threads, or one after the other with all threads in BLAS) give the same
-    # eigenvalues and valid eigenvectors (orthonormal, H v = E v), also without eigenvectors
-    for strategy in (:kpoints, :blas)
-        Es_s, vs_s = diagonalize(Hk1, strategy=strategy)
-        @test Es_s ≈ Es_correct
-        @test all(k -> Hk1[k] * vs_s[:, :, k] ≈ vs_s[:, :, k] * Diagonal(Es_s[:, k]) &&
-                       vs_s[:, :, k]' * vs_s[:, :, k] ≈ I, axes(vs_s, 3))
-        @test diagonalize(Hk1, strategy=strategy, vectors=false)[1] ≈ Es_correct
-    end
-    @test diagonalize(Hk1, large=1)[1] ≈ Es_correct
-    Es_m, vs_m = diagonalize(Hk1, large=1, strategy=:kpoints)          # MRRR solver for "large" matrices with few threads
-    @test Es_m ≈ Es_correct && all(k -> Hk1[k] * vs_m[:, :, k] ≈ vs_m[:, :, k] * Diagonal(Es_m[:, k]), axes(vs_m, 3))
-    @test_throws ErrorException diagonalize(Hk1, strategy=:gpu)
+    # Valid eigenvectors (orthonormal, H v = E v), also without eigenvectors
+    Es_v, vs_v = diagonalize(Hk1)
+    @test all(k -> Hk1[k] * vs_v[:, :, k] ≈ vs_v[:, :, k] * Diagonal(Es_v[:, k]) &&
+                   vs_v[:, :, k]' * vs_v[:, :, k] ≈ I, axes(vs_v, 3))
+    @test diagonalize(Hk1, vectors=false)[1] ≈ Es_correct
 
     # Test Neig
     Hk_sp = get_hamiltonian(Hr_sp, Rs, kpoints, Hamster.Sparse())
@@ -219,4 +211,92 @@ end
     Es_only, vs_only = diagonalize(Hk, vectors=false)
     @test Es_only ≈ Es atol=1e-10
     @test size(vs_only) == (0, 20, 3) && size(vs) == (20, 20, 3)
+end
+
+@testset "Dense eigensolvers" begin
+    herm(N) = (A = randn(ComplexF64, N, N); A + A')
+    valid(H, E, V) = H * V ≈ V * Diagonal(E) && V' * V ≈ I
+
+    # Complex matrices: divide and conquer and MRRR give the same eigenpairs
+    H = herm(60)
+    E_ref = eigvals(Hermitian(H))
+    for mrrr in (false, true)
+        V = similar(H)
+        E = Hamster.dense_eigen!(V, H, mrrr=mrrr)
+        @test E ≈ E_ref && valid(H, E, V)
+    end
+    @test Hamster.dense_eigen!(nothing, H) ≈ E_ref
+
+    # Real matrices stored as complex ones (e.g. at Γ without SOC, up to rounding in the phase factors) are
+    # diagonalized in real arithmetic, with the same eigenvalues and valid (real) eigenvectors
+    Hr = real(H) .+ 1e-16im
+    @test Hamster.is_real_matrix(Hr) && !Hamster.is_real_matrix(H) && Hamster.is_real_matrix(real(H))
+    V = similar(Hr)
+    E = Hamster.dense_eigen!(V, Hr)
+    @test E ≈ eigvals(Symmetric(real(H))) && valid(Hr, E, V) && Hamster.is_real_matrix(V)
+    @test Hamster.dense_eigen!(nothing, Hr) ≈ E
+    E1, V1 = diagonalize(real(H))
+    @test E1 ≈ E && eltype(V1) == Float64 && valid(real(H), E1, V1)
+
+    # Without MKL (test environment: OpenBLAS), the per-thread MKL thread count is not touched
+    @test !Hamster.uses_mkl()
+    @test Hamster.with_mkl_threads(() -> 42, 1) == 42
+
+    # Large matrices (one after the other with all threads in BLAS) and small ones (parallel over the k-points)
+    for N in (Hamster.DENSE_LARGE, 40)
+        Hs = [herm(N), real(herm(N)) .+ 0im]
+        Es, vs = diagonalize(Hs)
+        @test all(k -> Es[:, k] ≈ eigvals(Hermitian(Hs[k])) && valid(Hs[k], Es[:, k], vs[:, :, k]), 1:2)
+        @test diagonalize(Hs, vectors=false)[1] ≈ Es
+    end
+end
+
+@testset "Threads per k-point" begin
+    T = Threads.nthreads()
+    # Automatic choice: all threads for large dense Hamiltonians, the k-points in parallel otherwise
+    @test Hamster.threads_per_kpoint(Hamster.DENSE_LARGE, 8) == T
+    @test Hamster.threads_per_kpoint(100, 8) == 1
+    @test Hamster.threads_per_kpoint(100, 1, dense=false) == T
+    @test Hamster.threads_per_kpoint(100, 2T, dense=false) == 1
+    @test Hamster.threads_per_kpoint(100, 8, n=3) == min(3, T) && Hamster.threads_per_kpoint(100, 8, n=10T) == T
+
+    # Inner tasks: all threads outside of the loops over k-points, n per k-point inside
+    @test Hamster.inner_tasks() == T
+    for n in unique([1, 2, T])
+        @test all(==(min(n, T)), Hamster.kpoint_tmap(k -> Hamster.inner_tasks(), 1:5, 10, n=n))
+    end
+    # OpenBLAS: all threads (at most OPENBLAS_MAX_THREADS) for one k-point after the other, one for parallel k-points
+    @test only(Hamster.kpoint_tmap(k -> BLAS.get_num_threads(), 1:1, 10, n=T)) == min(T, Hamster.OPENBLAS_MAX_THREADS)
+    T > 1 && @test all(==(1), Hamster.kpoint_tmap(k -> BLAS.get_num_threads(), 1:4, 10, n=1))
+    @test Hamster.kpoint_tmap(k -> 2k, 1:5, 10) == 2:2:10 && isempty(Hamster.kpoint_tmap(k -> k, 1:0, 10))
+    covered = zeros(Int, 100)
+    Hamster.with_inner_tasks(() -> Hamster.inner_tforeach(r -> (covered[r] .+= 1), 1:100, chunks_per_task=4), min(3, T))
+    @test all(==(1), covered)
+
+    # H(k), dense and sparse diagonalization and the loss gradient do not depend on the threads per k-point
+    herm(N) = (A = randn(ComplexF64, N, N); A + A')
+    # Hermitian H(k): Hr[R = 0] Hermitian and Hr[-R] = Hr[R]'
+    Nε, Nk = 30, 7
+    A1, A2 = randn(ComplexF64, Nε, Nε), randn(ComplexF64, Nε, Nε)
+    Hr = [herm(Nε), A1, Matrix(A1'), A2, Matrix(A2')]
+    Rs = Float64.([0 1 -1 0 0; 0 0 0 1 -1; 0 1 -1 0 0]); ks = rand(3, Nk) .- 0.5
+    dL_dE = randn(Nε, Nk)
+    function run_all()
+        Hk = get_hamiltonian(Hr, Rs, ks)
+        Es, vs = diagonalize(Hk)
+        Es_sp, _ = diagonalize(get_hamiltonian(sparse.(Hr), Rs, ks, Hamster.Sparse()), Neig=4, target=0.0)
+        return Hk, Es, Es_sp, Hamster.get_loss_gradient_hr(dL_dE, vs, Rs, ks, Hamster.Dense())
+    end
+    reference = run_all()
+    try
+        for n in unique([1, 2, T])
+            Hamster.set_threads_per_kpoint!(n)
+            Hk, Es, Es_sp, grad = run_all()
+            @test Hk == reference[1]
+            @test Es ≈ reference[2] && Es_sp ≈ reference[3]
+            @test all(grad .≈ reference[4])
+        end
+    finally
+        Hamster.set_threads_per_kpoint!(0)
+    end
 end

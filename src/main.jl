@@ -62,13 +62,12 @@ and the combination of the per-structure eigenvalue files.
 function run_main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity(conf))
     set_seed!(conf, rank=rank)
     hostnames = MPI.gather(readchomp(`hostname`), comm, root=0)
-    # On every rank: otherwise the other ranks keep Julia's default (half of the Julia threads) and oversubscribe
-    nthreads_blas = get_nthreads_blas(conf); BLAS.set_num_threads(nthreads_blas)
+    # On every rank (Julia's default is half of the threads); the loops over k-points set their own
+    BLAS.set_num_threads(1)
+    set_threads_per_kpoint!(get_threads_per_kpoint(conf))
     if rank == 0
         generate_output(conf, hostnames=hostnames)
         julia_num_threads = Threads.nthreads()
-        nthreads_kpoints = get_nthreads_kpoints(conf)
-        nthreads_bands = get_nthreads_bands(conf)
         
         # COV_EXCL_START
         if get(ENV, "OMP_NUM_THREADS", "not set") ∉ ["1", "not set"] && rank == 0
@@ -79,8 +78,8 @@ function run_main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbo
         Nconf = get_Nconf(conf)
         write_block_summary("Parallelization", num_nodes=num_nodes, nhamster=nranks, 
             nstrc_per_hamster=round(Int64, Nconf/nranks), nstrc_per_node=round(Int64, Nconf/num_nodes), 
-            julia_num_threads=julia_num_threads, nthreads_kpoints=nthreads_kpoints, 
-            nthreads_bands=nthreads_bands, nthreads_blas=nthreads_blas)
+            julia_num_threads=julia_num_threads,
+            threads_per_kpoint=(n = get_threads_per_kpoint(conf); n == 0 ? "auto" : n))
     
         blocks_to_write = string.(vcat(["Options"], keys(conf.blocks)...))
         filter!(block -> block ∈ unique([tag.block for tag in CONFIG_TAGS]), blocks_to_write)

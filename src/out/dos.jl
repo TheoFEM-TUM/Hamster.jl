@@ -143,7 +143,7 @@ Diagonalize the Hamiltonian at every k-point and return, per k-point, the eigenv
 state onto the labels `P` (`nlabels × Nε`) and the COHP contributions of every pair `C` (`npairs × Nε`).
 """
 function exact_state_quantities(Hr, Rs, ks, atoms, members, pairs)
-    return tmap(axes(ks, 2)) do k
+    return kpoint_tmap(axes(ks, 2), size(first(Hr), 1)) do k
         H = Matrix(get_hamiltonian(Hr, Rs, ks[:, k:k])[1])
         E, V = eigen(Hermitian(H))
         absV = abs2.(V)
@@ -247,10 +247,12 @@ function joint_dos(Es, occs, wk, settings; pair_weights=nothing)
     ωmax = isnan(settings.jdos_emax) ? maximum(maximum(E) - minimum(E) for E in Es) + 5σ : settings.jdos_emax
     ω = collect(range(0.0, ωmax, length=settings.ne))
     dω = ω[2] - ω[1]
+    occupied(k) = (findall(>(1e-12), occs[k]), findall(<(1 - 1e-12), occs[k]))
+    Ws_k = isnothing(pair_weights) ? nothing : kpoint_tmap(k -> pair_weights(k, occupied(k)...), eachindex(Es), length(Es[1]))
     weights = sum(tmap(eachindex(Es)) do k
         E, f = Es[k], occs[k]
-        v = findall(>(1e-12), f); c = findall(<(1 - 1e-12), f)
-        Ws = isnothing(pair_weights) ? Matrix{Float64}[] : pair_weights(k, v, c)
+        v, c = occupied(k)
+        Ws = isnothing(Ws_k) ? Matrix{Float64}[] : Ws_k[k]
         h = zeros(length(ω), 1 + length(Ws))
         for (jc, j) in enumerate(c), (iv, i) in enumerate(v)
             x = max(E[j] - E[i], 0.0) / dω
@@ -296,7 +298,7 @@ read once for all vectors.
 """
 function hermitian_mul!(Y, H::SparseMatrixCSC, X)
     rows, vals = rowvals(H), nonzeros(H)
-    tforeach(chunks(1:size(H, 2), n=4 * Threads.nthreads())) do cols
+    inner_tforeach(1:size(H, 2), chunks_per_task=4) do cols
         for j in cols
             fill!(view(Y, :, j), 0)
             for p in nzrange(H, j)

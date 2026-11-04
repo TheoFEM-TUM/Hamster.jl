@@ -5,6 +5,12 @@ comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
+# Intel MKL if installed (hamster --install --mkl), with as many threads as Julia (its default is OMP_NUM_THREADS)
+if !isnothing(Base.find_package("MKL"))
+    haskey(ENV, "MKL_NUM_THREADS") || (ENV["MKL_NUM_THREADS"] = string(Threads.nthreads()))
+    @eval using MKL
+end
+
 # Only rank 0 precompiles
 rank == 0 && @eval using Hamster
 MPI.Barrier(comm)
