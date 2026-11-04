@@ -45,7 +45,7 @@ function get_soc_matrices(strc::Structure, basis::Basis, conf=get_empty_config()
             else
                 for l in ls # AOs
                     ms = [orb.type.m for orb in basis.orbitals[iion] if orb.type.l == l]
-                    spatial_dims = [lm_to_orbital_map[(l, m)] for m in ms if (l, m) in keys(lm_to_orbital_map)]
+                    spatial_dims = [lm_to_orbital_map_old[(l, m)] for m in ms if (l, m) in keys(lm_to_orbital_map_old)]
                     spin_dims = ["↑", "↓"]
                     basis_order = [sd * sp for sd in spatial_dims for sp in spin_dims]
                     if l in keys(soc_functions); push!(soc_blocks, soc_functions[l](basis_order)); end
