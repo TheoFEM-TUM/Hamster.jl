@@ -1,4 +1,5 @@
-# Long-range electrostatics of slabs (cells with vacuum along one lattice vector, `slab_axis` of the Ewald block).
+# Long-range electrostatics of slabs (cells with vacuum along one lattice vector, `slab_axis` of the Ewald block) and of
+# isolated clusters (vacuum in all directions, `cluster`, see `cluster_positions`).
 #
 # Wolf and Zahn keep only the short-range part erfc(αr)/r of the Coulomb interaction. In a slab, the long-range part that
 # matters is its average over the planes parallel to the surface (the k_∥ = 0 Fourier component): aligned dipoles of
@@ -28,13 +29,68 @@ function slab_heights(pos, lattice, axis)
     A = norm(cross(lattice[:, a], lattice[:, b]))
     h = abs(det(lattice)) / A                          # height of the cell along the normal
     lattice_inv = inv(lattice)
-    f = [mod((lattice_inv * r)[axis], 1.0) for r in pos]
+    f, gap = shift_vacuum_to_boundary([(lattice_inv * r)[axis] for r in pos])
+    return f .* h, A, gap * h
+end
+
+"""
+    shift_vacuum_to_boundary(f)
+
+Fractional coordinates `f` of the atoms along one lattice vector, shifted (modulo 1) so that the largest gap between
+atoms lies at the cell boundary and the lowest atom at 0. Returns the shifted coordinates and the width of the gap.
+"""
+function shift_vacuum_to_boundary(f)
+    f = mod.(f, 1.0)
     fs = sort(f)
     gaps = vcat(diff(fs), fs[1] + 1 - fs[end])         # gap after each sorted atom (the last one across the boundary)
     k = argmax(gaps)
-    start = k == length(fs) ? fs[1] : fs[k+1]          # the slab starts above the largest gap
-    z = [mod(fi - start, 1.0) * h for fi in f]
-    return z, A, gaps[k] * h
+    start = k == length(fs) ? fs[1] : fs[k+1]          # the atoms start above the largest gap
+    return mod.(f .- start, 1.0), gaps[k]
+end
+
+# Isolated clusters (`cluster` of the Ewald block), e.g. quantum dots in a vacuum box. The Ewald sum treats the box as
+# periodic with tinfoil boundary conditions: the dipole moments M of the images add up to a uniform field across the
+# cluster, -4π N M / V with the depolarization tensor N of the box shape (N = 1/3 for a cube). The dipole correction
+# removes it (vacuum boundary conditions, spherical summation of the images):
+#   φ_i += 4π ke M·(r_i - c) / (3V),   M = Σ_j q_j (r_j - c),
+# with the center c of the atoms. For a cubic box, the images then only contribute through their quadrupole moments
+# (a constant, removed by the centering of the potentials) and higher multipoles, which decay with the box size like
+# 1/L⁵. For boxes that are far from cubic, N differs from 1/3 and the correction is approximate.
+
+"""
+    cluster_positions(pos, lattice)
+
+Cartesian positions of the atoms of a cluster in the periodic cell `lattice`, unwrapped so that the cluster is not
+cut by the periodic boundary: along every lattice vector, the largest gap between atoms (the vacuum) is moved to the
+cell boundary.
+"""
+function cluster_positions(pos, lattice)
+    lattice_inv = inv(lattice)
+    f = reduce(hcat, (lattice_inv * r for r in pos))
+    for d in 1:3
+        f[d, :] .= first(shift_vacuum_to_boundary(f[d, :]))
+    end
+    return [lattice * f[:, i] for i in axes(f, 2)]
+end
+
+"""
+    cluster_potentials(pos, q, lattice; method)
+
+Dipole correction (eV per elementary charge) of an isolated cluster in a vacuum box `lattice`, to be added to the
+potentials of the full Ewald sum (`method = ewald`): removes the uniform field of the periodic images of the cluster
+dipole (vacuum instead of tinfoil boundary conditions, exact to dipole order for a cubic box). The charges are
+neutralized by a uniform background on the atoms. See the comment above `cluster_positions`.
+"""
+function cluster_potentials(pos, q, lattice; method)
+    lowercase(method) == "ewald" || error("cluster = true needs method = ewald (the full Ewald sum with the dipole " *
+        "correction). Wolf and Zahn have no long range to correct: with rcut larger than the cluster, they already sum " *
+        "an isolated cluster.")
+    r = cluster_positions(pos, lattice)
+    c = sum(r) / length(r)
+    qn = q .- sum(q) / length(q)
+    M = sum(qn[j] .* (r[j] .- c) for j in eachindex(r))
+    V = abs(det(lattice))
+    return [ke * 4π / (3V) * dot(M, r[i] .- c) for i in eachindex(r)]
 end
 
 """

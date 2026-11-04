@@ -243,6 +243,71 @@ end
     @test_throws ErrorException Hamster.compensation_charges("nearby", pos, types, qs, lat)
 end
 
+@testset "Ewald cluster" begin
+    # 3x3x3 rock-salt cluster with a dipole (anions displaced along z), across the periodic boundary of a cubic box
+    cluster = Vector{Float64}[]; q = Float64[]
+    for i in 0:2, j in 0:2, k in 0:2
+        s = iseven(i + j + k) ? 1.0 : -1.0
+        push!(cluster, [2.8i, 2.8j, 2.8k + (s < 0 ? 0.25k : 0.0)] .+ [-1.0, 13.0, 12.0]); push!(q, s)
+    end
+    qn = q .- sum(q) / length(q)
+    direct = [Hamster.ke * sum(qn[j] / norm(cluster[i] - cluster[j]) for j in eachindex(cluster) if j ≠ i) for i in eachindex(cluster)]
+    centered(φ) = φ .- sum(φ) / length(φ)
+    errors = map((30.0, 45.0)) do L
+        box = L * Matrix(1.0I, 3, 3)
+        pos = [mod.(r, L) for r in cluster]
+        r = Hamster.cluster_positions(pos, box)
+        @test all(i -> (r[i] - r[1]) ≈ (cluster[i] - cluster[1]), eachindex(r))
+        pme = Hamster.ewald_sum(pos, qn, box, rcut=10.0).potentials
+        corr = Hamster.cluster_potentials(pos, q, box; method="ewald")
+        @test corr ≈ Hamster.cluster_potentials(pos, qn, box; method="ewald")
+        (maximum(abs, centered(pme) .- centered(direct)), maximum(abs, centered(pme .+ corr) .- centered(direct)))
+    end
+    @test errors[1][2] < 3e-3 && errors[1][1] > 10 * errors[1][2]
+    @test errors[2][2] < errors[1][2] / 5                       # images beyond the dipole decay like 1/L⁵
+    @test_throws ErrorException Hamster.cluster_potentials(cluster, q, 30.0 * Matrix(1.0I, 3, 3); method="wolf")
+
+    # onsite model of a charged CsBr cluster (effective charges): uniform background on the atoms, dipole correction,
+    # species means per structure
+    mktempdir() do dir
+        L = 30.0
+        open(joinpath(dir, "POSCAR"), "w") do io
+            println(io, "CsBr cluster\n1.0\n$L 0 0\n0 $L 0\n0 0 $L\nCs Br\n$(count(>(0), q)) $(count(<(0), q))\nCartesian")
+            foreach(r -> println(io, join(mod.(r, L), " ")), cluster[q .> 0])
+            foreach(r -> println(io, join(mod.(r, L), " ")), cluster[q .< 0])
+        end
+        conf = get_empty_config()
+        set_value!(conf, "orbitals", "Cs", "s")
+        set_value!(conf, "orbitals", "Br", "px py pz")
+        set_value!(conf, "qeff", "Cs", 1.02)
+        set_value!(conf, "qeff", "Br", -0.756)
+        set_value!(conf, "poscar", joinpath(dir, "POSCAR"))
+        set_value!(conf, "load_rllm", true)
+        set_value!(conf, "rllm_file", joinpath(@__DIR__, "test_files/rllm_cspbbr3.dat"))
+        set_value!(conf, "rcut", 5.5)
+        strc = Structure(conf)
+        basis = Basis(strc, conf)
+        kw = (method="ewald", rcut=10.0, write_summary=false)
+        model = EwaldOnsites([strc], [basis], comm, conf; cluster=true, kw...)
+        pos = Hamster.get_ion_positions(strc.ions)
+        types = Hamster.get_ion_types(strc.ions)
+        qs = [t == Hamster.element_to_number("Cs") ? 1.02 : -0.756 for t in types]
+        @test abs(sum(qs)) > 1
+        qb = qs .- sum(qs) / length(qs)
+        φ = Hamster.ewald_sum(pos, qb, strc.lattice, rcut=10.0).potentials .+ Hamster.cluster_potentials(pos, qs, strc.lattice; method="ewald")
+        for t in unique(types)
+            φ[types .== t] .-= sum(φ[types .== t]) / count(==(t), types)
+        end
+        @test model.potentials[1] ≈ φ atol=1e-8
+        @test_throws ErrorException EwaldOnsites([strc], [basis], comm, conf; kw...)
+        @test_throws ErrorException EwaldOnsites([strc], [basis], comm, conf; cluster=true, slab_axis=3, kw...)
+        @test_throws ErrorException EwaldOnsites([strc], [basis], comm, conf; cluster=true, method="wolf", rcut=10.0, write_summary=false)
+        set_value!(conf, "cluster", "Ewald", true)
+        @test Hamster.get_ewald_cluster(conf) && Hamster.get_ewald_centering(conf) == "structure"
+        @test Hamster.get_ewald_charge_compensation(conf) == "global"
+    end
+end
+
 @testset "Ewald Onsites" begin
     conf = get_empty_config()
     set_value!(conf, "orbitals", "Cs", "s")

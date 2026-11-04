@@ -85,8 +85,9 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         mesh_spacing    = get_ewald_mesh_spacing(conf),
         slab_axis       = get_ewald_slab_axis(conf),
         slab_scale      = get_ewald_slab_scale(conf),
+        cluster         = get_ewald_cluster(conf),
         charge_compensation = get_ewald_charge_compensation(conf),
-        centering       = conf("centering", "Ewald") == "default" ? (slab_axis > 0 ? "structure" : "global") : get_ewald_centering(conf),
+        centering       = conf("centering", "Ewald") == "default" ? (slab_axis > 0 || cluster ? "structure" : "global") : get_ewald_centering(conf),
         update          = get_ewald_update(conf),
         label           = "",
         write_summary   = true)
@@ -97,6 +98,11 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     Rs_info = zeros(Int64, 2, length(strcs))
     grid_rebuilt = false
     α = ewald_alpha(method, rcut, alpha)
+    if cluster
+        slab_axis == 0 || error("cluster and slab_axis = $slab_axis exclude each other: a cluster has vacuum in all directions, a slab along one.")
+        lowercase(method) == "ewald" || error("cluster = true needs method = ewald (the full Ewald sum with the dipole correction); " *
+            "Wolf and Zahn with rcut larger than the cluster already sum an isolated cluster.")
+    end
 
     for (n, strc) in enumerate(strcs)
         pos = get_ion_positions(strc.ions, apply_distortion=true)
@@ -109,6 +115,8 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         slab_charges = charges .+ compensation_charges(charge_compensation, get_ion_positions(strc.ions, apply_distortion=false),
                                                        ion_types, charges, strc.lattice; slab_axis=slab_axis)
         charge_compensation == "local" && (charges = slab_charges)
+        # a cluster in vacuum: the uniform background of global compensation sits on its atoms, also in the Ewald sum
+        cluster && charge_compensation == "global" && (charges = charges .- sum(charges) / length(charges))
 
         reuse_grid = rcut ≤ min(strc.point_grid.grid_size, get_rcut(conf))
         grid_rebuilt |= !reuse_grid
@@ -128,6 +136,9 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         if slab_axis > 0
             # long range of a slab: plane-averaged part (wolf, zahn) or dipole correction (ewald), see ewald_slab.jl
             φ = φ .+ slab_scale .* slab_potentials(pos, slab_charges, strc.lattice, slab_axis; method=method, alpha=α)
+        elseif cluster
+            # isolated cluster: dipole correction of the periodic images, see ewald_slab.jl
+            φ = φ .+ cluster_potentials(pos, charges, strc.lattice; method=method)
         end
 
         ion_indices_with_orbs = collect(1:length(ion_types))
@@ -196,7 +207,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     model = EwaldOnsites(params, param_labels, potentials, types_per_strc, norb_per_strc, Rs_info, update)
     write_summary && write_model_summary(model, comm, conf, rank=rank, label=label, species_mean=species_mean, structure_means=structure_means,
                                          method=method, rcut=rcut, alpha=α, alpha_auto=alpha == 0, grid_rebuilt=grid_rebuilt && method == "ewald",
-                                         slab_axis=slab_axis, slab_scale=slab_scale, charge_compensation=charge_compensation,
+                                         slab_axis=slab_axis, slab_scale=slab_scale, cluster=cluster, charge_compensation=charge_compensation,
                                          centering=centering)
     return model
 end

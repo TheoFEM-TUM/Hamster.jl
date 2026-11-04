@@ -1,6 +1,6 @@
 # Ewald Onsite Correction
 
-An Ewald-based onsite correction is enabled when an `Ewald` block is present in the configuration file. The correction is only applied if effective charges are defined for all atomic species via the `qeff` parameter. For the full Ewald sum (`method = ewald`), the cell must be neutral, i.e., the charges `qeff` of its atoms must add up to zero. Wolf and Zahn also work for charged cells, e.g. slabs or defects with effective charges.
+An Ewald-based onsite correction is enabled when an `Ewald` block is present in the configuration file. The correction is only applied if effective charges are defined for all atomic species via the `qeff` parameter. For the full Ewald sum (`method = ewald`), the cell must be neutral, i.e., the charges `qeff` of its atoms must add up to zero, unless the net charge is compensated (`local`, or a cluster with `global`, see [Clusters](#Clusters)). Wolf and Zahn also work for charged cells, e.g. slabs or defects with effective charges.
 
 ## Overview
 
@@ -300,6 +300,49 @@ charge at the surfaces and enter only the slab terms; the effective charges of t
 Wolf/Zahn/Ewald sum stay unchanged. Those of `local` sit on the atoms next to the defect and are added to the effective
 charges in the whole sum. Both are determined from the reference positions of each structure, so that they are the
 same for all of its distortions.
+
+## Clusters
+
+An isolated cluster, e.g. a quantum dot, is computed in a box with vacuum in all directions. The full Ewald sum treats
+the box as periodic with tinfoil boundary conditions: the dipole moments of the periodic images of the cluster add up
+to a uniform field across the cluster, which shifts the potentials of its two sides against each other. The field
+decreases with the volume of the box, ``\propto M/V``, so it matters for polar clusters in small boxes.
+
+With `cluster = true` in the `Ewald` block (only for `method = ewald`), the dipole correction in all three directions
+is added (vacuum instead of tinfoil boundary conditions),
+
+```math
+\phi_i \rightarrow \phi_i + \frac{4\pi}{3V}\, \mathbf{M} \cdot (\mathbf{r}_i - \mathbf{c}),
+\qquad \mathbf{M} = \sum_j q_j (\mathbf{r}_j - \mathbf{c}),
+```
+
+with the center ``\mathbf{c}`` of the atoms. The positions are unwrapped first: along every lattice vector, the largest
+gap between atoms (the vacuum) is moved to the cell boundary, so a cluster may cross the periodic boundary. The factor
+1/3 is the depolarization factor of a cube. For a cubic box, the images then only enter through their quadrupole
+moments, a constant that the mean centering removes, and higher multipoles, which decay with the box size like
+``1/L^5``. For a box far from cubic, the correction is only approximate; use a cubic box with enough vacuum.
+
+Wolf and Zahn need no correction: they sum the neighbors within `rcut`, and with `rcut` larger than the cluster (and a
+vacuum wider than `rcut`) that is the potential of the isolated cluster. They are an alternative for small clusters;
+for large clusters, a cutoff of the cluster size makes them expensive, and `method = ewald` with `cluster` is the
+better choice.
+
+The effective charges of a non-stoichiometric cluster need not add up to zero, e.g. a CsPbBr₃ dot with excess CsBr
+on the surface (``q_\mathrm{Cs} + q_\mathrm{Br} \neq 0``). With `cluster`, `charge_compensation = global` (the
+default) places the uniform background on the atoms of the cluster (``q_j - \bar q``) in the whole sum, so that the
+Ewald sum of the box is neutral. `local` compensation is meant for defects in a bulk-like structure and is not
+suited for clusters: their most common coordination is that of the surface. With `cluster`, the species means are
+subtracted per structure by default (see [Mean Centering](#Mean-Centering)).
+
+```bash
+begin Ewald
+    method = ewald
+    rcut = 10.0
+    cluster = true                  # dipole correction of the images
+    charge_compensation = global    # default: uniform background on the atoms
+    centering = structure           # default with cluster
+end
+```
 
 ## Real-Space Neighbor Grid
 
