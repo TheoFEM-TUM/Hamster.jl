@@ -511,7 +511,7 @@ function get_VBM_per_structure(indices; path = "eigenval.h5", soc=false)
         for index in index_list
             i += 1
             #N_VBM = count(x -> x.type ∈ element_to_number.(["Br", "I", "Cl", "F"]), structures[i].ions) * 3
-            N_VBM_final = soc ? 2*N_VBM : N_VBM
+            N_VBM_final = N_VBM # already SOC-indexed in the data file, no doubling
             push!(N_VBM_system, N_VBM_final)
         end
         @assert length(unique(N_VBM_system)) == 1
@@ -531,7 +531,7 @@ function get_core_band_min_per_structure(indices; path = "eigenval.h5", soc=fals
         for index in index_list
             i += 1
             #N_core_min = count(x -> x.type ∈ element_to_number.(["Br", "I", "Cl", "F"]), structures[i].ions) * 3
-            N_core_min_final = soc ? 2*N_core_min : N_core_min
+            N_core_min_final = N_core_min # already SOC-indexed in the data file, no doubling
             push!(N_core_min_system, N_core_min_final)
         end
         @assert length(unique(N_core_min_system)) == 1
