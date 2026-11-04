@@ -90,28 +90,70 @@ end
 """
     iterate_nn_grid_points(point_grid::PointGrid)
 
-Iterates over nearest-neighbor (NN) grid points in a given `PointGrid` and collects indices of ion pairs and translation vectors.
+Iterator over the pairs of ions in neighboring grid cells of a `PointGrid`: for every ion `iion1` of the unit cell, all
+ions `iion2` with translation vector `R` whose grid cell is one of the 3x3x3 cells around the cell of `iion1`. Every
+pair `(iion1, iion2, R)` appears once. The pairs are generated during the iteration, nothing is stored.
 
 # Arguments
 - `point_grid::PointGrid`: A `PointGrid` object containing the initial grid points and the corresponding indices of ions.
 
 # Returns
-- `all_inds::Vector{Tuple{Int64, Int64, Int64}}`: A vector of tuples where each tuple consists of:
+- An iterator of tuples `(iion1, iion2, R)`:
   - `iion1::Int64`: Index of the first ion in the current grid point.
   - `iion2::Int64`: Index of the second ion in the neighboring grid point.
-  - `R::Int64`: Index of the translation vector between the current grid point and its nearest neighbor.
+  - `R::Int64`: Index of the translation vector of the second ion.
 """
-function iterate_nn_grid_points(point_grid::PointGrid)
-    all_inds = Tuple{Int64, Int64, Int64}[]
-    for (grid_point, inds) in point_grid.dict0
-        for nn_grid_point in nn_grid_points(grid_point, point_grid.dictR)
-            for iion1 in inds, (iion2, R) in point_grid.dictR[nn_grid_point]
-                push!(all_inds, (iion1, iion2, R))
-            end
-        end
-    end
-    return unique(all_inds)
+iterate_nn_grid_points(point_grid::PointGrid) = NNPairs(point_grid, collect(point_grid.dict0))
+
+"""
+    NNPairs
+
+Iterator over the ion pairs of neighboring grid cells of a `PointGrid`, see [`Hamster.iterate_nn_grid_points`](@ref).
+The state holds the current grid cell, its neighboring cells, the current ion of the cell and the current ion of the
+neighboring cell.
+"""
+struct NNPairs
+    point_grid :: PointGrid
+    cells :: Vector{Pair{SVector{3, Int64}, Vector{Int64}}}
 end
+
+Base.IteratorSize(::Type{NNPairs}) = Base.SizeUnknown()
+Base.eltype(::Type{NNPairs}) = NTuple{3, Int64}
+
+@inline function Base.iterate(it::NNPairs, state=(0, SVector{3, Int64}[], 0, Int64[], 0, Tuple{Int64, Int64}[], 0))
+    icell, nn_cells, inn, inds, i1, pairs, ip = state
+    while true
+        ip += 1
+        if ip ≤ length(pairs)
+            iion2, R = pairs[ip]
+            return (inds[i1], iion2, R), (icell, nn_cells, inn, inds, i1, pairs, ip)
+        end
+        ip = 0
+        i1 += 1
+        i1 ≤ length(inds) && !isempty(pairs) && continue
+        i1 = 1
+        inn += 1
+        if inn ≤ length(nn_cells)
+            pairs = it.point_grid.dictR[nn_cells[inn]]
+            continue
+        end
+        icell += 1
+        icell > length(it.cells) && return nothing
+        grid_point, inds = it.cells[icell]
+        nn_cells = nn_grid_points(grid_point, it.point_grid.dictR)
+        inn = 0
+        pairs = Tuple{Int64, Int64}[]
+    end
+end
+
+"""
+    count_nn_pairs(point_grid::PointGrid) -> Int64
+
+Number of pairs of `iterate_nn_grid_points(point_grid)`, without iterating over them.
+"""
+count_nn_pairs(point_grid::PointGrid) =
+    sum(length(inds) * sum(nn -> length(point_grid.dictR[nn]), nn_grid_points(grid_point, point_grid.dictR), init=0)
+        for (grid_point, inds) in point_grid.dict0; init=0)
 
 """
     grid_cell_chunks(point_grid::PointGrid; n=4 * Threads.nthreads())
@@ -123,25 +165,19 @@ grid_cell_chunks(point_grid::PointGrid; n=4 * Threads.nthreads()) = chunks(colle
 """
     iterate_nn_grid_points(grid_point, point_grid::PointGrid)
 
-Find and return all neighboring grid points of a given `grid_point` within the specified point grid and gather the associated ion indices and translation vectors.
+The ions in the grid cells around `grid_point` (the 3x3x3 neighborhood) in the point grid, as a vector of tuples
+`(iion, R)` of the ion index and the index of its translation vector. Every tuple appears once.
 
 # Arguments
 - `grid_point`: A grid point represented as a tuple (or similar structure), indicating the current grid position for which neighboring points are being queried.
 - `point_grid::PointGrid`: A `PointGrid` object containing information about the point grid, including the ions' positions and the translation vectors.
-
-# Returns
-- `all_inds::Vector{Tuple{Int64, Int64}}`: A vector of tuples, where each tuple contains:
-  - The index of the ion (`iion`) corresponding to a nearby grid point.
-  - The translation vector (`R`) for that ion.
 """
 function iterate_nn_grid_points(grid_point, point_grid::PointGrid)
     all_inds = Tuple{Int64, Int64}[]
     for nn_grid_point in nn_grid_points(grid_point, point_grid.dictR)
-        for (iion, R) in point_grid.dictR[nn_grid_point]
-            push!(all_inds, (iion, R))
-        end
+        append!(all_inds, point_grid.dictR[nn_grid_point])
     end
-    return unique(all_inds)
+    return all_inds
 end
 
 """
@@ -161,7 +197,7 @@ This function computes the nearest-neighbor grid points in a 3D grid by consider
 function nn_grid_points(grid_point, grid_dict)
     nn_grid_points = SVector{3, Int64}[]
     for i in -1:1, j in -1:1, k in -1:1
-        nn_grid_point = SVector{3}(grid_point .+ [i, j, k])
+        nn_grid_point = SVector{3, Int64}(grid_point[1] + i, grid_point[2] + j, grid_point[3] + k)
         if haskey(grid_dict, nn_grid_point)
             push!(nn_grid_points, nn_grid_point)
         end

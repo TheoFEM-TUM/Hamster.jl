@@ -121,12 +121,18 @@ Computes the gradient of loss w.r.t. the SOC model's parameters.
 function get_model_gradient(soc_model::SOCModel, indices, reg, dL_dHr; soc=true)
     dparams = zeros(length(soc_model.params))
     if soc_model.update
-        for (n, index) in enumerate(indices), param_index in eachindex(dparams)
-            iR0 = soc_model.Rs_info[2, index]
-            Msoc = BlockDiagonal([ifelse(check_param_type(soc_model, param_index, type), 1, 0) .* soc_model.matrices[type]
-                                for type in soc_model.types_per_strc[index]])
-            Msoc = convert_block_matrix_to_sparse(Msoc)
-            dparams[param_index] += real(sum(dL_dHr[n][iR0] .* Msoc))
+        for (n, index) in enumerate(indices)
+            dL_dHr0 = dL_dHr[n][soc_model.Rs_info[2, index]]
+            offset = 0
+            for type in soc_model.types_per_strc[index]
+                Msoc = soc_model.matrices[type]
+                block = offset+1:offset+size(Msoc, 1)
+                param_index = findfirst(==(type), soc_model.param_labels)
+                if !isnothing(param_index)
+                    dparams[param_index] += real(sum_product(Msoc, dL_dHr0[block, block]))
+                end
+                offset += size(Msoc, 1)
+            end
         end
     end
     dparams_penal = backward(reg, soc_model.params)

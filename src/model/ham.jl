@@ -343,7 +343,7 @@ end
 Calculate the gradient of the spin basis applied to a given matrix `dHr`. The output matrix is of size `(Nε/2, Nε/2)`.
 
 Since `apply_spin_basis` places `H` in the two spin-diagonal blocks, the gradient is the sum of the spin-diagonal blocks of
-`dHr`; the spin-off-diagonal blocks do not depend on `H`.
+`dHr`; the spin-off-diagonal blocks do not depend on `H`. A sparse `dHr` gives a sparse result.
 
 # Arguments
 - `dHr::AbstractMatrix`: An abstract matrix containing the gradient data to be transformed. It should have a shape that is compatible with the spin basis operations.
@@ -353,10 +353,10 @@ function gradient_apply_spin_basis(dHr::AbstractMatrix; alternating_order=false)
     Nε = size(dHr, 1) ÷ 2
     if !alternating_order
         # Case 1: kron(H, I_spin)
-        return Matrix(dHr[1:2:end, 1:2:end] + dHr[2:2:end, 2:2:end])
+        return dHr[1:2:end, 1:2:end] + dHr[2:2:end, 2:2:end]
     else
         # Case 2: kron(I_spin, H)
-        return Matrix(dHr[1:Nε, 1:Nε] + dHr[Nε+1:end, Nε+1:end])
+        return dHr[1:Nε, 1:Nε] + dHr[Nε+1:end, Nε+1:end]
     end
 end
 

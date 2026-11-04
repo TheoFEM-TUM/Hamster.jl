@@ -10,10 +10,11 @@ Generate a mapping from basis state indices to corresponding ion and orbital ind
 - `index_map`: A vector of tuples where each tuple `(iion, iorb)` represents the ion and orbital index corresponding to `i`.
 """
 function get_index_to_ion_orb_map(Norb)
-    Nε = sum(Norb)
-    index_map = Tuple{Int64, Int64}[]
-    for i in 1:Nε
-        push!(index_map, get_ion_and_orbital_indices(Norb, i))
+    index_map = Vector{Tuple{Int64, Int64}}(undef, sum(Norb))
+    i = 0
+    for (iion, n) in enumerate(Norb), jorb in 1:n
+        i += 1
+        index_map[i] = (iion, jorb)
     end
     return index_map
 end
@@ -31,11 +32,9 @@ Generate a mapping from ion and orbital indices to a basis state index.
   orbital index `i_orb`. The value corresponding to each key is the basis state index `i`.
 """
 function get_ion_orb_to_index_map(Norb)
-    Nion = length(Norb)
     ij_map = Dict{Tuple{Int64, Int64}, Int64}()
-    @views for iion in 1:Nion, jorb in 1:Norb[iion]
-        i = iion > 1 ? sum(Norb[1:iion-1]) + jorb : jorb
-        ij_map[(iion, jorb)] = i
+    for (i, ion_orb) in enumerate(get_index_to_ion_orb_map(Norb))
+        ij_map[ion_orb] = i
     end
     return ij_map
 end

@@ -22,7 +22,7 @@ function get_translation_vectors(rs_ion, lattice, conf=get_empty_config(); rcut=
     point_grid = PointGrid(rs_ion, Ts, grid_size=rcut)
     
     R_inds = Int64[]
-    for (iion1, iion2, R) in iterate_nn_grid_points(point_grid)
+    @views for (iion1, iion2, R) in iterate_nn_grid_points(point_grid)
         Δr = normdiff(rs_ion[:, iion1], rs_ion[:, iion2], Ts[:, R])
         if Δr ≤ rcut; push!(R_inds, R); end
     end

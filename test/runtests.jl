@@ -69,6 +69,7 @@ if test_all || test_only == "Model"
         include("model/test_ewald.jl")
         include("model/test_eff_ham.jl")
         include("model/test_ham_write.jl")
+        include("model/test_linear_scaling.jl")
     end
 end
 

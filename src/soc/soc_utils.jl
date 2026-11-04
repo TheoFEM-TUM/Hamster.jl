@@ -179,21 +179,17 @@ each block and collecting the nonzero entries (within a given tolerance).
 """
 function convert_block_matrix_to_sparse(M::BlockDiagonal; sp_tol=1e-10)
     is = Int64[]; js = Int64[]; vals = ComplexF64[]
-    sizelist = blocksizes(M)
-    i_cum_sizelist = [sum([s[1] for s in sizelist[1:block_idx-1]]) for block_idx in eachindex(blocks(M))]
-    j_cum_sizelist = [sum([s[2] for s in sizelist[1:block_idx-1]]) for block_idx in eachindex(blocks(M))]
-    @views for (block_idx, block) in enumerate(blocks(M))
-        block_size = sizelist[block_idx]
-        for block_j in 1:block_size[2], block_i in 1:block_size[1]
+    i_offset = 0; j_offset = 0
+    for block in blocks(M)
+        for block_j in axes(block, 2), block_i in axes(block, 1)
             val = block[block_i, block_j]
-            i = block_idx > 1 ? i_cum_sizelist[block_idx] + block_i : block_i
-            j = block_idx > 1 ? j_cum_sizelist[block_idx] + block_j : block_j
             if abs(val) ≥ sp_tol
-                push!(is, i)
-                push!(js, j)
+                push!(is, i_offset + block_i)
+                push!(js, j_offset + block_j)
                 push!(vals, val)
             end
         end
+        i_offset += size(block, 1); j_offset += size(block, 2)
     end
     M_sparse = sparse(is, js, vals, size(M, 1), size(M, 2))
     return M_sparse
