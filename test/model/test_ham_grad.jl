@@ -1,78 +1,20 @@
 """
-    get_eigenvalue_gradient(vs::Array{ComplexF64, 3}, Rs::Matrix{Float64}, ks::Matrix{Float64}) -> Array{Float64, 5}
+    loss_gradient_loops(dL_dE, vs, Rs, ks) -> Array{ComplexF64, 3}
 
-Computes the gradient of energy eigenvalues with respect to the Hamiltonian matrix elements by performing explicit loops.
+Gradient of the loss w.r.t. the real-space Hamiltonian, `dL_dHr[i, j, R]`, from the eigenvalue gradient
+`dE[m, k]/dHr[R][i, j] = conj(vs[i, m, k]) exp(2πik⋅R) vs[j, m, k]` with explicit loops.
 """
-function get_eigenvalue_gradient(vs::Array{ComplexF64, 3}, Rs::Matrix{Float64}, ks::Matrix{Float64})
-    Nε = size(vs, 1); NR = size(Rs, 2); Nk = size(ks, 2)
-    exp_2πiRk = Hamster.exp_2πi(Rs, ks)
-    dε = zeros(ComplexF64, Nε, Nε, NR, Nε, Nk)
-    for k in 1:Nk
-        for m in 1:Nε, R in 1:NR, i in 1:Nε, j in 1:Nε
-            @views dε[i, j, R, m, k] = sum(@. conj(vs[i, m, k]) * exp_2πiRk[R, k] * vs[j, m, k])
-        end
+function loss_gradient_loops(dL_dE, vs, Rs, ks)
+    Nε = size(vs, 1)
+    phase = Hamster.exp_2πi(Rs, ks)
+    dL_dHr = zeros(ComplexF64, Nε, Nε, size(Rs, 2))
+    for k in axes(ks, 2), m in axes(vs, 2), R in axes(Rs, 2), j in 1:Nε, i in 1:Nε
+        dL_dHr[i, j, R] += dL_dE[m, k] * conj(vs[i, m, k]) * phase[R, k] * vs[j, m, k]
     end
-    return dε
+    return dL_dHr
 end
 
-@testset "Eigenvalue gradient" begin
-    # Test 1: test that the gradient dE_dHr is the same as with explicit loops
-    Hr_1 = [Matrix(sprand(4, 4, 0.5)) for _ in 1:5]
-    Rs = 2 .* rand(3, 5) .- 1
-    ks = rand(3, 3) .- 0.5
-
-    vs = nothing
-    with_logger(Base.NullLogger()) do
-        vs = diagonalize(get_hamiltonian(Hr_1, Rs, ks))[2]
-    end
-    dE_dHr_an = Hamster.get_eigenvalue_gradient(vs, Rs, ks, Hamster.Dense()) #[R, m, k][i, j]
-    dE_dHr_old = get_eigenvalue_gradient(vs, Rs, ks) # i, j, R, m, k
-
-    same_as_old = Bool[]
-    for R in axes(dE_dHr_old, 3), j in axes(dE_dHr_old, 2), i in axes(dE_dHr_old, 1)
-        for k in axes(dE_dHr_old, 5), m in axes(dE_dHr_old, 4)
-            push!(same_as_old, dE_dHr_an[R, m, k][i, j] ≈ dE_dHr_old[i, j, R, m, k])
-        end
-    end
-    @test all(same_as_old)
-
-    # Test 2: test that the gradient dE_dHr is the same as with explicit loops for sparse arrays
-    sp_iterator = [[(i, j) for i in 1:4 for j in 1:4] for R in axes(Rs, 2)]
-    vs = nothing
-    with_logger(Base.NullLogger()) do
-        vs = diagonalize(get_hamiltonian(Hr_1, Rs, ks))[2]
-    end
-    dE_dHr_sp = Hamster.get_eigenvalue_gradient(vs, Rs, ks, Hamster.Sparse(), sp_iterator)
-
-    same_as_old = Bool[]
-    for R in axes(dE_dHr_old, 3), j in axes(dE_dHr_old, 2), i in axes(dE_dHr_old, 1)
-        for k in axes(dE_dHr_old, 5), m in axes(dE_dHr_old, 4)
-            push!(same_as_old, dE_dHr_sp[R, m, k][i, j] ≈ dE_dHr_old[i, j, R, m, k])
-
-        end
-    end
-    @test all(same_as_old)
-    @test dE_dHr_sp[1, 1, 1] isa SparseMatrixCSC{ComplexF64, Int64}
-
-    # Test 3: test chain rule
-    dL_dE = rand(size(dE_dHr_an, 2), size(ks, 2))
-    dL_dHr = Hamster.chain_rule(dL_dE, dE_dHr_an, Hamster.Dense())
-    @tensor dL_dHr_old[i, j, R] := dL_dE[m, k] * dE_dHr_old[i, j, R, m, k]
-    same_as_old_2 = map(eachindex(dL_dHr)) do R
-        dL_dHr[R] ≈ dL_dHr_old[:, :, R]
-    end
-    @test all(same_as_old_2)
-
-    # Test 4: test chain rule for sparse matrices
-    dL_dE = rand(size(dE_dHr_an, 2), size(ks, 2))
-    dL_dHr = Hamster.chain_rule(dL_dE, dE_dHr_sp, Hamster.Sparse())
-    @tensor dL_dHr_old[i, j, R] := dL_dE[m, k] * dE_dHr_old[i, j, R, m, k]
-    same_as_old_2 = map(eachindex(dL_dHr)) do R
-        dL_dHr[R] ≈ dL_dHr_old[:, :, R]
-    end
-    @test all(same_as_old_2)
-end
-@testset "Direct loss gradient w.r.t. Hr" begin
+@testset "Loss gradient w.r.t. Hr" begin
     Hr = [Matrix(sprand(6, 6, 0.5)) for _ in 1:5]
     Rs = 2 .* rand(3, 5) .- 1
     ks = rand(3, 4) .- 0.5
@@ -81,25 +23,24 @@ end
         vs = diagonalize(get_hamiltonian(Hr, Rs, ks))[2]
     end
     dL_dE = rand(size(vs, 2), size(ks, 2))
+    reference = loss_gradient_loops(dL_dE, vs, Rs, ks)
 
-    # Dense: identical to the chain rule over dE_dHr
-    reference = Hamster.chain_rule(dL_dE, Hamster.get_eigenvalue_gradient(vs, Rs, ks, Hamster.Dense()), Hamster.Dense())
+    # Dense
     direct = Hamster.get_loss_gradient_hr(dL_dE, vs, Rs, ks, Hamster.Dense())
-    @test all(direct .≈ reference)
+    @test all(R -> direct[R] ≈ reference[:, :, R], axes(Rs, 2))
     @test direct[1] isa Matrix{ComplexF64}
 
-    # Sparse: identical at the entries of the sparse iterator, zero elsewhere
+    # Sparse: the same at the entries of the sparse iterator, zero elsewhere
     sp_iterator = [[(i, j) for i in 1:6 for j in 1:6 if (i + j + R) % 3 ≠ 0] for R in axes(Rs, 2)]
-    reference = Hamster.chain_rule(dL_dE, Hamster.get_eigenvalue_gradient(vs, Rs, ks, Hamster.Sparse(), sp_iterator), Hamster.Sparse())
+    masked(iterator) = [[(i, j) ∈ iterator[R] ? reference[i, j, R] : 0.0im for i in 1:6, j in 1:6] for R in axes(Rs, 2)]
     direct = Hamster.get_loss_gradient_hr(dL_dE, vs, Rs, ks, Hamster.Sparse(), sp_iterator)
-    @test all(Matrix.(direct) .≈ Matrix.(reference))
+    @test all(Matrix.(direct) .≈ masked(sp_iterator))
     @test direct[1] isa SparseMatrixCSC{ComplexF64, Int64}
 
     # Very uneven numbers of entries per lattice vector (all at R = 1, none at R = 3) and no entries at all
     sp_uneven = [R == 1 ? [(i, j) for i in 1:6 for j in 1:6] : R == 3 ? Tuple{Int64, Int64}[] : [(R, R)] for R in axes(Rs, 2)]
-    reference = Hamster.chain_rule(dL_dE, Hamster.get_eigenvalue_gradient(vs, Rs, ks, Hamster.Sparse(), sp_uneven), Hamster.Sparse())
     direct = Hamster.get_loss_gradient_hr(dL_dE, vs, Rs, ks, Hamster.Sparse(), sp_uneven)
-    @test all(Matrix.(direct) .≈ Matrix.(reference))
+    @test all(Matrix.(direct) .≈ masked(sp_uneven))
     @test nnz(direct[3]) == 0
     empty = [Tuple{Int64, Int64}[] for _ in axes(Rs, 2)]
     @test all(R -> nnz(R) == 0, Hamster.get_loss_gradient_hr(dL_dE, vs, Rs, ks, Hamster.Sparse(), empty))

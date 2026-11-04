@@ -2,6 +2,7 @@
 # with the Hamster folder as active project: then the GPU extensions are compiled together with their precompile
 # workload (with the default environment as active project, the workload of the CUDSS extension is skipped).
 using Hamster
+isnothing(Base.find_package("MKL")) || @eval using MKL
 
 if isnothing(Base.find_package("CUDA"))
     println("Hamster.jl is precompiled.")

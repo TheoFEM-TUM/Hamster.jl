@@ -19,21 +19,15 @@
     set_value!(conf, "init_params", "random")
     @test Hamster.get_init_params(conf) == "random"
 
-    # Test 4: test nthreads_kpoints
+    # Test 4: test threads_per_kpoint
     conf = get_empty_config()
-    @test Hamster.get_nthreads_kpoints(conf) == Threads.nthreads()
-    set_value!(conf, "nthreads_kpoints", 4)
-    @test Hamster.get_nthreads_kpoints(conf) == 4
-    set_value!(conf, "nthreads_kpoints", 5.3)
-    @test_throws InexactError Hamster.get_nthreads_kpoints(conf)
-
-    # Test 5: test nthreads_bands
-    conf = get_empty_config()
-    @test Hamster.get_nthreads_bands(conf) == Threads.nthreads()
-    set_value!(conf, "nthreads_bands", 4)
-    @test Hamster.get_nthreads_bands(conf) == 4
-    set_value!(conf, "nthreads_bands", 5.3)
-    @test_throws InexactError Hamster.get_nthreads_bands(conf)
+    @test Hamster.get_threads_per_kpoint(conf) == 0
+    set_value!(conf, "threads_per_kpoint", 4)
+    @test Hamster.get_threads_per_kpoint(conf) == 4
+    set_value!(conf, "threads_per_kpoint", "auto")
+    @test Hamster.get_threads_per_kpoint(conf) == 0
+    set_value!(conf, "threads_per_kpoint", 0)
+    @test_throws ArgumentError Hamster.get_threads_per_kpoint(conf)
 
     # Test 6: test nhamster
     conf = get_empty_config()

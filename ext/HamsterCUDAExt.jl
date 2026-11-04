@@ -23,22 +23,16 @@ function Hamster.device_eigen(Hk::CuDeviceHk, ::Dense; vectors=true, kwargs...)
     H = densify(Hk)
     if Hk.Nε < MIN_GPU_EIGEN_SIZE
         Hh = Array(H)
-        Es = zeros(Hk.Nε, nkpoints(Hk))
-        Threads.@threads for k in axes(Hh, 3)
-            if vectors
-                eig = eigen!(Hermitian(Hh[:, :, k]))
-                Es[:, k] = eig.values
-                Hh[:, :, k] = eig.vectors
-            else
-                Es[:, k] = eigvals!(Hermitian(Hh[:, :, k]))
-            end
-        end
-        return Es, vectors ? copyto!(H, Hh) : similar(H, 0, Hk.Nε, nkpoints(Hk))
+        Es, vs = Hamster.diagonalize([Hh[:, :, k] for k in axes(Hh, 3)], vectors=vectors)
+        return Es, vectors ? copyto!(H, vs) : similar(H, 0, Hk.Nε, nkpoints(Hk))
     else
         # Eigenvalues only ('N') skip the back-transformation of the eigenvectors
         Es = CuMatrix{Float64}(undef, Hk.Nε, nkpoints(Hk))
         for k in axes(H, 3)
-            Es[:, k] = vectors ? first(cuSOLVER.Xsyevd!('V', 'U', view(H, :, :, k))) : cuSOLVER.Xsyevd!('N', 'U', view(H, :, :, k))
+            Hk_k = view(H, :, :, k)
+            A = Hamster.is_real_matrix(Hk_k) ? real.(Hk_k) : Hk_k
+            Es[:, k] = vectors ? first(cuSOLVER.Xsyevd!('V', 'U', A)) : cuSOLVER.Xsyevd!('N', 'U', A)
+            vectors && A !== Hk_k && copyto!(Hk_k, A)
         end
         return Array(Es), vectors ? H : similar(H, 0, Hk.Nε, nkpoints(Hk))
     end

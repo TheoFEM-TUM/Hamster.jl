@@ -233,7 +233,7 @@ The function behavior varies depending on the type of `data`, which can be eithe
 # Returns
 - `gradient`: The computed gradient of the loss with respect to the parameters of `ham`.
 """
-function backward(ham::EffectiveHamiltonian, index, loss, data::EigData, cache, conf=get_empty_config(); nthreads_kpoints=get_nthreads_kpoints(conf), nthreads_bands=get_nthreads_bands(conf))
+function backward(ham::EffectiveHamiltonian, index, loss, data::EigData, cache, conf=get_empty_config())
     if uses_device_path(ham); return device_backward(ham, index, loss, data, cache); end
     Es_tb, vs = cache
     dL_dE = backward(loss, Es_tb, data.Es)

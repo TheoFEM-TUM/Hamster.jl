@@ -10,6 +10,8 @@
     prof = Hamster.main(comm, conf, rank=rank)
     @test mean(prof.L_train[:, end]) < 0.15
     @test prof.L_val[end] < 0.15
+    # The linear algebra library is listed at the top of hamster.out
+    @test any(line -> occursin("Linear algebra (BLAS/LAPACK): OpenBLAS", line), readlines("hamster.out")[1:30])
     rm("hamster.out"); rm("params.dat")
 end
 
