@@ -126,6 +126,8 @@ end
     ewald_model = EwaldOnsites([strc], [basis], comm, conf)
 
     @test all(@. isapprox(zahn_model.potentials, ewald_model.potentials, rtol=1e-2))
+    @test EwaldOnsites([strc], [basis], comm, conf, method="Zahn", rcut=35, write_summary=false).potentials == zahn_model.potentials
+    @test_throws ErrorException EwaldOnsites([strc], [basis], comm, conf, method="wolff", write_summary=false)
     Hr = get_hr(ewald_model, Hamster.Dense(), 1, apply_soc=false)
 
     @test size(Hr[1])[1] == length(basis)

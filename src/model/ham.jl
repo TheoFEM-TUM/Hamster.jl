@@ -231,29 +231,33 @@ Diagonalizes a sparse Hermitian matrix `Hk` to find a specified number of eigenv
   `krylov-schur` (KrylovKit) or `chebyshev` (Chebyshev-filtered subspace iteration, see `chebyshev_eigen`).
 
 # Returns:
-- `eigenvalues::Vector{Float64}`: A vector of the real parts of the computed eigenvalues, focusing on those closest to the target. The number of eigenvalues returned is equal to `Neig`.
+- `eigenvalues::Vector{Float64}`: The real parts of the `Neig` eigenvalues closest to the target, sorted by energy.
 - `eigenvectors::Matrix{ComplexF64}`: A matrix where each column is an eigenvector corresponding to one of the computed eigenvalues.
 """
 function diagonalize(Hk::SparseMatrixCSC; Neig=6, target=0, method="shift-invert", vectors=true)
     if method == "shift-invert"
         Es, vs, _, _, _, _ = lock(() -> eigs(Hk, nev=Neig, sigma=target), ARPACK_LOCK)
-        if abs(Es[1] - target) > abs(Es[end] - target)
-            return real.(Es[end-Neig:end]), vs[:, end-Neig:end]
-        else
-            return real.(Es[1:Neig]), vs[:, 1:Neig]
-        end
+        return closest_eigenpairs(Es, vs, Neig, target)
     elseif method == "krylov-schur"
         Es, vs = eigsolve(Hk, Neig, EigSorter(λ->abs(target-λ), rev=false), ishermitian=true, maxiter=500)
-        if abs(Es[1] - target) > abs(Es[end] - target)
-            return real.(Es[end-Neig:end]), hcat(vs[end-Neig:end]...)
-        else
-            return real.(Es[1:Neig]), hcat(vs[1:Neig]...)
-        end
+        return closest_eigenpairs(Es, reduce(hcat, vs), Neig, target)
     elseif method == "chebyshev"
         return chebyshev_diagonalize(Hk, Neig, target)
     else
         error("Unknown eigsolver '$method'. Valid options are shift-invert, krylov-schur and chebyshev.")
     end
+end
+
+"""
+    closest_eigenpairs(Es, vs, Neig, target)
+
+The (at most) `Neig` eigenvalues `Es` closest to `target` and their eigenvectors (columns of `vs`), sorted by energy.
+"""
+function closest_eigenpairs(Es, vs, Neig, target)
+    Es = real.(Es)
+    inds = partialsortperm(abs.(Es .- target), 1:min(Neig, length(Es)))
+    inds = inds[sortperm(Es[inds])]
+    return Es[inds], vs[:, inds]
 end
 
 """

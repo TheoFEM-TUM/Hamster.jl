@@ -11,7 +11,7 @@ get_ewald(conf::Config)::Bool = haskey(conf.blocks, "Ewald") || (conf("ewald") �
 
 @configtag update Bool false "fit the Ewald coupling of each species (starting from charge_scale or init_params)." "Ewald" category="model"
 @configtag init_params String "default" "parameter file with the Ewald coupling per species (ewald_<element> lines, e.g. params.dat of a fit), default: charge_scale." "Ewald" category="model" default_doc="none: the couplings start from charge_scale"
-@configtag method String "ewald" "method to compute the Ewald sum" "Ewald" category="electrostatics"
+@configtag method String "ewald" "method of the electrostatic sum: ewald (Ewald/PME), wolf or zahn (case-insensitive)." "Ewald" category="electrostatics"
 @configtag rcut Float64 get_rcut(conf) "cut-off radius for real-space ewald; Wolf and Zahn: range of the electrostatics (alpha = 3 / rcut), in a fit 1.5 × the size of the training cells if neither rcut nor alpha are set." "Ewald" category="electrostatics" default_doc="same as rcut of the Options block (Wolf, Zahn in a fit: 1.5 × the size of the training cells)"
 @configtag charge_scale Float64 1.0 "scaling factor for charge values" "Ewald" category="model"
 @configtag alpha Float64 0. "Ewald dampening parameter; 0: 4 / rcut for method = ewald, 3 / rcut for wolf and zahn." "Ewald" category="electrostatics" default_doc="0: 4 / rcut for method = ewald, 3 / rcut for wolf and zahn"

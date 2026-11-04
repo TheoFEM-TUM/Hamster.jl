@@ -97,7 +97,7 @@ end
 @testset "DataLoader energy unit" begin
     path = joinpath(@__DIR__, "test_files")
     kp, Es = Hamster.read_eigenval(joinpath(path, "EIGENVAL_gaas"), 8)
-    Hr, _, _ = Hamster.read_hrdat(joinpath(path, "wannier90_hr.dat"))
+    Hr, _, deg = Hamster.read_hrdat(joinpath(path, "wannier90_hr.dat"))
 
     for (unit, factor) in [("eV", 1.0), ("Hartree", 27.211386245988), ("ry", 13.605693122994)]
         conf = get_empty_config()
@@ -113,8 +113,8 @@ end
         set_value!(conf, "val_data", "Optimizer", joinpath(path, "wannier90_hr.dat"))
         set_value!(conf, "hr_fit", "Optimizer", true)
         dl = DataLoader(Dict(""=>[]), Dict(""=>[]), Dict("" => 8), Dict("" => 8), conf)
-        @test all(dl.train_data[1].Hr[R] ≈ factor .* Hr[R] for R in eachindex(Hr))
-        @test all(dl.val_data[1].Hr[R] ≈ factor .* Hr[R] for R in eachindex(Hr))
+        @test all(dl.train_data[1].Hr[R] ≈ factor .* Hr[R] ./ deg[R] for R in eachindex(Hr))
+        @test all(dl.val_data[1].Hr[R] ≈ factor .* Hr[R] ./ deg[R] for R in eachindex(Hr))
     end
 
     conf = get_empty_config()
@@ -185,7 +185,8 @@ end
 
     # Test 1: test PC training data with no validation
     dl = DataLoader(Dict(""=>[]), Dict(""=>[]), Dict("" => 8), Dict("" => 8), conf)
-    @test all([dl.train_data[1].Hr[R] == Hr[R] for R in eachindex(Hr)])
+    @test any(deg .> 1)
+    @test all([dl.train_data[1].Hr[R] ≈ Hr[R] / deg[R] for R in eachindex(Hr)])
     @test length(dl.val_data) == 0
     @test typeof(dl.train_data) == typeof(dl.val_data)
 
@@ -193,7 +194,7 @@ end
     set_value!(conf, "val_data", "Optimizer", joinpath(path, "wannier90_hr.dat"))
     dl = DataLoader(Dict(""=>[]), Dict(""=>[]), Dict("" => 8), Dict("" => 8), conf)
     @test length(dl.val_data) == 1
-    @test all([dl.val_data[1].Hr[R] == Hr[R] for R in eachindex(Hr)])
+    @test all([dl.val_data[1].Hr[R] ≈ Hr[R] / deg[R] for R in eachindex(Hr)])
     
     # Test 3: test get nk and neig
     @test Hamster.get_neig_and_nk(dl.train_data) == (0, 0)

@@ -103,7 +103,7 @@ get_val_data(conf::Config)::String = conf("val_data", "Optimizer") == "default" 
 @configtag bandinclude Vector{Int64} Int64[] "indices of additional bands to be included in the fit." "Optimizer" category="bands and weights"
 @configtag bandmultiplicity Int64 1 "Factor used to scale reference-cell band indices, including `bandmin` and `bandinclude`, for supercell calculations." "Optimizer" category="bands and weights"
 @configtag val_bandmin Int64 get_bandmin(conf) "lowest band index to include in validation set." "Optimizer" category="validation" default_doc="same as bandmin"
-@configtag hr_fit Bool false "switches to fitting the model to Hamiltonian data." "Optimizer" category="data"
+@configtag hr_fit Bool false "switches to fitting the model to Hamiltonian data: a Wannier90 `hr.dat` file (the H(R) are divided by the degeneracies of R, as in the Fourier sum of Wannier90) or an HDF5 file with the datasets `Hr` and `Rs`." "Optimizer" category="data"
 
 """
     eig_fit=true (false if hr_fit)

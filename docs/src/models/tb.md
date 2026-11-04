@@ -170,6 +170,10 @@ The orbitals of an element are given with the `orbitals` tag of its `atom` block
   `orbitals = dxy dyz dxz dz2 dx2_y2` for Ti in SrTiO3); their orientation is given by their angular function;
 - hybrid orbitals: `sp3` and `sp3dr2` (one orbital per hybrid, oriented along the bonds with `NNaxes = true`).
 
+Elements with hybrid orbitals can be combined with elements with pure orbitals (e.g. `sp3` on Ga and `s px py pz` on
+As). The matrix elements between a hybrid and a pure orbital are evaluated in the same bond frame as those between pure
+orbitals, so the model is invariant under rotations of the structure.
+
 For the d orbitals, the Slater-Koster factors are evaluated in the bond frame, with the parity factor ``(-1)^{l_1+l_2}``
 of the bond direction where the order of the orbitals or of the parameter is reversed (e.g. `O+Sr_spσ` for s on Sr and
 p on O). In the descriptor of the ML model, a d orbital (which has no single axis) gets the angle

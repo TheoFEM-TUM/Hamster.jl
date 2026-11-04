@@ -17,6 +17,23 @@ function get_sk_transform_matrix(r⃗₁, r⃗₂; ϵ=1e-5)
 end
 
 """
+    get_angular_frame(Û)
+
+Rotation matrix whose rows are the axes of the bond frame that the angular functions of the s, p and d orbitals
+(`fpx`, `fdxy`, ...) use for the bond frame `Û` (from `get_sk_transform_matrix`). These functions only get the angles
+(θ, φ) of `Û * ê_z`, where the bond direction is (θ, φ - π), and their frame has the y-axis (sin φ, -cos φ, 0) in the
+xy-plane. It has the same z-axis as `Û`, but is rotated around it. Hybrid orbitals are rotated with this frame when
+the other orbital of the pair is an s, p or d orbital.
+"""
+function get_angular_frame(Û)
+    θ, φ = get_rotated_angles(Û, ê_z)
+    sθ, cθ, sφ, cφ = sin(θ), cos(θ), sin(φ), cos(φ)
+    return @SMatrix [-cθ*cφ -cθ*sφ -sθ;
+                        sφ    -cφ  0.0;
+                     -sθ*cφ -sθ*sφ  cθ]
+end
+
+"""
     rotation_matrix_around_axis(u⃗::AbstractVector{T}, θ::T) where T
 
 Constructs a 3x3 rotation matrix that rotates by an angle `θ` around an arbitrary axis `u⃗`, using Rodrigues' rotation formula.

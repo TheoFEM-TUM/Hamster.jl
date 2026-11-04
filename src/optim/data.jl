@@ -168,8 +168,7 @@ function get_hr_data(mode, path; inds=Int64[], empty=false)
     mode ∈ ("pc", "md", "universal", "mixed") || throw(ArgumentError("unknown train_mode/val_mode $mode for Hamiltonian data; use pc or md."))
     data = HrData[]
     if (mode == "pc" || mode == "mixed") && !empty
-        Hr, Rs, _ = read_hrdat(path)
-        push!(data, HrData(Rs, Hr))
+        push!(data, read_hrdat_data(path))
     end
     if (mode == "md" || mode == "mixed") && !empty
         append!(data, read_hr_data_from_path(path, inds))
@@ -227,6 +226,18 @@ function check_band_range(path, nbands, band_indices)
     return nothing
 end
 
+"""
+    read_hrdat_data(path) -> HrData
+
+Hamiltonian data of a Wannier90 `hr.dat` file. The matrices H(R) are divided by the degeneracies of the translation
+vectors R in the file, as in the Fourier sum of Wannier90 (H(k) = Σ_R exp(ik⋅R) H(R) / deg(R)), so that they are the
+H(R) of Hamster (H(k) = Σ_R exp(ik⋅R) H(R)).
+"""
+function read_hrdat_data(path)
+    Hr, Rs, deg = read_hrdat(path)
+    return HrData(Rs, Hr ./ deg)
+end
+
 function read_hr_data_from_path(path, inds)
     if occursin(".h5", path)
         Rs = h5read(path, "Rs")[:, :, 1]
@@ -237,8 +248,7 @@ function read_hr_data_from_path(path, inds)
         end
         return data
     else
-        Hr, Rs, _ = read_hrdat(path)
-        return [HrData(Rs, Hr)]
+        return [read_hrdat_data(path)]
     end
 end
 
