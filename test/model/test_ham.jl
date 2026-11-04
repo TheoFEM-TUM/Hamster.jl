@@ -95,6 +95,17 @@ end
     @test size(CBM_sp) == (1, 80)
     @test CBM_sp[1, 20] ≈ CBM
 
+    # Eigenvalues closest to a target inside the spectrum, sorted by energy
+    target = (VBM + CBM) / 2
+    closest = reduce(hcat, [sort(sort(Es_dense[:, k], by=E -> abs(E - target))[1:4]) for k in axes(Es_dense, 2)])
+    for method in ("shift-invert", "krylov-schur", "chebyshev")
+        Es_mid, vs_mid = diagonalize(Hk_sp, Neig=4, target=target, method=method)
+        @test all(issorted, eachcol(Es_mid))
+        # krylov-schur can miss eigenvalues inside the spectrum
+        method == "krylov-schur" || @test Es_mid ≈ closest
+        @test all(norm(Hk_sp[k] * vs_mid[:, n, k] - Es_mid[n, k] * vs_mid[:, n, k]) < 1e-6 for n in 1:4, k in axes(Es_mid, 2))
+    end
+
     # Test write function
     Hr, Rs = read_hr(file_path*"gaas_hr.dat", verbose=0)
     write_hr(Hr, Rs, filename=file_path*"test_hr", verbose=0)

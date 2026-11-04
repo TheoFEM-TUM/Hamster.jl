@@ -91,6 +91,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     potentials = Vector{Float64}[]
     Rs_info = zeros(Int64, 2, length(strcs))
     grid_rebuilt = false
+    method = ewald_method(method)
     α = ewald_alpha(method, rcut, alpha)
     site_counts = Dict{Tuple{String, Float64}, Int64}()
 
@@ -260,6 +261,18 @@ and a reciprocal-space part, and 3 / rcut for `wolf` and `zahn`, where α sets t
 ewald_alpha(method, rcut, alpha) = alpha ≠ 0 ? Float64(alpha) : (lowercase(method) ∈ ("wolf", "zahn") ? 3.0 : 4.0) / rcut
 
 """
+    ewald_method(method)
+
+The Ewald method `method` (tag `method` of the `Ewald` block) in lower case: `ewald`, `wolf` or `zahn`. Other values
+raise an error.
+"""
+function ewald_method(method)
+    m = lowercase(string(method))
+    m ∈ ("ewald", "wolf", "zahn") || error("Unknown Ewald method '$method'. Valid options are ewald, wolf and zahn.")
+    return m
+end
+
+"""
     ewald_settings(conf)
 
 Settings that define the Ewald potentials: method, rcut, the damping α actually used and the charges `qeff`, written
@@ -267,7 +280,7 @@ to the header of the parameter file of a fit (see `apply_ewald_settings!`). Site
 the species `type` are listed as `<type>_<element>`.
 """
 function ewald_settings(conf)
-    method, rcut = get_ewald_method(conf), get_ewald_rcut(conf)
+    method, rcut = ewald_method(get_ewald_method(conf)), get_ewald_rcut(conf)
     qeff = [(type, get_qeff(conf, type)) for (type, block) in conf.blocks if haskey(block, "qeff")]
     for type in keys(conf.blocks), (element, q) in get_site_qeff(conf, type)
         push!(qeff, ("$(type)_$(element)", q))
@@ -302,7 +315,7 @@ Ewald settings of a model, before it is built:
 """
 function apply_ewald_settings!(conf; strcs=Structure[], comm=nothing, training=false, rank=0, verbosity=get_verbosity(conf))
     adopt_ewald_settings!(conf, rank=rank, verbosity=verbosity)
-    lowercase(get_ewald_method(conf)) ∈ ("wolf", "zahn") || return nothing
+    ewald_method(get_ewald_method(conf)) ∈ ("wolf", "zahn") || return nothing
     set_rcut, set_alpha = conf("rcut", "Ewald") ≠ "default", conf("alpha", "Ewald") ≠ "default"
     (set_alpha && set_rcut) && return nothing
     if set_alpha

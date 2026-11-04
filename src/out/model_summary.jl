@@ -62,7 +62,7 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         label="",
         species_mean,
         structure_means,
-        method=get_ewald_method(conf),
+        method=ewald_method(get_ewald_method(conf)),
         rcut=get_ewald_rcut(conf),
         alpha=ewald_alpha(method, rcut, get_ewald_alpha(conf)),
         alpha_auto=get_ewald_alpha(conf) == 0,

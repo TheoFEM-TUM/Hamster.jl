@@ -168,10 +168,6 @@ end
 function device_eigen(Hk::DeviceHk, ::Sparse; Neig=6, target=0.0, method="shift-invert", vectors=true)
     method == "chebyshev" && return device_chebyshev(Hk, Neig, target)
     Es, vs = diagonalize(host_hamiltonians(Hk), Neig=Neig, target=target, method=method)
-    for k in axes(Es, 2)
-        perm = sortperm(Es[:, k])
-        Es[:, k] = Es[perm, k]; vs[:, :, k] = vs[:, perm, k]
-    end
     return Es, copyto!(similar(Hk.nzval, ComplexF64, size(vs)), vs)
 end
 

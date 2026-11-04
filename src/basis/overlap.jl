@@ -195,13 +195,18 @@ function phase(base)
     end
 end
 
-function get_sign(base)
-    if base[1].l ≥ 0 && base[1].l ≥ 0
-        return (-1)^(base[1].m + base[2].m)
-    else
-        return +1
-    end
-end
+"""
+    get_sign(base)
+
+Sign `(-1)^(m₁ + m₂)` of the matrix elements between the orbitals `base` with magnetic quantum numbers `m₁`, `m₂`.
+
+The angular functions (`fpx`, `fdxy`, ... in `sh_transforms.jl`) of the s, p and d orbitals get the angles (θ, φ) of
+`Û * ê_z` for the bond frame `Û` (see `get_sk_transform_matrix`). The bond direction is (θ, φ - π), so the functions
+are evaluated at φ instead of the azimuth φ - π of the bond. Under φ → φ + π, the real orbital with `m` changes sign by
+`(-1)^m` (cos(mφ) and sin(|m|φ) change sign for odd `m`), which this factor compensates. Hybrid orbitals have `m = 0`
+and are rotated with their real axes (see `get_angular_frame`), so they don't contribute to the sign.
+"""
+get_sign(base) = (-1)^(base[1].m + base[2].m)
 
 """
     Vssσ

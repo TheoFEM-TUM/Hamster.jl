@@ -214,39 +214,68 @@ end
 Appends the geometry tensor entries `(v, i, j, R, val)` of all orbital pairs of the bond from ion `iion1` at `r⃗₁` to
 ion `iion2` at `r⃗₂` (translation `R`) to `entries`. `radial` are the radial parts from `radial_parts!` and `angles` is
 a buffer of length 5 for `evaluate_overlap!`.
+
+Pairs with hybrid orbitals (l < 0) are evaluated in the bond frame from the first to the second ion of the parameters
+(`IonLabel`): for ions in the other order, the transposed element (orbital 2 on the bond to orbital 1) is evaluated.
+A hybrid next to an s, p or d orbital is rotated with the frame of their angular functions (`get_angular_frame`).
 """
 function add_bond_entries!(entries, angles, lookup, basis, iion1, iion2, R, r⃗₁, r⃗₂, nnlabel, radial, sp_tol)
     type1, type2 = lookup.ion_types[iion1], lookup.ion_types[iion2]
-    ion_label = IonLabel(type1, type2, sorted=false)
-    axes1, axes2 = lookup.orbital_axes[iion1], lookup.orbital_axes[iion2]
     Û = get_sk_transform_matrix(r⃗₁, r⃗₂)
     Û_swap = get_sk_transform_matrix(r⃗₂, r⃗₁)
+    Û_angular = (get_angular_frame(Û), get_angular_frame(Û_swap))
 
-    for jorb1 in eachindex(axes1), jorb2 in eachindex(axes2)
+    for jorb1 in eachindex(lookup.orbital_axes[iion1]), jorb2 in eachindex(lookup.orbital_axes[iion2])
         i, j = lookup.offset[iion1] + jorb1, lookup.offset[iion2] + jorb2
         orb1, orb2 = basis.orbitals[iion1][jorb1], basis.orbitals[iion2][jorb2]
-        # Hybrid orbitals (l < 0) are always evaluated in the bond frame from ion 1 to ion 2
         hybrid = orb1.type.l < 0 || orb2.type.l < 0
-        bondswap = !hybrid && determine_bondswap(type1, type2, orb1.type, orb2.type, i, j)
-        base = get_base_orb(orb1.type, orb2.type, bondswap=bondswap)
-        U = bondswap ? Û_swap : Û
-        angles[1], angles[2] = get_rotated_angles(U, axes1[jorb1])
-        angles[3], angles[4] = get_rotated_angles(U, axes2[jorb2])
-
-        ls = (Int64(type1), Int64(type2), lookup.orbital_ls[iion1][jorb1], lookup.orbital_ls[iion2][jorb2])
-        for k in lookup.contributing_overlaps[ls]
-            overlap = basis.overlaps[k]
-            base_k, parity = base_in_parameter_order(overlap, base, hybrid)
-            orbconfig = get_orbconfig(lookup.oc_dicts, k, ion_label, jorb1, jorb2)
-            mode = get_mode(lookup.mode_dicts, k, ion_label, jorb1, jorb2)
-            evaluate_overlap!(angles, overlap, base_k, orbconfig, mode)
-            val = parity * angles[5] * radial[k]
-            abs(val) ≥ sp_tol || continue
-
-            v = nnlabel ≠ 0 ? get(lookup.param_indices, (k, nnlabel), 0) :
-                get_param_index(overlap, nnlabel, basis.parameters, orb1, orb2, i, j, overlap_label=lookup.overlap_labels[k])
-            push!(entries.v, v); push!(entries.i, i); push!(entries.j, j); push!(entries.R, R); push!(entries.val, val)
+        if hybrid && type1 > type2
+            add_pair_entries!(entries, angles, lookup, basis, iion2, iion1, jorb2, jorb1, Û_swap, Û_angular[2], j, i, R,
+                              nnlabel, radial, sp_tol, transposed=true)
+        elseif hybrid
+            add_pair_entries!(entries, angles, lookup, basis, iion1, iion2, jorb1, jorb2, Û, Û_angular[1], i, j, R,
+                              nnlabel, radial, sp_tol)
+        else
+            bondswap = determine_bondswap(type1, type2, orb1.type, orb2.type, i, j)
+            add_pair_entries!(entries, angles, lookup, basis, iion1, iion2, jorb1, jorb2, bondswap ? Û_swap : Û,
+                              nothing, i, j, R, nnlabel, radial, sp_tol, bondswap=bondswap)
         end
+    end
+    return entries
+end
+
+"""
+    add_pair_entries!(entries, angles, lookup, basis, iion1, iion2, jorb1, jorb2, U, U_angular, i, j, R, nnlabel, radial, sp_tol; bondswap=false, transposed=false)
+
+Appends the geometry tensor entries of orbital `jorb1` of ion `iion1` (index `i`) and orbital `jorb2` of ion `iion2`
+(index `j`) in the bond frame `U` (see `add_bond_entries!`). Hybrid orbitals next to s, p or d orbitals are rotated with
+`U_angular`. For `transposed`, the entries are written to `(j, i)`.
+"""
+function add_pair_entries!(entries, angles, lookup, basis, iion1, iion2, jorb1, jorb2, U, U_angular, i, j, R, nnlabel,
+                           radial, sp_tol; bondswap=false, transposed=false)
+    type1, type2 = lookup.ion_types[iion1], lookup.ion_types[iion2]
+    ion_label = IonLabel(type1, type2, sorted=false)
+    orb1, orb2 = basis.orbitals[iion1][jorb1], basis.orbitals[iion2][jorb2]
+    hybrid = orb1.type.l < 0 || orb2.type.l < 0
+    mixed = hybrid && (orb1.type.l ≥ 0 || orb2.type.l ≥ 0)
+    base = get_base_orb(orb1.type, orb2.type, bondswap=bondswap)
+    angles[1], angles[2] = get_rotated_angles(mixed && orb1.type.l < 0 ? U_angular : U, lookup.orbital_axes[iion1][jorb1])
+    angles[3], angles[4] = get_rotated_angles(mixed && orb2.type.l < 0 ? U_angular : U, lookup.orbital_axes[iion2][jorb2])
+
+    ls = (Int64(type1), Int64(type2), lookup.orbital_ls[iion1][jorb1], lookup.orbital_ls[iion2][jorb2])
+    for k in lookup.contributing_overlaps[ls]
+        overlap = basis.overlaps[k]
+        base_k, parity = base_in_parameter_order(overlap, base, hybrid)
+        orbconfig = get_orbconfig(lookup.oc_dicts, k, ion_label, jorb1, jorb2)
+        mode = get_mode(lookup.mode_dicts, k, ion_label, jorb1, jorb2)
+        evaluate_overlap!(angles, overlap, base_k, orbconfig, mode)
+        val = parity * angles[5] * radial[k]
+        abs(val) ≥ sp_tol || continue
+
+        v = nnlabel ≠ 0 ? get(lookup.param_indices, (k, nnlabel), 0) :
+            get_param_index(overlap, nnlabel, basis.parameters, orb1, orb2, i, j, overlap_label=lookup.overlap_labels[k])
+        a, b = transposed ? (j, i) : (i, j)
+        push!(entries.v, v); push!(entries.i, a); push!(entries.j, b); push!(entries.R, R); push!(entries.val, val)
     end
     return entries
 end
