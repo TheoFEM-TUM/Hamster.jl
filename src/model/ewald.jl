@@ -56,7 +56,8 @@ function ewald_sum(pos, q, lattice;
 )
 
     @assert length(q) == length(pos) "length(q) must equal number of atoms"
-    @assert abs(sum(q)) < 1e-8 "Periodic PME requires a neutral cell unless you add a neutralizing background"
+    lowercase(method) ∈ ("wolf", "zahn") || abs(sum(q)) < 1e-8 ||
+        error("The Ewald sum (method = ewald) needs a neutral cell: the charges add up to $(sum(q)). Use method = wolf or zahn.")
 
     lattice_inv = inv(lattice)
     α = alpha == 0. ? (alpha_factor / rcut) : alpha

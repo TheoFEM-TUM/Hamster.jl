@@ -38,7 +38,7 @@ Pages = ["descriptor.jl", "kernel.jl", "kernel_precalced.jl", "simmat.jl"]
 
 ```@autodocs
 Modules = [Hamster]
-Pages = ["ewald_onsite.jl", "ewald.jl", "ewald_helper.jl"]
+Pages = ["ewald_onsite.jl", "ewald.jl", "ewald_slab.jl", "ewald_helper.jl"]
 ```
 
 

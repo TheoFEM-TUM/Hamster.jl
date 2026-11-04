@@ -58,7 +58,8 @@ Builds the container by:
 2. Gathering unique species across MPI ranks
 3. Initializing per-species parameters
 4. Computing global per-species mean potentials (MPI-reduced)
-5. Subtracting these means from all site potentials
+5. Subtracting these means from all site potentials (`centering = global`), or the species means of each structure
+   (`centering = structure`)
 
 # Notes
 - Potentials are only defined up to a constant; per-species centering ensures
@@ -82,6 +83,11 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         rcut            = get_ewald_rcut(conf),
         alpha           = get_ewald_alpha(conf),
         mesh_spacing    = get_ewald_mesh_spacing(conf),
+        slab_axis       = get_ewald_slab_axis(conf),
+        slab_scale      = get_ewald_slab_scale(conf),
+        cluster         = get_ewald_cluster(conf),
+        charge_compensation = get_ewald_charge_compensation(conf),
+        centering       = conf("centering", "Ewald") == "default" ? (slab_axis > 0 || cluster ? "structure" : "global") : get_ewald_centering(conf),
         update          = get_ewald_update(conf),
         label           = "",
         write_summary   = true)
@@ -93,15 +99,26 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     grid_rebuilt = false
     method = ewald_method(method)
     α = ewald_alpha(method, rcut, alpha)
+    if cluster
+        slab_axis == 0 || error("cluster and slab_axis = $slab_axis exclude each other: a cluster has vacuum in all directions, a slab along one.")
+        lowercase(method) == "ewald" || error("cluster = true needs method = ewald (the full Ewald sum with the dipole correction); " *
+            "Wolf and Zahn with rcut larger than the cluster already sum an isolated cluster.")
+    end
     site_counts = Dict{Tuple{String, Float64}, Int64}()
+    compensated = slab_axis > 0 || cluster || charge_compensation ≠ "global"
 
     for (n, strc) in enumerate(strcs)
         pos = get_ion_positions(strc.ions, apply_distortion=true)
 
         ion_types = get_ion_types(strc.ions)
         charges, sites = get_site_charges(strc, conf, positions=pos)
-        check_neutrality(charges, sites, strc.system, n)
+        compensated || check_neutrality(charges, sites, strc.system, n)
         for site in zip(sites, charges); site_counts[site] = get(site_counts, site, 0) + 1; end
+        # from the reference positions: the same compensation for all distortions of a structure
+        slab_charges = charges .+ compensation_charges(charge_compensation, get_ion_positions(strc.ions, apply_distortion=false),
+                                                       ion_types, charges, strc.lattice; slab_axis=slab_axis)
+        charge_compensation == "local" && (charges = slab_charges)
+        cluster && charge_compensation == "global" && (charges = charges .- sum(charges) / length(charges))
 
         reuse_grid = rcut ≤ min(strc.point_grid.grid_size, get_rcut(conf))
         grid_rebuilt |= !reuse_grid
@@ -117,6 +134,12 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         else
             ewald = ewald_sum(pos, charges, strc.lattice, rcut=rcut, method=method, alpha=α)
         end
+        φ = ewald.potentials
+        if slab_axis > 0
+            φ = φ .+ slab_scale .* slab_potentials(pos, slab_charges, strc.lattice, slab_axis; method=method, alpha=α)
+        elseif cluster
+            φ = φ .+ cluster_potentials(pos, charges, strc.lattice; method=method)
+        end
 
         ion_indices_with_orbs = collect(1:length(ion_types))
         ion_types_with_orbs = get_ion_types(strc.ions, conf, uniq=true, withorbitals=true)
@@ -124,7 +147,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
 
         push!(types_per_strc, ion_types[ion_indices_with_orbs])
         push!(norb_per_strc, size(bases[n])[ion_indices_with_orbs])
-        push!(potentials, ewald.potentials[ion_indices_with_orbs])
+        push!(potentials, φ[ion_indices_with_orbs])
         Rs_info[1, n] = size(strc.Rs, 2)
         Rs_info[2, n] = findR0(strc.Rs)
     end
@@ -170,16 +193,14 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     end
     MPI.Bcast!(species_mean, comm, root=0)
 
+    centering ∈ ("global", "structure") || error("centering = $centering: unknown, use global or structure.")
     structure_means = Tuple{UInt8, Float64}[]
-    for n in eachindex(potentials), type in unique(types_per_strc[n])
-        push!(structure_means, (type, mean(potentials[n][types_per_strc[n] .== type])))
-    end
-
     for n in eachindex(potentials)
+        means = Dict(type => mean(potentials[n][types_per_strc[n] .== type]) for type in unique(types_per_strc[n]))
+        append!(structure_means, [(type, m) for (type, m) in means])
         for i in eachindex(potentials[n])
             typ = types_per_strc[n][i]
-            p = type_to_idx[typ]
-            potentials[n][i] -= species_mean[p]
+            potentials[n][i] -= centering == "structure" ? means[typ] : species_mean[type_to_idx[typ]]
         end
     end
 
@@ -187,7 +208,8 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     has_sites = any(!isempty(get_site_qeff(conf, type)) for type in keys(conf.blocks))
     write_summary && write_model_summary(model, comm, conf, rank=rank, label=label, species_mean=species_mean, structure_means=structure_means,
                                          method=method, rcut=rcut, alpha=α, alpha_auto=alpha == 0, grid_rebuilt=grid_rebuilt && method == "ewald",
-                                         site_counts=has_sites ? site_counts : nothing)
+                                         slab_axis=slab_axis, slab_scale=slab_scale, cluster=cluster, charge_compensation=charge_compensation,
+                                         centering=centering, site_counts=has_sites ? site_counts : nothing)
     return model
 end
 
@@ -249,7 +271,8 @@ function check_neutrality(charges, sites, system="", index=1; tol=1e-8)
     listing = join(["$(n) × $(site) ($(q))" for ((site, q), n) in sort(collect(counts))], ", ")
     error("The effective charges of structure $index$(isempty(system) ? "" : " ($system)") are not neutral: net charge " *
           "$(round(net, sigdigits=6)) e from $listing. Check qeff and qeff_<element> in the atom blocks; with " *
-          "site-dependent charges, atoms without a neighbour of the given elements within site_rcut keep qeff.")
+          "site-dependent charges, atoms without a neighbour of the given elements within site_rcut keep qeff. A net " *
+          "charge of slabs, clusters or defects can be compensated (slab_axis, cluster or charge_compensation in the Ewald block).")
 end
 
 """
