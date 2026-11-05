@@ -254,6 +254,8 @@ Selects a subset of descriptor vectors using K-Means clustering, weighted by clu
 - A matrix of selected descriptor vectors with `Npoints` columns.
 """
 function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random")
+    lowercase(ml_sampling) ∈ ("random", "farthest", "r", "f") ||
+        error("Unknown ML sampling '$ml_sampling'. Valid options are random and farthest.")
     result = kmeans(descriptors, Ncluster)
     indices = result.assignments
     centroids = result.centers
@@ -290,9 +292,9 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
         num_to_take = min(points_per_cluster[c], length(cluster_indices))
         
         selected = Int64[]
-        if ml_sampling[1] == 'r'
+        if lowercase(ml_sampling)[1] == 'r'
             selected = sample(cluster_indices, num_to_take, replace=false)
-        elseif ml_sampling[1] == 'f'
+        elseif lowercase(ml_sampling)[1] == 'f'
             selected = farthest_point_sampling(descriptors, cluster_indices, num_to_take)
         end
         append!(selected_indices, selected)

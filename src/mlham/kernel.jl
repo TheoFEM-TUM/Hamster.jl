@@ -217,11 +217,11 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filena
     open(filename*".dat", "w") do file
         # Write header to file
         println(file, "begin ", get_system(conf))
-        println(file, "  rcut = ", get_ml_rcut(conf))
-        println(file, "  sim_params = ", get_ml_sim_params(conf))
-        println(file, "  env_scale = ", get_ml_env_scale(conf))
-        println(file, "  apply_distortion = ", get_ml_apply_distortion(conf))
-        println(file, "  apply_orthogonality = ", get_ml_apply_orthogonality(conf))
+        for key in ML_HEADER_TAGS
+            value = ml_setting(conf, key)
+            value isa AbstractVector && isempty(value) && continue
+            println(file, "  $key = ", value isa AbstractVector ? join(value, " ") : value)
+        end
         println(file, "end")
         println(file, "")
         for n in eachindex(kernel.params)
@@ -232,6 +232,90 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filena
             print(file, "\n")
         end
     end
+end
+
+"""
+    ML_HEADER_TAGS
+
+The tags of the ML block that define an ML model, written to the header of its parameter file (`write_params`).
+"""
+const ML_HEADER_TAGS = ["rcut", "sim_params", "env_scale", "strc_scale", "apply_distortion", "apply_distance_distortion",
+                        "apply_orthogonality", "key_dims"]
+
+ml_setting(conf, key) = getfield(@__MODULE__, Symbol("get_ml_", key))(conf)
+
+"""
+    read_ml_header(filename) -> Dict{String, String}
+
+The settings in the header (`begin` ... `end`) of the ML parameter file `filename` (with or without `.dat`).
+"""
+function read_ml_header(filename)
+    endswith(filename, ".dat") || (filename *= ".dat")
+    header = Dict{String, String}()
+    for line in eachline(filename)
+        words = split(line)
+        isempty(words) && continue
+        words[1] == "begin" && continue
+        words[1] == "end" && break
+        occursin('=', line) || continue
+        key, value = strip.(split(line, '=', limit=2))
+        header[lowercase(key)] = value
+    end
+    return header
+end
+
+"""
+    same_ml_setting(value, text)
+
+Whether the setting `value` (from the config) equals `text` (from the header of a parameter file); numbers are compared
+with a relative tolerance of 1e-10.
+"""
+function same_ml_setting(value, text)
+    other = convert_value(text)
+    value isa AbstractVector && !(other isa AbstractVector) && (other = [other])
+    value isa AbstractVector && return length(value) == length(other) && all(same_ml_setting.(value, string.(other)))
+    value isa Bool && return other isa Bool && value == other
+    value isa Number && other isa Number && return isapprox(value, other, rtol=1e-10)
+    return string(value) == string(other)
+end
+
+"""
+    check_ml_settings(conf, filename)
+
+Throw an error if a setting in the header of the ML parameter file `filename` (see `ML_HEADER_TAGS`) differs from the
+value in `conf`.
+"""
+function check_ml_settings(conf, filename)
+    for (key, text) in read_ml_header(filename)
+        key ∈ ML_HEADER_TAGS || continue
+        value = ml_setting(conf, key)
+        same_ml_setting(value, text) ||
+            error("The ML model in $filename was fitted with $key = $text, but $key = $(value isa AbstractVector ? join(value, " ") : value) " *
+                  "in the ML block. Remove $key from the ML block to use the value of the file.")
+    end
+    return nothing
+end
+
+"""
+    apply_ml_settings!(conf)
+
+Use a fitted ML model with the settings it was fitted with: the settings in the header of the ML parameter files
+(`init_params` of the ML block if it is a file, and `filename` with `mode = expand`) that are not set in the ML block
+are taken from the file; settings that are set and differ raise an error (`check_ml_settings`). Files written before
+the header contained all settings of `ML_HEADER_TAGS` keep the defaults for the missing ones.
+"""
+function apply_ml_settings!(conf)
+    files = String[]
+    get_init_mode(get_ml_init_params(conf)) == :file && push!(files, get_ml_init_params(conf))
+    get_ml_mode(conf) == "expand" && push!(files, get_ml_filename(conf))
+    for file in files
+        for (key, text) in read_ml_header(file)
+            key ∈ ML_HEADER_TAGS || continue
+            conf(key, "ML") == "default" && set_value!(conf, key, "ML", text)
+        end
+        check_ml_settings(conf, endswith(file, ".dat") ? file : file * ".dat")
+    end
+    return nothing
 end
 
 """
@@ -248,28 +332,8 @@ function read_ml_params(conf=get_empty_config(); filename=get_ml_filename(conf))
     lines = open_and_read(filename)
     lines = split_lines(lines)
 
-    # Check that header params match Config
-    in_header = false
-    data_start = 1
-
-    for (i, line) in enumerate(lines)
-        if line[1] == "begin"
-            in_header = true
-            continue
-        elseif line[1] == "end"
-            in_header = false
-            data_start = i + 2
-            break
-        elseif in_header && "=" ∈ line
-            key, val = line[1], line[end]
-            key = strip(key)
-            val = strip(val)
-            fn_name = Symbol("get_ml_", key)
-            fn = getfield(@__MODULE__, fn_name)
-            conf_val = fn(conf)
-            @assert tryparse(typeof(conf_val), val) == conf_val
-        end
-    end
+    check_ml_settings(conf, filename)
+    data_start = something(findfirst(line -> !isempty(line) && line[1] == "end", lines), -1) + 2
 
     N = length(lines[data_start]) - 1
     data_points = SVector{N, Float64}[]

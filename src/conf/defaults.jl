@@ -24,7 +24,7 @@
 # Diagonalization
 # ====================
 @configtag skip_diag Bool false "if true, no eigenvalues are computed." category="diagonalization"
-@configtag eigsolver String "shift-invert" "sparse eigensolver when `sp_diag=true`: shift-invert (factorization, Arpack/cuDSS), krylov-schur (KrylovKit) or chebyshev (Chebyshev-filtered subspace iteration, only matrix-vector products, threaded and on GPUs). Formerly `diag_method`." category="diagonalization" see_also=["sp_diag", "neig", "eig_target"]
+@configtag eigsolver String "shift-invert" "sparse eigensolver when `sp_diag=true`: shift-invert (factorization, Arpack/cuDSS), krylov-schur (KrylovKit) or chebyshev (Chebyshev-filtered subspace iteration, only matrix-vector products, threaded and on GPUs). Formerly `diag_method`." category="diagonalization" see_also=["sp_diag", "neig", "eig_target"] values=["shift-invert", "krylov-schur", "chebyshev"]
 @configtag neig Int64 6 "number of eigenvalues when using sparse eigensolver." category="diagonalization" see_also=["sp_diag", "eig_target"]
 @configtag eig_target Float64 0.0 "target energy when using sparse eigensolver." category="diagonalization" see_also=["sp_diag", "neig"]
 
@@ -66,7 +66,7 @@ end
 # ====================
 # Device
 # ====================
-@configtag device String "cpu" "Compute device for building, diagonalizing and differentiating Hamiltonians (cpu, gpu). `gpu` requires `using CUDA` (and `using CUDSS` for the shift-invert eigensolver); each MPI rank binds to one GPU of its node." category="device and parallelization"
+@configtag device String "cpu" "Compute device for building, diagonalizing and differentiating Hamiltonians (cpu, gpu). `gpu` requires `using CUDA` (and `using CUDSS` for the shift-invert eigensolver); each MPI rank binds to one GPU of its node." category="device and parallelization" values=["cpu", "gpu"]
 
 # ====================
 # Post-processing

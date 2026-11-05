@@ -42,7 +42,8 @@ Create a `Loss` object with band weights, k-point weights, and loss norm based o
 - A `Loss` object initialized with the appropriate band weights (`wE`), k-point weights (`wk`), normalization factor, and loss norm (`n`).
 """
 function Loss(Nε, Nk, conf=get_empty_config(); loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk))
-    n = loss_to_n[loss]
+    haskey(loss_to_n, uppercase(loss)) || error("Unknown loss '$loss'. Valid options are MAE and MSE.")
+    n = loss_to_n[uppercase(loss)]
     length(wE) == Nε || error("wE has $(length(wE)) entries, but the training data has $Nε bands.")
     length(wk) == Nk || error("wk has $(length(wk)) entries, but the training data has $Nk k-points.")
 

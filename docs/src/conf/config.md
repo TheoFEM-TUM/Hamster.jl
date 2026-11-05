@@ -22,6 +22,12 @@ described on one page per block (in the navigation under Input Tags).
   description contains the term (e.g. `hamster --tags ewald`).
 - When Hamster reads the config file, it warns about unknown tags (with suggestions) and about tags in a block where they
   have no effect, e.g. `xdatcar` in the `Options` block instead of the `Supercell` block.
+- Values that do not fit the type of a tag (e.g. `rcut = 5,5`) or are not one of its allowed values (e.g. `loss = RMSE`;
+  the allowed values are listed with the tag and are not case sensitive) stop the run with an error that lists all such
+  tags, also for tags given on the command line.
+- Lines that cannot be read stop the run with an error and the line number: a line in a block without `=` or with more
+  than one `=`, a tag without a value, a block without `end` (or a `begin` inside a block) and an `end` without `begin`.
+  Text outside the blocks is ignored.
 
 Keys with an index, such as the band and k-point weights `wE_3` or `wE_10-20` of the `Optimizer` block, are described
 with their base tag (`wE`, `wk`).

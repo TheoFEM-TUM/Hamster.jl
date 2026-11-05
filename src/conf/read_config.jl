@@ -23,15 +23,16 @@ function read_config(file::String)
     conf = get_empty_config()
     if isfile(file)
         lines = open_and_read(file)
-        blocks = split_blocks(lines)
+        blocks = split_blocks(lines, source=file)
         for block in blocks
-            read_config_block!(block, conf)
+            read_config_block!(block, conf, source=file)
         end
         # Unknown and misplaced tags (warned once, on the first MPI rank)
         if !MPI.Initialized() || MPI.Comm_rank(MPI.COMM_WORLD) == 0
             foreach(message -> @warn(message * " See `hamster --tag <name>` or the list of input tags in the documentation."),
                     check_config_tags(conf))
         end
+        assert_valid_config(conf, source=file)
     else
         @info "File $file not found. Using default values."
     end
@@ -39,10 +40,11 @@ function read_config(file::String)
 end
 
 """
-    split_blocks(lines)
+    split_blocks(lines; source="config")
 
 Splits a list of lines into blocks of text based on "begin" and "end" markers, i.e., lines whose first word (without
-comments) is `begin` or `end`. Each block is encapsulated in a `ConfigBlock` struct.
+comments) is `begin` or `end`. Each block is encapsulated in a `ConfigBlock` struct. A block without a name or
+without `end`, a `begin` inside a block and an `end` outside a block raise an error with the line number in `source`.
 
 # Arguments
 - `lines`: A list of strings, where each string is a line from the input text.
@@ -50,36 +52,24 @@ comments) is `begin` or `end`. Each block is encapsulated in a `ConfigBlock` str
 # Returns
 - A list of `ConfigBlock` instances, each containing the header and content of a block found in the input lines.
 """
-function split_blocks(lines)
+function split_blocks(lines; source="config")
     blocks = ConfigBlock[]
-    found_begin = false; found_end = false
-    begin_line = 0; end_line = 0; unclosed_begins = 0
+    begin_line = 0
     for (k, line) in enumerate(lines)
         words = split_line(filter_comment(line))
         first_word = isempty(words) ? "" : words[1]
         if first_word == "begin"
-            if unclosed_begins == 0
-                begin_line = k
-                found_begin = true
-            end
-            unclosed_begins += 1
+            begin_line == 0 || error("$source, line $k: \"begin\" inside the block of line $begin_line (missing \"end\"?).")
+            length(words) > 1 || error("$source, line $k: \"begin\" without a block name.")
+            begin_line = k
         elseif first_word == "end"
-            if unclosed_begins == 1
-                end_line = k
-                found_end = true
-                unclosed_begins = 0
-            else
-                unclosed_begins -= 1
-            end
-        end
-        if found_begin && found_end
-            block_content = lines[begin_line+1:end_line-1]
-            block_header = string.([el for el in split_line(filter_comment(lines[begin_line])) if el ≠ "begin"])
-            block = ConfigBlock(block_header, block_content)
-            push!(blocks, block)
-            found_begin = false; found_end = false
+            begin_line > 0 || error("$source, line $k: \"end\" without \"begin\".")
+            header = string.([el for el in split_line(filter_comment(lines[begin_line])) if el ≠ "begin"])
+            push!(blocks, ConfigBlock(header, lines[begin_line+1:k-1], begin_line))
+            begin_line = 0
         end
     end
+    begin_line == 0 || error("$source, line $begin_line: block without \"end\".")
     return blocks
 end
 
@@ -93,14 +83,18 @@ The `ConfigBlock` struct is used to encapsulate a segment of a configuration fil
 # Fields:
 - `header::Vector{String}`: A vector of strings representing the header of the configuration block. This typically identifies the section or category the block belongs to.
 - `content::Vector{String}`: A vector of strings representing the content of the configuration block. Each string usually corresponds to a line in the configuration file, often containing key-value pairs or other settings.
+- `line::Int64`: The line number of the `begin` line of the block (for error messages).
 """
 struct ConfigBlock
     header :: Vector{String}
     content :: Vector{String}
+    line :: Int64
 end
 
+ConfigBlock(header, content) = ConfigBlock(header, content, 0)
+
 """
-    read_config_block!(block::ConfigBlock, conf::Config)
+    read_config_block!(block::ConfigBlock, conf::Config; source="config")
 
 Processes a configuration block and updates the configuration object with the parsed key-value pairs.
 
@@ -109,17 +103,24 @@ This function iterates over the lines in a `ConfigBlock`, parses each line to ex
 # Arguments:
 - `block::ConfigBlock`: An object representing a block of configuration lines, typically containing a header and a list of content lines.
 - `conf::Config`: The configuration object that will be updated with the parsed key-value pairs from the block.
+
+Lines without `=`, with more than one `=` or without a tag name or value raise an error with the line number in
+`source`.
 """
-function read_config_block!(block::ConfigBlock, conf::Config)
-    for line in block.content
-        if occursin('=', line) && length(filter_comment(line)) > 0
-            option_key, option_value = read_config_line(filter_comment(line))
-            option_key = renamed_tag(option_key)
-            if block.header[end] == "Options"
-                set_value!(conf, option_key, option_value)
-            else
-                set_value!(conf, option_key, block.header[end], option_value)
-            end
+function read_config_block!(block::ConfigBlock, conf::Config; source="config")
+    for (k, line) in enumerate(block.content)
+        text = filter_comment(line)
+        isempty(strip(text)) && continue
+        where = "$source, line $(block.line + k): \"$(strip(text))\""
+        count(==('='), text) == 1 || error("$where is not of the form tag = value.")
+        option_key, option_value = read_config_line(text)
+        isempty(option_key) && error("$where has no tag name.")
+        isempty(option_value) && error("$where has no value.")
+        option_key = renamed_tag(option_key)
+        if block.header[end] == "Options"
+            set_value!(conf, option_key, option_value)
+        else
+            set_value!(conf, option_key, block.header[end], option_value)
         end
     end
 end
@@ -162,10 +163,8 @@ This function splits a configuration line at the first occurrence of the `=` cha
   - `option_value::String`: The configuration option value, also stripped of leading and trailing whitespace.
 """
 function read_config_line(line)
-    option_key, option_value = split_line(line, char="=")
-    option_key = strip(option_key, ' ')
-    option_value = strip(option_value, ' ')
-    return option_key, option_value
+    option_key, option_value = split(line, '=', limit=2)
+    return strip(option_key), strip(option_value)
 end
 
 """
