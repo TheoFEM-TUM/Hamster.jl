@@ -2,7 +2,7 @@ module Hamster
 
 using LinearAlgebra, SparseArrays, StaticArrays, KrylovKit, Dates, PeriodicTable, UnPack, MPI, Clustering, BlockDiagonals, DataStructures,
     CubicSplines, HCubature, Statistics, ChunkSplitters, FiniteDiff, StatsBase, HDF5, Printf, OhMyThreads, TreeParzen, Arpack, Random, Distances, Logging, ParallelKMeans,
-    KernelAbstractions
+    KernelAbstractions, FFTW, SpecialFunctions
 
 include("parse/utils.jl"); include("parse/poscar.jl"); include("parse/eigenval.jl"); include("parse/kpoints.jl"); include("parse/xdatcar.jl"); include("parse/wannier90.jl")
 include("parse/commandline.jl")
@@ -10,7 +10,7 @@ include("parse/commandline.jl")
 include("conf/config.jl"); include("conf/read_config.jl")
 include("conf/defaults.jl"); include("conf/strc_defaults.jl"); include("conf/atom_defaults.jl"); include("conf/basis_defaults.jl")
 include("conf/model_defaults.jl"); include("conf/optim_defaults.jl"); include("conf/supercell_defaults.jl") 
-include("conf/ml_defaults.jl"); include("conf/soc_defaults.jl"); include("conf/hyperopt_defaults.jl"); include("conf/unfold_defaults.jl"); include("conf/dos_defaults.jl")
+include("conf/ml_defaults.jl"); include("conf/soc_defaults.jl"); include("conf/hyperopt_defaults.jl"); include("conf/unfold_defaults.jl"); include("conf/dos_defaults.jl"); include("conf/ewald_defaults.jl")
 
 include("out/output.jl")
 
@@ -23,7 +23,7 @@ include("basis/label.jl"); include("basis/orbital.jl"); include("basis/overlap.j
 include("basis/basis.jl")
 
 include("model/ham.jl"); include("model/ham_grad.jl"); include("model/ham_write.jl"); include("model/model.jl")
-include("model/eff_ham.jl")
+include("model/ewald_helper.jl"); include("model/ewald.jl"); include("model/ewald_onsite.jl"); include("model/eff_ham.jl")
 
 include("soc/soc_utils.jl"); include("soc/soc_matrix.jl"); include("soc/soc_model.jl")
 
@@ -61,6 +61,7 @@ export Kernelpoints, SimMat, get_empty_simmat, write_simmat, read_simmat, read_s
 export HamiltonianKernel, load_simmats!, unload_simmats!
 
 
+export EwaldOnsites
 
 export run_calculation
 

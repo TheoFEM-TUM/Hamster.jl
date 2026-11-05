@@ -20,6 +20,12 @@ makedocs(
         ],
         "GPU Support" => "calc/gpu.md",
         "Band Unfolding" => "calc/unfold.md",
+        "Hamiltonian Models" => [
+            "models/tb.md",
+            "models/soc.md",
+            "models/kernel.md",
+            "models/ewald.md"
+        ],
         "Examples" => [
             "examples/examples.md",
             "examples/model_eval.md",

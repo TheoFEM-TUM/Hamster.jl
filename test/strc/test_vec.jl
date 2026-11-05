@@ -88,7 +88,7 @@ end
     @test Hamster.normdiff(v1, v2) ≈ norm(v1 - v2)
 
     t = 2 .* rand(3) .- 1
-    @test Hamster.normdiff(v1,v2, t) ≈ norm(v1 - v2 + t)
+    @test Hamster.normdiff(v1, v2, t) ≈ norm(v1 - v2 + t)
 
     dv1 = 2 .* rand(3) .- 1
     dv2 = 2 .* rand(3) .- 1

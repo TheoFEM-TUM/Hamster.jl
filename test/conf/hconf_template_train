@@ -1,0 +1,161 @@
+begin Options
+    # --- general ---
+    system           = unknown
+    verbosity        = 1          # 0 minimal … 3 debug
+    # seed           = 42         # unset by default; rank is added to it
+    # systems        = sysA sysB  # unset = all systems in the XDATCAR/h5 file
+
+    # --- structure ---
+    poscar           = POSCAR
+    rcut             = 7.0
+    rcut_tol         = 1.0
+    Rmax             = 1
+    # grid_size      = 7.0        # default = rcut
+
+    # --- TB model / basis ---
+    tb_model         = true
+    init_params      = ones       # ones | zeros | rand | <file>.dat
+    onsite           = true
+    sepNN            = false
+    tmethod          = rotation   # rotation | gramschmidt
+    load_rllm        = false
+    interpolate_rllm = true
+    # rllm_file      = rllm.dat   # default: rllm.dat (rllm.h5 if >1 system)
+    itp_xmin         = 0.0
+    # itp_xmax       = 9.0        # default = rcut + |rcut_tol| + 1
+    itp_Ninit        = 20
+    itp_Nmax         = 300        # (docstring says 1000, code uses 300)
+    itp_tol          = 1e-5
+
+    # --- k-points ---
+    kpoints          = gamma      # gamma | EIGENVAL | *KPOINTS* | <file>.h5
+
+    # --- numerics / parallelization ---
+    device           = cpu        # cpu | gpu
+    sp_mode          = false      # sparse H(R) + gradients
+    sp_diag          = false      # sparse diagonalization – NOT compatible with optimization
+    sp_tol           = 1e-10
+    nthreads_blas    = 1
+    # nthreads_kpoints = <JULIA_NUM_THREADS>
+    # nthreads_bands   = <JULIA_NUM_THREADS>
+    nhamster         = 1
+    only_sample      = false      # only sample ML kernel vectors, then stop
+end
+
+# Remove the Supercell block for primitive-cell (pc) training.
+begin Supercell
+    poscar             = SC_POSCAR
+    xdatcar            = XDATCAR  # XDATCAR or .h5 file with structures
+    # xdatcar_val      = XDATCAR_val   # default: none
+    Nconf              = 1        # (docstrings say 10, code uses 1)
+    Nconf_min          = 1
+    Nconf_max          = 1
+    nbatch             = 1
+    filter_config_inds = false
+    pc_weight          = 0        # 0 = drop *PC systems; value is multiplied by Nconf
+    pc_weight_val      = 0
+    # config_inds      = config_inds.dat   # default: none (sampled); file or list of ints
+    # val_config_inds  = val_config_inds.dat
+end
+
+begin Optimizer
+    # --- data ---
+    train_data       = EIGENVAL
+    # train_mode     = md         # default: md if Supercell block, else pc  (pc | md | universal)
+    hr_fit           = false
+    # eig_fit        = true       # default: true (false if hr_fit = true)
+    bandmin          = 1
+    auto_bandmin     = true
+
+    # --- what is updated ---
+    update_tb        = true       # true | false | list of parameter indices
+
+    # --- loss ---
+    loss             = MAE        # MAE | MSE
+    # wE             = 1 1 1 …    # default: ones; or individual e.g. wE_3 = 2
+    # wk             = 1 1 1 …    # default: ones; or individual e.g. wk_3 = 2
+    auto_band_weights   = true
+    auto_kpoint_weights = true
+    # band_edge_weight  = 5       # default: max(0.25*sum(wE), 5); 1 = no extra weight
+    gap_weight       = 1.0
+    min_delta        = 0.0
+    ls_weight        = true
+    offset           = true
+    offset_mode      = system     # system | one_system | individual
+    # offset_step    = 1          # default = niter
+    onsite_shift     = step       # step | end | none
+
+    # --- regularization ---
+    lambda           = 0.0
+    lreg             = 2
+    barrier          = 0.0
+
+    # --- schedule ---
+    niter            = 1
+    lr               = 0.1
+    # lr_min         = 0.1        # default = lr (cosine decay if lr_min != lr)
+    warmup_ratio     = 0.0
+    lr_warmup        = 0.00001
+    shuffle_batches  = false
+
+    # --- validation ---
+    # validate       = false      # default: true as soon as val_mode or val_data is set
+    # val_data       = EIGENVAL
+    # val_mode       = md         # default = train_mode  (pc | md | mixed | universal)
+    # eig_val        = true       # default = eig_fit
+    # val_bandmin    = 1          # default = bandmin
+    val_ratio        = 0
+    val_weights      = false
+    valeachiter      = 1
+
+    # --- early stopping (needs validation) ---
+    early_stopping        = 0     # patience in iterations, 0 = off
+    early_stopping_metric = loss  # loss | MAE | BG
+    restore_best          = false
+
+    # --- output ---
+    printeachiter    = 1
+    # printeachbatch = false      # default: true if verbosity > 1
+end
+
+begin ML
+    update           = true
+    init_params      = zeros
+    filename         = ml_params
+    # rcut           = 7.0        # default = global rcut
+
+    # --- descriptor scaling ---
+    overlap_scale    = 1.0
+    Z_scale          = 1.0
+    R_scale          = 1.0
+    strc_scale       = 1.0
+    env_scale        = 1.0
+    apply_distortion          = false
+    apply_distance_distortion = false
+
+    # --- kernel / sampling ---
+    sim_params       = 0.1
+    sim_tol          = 0.01
+    Npoints          = 1
+    Ncluster         = 1
+    key_dims         = 1 2 3      # 0 = no keys
+    sample_strat     = cluster    # cluster | single_rank | cluster_single | split
+    kernel_strat     = Sampling   # Sampling | Coreset | Lloyd | Elkan | Hamerly
+    sampling         = random
+    sample_norm      = false
+    weight_factor    = -1.0
+    kernel_chunk_size = 50000
+    alpha            = 0.5
+    nc_min           = -1         # -1 = no floor
+    nc_max           = -1         # -1 = no cap
+    n_ratio          = 0          # <1 → Npoints/Ncluster
+    apply_orthogonality = false
+    zero_params      = false
+end
+
+# The presence of an SOC block enables SOC:
+begin SOC
+     update      = true
+     init_params = zeros
+end
+

@@ -32,7 +32,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; rcut=get_
         @views grouped_R = grouped[R]
         for (iion, jion) in grouped_R
             ri = rs_ion[iion]
-            rj = rs_ion[jion] - Ts[:, R]
+            rj = apply_pbc(rs_ion[jion], Ts[:, R])
             Δr = normdiff(ri, rj)
             if apply_distortion
                 ri -= strc.ions[iion].dist

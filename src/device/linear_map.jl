@@ -108,6 +108,20 @@ function linear_terms(soc_model::SOCModel, index; soc=true)
     return terms
 end
 
+function linear_terms(ewald::EwaldOnsites, index; soc=false)
+    R0 = ewald.Rs_info[2, index]
+    terms = SparseTerms(Float64, length(ewald.params))
+    offset = 0
+    for (n, ϕ) in enumerate(ewald.potentials[index])
+        p = findfirst(label -> label == ewald.types_per_strc[index][n], ewald.param_labels)
+        for o in offset+1:offset+ewald.norb_per_strc[index][n]
+            push_term!(terms, R0, o, o, p, -ϕ, soc=soc)
+        end
+        offset += ewald.norb_per_strc[index][n]
+    end
+    return terms
+end
+
 """
     DeviceSparseBlock
 

@@ -38,6 +38,13 @@ Modules = [Hamster]
 Pages = ["soc_defaults.jl"]
 ```
 
+## Ewald onsite corrections
+
+```@autodocs
+Modules = [Hamster]
+Pages = ["ewald_defaults.jl"]
+```
+
 ## [Optim](@id optim-tags)
 
 ```@autodocs
