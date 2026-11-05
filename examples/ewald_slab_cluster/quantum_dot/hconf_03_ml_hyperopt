@@ -1,0 +1,81 @@
+# CsPbBr3 quantum dot, step 3: hyperparameters of the ML correction on SOC data, TB and Ewald couplings of step 2
+# fixed. Data with SOC: structures.h5 and eigenval.h5 (frames of the dot), POSCAR in the atom order of structures.h5.
+begin Options
+    rcut = 5.5
+    verbosity = 1
+    sp_mode = true
+    interpolate_rllm = true
+    init_params = ../02/params.dat
+end
+
+begin Supercell
+    xdatcar = structures.h5
+    poscar = POSCAR
+    Nconf = 50
+    Nconf_min = 1
+    Nconf_max = 100
+end
+
+begin Optimizer
+    update_tb = false
+    lr = 0.01
+    niter = 150
+    loss = MAE
+    bandmin = 313                       # 2 × (4 N_Cs + 5 N_Pb + N_Br) + 1: the VBM is band 232 of the window
+    wE_232-233 = 5
+    wE_300-320 = 0.5
+    val_weights = true
+    train_data = eigenval.h5
+    val_data = eigenval.h5
+    train_mode = md
+    val_mode = md
+    val_ratio = 1.0
+    valeachiter = 25
+end
+
+begin ML
+   update = true
+   apply_orthogonality = true
+   apply_distortion = true              # descriptors from the distorted geometry of every frame
+   ncluster = 100
+end
+
+begin HyperOpt
+    niter = 40
+    params = ML_npoints ML_env_scale ML_sim_params
+    lowerbounds = 100 0 0.01
+    upperbounds = 1500 3 3
+    stepsizes = 10 1e-5 1e-5
+    mode = tpe
+end
+
+begin SOC
+    update = true
+    init_params = ones
+end
+
+begin Ewald
+    method = ewald
+    rcut = 10.0
+    mesh_spacing = 0.5
+    init_params = ../02/params.dat
+    cluster = true
+end
+
+begin atom Cs
+  alpha = 25.87
+  orbitals = s
+  qeff = 1.02
+end
+
+begin atom Pb
+  alpha = 39.19
+  orbitals = s px py pz
+  qeff = 1.248
+end
+
+begin atom Br
+  alpha = 17.98
+  orbitals = px py pz
+  qeff = -0.756
+end

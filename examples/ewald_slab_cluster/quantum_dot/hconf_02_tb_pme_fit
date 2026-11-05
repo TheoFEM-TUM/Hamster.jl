@@ -1,0 +1,64 @@
+# CsPbBr3 quantum dot, step 2: TB + PME on-site term without SOC, with the alpha values of step 1.
+begin Options
+    rcut = 5.5
+    verbosity = 1
+    sp_mode = true
+    interpolate_rllm = true
+    init_params = params_relaxed.dat
+end
+
+begin Supercell
+    xdatcar = XDATCAR
+    poscar = POSCAR
+    Nconf = 100
+    Nconf_min = 1
+    Nconf_max = 5000
+end
+
+begin Optimizer
+    update_tb = true
+    lr = 0.02
+    niter = 1500
+    loss = MAE
+    bandmin = 157
+    wE_110-115 = 6
+    wE_116-117 = 12
+    wE_118-123 = 6
+    wE_150-160 = 0.5
+    train_data = eigenval.h5
+    val_data = eigenval.h5
+    train_mode = md
+    val_mode = md
+    val_ratio = 0.5
+    valeachiter = 100
+end
+
+begin Ewald
+    method = ewald
+    rcut = 10.0
+    mesh_spacing = 0.5
+    update = true
+    charge_scale = 0.6
+    cluster = true
+    charge_compensation = global        # default with cluster: the net charge of qeff (+3.17 e here) as a uniform
+                                        # background on the atoms
+    centering = structure               # default with cluster
+end
+
+begin atom Cs
+  alpha = 25.87
+  orbitals = s
+  qeff = 1.02
+end
+
+begin atom Pb
+  alpha = 39.19
+  orbitals = s px py pz
+  qeff = 1.248
+end
+
+begin atom Br
+  alpha = 17.98
+  orbitals = px py pz
+  qeff = -0.756
+end

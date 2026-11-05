@@ -1,0 +1,59 @@
+# CsPbBr3 slab (vacuum along a3): TB fit with the Wolf on-site term and its plane-averaged long range.
+# Data: structures.h5 (MD frames of the slab), eigenval.h5 (DFT eigenvalues of the same frames), POSCAR (reference).
+begin Options
+    rcut = 5.5
+    verbosity = 1
+    sp_mode = true
+    interpolate_rllm = true
+    init_params = params_bulk.dat       # TB parameters of a bulk fit as the start
+end
+
+begin Supercell
+    xdatcar = structures.h5
+    poscar = POSCAR
+    Nconf = 100
+    Nconf_min = 1
+    Nconf_max = 320
+end
+
+begin Optimizer
+    update_tb = true
+    lr = 0.02
+    niter = 1000
+    loss = MAE
+    bandmin = 125                       # 4 N_Cs + 5 N_Pb + N_Br + 1 for Cs8 Pb12 Br32 (see README)
+    train_data = eigenval.h5
+    val_data = eigenval.h5
+    train_mode = md
+    val_mode = md
+    val_ratio = 0.5
+    valeachiter = 100
+end
+
+begin Ewald
+    method = wolf
+    alpha = 0.2                         # range of the short-range sum (rcut = 3 / alpha = 15 Å)
+    update = true                       # fit the coupling per species
+    charge_scale = 0.6                  # start of the couplings
+    slab_axis = 3                       # lattice vector across the vacuum
+    charge_compensation = surface       # default with slab_axis
+    centering = structure               # default with slab_axis
+end
+
+begin atom Cs
+  alpha = 38.6
+  orbitals = s
+  qeff = 1.02
+end
+
+begin atom Pb
+  alpha = 37
+  orbitals = s px py pz
+  qeff = 1.248
+end
+
+begin atom Br
+  alpha = 14.3
+  orbitals = px py pz
+  qeff = -0.756
+end

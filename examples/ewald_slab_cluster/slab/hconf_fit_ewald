@@ -1,0 +1,59 @@
+# CsPbBr3 slab: the same fit with the full Ewald sum (particle mesh) and the dipole correction of the slab
+# (Yeh-Berkowitz) instead of Wolf. The surface compensation enters the dipole correction only.
+begin Options
+    rcut = 5.5
+    verbosity = 1
+    sp_mode = true
+    interpolate_rllm = true
+    init_params = params_bulk.dat
+end
+
+begin Supercell
+    xdatcar = structures.h5
+    poscar = POSCAR
+    Nconf = 100
+    Nconf_min = 1
+    Nconf_max = 320
+end
+
+begin Optimizer
+    update_tb = true
+    lr = 0.02
+    niter = 1000
+    loss = MAE
+    bandmin = 125                       # 4 N_Cs + 5 N_Pb + N_Br + 1 for Cs8 Pb12 Br32 (see README)
+    train_data = eigenval.h5
+    val_data = eigenval.h5
+    train_mode = md
+    val_mode = md
+    val_ratio = 0.5
+    valeachiter = 100
+end
+
+begin Ewald
+    method = ewald
+    rcut = 10.0                         # real-space part; alpha = 4 / rcut
+    mesh_spacing = 0.5                  # grid of the reciprocal-space part (Å)
+    update = true
+    charge_scale = 0.6
+    slab_axis = 3                       # adds the dipole correction along a3
+    charge_compensation = surface
+end
+
+begin atom Cs
+  alpha = 38.6
+  orbitals = s
+  qeff = 1.02
+end
+
+begin atom Pb
+  alpha = 37
+  orbitals = s px py pz
+  qeff = 1.248
+end
+
+begin atom Br
+  alpha = 14.3
+  orbitals = px py pz
+  qeff = -0.756
+end

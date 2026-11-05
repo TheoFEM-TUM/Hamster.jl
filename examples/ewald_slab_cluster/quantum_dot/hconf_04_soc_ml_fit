@@ -1,0 +1,73 @@
+# CsPbBr3 quantum dot, step 4: SOC + ML fit with the hyperparameters of step 3.
+begin Options
+    rcut = 5.5
+    verbosity = 1
+    sp_mode = true
+    interpolate_rllm = true
+    init_params = ../02/params.dat
+end
+
+begin Supercell
+    xdatcar = structures.h5
+    poscar = POSCAR
+    Nconf = 50
+    Nconf_min = 1
+    Nconf_max = 100
+end
+
+begin Optimizer
+    update_tb = false
+    lr = 0.01
+    niter = 300
+    loss = MAE
+    bandmin = 313
+    wE_232-233 = 5
+    wE_300-320 = 0.5
+    train_data = eigenval.h5
+    val_data = eigenval.h5
+    train_mode = md
+    val_mode = md
+    val_ratio = 1.0
+    valeachiter = 25
+end
+
+begin ML
+   update = true
+   apply_orthogonality = true
+   apply_distortion = true
+   ncluster = 100
+   npoints = 300
+   env_scale = 2.913
+   sim_params = 0.15
+end
+
+begin SOC
+    update = true
+    init_params = ones
+end
+
+begin Ewald
+    method = ewald
+    rcut = 10.0
+    mesh_spacing = 0.5
+    init_params = ../02/params.dat
+    cluster = true
+end
+
+begin atom Cs
+  alpha = 25.87
+  orbitals = s
+  qeff = 1.02
+end
+
+begin atom Pb
+  alpha = 39.19
+  orbitals = s px py pz
+  qeff = 1.248
+end
+
+begin atom Br
+  alpha = 17.98
+  orbitals = px py pz
+  qeff = -0.756
+end

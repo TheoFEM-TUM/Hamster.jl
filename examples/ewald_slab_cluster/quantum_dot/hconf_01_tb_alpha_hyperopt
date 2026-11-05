@@ -1,0 +1,72 @@
+# CsPbBr3 quantum dot (Cs20Pb8Br36 in a 40 Å box), step 1: radial parameters alpha of the TB with the PME on-site term.
+# Data without SOC: XDATCAR (AIMD frames), eigenval.h5 (Γ-point eigenvalues of the same frames), POSCAR (reference).
+begin Options
+    rcut = 5.5
+    verbosity = 1
+    sp_mode = true
+    interpolate_rllm = true
+    init_params = params_relaxed.dat    # TB fit to the relaxed dot (pc mode, same bandmin)
+end
+
+begin Supercell
+    xdatcar = XDATCAR
+    poscar = POSCAR
+    Nconf = 100
+    Nconf_min = 1
+    Nconf_max = 5000
+end
+
+begin Optimizer
+    update_tb = true
+    lr = 0.02
+    niter = 800
+    loss = MAE
+    bandmin = 157                       # 4 N_Cs + 5 N_Pb + N_Br + 1: the VBM is band 116 of the window
+    wE_110-115 = 6                      # levels below the VBM
+    wE_116-117 = 12                     # VBM and CBM
+    wE_118-123 = 6                      # levels above the CBM
+    wE_150-160 = 0.5
+    val_weights = true                  # the search ranks by the weighted validation loss
+    train_data = eigenval.h5
+    val_data = eigenval.h5
+    train_mode = md
+    val_mode = md
+    val_ratio = 0.5
+    valeachiter = 200
+end
+
+begin HyperOpt
+    niter = 40
+    params = Cs_alpha Pb_alpha Br_alpha
+    lowerbounds = 8 8 8
+    upperbounds = 40 60 40
+    stepsizes = 0.01 0.01 0.01
+    mode = tpe
+end
+
+begin Ewald
+    method = ewald
+    rcut = 10.0
+    mesh_spacing = 0.5
+    update = true
+    charge_scale = 0.6
+    cluster = true                      # dipole correction of the periodic images
+end
+
+begin atom Cs
+  alpha = 28.67
+  orbitals = s
+  qeff = 1.02
+end
+
+begin atom Pb
+  alpha = 11.67
+  orbitals = s px py pz
+  qeff = 1.248
+end
+
+begin atom Br
+  alpha = 17.06
+  orbitals = px py pz
+  qeff = -0.756
+end

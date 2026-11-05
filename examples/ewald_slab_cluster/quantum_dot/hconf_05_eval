@@ -1,0 +1,53 @@
+# CsPbBr3 quantum dot, step 5: eigenvalues of new frames (e.g. another trajectory) with the model of step 4.
+# The ML settings that define the descriptor must be the same as in the fit.
+begin Options
+    rcut = 5.5
+    verbosity = 1
+    sp_mode = true
+    interpolate_rllm = true
+    init_params = ../04/params.dat
+    soc = true
+end
+
+begin Supercell
+    xdatcar = structures.h5
+    poscar = POSCAR
+    Nconf = 100
+    Nconf_min = 1
+    Nconf_max = 100
+end
+
+begin ML
+   init_params = ../04/ml_params.dat
+   apply_orthogonality = true
+   apply_distortion = true
+   env_scale = 2.913
+   sim_params = 0.15
+end
+
+begin SOC
+    init_params = ../04/params.dat
+end
+
+begin Ewald
+    init_params = ../04/params.dat
+    cluster = true
+end
+
+begin atom Cs
+  alpha = 25.87
+  orbitals = s
+  qeff = 1.02
+end
+
+begin atom Pb
+  alpha = 39.19
+  orbitals = s px py pz
+  qeff = 1.248
+end
+
+begin atom Br
+  alpha = 17.98
+  orbitals = px py pz
+  qeff = -0.756
+end
