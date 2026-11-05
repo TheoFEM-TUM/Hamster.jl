@@ -24,6 +24,8 @@ Performs a standard calculation for an effective Hamiltonian model.
 9. Initializes the `EffectiveHamiltonian` for solving electronic or vibrational properties.
 10. Sets up a `HamsterProfiler` to profile the computation over multiple iterations.
 11. Computes eigenvalues using `get_eigenvalues`, which performs the main calculation.
+    Afterwards, if requested, the bands are unfolded (`Unfold` block) and the DOS / PDOS / COHP are written to `dos.h5`
+    (`dos` tag, `DOS` block).
 12. Returns the profiler object (`prof`), which contains performance and profiling data.
 
 # Returns
@@ -66,6 +68,10 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1,
     if haskey(conf, "Unfold")
         if rank == 0 && verbosity > 0; println("Unfolding bands..."); end
         run_unfold(ham, strcs, bases, local_inds, systems, comm, conf, rank=rank, nranks=nranks)
+    end
+    if !isempty(dos_quantities(conf))
+        if rank == 0 && verbosity > 0; println("Computing $(join(dos_quantities(conf), ", "))..."); end
+        run_dos(ham, strcs, bases, local_inds, comm, conf, rank=rank, nranks=nranks)
     end
     return prof
 end
@@ -155,7 +161,7 @@ function get_eigenvalues(ham::EffectiveHamiltonian, prof, local_inds, comm, conf
                 # COV_EXCL_STOP
             end
 
-            print_train_status(prof, strc_ind, batch_id, verbosity=verbosity)
+            print_train_status(prof, strc_ind, 1, verbosity=verbosity)   # the profiler has one row (timings at [1, strc_ind, :])
         end
         if Nbatch > 1; unload_simmats!(ham, indices); end
     end

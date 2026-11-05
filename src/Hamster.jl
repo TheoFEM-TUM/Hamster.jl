@@ -10,7 +10,7 @@ include("parse/commandline.jl")
 include("conf/config.jl"); include("conf/read_config.jl")
 include("conf/defaults.jl"); include("conf/strc_defaults.jl"); include("conf/atom_defaults.jl"); include("conf/basis_defaults.jl")
 include("conf/model_defaults.jl"); include("conf/optim_defaults.jl"); include("conf/supercell_defaults.jl") 
-include("conf/ml_defaults.jl"); include("conf/soc_defaults.jl"); include("conf/hyperopt_defaults.jl"); include("conf/unfold_defaults.jl")
+include("conf/ml_defaults.jl"); include("conf/soc_defaults.jl"); include("conf/hyperopt_defaults.jl"); include("conf/unfold_defaults.jl"); include("conf/dos_defaults.jl")
 
 include("out/output.jl")
 
@@ -33,7 +33,7 @@ include("optim/optimize.jl")
 include("mlham/simmat.jl"); include("mlham/descriptor.jl"); include("mlham/kernel.jl")
 
 include("device/device.jl"); include("device/kernels.jl"); include("device/linear_map.jl"); include("device/device_ham.jl")
-include("out/unfold.jl")
+include("out/unfold.jl"); include("out/dos.jl")
 
 include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hyperopt.jl")
 
@@ -52,6 +52,7 @@ export ParameterLabel, read_params, write_params, Basis, get_geometry_tensor, np
 export TBModel, EffectiveHamiltonian, get_params, set_params!, copy_params!
 export get_hamiltonian, diagonalize, get_hr, init_params!
 export write_hr, read_hr, write_ham, read_ham
+export compute_dos, orbital_labels
 
 export SOCModel
 
