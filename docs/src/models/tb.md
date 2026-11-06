@@ -294,7 +294,8 @@ every MPI rank added it, so fits with `lambda > 0` on several ranks were regular
 Only parameters marked as updateable are modified during optimization: with `update_tb = true` (the default in a fit)
 all TB parameters, with `update_tb = false` none, and with a list of indices, e.g. `update_tb = 1 3`, only these
 parameters, counted in the order of `params.dat`. (Up to version 0.6.3, a list of indices froze all TB parameters in
-fits.)
+fits.) The same holds for the SOC parameters and the Ewald couplings (`update` in the `SOC` and `Ewald` blocks): frozen
+parameters get no gradient, also not from the regularization.
 
 ## Parameter Initialization
 

@@ -501,22 +501,22 @@ end
     get_model_gradient(ewald::EwaldOnsites, indices, reg, dL_dHr; soc=true)
 
 Gradient of the loss with respect to the Ewald coupling γ of each species. The onsite shifts are
-`Δε = -γ_s φ_i` on all orbitals of atom `i` (species `s`), so `dL/dγ_s = -Σ_i Σ_o Re(dL/dHr[R=0]_oo) φ_i`.
+`Δε = -γ_s φ_i` on all orbitals of atom `i` (species `s`), so `dL/dγ_s = -Σ_i Σ_o Re(dL/dHr[R=0]_oo) φ_i`. Zero (also without
+the regularization term) if the couplings are not updated.
 """
 function get_model_gradient(ewald::EwaldOnsites, indices, reg, dL_dHr; soc=true)
     dparams = zeros(length(ewald.params))
-    if ewald.update
-        for (n, index) in enumerate(indices)
-            G = dL_dHr[n][ewald.Rs_info[2, index]]
-            Norb = soc ? 2 .* ewald.norb_per_strc[index] : ewald.norb_per_strc[index]
-            offset = 0
-            for (iion, ϕ) in enumerate(ewald.potentials[index])
-                p = findfirst(==(ewald.types_per_strc[index][iion]), ewald.param_labels)
-                for o in offset + 1:offset + Norb[iion]
-                    dparams[p] -= real(G[o, o]) * ϕ
-                end
-                offset += Norb[iion]
+    ewald.update || return dparams
+    for (n, index) in enumerate(indices)
+        G = dL_dHr[n][ewald.Rs_info[2, index]]
+        Norb = soc ? 2 .* ewald.norb_per_strc[index] : ewald.norb_per_strc[index]
+        offset = 0
+        for (iion, ϕ) in enumerate(ewald.potentials[index])
+            p = findfirst(==(ewald.types_per_strc[index][iion]), ewald.param_labels)
+            for o in offset + 1:offset + Norb[iion]
+                dparams[p] -= real(G[o, o]) * ϕ
             end
+            offset += Norb[iion]
         end
     end
     return dparams + backward(reg, ewald.params)

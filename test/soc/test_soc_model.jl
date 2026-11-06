@@ -113,6 +113,27 @@ end
     @test maximum(abs.(grad .- fd)) < 1e-7
 end
 
+@testset "Frozen SOC parameters get no gradient from the regularization" begin
+    path = joinpath(@__DIR__, "test_files/")
+    conf = get_config(filename=joinpath(path, "hconf_gaas"))
+    set_value!(conf, "rllm_file", joinpath(path, "rllm_gaas.dat"))
+    set_value!(conf, "poscar", joinpath(path, "POSCAR_gaas"))
+    set_value!(conf, "init_params", "SOC", joinpath(path, "params.dat"))
+    set_value!(conf, "verbosity", 0)
+    strc = Structure(conf); basis = Basis(strc, conf)
+    reg = Hamster.Regularization(conf, lambda=0.1)
+    for update in (false, true)
+        model = Hamster.SOCModel([strc], [basis], comm, conf, update_soc=update)
+        @test any(!iszero, Hamster.backward(reg, model.params))
+        dL_dHr = [zero(H) for H in Hamster.get_hr(model, Hamster.Dense(), 1)]
+        grad_cpu = Hamster.get_model_gradient(model, [1], reg, [dL_dHr])
+        grad_dev = Hamster.get_model_gradient(model, [1], reg, Hamster.RawModelGradient(zeros(length(model.params))))
+        expected = update ? Hamster.backward(reg, model.params) : zeros(length(model.params))
+        @test grad_cpu ≈ expected
+        @test grad_dev ≈ expected
+    end
+end
+
 @testset "SOC parameters from a file with other elements" begin
     mktempdir() do dir
         file = joinpath(dir, "params.dat")
