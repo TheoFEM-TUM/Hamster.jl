@@ -425,9 +425,12 @@ end
         @test grad ≈ fd rtol=1e-6
     end
 
-    # Without update, no gradient
+    # Without update, no gradient, also not from the regularization (CPU and device path)
     model_fixed = EwaldOnsites([strc], [basis], comm, conf)
-    @test all(iszero, Hamster.get_model_gradient(model_fixed, [1], reg, [get_hr(model_fixed, Hamster.Dense(), 1)]; soc=false))
+    reg_λ = Hamster.Regularization(conf, lambda=0.1)
+    @test all(iszero, Hamster.get_model_gradient(model_fixed, [1], reg_λ, [get_hr(model_fixed, Hamster.Dense(), 1)]; soc=false))
+    @test all(iszero, Hamster.get_model_gradient(model_fixed, [1], reg_λ, Hamster.RawModelGradient(ones(length(model_fixed.params)))))
+    @test Hamster.get_model_gradient(model, [1], reg_λ, Hamster.RawModelGradient(zeros(length(model.params)))) ≈ Hamster.backward(reg_λ, model.params)
 
     # Coupling per species from the atom blocks (e.g. for a hyperparameter search over Pb_charge_scale)
     set_value!(conf, "charge_scale", "Ewald", 0.5)

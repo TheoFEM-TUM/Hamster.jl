@@ -275,11 +275,11 @@ function get_model_gradient(kernel::HamiltonianKernelPrecalced, indices, reg, g:
 end
 
 function get_model_gradient(soc_model::SOCModel, indices, reg, g::RawModelGradient; soc=true)
-    dparams = soc_model.update ? g.grad : zeros(length(soc_model.params))
-    return dparams + backward(reg, soc_model.params)
+    soc_model.update || return zeros(length(soc_model.params))
+    return g.grad + backward(reg, soc_model.params)
 end
 
 function get_model_gradient(ewald::EwaldOnsites, indices, reg, g::RawModelGradient; soc=true)
-    dparams = ewald.update ? g.grad : zeros(length(ewald.params))
-    return dparams + backward(reg, ewald.params)
+    ewald.update || return zeros(length(ewald.params))
+    return g.grad + backward(reg, ewald.params)
 end

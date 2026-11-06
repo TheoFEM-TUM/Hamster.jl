@@ -116,23 +116,23 @@ Computes the gradient of loss w.r.t. the SOC model's parameters.
 - `dL_dHr`: Gradient of the loss w.r.t. the Hamiltonian matrix elements.
 
 # Returns:
-- `dparams`: A vector containing the gradient of the loss w.r.t. the model parameters.
+- `dparams`: A vector containing the gradient of the loss w.r.t. the model parameters (zero if the parameters are not
+  updated, also without the regularization term).
 """
 function get_model_gradient(soc_model::SOCModel, indices, reg, dL_dHr; soc=true)
     dparams = zeros(length(soc_model.params))
-    if soc_model.update
-        for (n, index) in enumerate(indices)
-            dL_dHr0 = dL_dHr[n][soc_model.Rs_info[2, index]]
-            offset = 0
-            for type in soc_model.types_per_strc[index]
-                Msoc = soc_model.matrices[type]
-                block = offset+1:offset+size(Msoc, 1)
-                param_index = findfirst(==(type), soc_model.param_labels)
-                if !isnothing(param_index)
-                    dparams[param_index] += real(sum_product(Msoc, dL_dHr0[block, block]))
-                end
-                offset += size(Msoc, 1)
+    soc_model.update || return dparams
+    for (n, index) in enumerate(indices)
+        dL_dHr0 = dL_dHr[n][soc_model.Rs_info[2, index]]
+        offset = 0
+        for type in soc_model.types_per_strc[index]
+            Msoc = soc_model.matrices[type]
+            block = offset+1:offset+size(Msoc, 1)
+            param_index = findfirst(==(type), soc_model.param_labels)
+            if !isnothing(param_index)
+                dparams[param_index] += real(sum_product(Msoc, dL_dHr0[block, block]))
             end
+            offset += size(Msoc, 1)
         end
     end
     dparams_penal = backward(reg, soc_model.params)
