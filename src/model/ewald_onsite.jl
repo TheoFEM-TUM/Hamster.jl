@@ -10,16 +10,23 @@ onsite parameters.
 
 # Fields
 - `params::Vector{Float64}`:
-    Trainable or fixed parameters associated with each atomic species (e.g.
-    coupling strengths between electrostatic potential and onsite energies).
+    The couplings γ (one per entry of `coupling_labels`), followed by the polarizabilities (Å³, one per entry of
+    `pol_labels`).
 
-- `param_labels::Vector{UInt8}`:
-    Unique list of atomic species identifiers corresponding to `params`.
+- `coupling_labels::Vector{Tuple{UInt8, Int64}}`:
+    Species and orbital angular momentum `l` of each coupling.
+
+- `pol_labels::Vector{UInt8}`:
+    Polarizable species (atom tag `polarizability`).
 
 - `potentials::Vector{P}`:
-    Electrostatic potentials for each structure. Each entry is a vector of
+    Electrostatic potentials of the effective charges for each structure. Each entry is a vector of
     site potentials (one per atom), typically computed via an Ewald-like method
     and centered per species.
+
+- `dipole_potentials::Vector{Matrix{Float64}}`:
+    Potentials (atoms × polarizable species) of the first-order dipoles induced on the atoms of each polarizable species
+    with polarizability 1 Å³ (`induced_dipole_potentials`), centered per species like `potentials`.
 
 - `types_per_strc::Vector{T}`:
     Atomic species (as `UInt8`) for each atom in each structure.
@@ -28,14 +35,19 @@ onsite parameters.
     Number of orbitals per structure (used to map site potentials to Hamiltonian
     orbital indices).
 
+- `coupling_per_strc::Vector{Vector{Int64}}`:
+    Index of the coupling (in `coupling_labels`) of every orbital of each structure (without spin).
+
 - `Rs_info::Matrix{Int64}`:
     Auxiliary information about lattice translations per structure:
     - row 1: number of R-vectors
     - row 2: index of the reference cell (R = 0)
 
 - `update::Bool`:
-    Flag indicating whether onsite corrections should be updated during
-    optimization/training.
+    Flag indicating whether the couplings are updated during optimization/training.
+
+- `update_polarizability::Bool`:
+    Flag indicating whether the polarizabilities are updated during optimization/training.
 
 # Description
 The `EwaldOnsites` object encapsulates the electrostatic contribution to
@@ -43,11 +55,12 @@ tight-binding onsite energies, computed from effective charges via Ewald
 or related methods. Potentials are typically centered per species across
 all structures to remove arbitrary reference offsets.
 
-This allows a linear mapping of the form:
+This allows a mapping of the form:
 
-    Δεᵢ ≈ γ_{s(i)} ⋅ φᵢ
+    Δε_o = -γ_{s(i), l(o)} ⋅ (φᵢ + Σ_t p_t Φ_{i,t})
 
-where `φᵢ` are the stored potentials and `γ` are the parameters in `params`.
+for the orbital `o` with angular momentum `l(o)` of atom `i` (species `s(i)`), where `φᵢ` are the stored potentials,
+`Φ` the dipole potentials, `γ` the couplings and `p` the polarizabilities in `params`.
 
 # Constructor
     EwaldOnsites(strcs, bases, comm, conf; kwargs...)
@@ -56,9 +69,10 @@ Builds the container by:
 
 1. Computing electrostatic potentials for each structure
 2. Gathering unique species across MPI ranks
-3. Initializing per-species parameters
-4. Computing global per-species mean potentials (MPI-reduced)
-5. Subtracting these means from all site potentials (`centering = global`), or the species means of each structure
+3. Computing the induced-dipole potentials of the polarizable species
+4. Initializing the couplings per species and orbital angular momentum, and the polarizabilities
+5. Computing global per-species mean potentials (MPI-reduced)
+6. Subtracting these means from all site potentials (`centering = global`), or the species means of each structure
    (`centering = structure`)
 
 # Notes
@@ -69,12 +83,16 @@ Builds the container by:
 """
 mutable struct EwaldOnsites{P, T, N}
     params :: Vector{Float64}
-    param_labels :: Vector{UInt8}
+    coupling_labels :: Vector{Tuple{UInt8, Int64}}
+    pol_labels :: Vector{UInt8}
     potentials :: Vector{P}
+    dipole_potentials :: Vector{Matrix{Float64}}
     types_per_strc :: Vector{T}
     norb_per_strc :: Vector{N}
+    coupling_per_strc :: Vector{Vector{Int64}}
     Rs_info :: Matrix{Int64}
     update :: Bool
+    update_polarizability :: Bool
 end
 
 function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=get_empty_config(); 
@@ -89,12 +107,15 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         charge_compensation = get_ewald_charge_compensation(conf),
         centering       = conf("centering", "Ewald") == "default" ? (slab_axis > 0 || cluster ? "structure" : "global") : get_ewald_centering(conf),
         update          = get_ewald_update(conf),
+        update_polarizability = conf("update_polarizability", "Ewald") == "default" ? update : get_ewald_update_polarizability(conf),
         label           = "",
         write_summary   = true)
 
     types_per_strc = Vector{UInt8}[]
     norb_per_strc = Vector{Int64}[]
+    l_per_strc = Vector{Int64}[]
     potentials = Vector{Float64}[]
+    dipole_potentials = Matrix{Float64}[]
     Rs_info = zeros(Int64, 2, length(strcs))
     grid_rebuilt = false
     method = ewald_method(method)
@@ -103,6 +124,11 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         slab_axis == 0 || error("cluster and slab_axis = $slab_axis exclude each other: a cluster has vacuum in all directions, a slab along one.")
         lowercase(method) == "ewald" || error("cluster = true needs method = ewald (the full Ewald sum with the dipole correction); " *
             "Wolf and Zahn with rcut larger than the cluster already sum an isolated cluster.")
+    end
+    pol_labels = polarizable_species(conf)
+    if !isempty(pol_labels)
+        method ∈ ("wolf", "zahn") || error("Polarizabilities (induced dipoles) need method = wolf or zahn in the Ewald block, not $method.")
+        (slab_axis > 0 || cluster) && error("Polarizabilities (induced dipoles) are not available for slabs and clusters (slab_axis, cluster).")
     end
     site_counts = Dict{Tuple{String, Float64}, Int64}()
     compensated = slab_axis > 0 || cluster || charge_compensation ≠ "global"
@@ -145,72 +171,84 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         ion_types_with_orbs = get_ion_types(strc.ions, conf, uniq=true, withorbitals=true)
         filter!(ind -> ion_types[ind] ∈ ion_types_with_orbs, ion_indices_with_orbs)
 
+        if isempty(pol_labels)
+            Φ = zeros(length(ion_types), 0)
+        else
+            groups = [something(findfirst(==(t), pol_labels), 0) for t in ion_types]
+            Φ = induced_dipole_potentials(pos, charges, strc.lattice, groups, length(pol_labels); rcut=rcut, alpha=α, method=method)
+        end
+
         push!(types_per_strc, ion_types[ion_indices_with_orbs])
         push!(norb_per_strc, size(bases[n])[ion_indices_with_orbs])
+        push!(l_per_strc, [orb.type.l for iion in ion_indices_with_orbs for orb in bases[n].orbitals[iion]])
         push!(potentials, φ[ion_indices_with_orbs])
+        push!(dipole_potentials, Φ[ion_indices_with_orbs, :])
         Rs_info[1, n] = size(strc.Rs, 2)
         Rs_info[2, n] = findR0(strc.Rs)
     end
 
-    param_labels_local = Iterators.flatten(types_per_strc)
-    param_labels = MPI.gather(param_labels_local, comm, root=0)
-    if rank == 0
-        param_labels = unique(Iterators.flatten(param_labels))
-        nparams = length(param_labels)
-    else
-        param_labels = UInt8[]
-        nparams = 0
+    local_labels = unique([(t, l) for n in eachindex(types_per_strc)
+                           for (t, l) in zip(reduce(vcat, [fill(t, k) for (t, k) in zip(types_per_strc[n], norb_per_strc[n])], init=UInt8[]), l_per_strc[n])])
+    all_labels = MPI.gather(local_labels, comm, root=0)
+    coupling_labels = rank == 0 ? sort(unique(reduce(vcat, all_labels))) : Tuple{UInt8, Int64}[]
+    coupling_labels = MPI.bcast(coupling_labels, 0, comm)
+    coupling_per_strc = map(eachindex(types_per_strc)) do n
+        types = reduce(vcat, [fill(t, k) for (t, k) in zip(types_per_strc[n], norb_per_strc[n])], init=UInt8[])
+        [findfirst(==((t, l)), coupling_labels) for (t, l) in zip(types, l_per_strc[n])]
     end
-    nparams = MPI.Bcast(nparams, 0, comm)
+    species = unique(first.(coupling_labels))
 
-    if rank ≠ 0
-        resize!(param_labels, nparams)
-    end
-    MPI.Bcast!(param_labels, comm, root=0)
-    MPI.Barrier(comm)
-
-    params = init_ewald_params(param_labels, conf)
-    
-    type_to_idx = Dict(t => i for (i, t) in enumerate(param_labels))
-
-    local_sum = zeros(Float64, length(param_labels))
-    local_count = zeros(Int64, length(param_labels))
-    for n in eachindex(potentials)
-        for (pot, type) in zip(potentials[n], types_per_strc[n])
-            p = type_to_idx[type]
-            local_sum[p] += pot
-            local_count[p] += 1
-        end
-    end
-
-    species_mean = similar(local_sum)
-    for t in eachindex(local_sum)
-        species_sum = MPI.Reduce(local_sum[t], +, comm)
-        species_count = MPI.Reduce(local_count[t], +, comm)
-        if rank == 0
-            species_mean[t] = species_sum / species_count
-        end
-    end
-    MPI.Bcast!(species_mean, comm, root=0)
+    params = init_ewald_params(coupling_labels, pol_labels, conf)
 
     centering ∈ ("global", "structure") || error("centering = $centering: unknown, use global or structure.")
+    type_to_idx = Dict(t => i for (i, t) in enumerate(species))
+    columns = [potentials, [[Φ[:, t] for Φ in dipole_potentials] for t in eachindex(pol_labels)]...]
+    column_means = map(columns) do col
+        local_sum = zeros(length(species)); local_count = zeros(Int64, length(species))
+        for n in eachindex(col), (v, type) in zip(col[n], types_per_strc[n])
+            local_sum[type_to_idx[type]] += v; local_count[type_to_idx[type]] += 1
+        end
+        MPI.Allreduce(local_sum, +, comm) ./ max.(MPI.Allreduce(local_count, +, comm), 1)
+    end
+    pol = params[length(coupling_labels)+1:end]
+    species_mean = column_means[1] .+ sum((column_means[1+t] .* pol[t] for t in eachindex(pol)), init=zeros(length(species)))
     structure_means = Tuple{UInt8, Float64}[]
     for n in eachindex(potentials)
-        means = Dict(type => mean(potentials[n][types_per_strc[n] .== type]) for type in unique(types_per_strc[n]))
-        append!(structure_means, [(type, m) for (type, m) in means])
-        for i in eachindex(potentials[n])
-            typ = types_per_strc[n][i]
-            potentials[n][i] -= centering == "structure" ? means[typ] : species_mean[type_to_idx[typ]]
+        φeff = potentials[n] .+ dipole_potentials[n] * pol
+        append!(structure_means, [(type, mean(φeff[types_per_strc[n] .== type])) for type in unique(types_per_strc[n])])
+        for (k, col) in enumerate(columns)
+            v = k == 1 ? potentials[n] : view(dipole_potentials[n], :, k - 1)
+            means = Dict(type => mean(v[types_per_strc[n] .== type]) for type in unique(types_per_strc[n]))
+            for i in eachindex(v)
+                typ = types_per_strc[n][i]
+                v[i] -= centering == "structure" ? means[typ] : column_means[k][type_to_idx[typ]]
+            end
         end
     end
 
-    model = EwaldOnsites(params, param_labels, potentials, types_per_strc, norb_per_strc, Rs_info, update)
+    model = EwaldOnsites(params, coupling_labels, pol_labels, potentials, dipole_potentials, types_per_strc, norb_per_strc,
+                         coupling_per_strc, Rs_info, update, update_polarizability)
     has_sites = any(!isempty(get_site_qeff(conf, type)) for type in keys(conf.blocks))
-    write_summary && write_model_summary(model, comm, conf, rank=rank, label=label, species_mean=species_mean, structure_means=structure_means,
-                                         method=method, rcut=rcut, alpha=α, alpha_auto=alpha == 0, grid_rebuilt=grid_rebuilt && method == "ewald",
-                                         slab_axis=slab_axis, slab_scale=slab_scale, cluster=cluster, charge_compensation=charge_compensation,
-                                         centering=centering, site_counts=has_sites ? site_counts : nothing)
+    write_summary && write_model_summary(model, comm, conf, rank=rank, label=label, species=species, species_mean=species_mean,
+                                         structure_means=structure_means, method=method, rcut=rcut, alpha=α, alpha_auto=alpha == 0,
+                                         grid_rebuilt=grid_rebuilt && method == "ewald", slab_axis=slab_axis, slab_scale=slab_scale,
+                                         cluster=cluster, charge_compensation=charge_compensation, centering=centering,
+                                         site_counts=has_sites ? site_counts : nothing)
     return model
+end
+
+"""
+    polarizable_species(conf; initas=get_ewald_init_params(conf))
+
+Polarizable species (atomic numbers, sorted): the species with the tag `polarizability` in their atom block and, with a
+parameter file `initas`, the species of its `polarizability_<element>` lines.
+"""
+function polarizable_species(conf; initas=get_ewald_init_params(conf))
+    types = [type for type in keys(conf.blocks) if haskey(elements, Symbol(type)) && conf("polarizability", type) ≠ "default"]
+    if initas ≠ "default"
+        append!(types, read_params(initas)[8])
+    end
+    return sort(unique(element_to_number.(types)))
 end
 
 """
@@ -401,25 +439,64 @@ function adopt_ewald_settings!(conf; rank=0, verbosity=get_verbosity(conf))
 end
 
 """
-    init_ewald_params(param_labels, conf; initas=get_ewald_init_params(conf))
+    init_ewald_params(coupling_labels, pol_labels, conf; initas=get_ewald_init_params(conf))
 
-Initialize the Ewald coupling γ of each species in `param_labels`: from the `ewald_<element>` lines of the parameter
-file `initas` (e.g. the `params.dat` of a fit) if given, otherwise (and for species missing in the file) with the
-`charge_scale` of the atom block, which defaults to the `charge_scale` of the `Ewald` block.
+Initial parameters of the Ewald model: the coupling γ of each species and orbital type in `coupling_labels`, followed by
+the polarizability of each species in `pol_labels`. From the parameter file `initas` (e.g. the `params.dat` of a fit) if
+given: `ewald_<element>_<l>` (`<l>` = s, p or d) for one orbital type, `ewald_<element>` for all orbital types of the
+species, `polarizability_<element>`. Otherwise (and for entries missing in the file) from the config: `charge_scale_<l>`
+of the atom block, else its `charge_scale`, else the `charge_scale` of the `Ewald` block; the tag `polarizability` of the
+atom block.
 """
-function init_ewald_params(param_labels, conf; initas=get_ewald_init_params(conf))
-    params = [get_charge_scale(conf, number_to_element(label)) for label in param_labels]
+function init_ewald_params(coupling_labels, pol_labels, conf; initas=get_ewald_init_params(conf))
+    γ = [get_charge_scale(conf, number_to_element(type), l) for (type, l) in coupling_labels]
+    p = [get_polarizability(conf, number_to_element(type)) for type in pol_labels]
     if initas ≠ "default"
-        _, _, _, _, _, ewald_types, ewald_parameters = read_params(initas)
-        γ = Dict(zip(ewald_types, ewald_parameters))
-        for (p, label) in enumerate(param_labels)
-            params[p] = get(γ, number_to_element(label), params[p])
+        _, _, _, _, _, ewald_types, ewald_parameters, pol_types, pol_parameters = read_params(initas)
+        file_γ = Dict(zip(ewald_types, ewald_parameters)); file_p = Dict(zip(pol_types, pol_parameters))
+        for (c, (type, l)) in enumerate(coupling_labels)
+            element = number_to_element(type)
+            γ[c] = get(file_γ, "$(element)_$("spdf"[l+1])", get(file_γ, element, γ[c]))
+        end
+        for (t, type) in enumerate(pol_labels)
+            p[t] = get(file_p, number_to_element(type), p[t])
         end
     end
-    return params
+    return vcat(γ, p)
 end
 
 get_params(ewald::EwaldOnsites) = ewald.params
+
+"""
+    couplings(ewald::EwaldOnsites)
+
+The couplings γ (one per entry of `ewald.coupling_labels`), a view of the parameters.
+"""
+couplings(ewald::EwaldOnsites) = view(ewald.params, 1:length(ewald.coupling_labels))
+
+"""
+    polarizabilities(ewald::EwaldOnsites)
+
+The polarizabilities (Å³, one per entry of `ewald.pol_labels`), a view of the parameters.
+"""
+polarizabilities(ewald::EwaldOnsites) = view(ewald.params, length(ewald.coupling_labels)+1:length(ewald.params))
+
+"""
+    site_potentials(ewald::EwaldOnsites, index)
+
+Electrostatic potential at the atoms of structure `index`: the potential of the effective charges plus that of the
+induced dipoles, `φ + Φ p` (centered per species).
+"""
+site_potentials(ewald::EwaldOnsites, index) = ewald.potentials[index] .+ ewald.dipole_potentials[index] * polarizabilities(ewald)
+
+"""
+    update_mask(ewald::EwaldOnsites)
+
+1 for the parameters that are updated in a fit (couplings with `update`, polarizabilities with `update_polarizability`), 0
+for the others, whose gradient (also of the regularization) is zero.
+"""
+update_mask(ewald::EwaldOnsites) = vcat(fill(Float64(ewald.update), length(ewald.coupling_labels)),
+                                        fill(Float64(ewald.update_polarizability), length(ewald.pol_labels)))
 
 """
     update!(ewald::EwaldOnsites, opt, dparams)
@@ -450,19 +527,20 @@ end
 """
     copy_params!(receiving_model::EwaldOnsites, sending_model::EwaldOnsites) -> Nothing
 
-Copy matching parameters from one Ewald model to another.
+Copy matching parameters (couplings with the same species and orbital type, polarizabilities of the same species) from
+one Ewald model to another.
 
 # Arguments
 - `receiving_model::EwaldOnsites`: The model whose parameters will be updated.
 - `sending_model::EwaldOnsites`: The model providing parameter values.
 """
 function copy_params!(receiving_model::EwaldOnsites, sending_model::EwaldOnsites)
-    for (i, sending_label) in enumerate(sending_model.param_labels)
-        for (j, receiving_label) in enumerate(receiving_model.param_labels)
-            if sending_label == receiving_label
-                receiving_model.params[j] = sending_model.params[i]
-            end
-        end
+    nr, ns = length(receiving_model.coupling_labels), length(sending_model.coupling_labels)
+    for (i, label) in enumerate(sending_model.coupling_labels), (j, receiving_label) in enumerate(receiving_model.coupling_labels)
+        label == receiving_label && (receiving_model.params[j] = sending_model.params[i])
+    end
+    for (i, label) in enumerate(sending_model.pol_labels), (j, receiving_label) in enumerate(receiving_model.pol_labels)
+        label == receiving_label && (receiving_model.params[nr+j] = sending_model.params[ns+i])
     end
 end
 
@@ -473,7 +551,7 @@ Construct the onsite Hamiltonian contribution from Ewald potentials for
 the structure at `index`.
 
 Returns a vector of sparse matrices `Hr`, where only the on-site block
-(`R = 0`) contains the diagonal electrostatic shifts and all other blocks
+(`R = 0`) contains the diagonal electrostatic shifts `-γ_{s,l} (φ + Φ p)` and all other blocks
 are zero.
 
 # Arguments
@@ -482,12 +560,15 @@ are zero.
 - `apply_soc`: If `true`, doubles the number of orbitals (spin degree of freedom)
 """
 function get_hr(ewald::EwaldOnsites, sp_mode, index; apply_soc=false)
+    φ = site_potentials(ewald, index)
+    γ = couplings(ewald)
+    c = ewald.coupling_per_strc[index]
     vals = Float64[]
-    Norb = apply_soc ? 2 .* ewald.norb_per_strc[index] : ewald.norb_per_strc[index]
-    for (i, ϕ_i) in enumerate(ewald.potentials[index])
-
-        p = findfirst(label -> label == ewald.types_per_strc[index][i], ewald.param_labels)
-        append!(vals, fill(-ewald.params[p]*(ϕ_i), Norb[i]))
+    o = 0
+    for (i, ϕ) in enumerate(φ), _ in 1:ewald.norb_per_strc[index][i]
+        o += 1
+        v = -γ[c[o]] * ϕ
+        apply_soc ? append!(vals, (v, v)) : push!(vals, v)
     end
 
     is = collect(1:length(vals))
@@ -500,38 +581,55 @@ end
 """
     get_model_gradient(ewald::EwaldOnsites, indices, reg, dL_dHr; soc=true)
 
-Gradient of the loss with respect to the Ewald coupling γ of each species. The onsite shifts are
-`Δε = -γ_s φ_i` on all orbitals of atom `i` (species `s`), so `dL/dγ_s = -Σ_i Σ_o Re(dL/dHr[R=0]_oo) φ_i`. Zero (also without
-the regularization term) if the couplings are not updated.
+Gradient of the loss with respect to the couplings and polarizabilities. The onsite shift of orbital `o` (orbital type
+`l`) of atom `i` (species `s`) is `Δε_o = -γ_{s,l} (φ_i + Σ_t p_t Φ_{i,t})`, so with `g_o = Re(dL/dHr[R=0]_oo)` (summed over
+spin): `dL/dγ_{s,l} = -Σ g_o (φ_i + Σ_t p_t Φ_{i,t})` and `dL/dp_t = -Σ_o g_o γ_{s,l} Φ_{i,t}`. Zero (also without the
+regularization term) for the parameters that are not updated (`update_mask`).
 """
 function get_model_gradient(ewald::EwaldOnsites, indices, reg, dL_dHr; soc=true)
+    mask = update_mask(ewald)
     dparams = zeros(length(ewald.params))
-    ewald.update || return dparams
+    any(!iszero, mask) || return dparams
+    nc = length(ewald.coupling_labels); γ = couplings(ewald)
     for (n, index) in enumerate(indices)
         G = dL_dHr[n][ewald.Rs_info[2, index]]
-        Norb = soc ? 2 .* ewald.norb_per_strc[index] : ewald.norb_per_strc[index]
-        offset = 0
-        for (iion, ϕ) in enumerate(ewald.potentials[index])
-            p = findfirst(==(ewald.types_per_strc[index][iion]), ewald.param_labels)
-            for o in offset + 1:offset + Norb[iion]
-                dparams[p] -= real(G[o, o]) * ϕ
+        φ = site_potentials(ewald, index); Φ = ewald.dipole_potentials[index]; c = ewald.coupling_per_strc[index]
+        o = 0
+        for i in eachindex(φ), _ in 1:ewald.norb_per_strc[index][i]
+            o += 1
+            g = soc ? real(G[2o-1, 2o-1]) + real(G[2o, 2o]) : real(G[o, o])
+            dparams[c[o]] -= g * φ[i]
+            for t in axes(Φ, 2)
+                dparams[nc+t] -= g * γ[c[o]] * Φ[i, t]
             end
-            offset += Norb[iion]
         end
     end
-    return dparams + backward(reg, ewald.params)
+    return mask .* (dparams + backward(reg, ewald.params))
 end
 
 """
     write_params(ewald::EwaldOnsites, conf=get_empty_config(); filename="params.dat")
 
-Add the Ewald coupling per species as `ewald_<element>` lines to the parameter file `filename` (written by the TB and
-SOC models before), where it is read with `init_params = params.dat` in the `Ewald` block, and the Ewald settings
-(`ewald_settings`) to its header.
+Add the Ewald couplings and the polarizabilities to the parameter file `filename` (written by the TB and SOC models
+before), where they are read with `init_params = params.dat` in the `Ewald` block, and the Ewald settings
+(`ewald_settings`) to its header. The coupling of a species is written as one `ewald_<element>` line if it is the same
+for all its orbital types, else as `ewald_<element>_<l>` lines (`<l>` = s, p or d); polarizabilities as
+`polarizability_<element>` lines.
 """
 function write_params(ewald::EwaldOnsites, conf=get_empty_config(); filename="params.dat")
     isfile(filename) || return nothing
     parameters, parameter_values, ion_types, soc_parameters, _ = read_params(filename)
+    γ = couplings(ewald); ewald_types = String[]; ewald_parameters = Float64[]
+    for type in unique(first.(ewald.coupling_labels))
+        cs = findall(label -> label[1] == type, ewald.coupling_labels)
+        element = number_to_element(type)
+        if all(γ[c] == γ[cs[1]] for c in cs)
+            push!(ewald_types, element); push!(ewald_parameters, γ[cs[1]])
+        else
+            append!(ewald_types, ["$(element)_$("spdf"[ewald.coupling_labels[c][2]+1])" for c in cs]); append!(ewald_parameters, γ[cs])
+        end
+    end
     write_params(parameters, parameter_values, ion_types, soc_parameters, conf, filename=replace(filename, r"\.dat$" => ""),
-                 ewald_types=number_to_element.(ewald.param_labels), ewald_parameters=ewald.params, ewald_settings=ewald_settings(conf))
+                 ewald_types=ewald_types, ewald_parameters=ewald_parameters, ewald_settings=ewald_settings(conf),
+                 pol_types=number_to_element.(ewald.pol_labels), pol_parameters=collect(polarizabilities(ewald)))
 end

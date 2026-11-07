@@ -115,18 +115,29 @@ end
 
 function linear_terms(ewald::EwaldOnsites, index; soc=false)
     R0 = ewald.Rs_info[2, index]
-    Norb = soc ? 2 .* ewald.norb_per_strc[index] : ewald.norb_per_strc[index]
-    terms = SparseTerms(Float64, length(ewald.params))
-    offset = 0
-    for (iion, ϕ) in enumerate(ewald.potentials[index])
-        p = findfirst(label -> label == ewald.types_per_strc[index][iion], ewald.param_labels)
-        for n in 1:Norb[iion]
-            push_term!(terms, R0, offset + n, offset + n, p, -ϕ)
+    nc = length(ewald.coupling_labels)
+    Φ = ewald.dipole_potentials[index]; c = ewald.coupling_per_strc[index]
+    terms = SparseTerms(Float64, nc * (1 + size(Φ, 2)))
+    o = 0
+    for (i, ϕ) in enumerate(ewald.potentials[index]), _ in 1:ewald.norb_per_strc[index][i]
+        o += 1
+        push_term!(terms, R0, o, o, c[o], -ϕ, soc=soc)
+        for t in axes(Φ, 2)
+            push_term!(terms, R0, o, o, nc + (t - 1) * nc + c[o], -Φ[i, t], soc=soc)
         end
-        offset += Norb[iion]
     end
     return terms
 end
+
+"""
+    device_param_values(model)
+
+Parameters of `model` in the device code path, which builds the Hamiltonian as `A * device_param_values(model)` with the
+linear terms `A` of `linear_terms`: the parameters of the model, except for `EwaldOnsites`, whose shifts are bilinear in
+the couplings `γ` and polarizabilities `p`: `[γ; vec(γ p')]`.
+"""
+device_param_values(model) = get_params(model)
+device_param_values(ewald::EwaldOnsites) = vcat(couplings(ewald), vec(couplings(ewald) * polarizabilities(ewald)'))
 
 """
     DeviceSparseBlock

@@ -9,8 +9,9 @@ A model to account for long-term electrostatics (Ewald summation) is constructed
 get_ewald(conf::Config)::Bool = haskey(conf.blocks, "Ewald") || (conf("ewald") ≠ "default" ? conf("ewald") : false)
 @configtag ewald Bool false "electrostatic on-site model (also switched on by an Ewald block)." getter=:custom default_doc="true if an Ewald block is present, else false" category="model"
 
-@configtag update Bool false "fit the Ewald coupling of each species (starting from charge_scale or init_params)." "Ewald" category="model"
-@configtag init_params String "default" "parameter file with the Ewald coupling per species (ewald_<element> lines, e.g. params.dat of a fit), default: charge_scale." "Ewald" category="model" default_doc="none: the couplings start from charge_scale"
+@configtag update Bool false "fit the Ewald coupling of each species and orbital type s, p, d (starting from charge_scale, charge_scale_<l> or init_params)." "Ewald" category="model"
+@configtag update_polarizability Bool get_ewald_update(conf) "fit the polarizabilities of the polarizable species (atom tag polarizability)." "Ewald" category="model" default_doc="same as update" see_also=["polarizability"]
+@configtag init_params String "default" "parameter file with the Ewald couplings (ewald_<element> or ewald_<element>_<l> lines, <l> = s, p or d) and polarizabilities (polarizability_<element> lines), e.g. params.dat of a fit; default: charge_scale and polarizability of the config." "Ewald" category="model" default_doc="none: the couplings start from charge_scale, the polarizabilities from polarizability"
 @configtag method String "ewald" "method of the electrostatic sum: ewald (Ewald/PME), wolf or zahn (case-insensitive)." "Ewald" category="electrostatics" values=["ewald", "wolf", "zahn"]
 @configtag rcut Float64 get_rcut(conf) "cut-off radius for real-space ewald; Wolf and Zahn: range of the electrostatics (alpha = 3 / rcut), in a fit 1.5 × the size of the training cells if neither rcut nor alpha are set." "Ewald" category="electrostatics" default_doc="same as rcut of the Options block (Wolf, Zahn in a fit: 1.5 × the size of the training cells)"
 @configtag charge_scale Float64 1.0 "scaling factor for charge values" "Ewald" category="model"

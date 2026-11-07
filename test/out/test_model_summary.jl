@@ -68,9 +68,10 @@ end
             ewald = summary_block(out, "Ewald Model Summary (training set)")
             @test occursin("structures:                  1", ewald)
             @test !occursin("qeff", ewald) && !occursin("rebuilt", ewald)
-            for element in ["Cs", "Pb", "Br"]
-                @test occursin(Regex("\\n    $element\\s+\\d+ "), ewald)
+            for orbital in ["Cs s", "Pb s", "Pb p", "Br p"]
+                @test occursin(Regex("\\n    $orbital\\s+\\d+ "), ewald)
             end
+            @test occursin("couplings γ", ewald) && !occursin("polarizabilities", ewald)
         end
     end
 end

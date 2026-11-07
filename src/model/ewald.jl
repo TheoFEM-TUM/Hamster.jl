@@ -210,6 +210,65 @@ zahn_kernel(r, α, rcut) = ewald_kernel(r, α, rcut) - erfc(α * rcut) / rcut +
                           (erfc(α * rcut) / rcut^2 + 2α / √π * exp(-(α * rcut)^2) / rcut) * (r - rcut)
 
 """
+    get_field_kernel(method)
+
+Radial field kernel `-dk/dr` of the real-space kernel `k` of `method` (`wolf` or `zahn`, see `ewald_real!`): a unit
+charge at distance `r` creates the field `ke * f(r, α, rcut)` along the connecting vector, and a dipole `μ` the potential
+`ke * f(r, α, rcut) * μ ⋅ r̂`. For Wolf, the shift of the potential does not change the field; for Zahn, the field also
+vanishes at `rcut`.
+"""
+function get_field_kernel(method)
+    method == "wolf" && return ewald_field_kernel
+    method == "zahn" && return zahn_field_kernel
+    error("Induced dipoles (polarizability) need method = wolf or zahn, not $method.")
+end
+ewald_field_kernel(r, α, rcut) = erfc(α * r) / r^2 + 2α / √π * exp(-(α * r)^2) / r
+zahn_field_kernel(r, α, rcut) = ewald_field_kernel(r, α, rcut) - ewald_field_kernel(rcut, α, rcut)
+
+"""
+    induced_dipole_potentials(pos, q, lattice, groups, ngroups; rcut, alpha, method)
+
+Potentials (V) of the dipoles that the field of the charges `q` induces on the atoms, to first order and per group of
+atoms: atom `j` belongs to group `groups[j]` (0: not polarizable) and gets the dipole `μ_j = E_j / ke` of polarizability
+1 Å³ in the field `E_j` of all charges (without the induced dipoles). Returns the matrix `Φ` (atoms × `ngroups`) with the
+potential `Φ[i, g]` of the dipoles of group `g` at atom `i`; with the polarizabilities `p_g` (Å³) the potential of all
+induced dipoles is `Φ * p`. Field and dipole potential use the damped real-space kernel of `method` (`wolf` or `zahn`)
+within `rcut`, on a neighbor grid (linear in the number of atoms).
+"""
+function induced_dipole_potentials(pos, q, lattice, groups, ngroups; rcut, alpha, method)
+    f = get_field_kernel(lowercase(method))
+    N = length(pos)
+    Rs = ewald_translation_vectors(pos, lattice, rcut)
+    point_grid = PointGrid(reduce(hcat, pos), frac_to_cart(Rs, lattice), grid_size=rcut)
+    Ts = [SVector{3, Float64}(T) for T in eachcol(frac_to_cart(Rs, lattice))]
+    R0 = [iszero(R) for R in eachcol(Rs)]
+    rs = [SVector{3, Float64}(r) for r in pos]
+    E = zeros(SVector{3, Float64}, N)
+    Φ = zeros(Float64, N, ngroups)
+    cells = collect(point_grid.dict0)
+    function pairs(action, cell)
+        grid_point, inds = cell
+        for nn_grid_point in nn_grid_points(grid_point, point_grid.dictR), (j, R) in point_grid.dictR[nn_grid_point], i in inds
+            (i == j && R0[R]) && continue
+            d = rs[i] - apply_pbc(rs[j], Ts[R])
+            r = norm(d)
+            (r < rcut && r > 1e-14) && action(i, j, d, r)
+        end
+    end
+    tforeach(cells) do cell
+        pairs(cell) do i, j, d, r
+            groups[i] > 0 && (E[i] += ke * q[j] * f(r, alpha, rcut) / r * d)
+        end
+    end
+    tforeach(cells) do cell
+        pairs(cell) do i, j, d, r
+            groups[j] > 0 && (Φ[i, groups[j]] += f(r, alpha, rcut) / r * dot(E[j], d))
+        end
+    end
+    return Φ
+end
+
+"""
     ewald_recip!(phi, pos, q, box, box_inv, alpha, mesh_spacing)
 
 Compute the reciprocal-space contribution to the electrostatic potential

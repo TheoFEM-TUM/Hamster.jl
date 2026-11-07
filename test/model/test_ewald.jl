@@ -357,7 +357,7 @@ end
             out = read("hamster.out", String)
             @test occursin("Ewald Model Summary (test set)", out)
             @test !occursin("skipped", out)
-            for element in ["Cs", "Pb", "Br"]
+            for element in ["Cs s", "Pb s", "Pb p", "Br p"]
                 @test occursin(Regex("\\n    $element\\s+\\d+ "), out)
             end
             @test count("real-space neighbor grid:    rebuilt", out) == 1
@@ -410,7 +410,7 @@ end
     strc = Structure(conf)
     basis = Basis(strc, conf)
     model = EwaldOnsites([strc], [basis], comm, conf, update=true)
-    model.params .= [0.4, 0.6, 0.8][1:length(model.params)]
+    model.params .= [0.4, 0.6, 0.8, 0.5][1:length(model.params)]
     reg = Hamster.Regularization(conf, lambda=0.0)
 
     # dL/dγ for the linear loss L = Re Σ_R Σ_ij G_R,ij Hr_R,ij versus central finite differences
@@ -436,8 +436,8 @@ end
     set_value!(conf, "charge_scale", "Ewald", 0.5)
     set_value!(conf, "charge_scale", "Pb", 0.3)
     per_species = EwaldOnsites([strc], [basis], comm, conf)
-    for (label, γ) in zip(per_species.param_labels, per_species.params)
-        @test γ ≈ (Hamster.number_to_element(label) == "Pb" ? 0.3 : 0.5)
+    for ((type, _), γ) in zip(per_species.coupling_labels, per_species.params)
+        @test γ ≈ (Hamster.number_to_element(type) == "Pb" ? 0.3 : 0.5)
     end
 
     # Fitted coupling written to params.dat (after the TB and SOC parameters, which are kept) and read with init_params
@@ -451,7 +451,7 @@ end
             set_value!(conf, "init_params", "Ewald", joinpath(dir, "params.dat"))
             loaded = EwaldOnsites([strc], [basis], comm, conf)
             @test loaded.params ≈ model.params
-            @test loaded.param_labels == model.param_labels
+            @test loaded.coupling_labels == model.coupling_labels
         end
     end
 end
@@ -651,5 +651,101 @@ end
             set_value!(different, "init_params", "Ewald", "params.dat")
             @test_throws ErrorException Hamster.apply_ewald_settings!(different)
         end
+    end
+end
+
+@testset "Induced dipoles and couplings per orbital type" begin
+    function cspbbr3_conf(; kwargs...)
+        conf = get_empty_config()
+        for (element, orbitals, q) in [("Cs", "s", 1), ("Pb", "s px py pz", 2), ("Br", "px py pz", -1)]
+            set_value!(conf, "orbitals", element, orbitals); set_value!(conf, "qeff", element, q)
+        end
+        for (key, value) in ["poscar" => joinpath(@__DIR__, "test_files/POSCAR_cspbbr3_distorted"), "load_rllm" => true, "rcut" => 5.5,
+                             "rllm_file" => joinpath(@__DIR__, "test_files/rllm_cspbbr3.dat"), "verbosity" => 0]
+            set_value!(conf, key, value)
+        end
+        for (key, value) in ["method" => "wolf", "rcut" => 8.0, "alpha" => 0.3]; set_value!(conf, key, "Ewald", value); end
+        for (key, block, value) in values(kwargs); set_value!(conf, key, block, value); end
+        return conf
+    end
+    conf = cspbbr3_conf(; (Symbol("pol_$e") => ("polarizability", e, p) for (e, p) in [("Pb", 2.75), ("Br", 1.5)])...)
+    strc = Structure(conf); basis = Basis(strc, conf)
+    pos = Hamster.get_ion_positions(strc.ions, apply_distortion=true)
+    q, _ = Hamster.get_site_charges(strc, conf, positions=pos)
+    types = Hamster.number_to_element.(Hamster.get_ion_types(strc.ions))
+
+    for method in ("wolf", "zahn")
+        groups = [t == "Pb" ? 1 : t == "Br" ? 2 : 0 for t in types]
+        Φ = Hamster.induced_dipole_potentials(pos, q, strc.lattice, groups, 2; rcut=8.0, alpha=0.3, method=method)
+        f = Hamster.get_field_kernel(method)
+        images = [strc.lattice * [a, b, c] for a in -2:2 for b in -2:2 for c in -2:2]
+        neighbours(i) = [(j, d, norm(d)) for j in eachindex(pos), T in images for d in (pos[i] - pos[j] - T,) if 1e-10 < norm(d) < 8.0]
+        E = [sum((Hamster.ke * q[j] * f(r, 0.3, 8.0) / r * d for (j, d, r) in neighbours(i)), init=zeros(3)) for i in eachindex(pos)]
+        Φ_direct = [sum((f(r, 0.3, 8.0) / r * dot(E[j], d) for (j, d, r) in neighbours(i) if groups[j] == g), init=0.0) for i in eachindex(pos), g in 1:2]
+        @test Φ ≈ Φ_direct rtol=1e-10
+    end
+
+    set_value!(conf, "charge_scale", "Ewald", 0.6); set_value!(conf, "charge_scale_p", "Pb", 0.3)
+    model = EwaldOnsites([strc], [basis], comm, conf, update=true)
+    @test Hamster.number_to_element.(model.pol_labels) == ["Br", "Pb"] && collect(Hamster.polarizabilities(model)) ≈ [1.5, 2.75]
+    @test Dict(model.coupling_labels .=> Hamster.couplings(model))[(Hamster.element_to_number("Pb"), 1)] ≈ 0.3
+    @test all(abs(sum(model.dipole_potentials[1][types[model_atoms] .== e, t])) < 1e-10
+              for model_atoms in (eachindex(types),) for e in ("Pb", "Br", "Cs") for t in 1:2)
+    φ = model.potentials[1] .+ model.dipole_potentials[1] * collect(Hamster.polarizabilities(model))
+    @test Hamster.site_potentials(model, 1) ≈ φ
+    H = Matrix(get_hr(model, Hamster.Dense(), 1)[Hamster.findR0(strc.Rs)])
+    labels, atoms = Hamster.orbital_labels(strc, basis)
+    expected = [-(startswith(l, "Pb-p") ? 0.3 : 0.6) * φ[a] for (l, a) in zip(labels, atoms)]
+    @test diag(H) ≈ expected && H ≈ Diagonal(expected)
+    @test diag(Matrix(get_hr(model, Hamster.Dense(), 1, apply_soc=true)[Hamster.findR0(strc.Rs)])) ≈ repeat(expected, inner=2)
+
+    model.params .= model.params .+ 0.05 .* (1:length(model.params))
+    reg = Hamster.Regularization(conf, lambda=0.0)
+    for soc in (false, true)
+        Hr = get_hr(model, Hamster.Dense(), 1, apply_soc=soc)
+        G = [randn(ComplexF64, size(H)) for H in Hr]
+        loss(θ) = (model.params .= θ; real(sum(sum(G[R] .* get_hr(model, Hamster.Dense(), 1, apply_soc=soc)[R]) for R in eachindex(G))))
+        θ0 = copy(model.params)
+        grad = Hamster.get_model_gradient(model, [1], reg, [G]; soc=soc)
+        fd = [(loss(θ0 .+ 1e-5 .* (eachindex(θ0) .== p)) - loss(θ0 .- 1e-5 .* (eachindex(θ0) .== p))) / 2e-5 for p in eachindex(θ0)]
+        model.params .= θ0
+        @test grad ≈ fd rtol=1e-6
+        terms = Hamster.linear_terms(model, 1; soc=soc)
+        v = Hamster.device_param_values(model)
+        hr = zeros(size(Hr[1])); raw = zeros(length(v))
+        for (key, col, val) in zip(terms.keys, terms.cols, terms.vals)
+            hr[key[2], key[3]] += val * v[col]; raw[col] += val * real(G[key[1]][key[2], key[3]])
+        end
+        @test hr ≈ real(Matrix(Hr[Hamster.findR0(strc.Rs)]))
+        @test Hamster.get_model_gradient(model, [1], reg, Hamster.RawModelGradient(raw); soc=soc) ≈ grad
+    end
+
+    fixed_pol = EwaldOnsites([strc], [basis], comm, conf, update=true, update_polarizability=false, write_summary=false)
+    reg_λ = Hamster.Regularization(conf, lambda=0.1)
+    g = Hamster.get_model_gradient(fixed_pol, [1], reg_λ, [get_hr(fixed_pol, Hamster.Dense(), 1)]; soc=false)
+    @test all(iszero, g[end-1:end]) && any(!iszero, g[1:end-2])
+
+    mktempdir() do dir
+        cd(dir) do
+            Hamster.write_params(Hamster.ParameterLabel[], Float64[], conf)
+            Hamster.write_params(model, conf)
+            text = read("params.dat", String)
+            @test occursin(r"ewald_Pb_s\s", text) && occursin(r"ewald_Pb_p\s", text) && occursin(r"ewald_Br\s", text)
+            @test occursin(r"polarizability_Pb\s", text) && occursin(r"polarizability_Br\s", text)
+            plain = cspbbr3_conf(init=("init_params", "Ewald", joinpath(dir, "params.dat")))
+            loaded = EwaldOnsites([strc], [basis], comm, plain, write_summary=false)
+            @test loaded.pol_labels == model.pol_labels && loaded.coupling_labels == model.coupling_labels
+            @test loaded.params ≈ model.params
+            @test get_hr(loaded, Hamster.Dense(), 1)[Hamster.findR0(strc.Rs)] ≈ get_hr(model, Hamster.Dense(), 1)[Hamster.findR0(strc.Rs)]
+            write("old.dat", replace(text, r"ewald_Pb_s\s+\S+\n" => "", r"ewald_Pb_p(\s+)" => s"ewald_Pb\1"))
+            old = EwaldOnsites([strc], [basis], comm, cspbbr3_conf(init=("init_params", "Ewald", joinpath(dir, "old.dat"))), write_summary=false)
+            pb = findall(label -> Hamster.number_to_element(label[1]) == "Pb", old.coupling_labels)
+            @test length(pb) == 2 && old.params[pb[1]] == old.params[pb[2]] ≈ model.params[pb[2]]
+        end
+    end
+
+    for (key, value) in ["method" => "ewald", "slab_axis" => 3]
+        bad = cspbbr3_conf(pol=("polarizability", "Pb", 1.0), m=(key, "Ewald", value))
+        @test_throws ErrorException EwaldOnsites([strc], [basis], comm, bad, write_summary=false)
     end
 end

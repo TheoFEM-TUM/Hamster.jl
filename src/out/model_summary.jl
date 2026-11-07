@@ -60,6 +60,7 @@ Append a summary of the Ewald onsite model to `hamster.out`.
 function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         rank=0,
         label="",
+        species=unique(first.(ewald.coupling_labels)),
         species_mean,
         structure_means,
         method=ewald_method(get_ewald_method(conf)),
@@ -76,11 +77,13 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         filename="hamster.out")
 
     all_site_counts = isnothing(site_counts) ? nothing : MPI.gather(site_counts, comm, root=0)
-    nspecies = length(ewald.param_labels)
-    local_Δε = [Float64[] for _ in 1:nspecies]
-    for n in eachindex(ewald.potentials), (ϕ, type) in zip(ewald.potentials[n], ewald.types_per_strc[n])
-        p = findfirst(==(type), ewald.param_labels)
-        push!(local_Δε[p], -1000 * ewald.params[p] * ϕ)
+    ncouplings = length(ewald.coupling_labels)
+    γ = couplings(ewald)
+    local_Δε = [Float64[] for _ in 1:ncouplings]
+    for n in eachindex(ewald.potentials), (ϕ, type) in zip(site_potentials(ewald, n), ewald.types_per_strc[n])
+        for (c, (t, _)) in enumerate(ewald.coupling_labels)
+            t == type && push!(local_Δε[c], -1000 * γ[c] * ϕ)
+        end
     end
 
     all_Δε = MPI.gather(local_Δε, comm, root=0)
@@ -88,7 +91,7 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
     nstrc = MPI.Reduce(length(ewald.potentials), +, comm, root=0)
     (rank ≠ 0 || !isfile(filename)) && return nothing
 
-    Δε = [reduce(vcat, (Δε_rank[p] for Δε_rank in all_Δε), init=Float64[]) for p in 1:nspecies]
+    Δε = [reduce(vcat, (Δε_rank[c] for Δε_rank in all_Δε), init=Float64[]) for c in 1:ncouplings]
     structure_means = reduce(vcat, all_structure_means)
 
     open(filename, "a") do io
@@ -96,7 +99,7 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         write_separator(io)
         println(io, summary_title("Ewald", label))
         write_separator(io, char='-')
-        elements = number_to_element.(ewald.param_labels)
+        elements = number_to_element.(species)
         write_summary_line(io, "structures", nstrc)
         write_summary_line(io, "method, rcut", @sprintf("%s, %.2f Å", method, rcut))
         write_summary_line(io, "alpha", @sprintf("%.4f 1/Å", alpha) * (alpha_auto ? " ($(lowercase(method) ∈ ("wolf", "zahn") ? 3 : 4) / rcut)" : ""))
@@ -108,6 +111,12 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         (slab_axis > 0 || cluster || charge_compensation ≠ "global") && write_summary_line(io, "net charge compensated",
             Dict("global" => "uniformly over all atoms", "surface" => "on the outermost layers (no average field inside)",
                  "local" => "on atoms with missing neighbors")[charge_compensation])
+        coupling_names = ["$(number_to_element(t)) $("spdf"[l+1])" for (t, l) in ewald.coupling_labels]
+        write_summary_line(io, "couplings γ" * (ewald.update ? " (fitted)" : ""),
+                           join(["$name $(@sprintf("%.4g", g))" for (name, g) in zip(coupling_names, γ)], ", "))
+        isempty(ewald.pol_labels) || write_summary_line(io, "polarizabilities (Å³)" * (ewald.update_polarizability ? " (fitted)" : ""),
+            join(["$(number_to_element(t)) $(@sprintf("%.4g", p))" for (t, p) in zip(ewald.pol_labels, polarizabilities(ewald))], ", ") *
+            " (first-order induced dipoles)")
         means = join(["$e $(@sprintf("%.4f", m)) V" for (e, m) in zip(elements, species_mean)], ", ")
         write_summary_line(io, "subtracted species mean φ̄", centering == "structure" ? "per structure (mean over all: $means)" : means)
         if !isnothing(all_site_counts)
@@ -115,16 +124,17 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
             write_summary_line(io, "site charges (sites)", join(["$site $q ($n)" for ((site, q), n) in sort(collect(counts))], ", "))
         end
         println(io)
-        println(io, "  Onsite corrections Δε = -γ (φ - φ̄) per species (meV):")
+        println(io, "  Onsite corrections Δε = -γ (φ - φ̄) per species and orbital type (meV)" *
+                    (isempty(ewald.pol_labels) ? ":" : ", φ including the induced dipoles:"))
         widths = [7, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6]
-        write_table_row(io, ["species", "sites", "σ", "min", "p1", "p99", "max", "max/σ", ">3σ %", "σ_strc", "δφ̄"], widths)
-        δφ̄ = zeros(nspecies)
-        for (p, type) in enumerate(ewald.param_labels)
+        write_table_row(io, ["orbital","sites", "σ", "min", "p1", "p99", "max", "max/σ", ">3σ %", "σ_strc", "δφ̄"], widths)
+        δφ̄ = zeros(ncouplings)
+        for (p, (type, _)) in enumerate(ewald.coupling_labels)
             s = correction_statistics(Δε[p])
             means = [m for (t, m) in structure_means if t == type]
-            σ_strc = length(means) > 1 ? 1000 * abs(ewald.params[p]) * std(means, corrected=false) : NaN
+            σ_strc = length(means) > 1 ? 1000 * abs(γ[p]) * std(means, corrected=false) : NaN
             δφ̄[p] = centering == "structure" ? NaN : mean_uncertainty(σ_strc, length(means), s.σ, s.n)
-            write_table_row(io, [elements[p], string(s.n), format_number(s.σ, 1), format_number(s.min, 1), format_number(s.p1, 1),
+            write_table_row(io, [coupling_names[p], string(s.n), format_number(s.σ, 1), format_number(s.min, 1), format_number(s.p1, 1),
                                  format_number(s.p99, 1), format_number(s.max, 1), format_number(s.tail, 2),
                                  format_number(100 * s.frac3σ, 2), format_number(σ_strc, 1), format_number(δφ̄[p], 1)], widths)
         end
