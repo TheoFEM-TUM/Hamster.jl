@@ -67,6 +67,8 @@ function accumulate_hr!(hr, block::DeviceKernelBlock, p)
     launch_kernel!(gaussian_kernel_hr_kernel!, hr, length(block.rows), block.rows, block.X, block.D, p, block.γ)
 end
 
+accumulate_hr!(hr, block::DeviceRadialBlock, p) = accumulate_hr!(hr, block.inner, p)
+
 """
     parameter_gradient(block, G)
 
@@ -80,6 +82,20 @@ end
 function parameter_gradient(block::DeviceKernelBlock, G)
     g = similar(G, Float64, block.nparams)
     launch_kernel!(gaussian_kernel_grad_kernel!, g, block.nparams, block.rows, block.X, block.D, G, block.γ)
+end
+
+parameter_gradient(block::DeviceRadialBlock, G) = parameter_gradient(block.inner, G)
+
+"""
+    update_radial_blocks!(lmap, models)
+
+Bring the values of the `DeviceRadialBlock`s of `lmap` up to date with the radial exponents of their models.
+"""
+function update_radial_blocks!(lmap, models)
+    for block in lmap.blocks
+        block isa DeviceRadialBlock && update_radial_block!(block, models[block.model_index].radial.c)
+    end
+    return lmap
 end
 
 """
@@ -123,7 +139,7 @@ end
 
 function get_device_hamiltonian(ham, index, ks)
     ctx = ham.device_ctx
-    lmap = ctx.maps[index]
+    lmap = update_radial_blocks!(ctx.maps[index], ham.models)
     hr = get_device_hr(lmap, device_params(ham, ctx))
     phase = device_phase(ctx, index, ham.Rs[index], ks)
     Hk = get_device_hamiltonian(lmap, hr, phase, ham.sp_diag)
@@ -259,9 +275,10 @@ function model_gradient_input(dL_dHr::AbstractVector{DeviceParamGradient}, model
 end
 
 function get_model_gradient(model::TBModel, indices, reg, g::RawModelGradient; soc=false)
-    any(model.update) || return zeros(length(model.params))
-    dV_penal = backward(reg, model.params)
-    return @. ifelse(model.update, g.grad + dV_penal, 0.)
+    n = length(model.params)
+    dV = @. ifelse(model.update, g.grad[1:n] + $backward(reg, model.params), 0.)
+    has_exponents(model) || return dV
+    return vcat(dV, exponent_gradient(model, -g.grad[n+1:end]))
 end
 
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, g::RawModelGradient; soc=false)

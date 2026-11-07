@@ -238,6 +238,11 @@ function write_model_summary(model::TBModel, strcs, bases, comm, conf=get_empty_
         write_summary_line(io, "parameters", length(model.param_labels))
         write_summary_line(io, "  per shell", join(shell_counts, ", "))
         write_summary_line(io, "  per ion pair", join(pair_counts, ", "))
+        if has_exponents(model)
+            c = model.radial.c[hopping_parameters(model)]
+            write_summary_line(io, "radial exponents (d/Å)^(-c)" * (model.radial.update ? " (fitted)" : ""),
+                               "$(length(c)) hopping parameters" * (isempty(c) ? "" : @sprintf(", c = %.3g to %.3g", minimum(c), maximum(c))))
+        end
         write_summary_line(io, "geometry tensor entries", @sprintf("%d (%.1f MB)", entries, entries * 16 / 1024^2))
         if sepNN
             merged = Dict{String, NTuple{4, Float64}}()

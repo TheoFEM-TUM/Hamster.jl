@@ -230,6 +230,43 @@ The cutoffs and the number of bonds with each label are listed in the [model sum
     nearest-neighbor bonds of slightly different lengths (within 10 %, e.g. wurtzite or orthorhombic perovskites), all
     of them now use the `NN1` parameters, while before only the shortest did.
 
+## Radial Exponents
+
+The distance dependence ``V_v(\Delta r)`` follows from the overlap of the radial functions, so its slope is fixed by
+`alpha` and `n` of the orbitals. Fits to equilibrium structures (e.g. band structures of primitive cells) hardly
+constrain it, while the response of the bands to bond-length changes, e.g. in MD snapshots, depends on it. With
+`radial_exponent = true`, every hopping parameter (nearest-neighbor label ≠ 0) gets an additional power-law factor with
+its own exponent ``c_v``:
+
+```math
+h_{vij}^{\mathbf{R}} = C_{vij}^{\mathbf{R}} \, V_v(\Delta r) \left(\frac{\Delta r}{1\,\text{Å}}\right)^{-c_v}.
+```
+
+The factor depends only on the bond length, not on a reference structure, so it is the same for all structures and
+cell sizes. Positive exponents make the hopping decay faster with distance, negative ones slower. The factor at the
+typical bond length is absorbed into ``V_v^0``, so a fit mainly changes the slope ``-c_v / \Delta r`` of the logarithm of
+the hopping. On-site parameters have no exponent.
+
+The exponents start from 0 (the model is unchanged) or from the `exponent_<label>` lines of the parameter file
+(`init_params`), e.g. `exponent_NN1_Br+Pb_spσ`, and are written to `params.dat` in the same way. They are fixed unless
+`update_radial_exponent = true` is set in the `Optimizer` block, independent of `update_tb`, so that, e.g., only the
+exponents are fitted to distorted structures with fixed TB parameters. They are not regularized. Exponents are only
+determined by training data with different bond lengths, e.g. MD snapshots or distorted cells; in fits to a single
+equilibrium structure they only shift the effective parameter values.
+
+The Hamiltonian is no longer linear in all parameters: the geometry tensor is recomputed from the stored values without
+the factor whenever the exponents change, and the gradient w.r.t. an exponent is
+
+```math
+\frac{\partial L}{\partial c_v} = -V_v^0 \sum_R \sum_{ij} h_{vR,ij} \ln\left(\frac{\Delta r_{ij}}{1\,\text{Å}}\right)
+\frac{\partial L}{\partial H_{R,ij}}.
+```
+
+With exponents, the model keeps two more copies of the values of the geometry tensor (the values without the factor
+and the bond lengths). The descriptors of the ML model are computed from the geometry tensor without the factor, so they
+do not depend on the exponents: a model fitted with exponents gives the same descriptors when it is used later with the
+fitted exponents.
+
 ## Spin Basis
 
 If spin-orbit coupling or an explicit spin basis is requested, the Hamiltonian

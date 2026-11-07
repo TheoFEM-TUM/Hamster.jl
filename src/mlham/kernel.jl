@@ -70,7 +70,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             write_summary=true)
     systems = [strc.system for strc in strcs]
     structure_descriptors = map(eachindex(strcs)) do n
-        get_tb_descriptor(model.hs[n], model.params, strcs[n], bases[n], conf)
+        get_tb_descriptor(base_geometry_tensor(model, n), model.params, strcs[n], bases[n], conf)
     end
     external_data_points = !isnothing(data_points)
     if external_data_points

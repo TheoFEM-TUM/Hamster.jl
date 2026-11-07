@@ -676,7 +676,7 @@ for all its orbital types, else as `ewald_<element>_<l>` lines (`<l>` = s, p or 
 """
 function write_params(ewald::EwaldOnsites, conf=get_empty_config(); filename="params.dat")
     isfile(filename) || return nothing
-    parameters, parameter_values, ion_types, soc_parameters, _ = read_params(filename)
+    parameters, parameter_values, ion_types, soc_parameters, _, _, _, _, _, exponent_labels, exponents = read_params(filename)
     γ = couplings(ewald); ewald_types = String[]; ewald_parameters = Float64[]
     if ewald.coupling_labels == [(0x00, -1)]
         append!(ewald_types, number_to_element.(ewald.species)); append!(ewald_parameters, fill(γ[1], length(ewald.species)))
@@ -692,5 +692,6 @@ function write_params(ewald::EwaldOnsites, conf=get_empty_config(); filename="pa
     end
     write_params(parameters, parameter_values, ion_types, soc_parameters, conf, filename=replace(filename, r"\.dat$" => ""),
                  ewald_types=ewald_types, ewald_parameters=ewald_parameters, ewald_settings=ewald_settings(conf),
-                 pol_types=number_to_element.(ewald.pol_labels), pol_parameters=collect(polarizabilities(ewald)))
+                 pol_types=number_to_element.(ewald.pol_labels), pol_parameters=collect(polarizabilities(ewald)),
+                 exponent_labels=exponent_labels, exponents=exponents)
 end

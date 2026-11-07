@@ -42,7 +42,7 @@ end
 
 # Dense real-space Hamiltonian from the device entries
 function get_dense_device_hr(ham, index)
-    ctx = ham.device_ctx; lmap = ctx.maps[index]
+    ctx = ham.device_ctx; lmap = Hamster.update_radial_blocks!(ctx.maps[index], ham.models)
     hr = Array(Hamster.get_device_hr(lmap, Hamster.device_params(ham, ctx)))
     I, J, Ridx = Array(lmap.I), Array(lmap.J), Array(lmap.Ridx)
     Hr = [zeros(ComplexF64, lmap.Nε, lmap.Nε) for _ in 1:lmap.NR]
@@ -267,4 +267,24 @@ end
             @test maximum(maximum(abs.(Matrix(a) .- Matrix(b))) for (a, b) in zip(Hr, get_hr(ham_cpu, 1))) < 1e-10
         end
     end
+end
+
+@testset "Device training steps with radial exponents match CPU" begin
+    conf = get_device_test_config(sp_mode=true)
+    set_value!(conf, "radial_exponent", true)
+    set_value!(conf, "update_radial_exponent", "Optimizer", true)
+    ham_cpu, ham_dev = get_device_test_hams(conf, ArrayDevice(JLArray))
+    Es, _ = diagonalize(get_hamiltonian(ham_cpu, 1, ks_device_test))
+    train_data = [Hamster.EigData(ks_device_test, Es .+ 0.1 .* randn(size(Es)))]
+    prof_cpu = HamsterProfiler(3, conf); prof_dev = HamsterProfiler(3, conf)
+    optim_cpu = GDOptimizer(size(Es)..., conf); optim_dev = GDOptimizer(size(Es)..., conf)
+    for iter in 1:3
+        Hamster.train_step!(ham_cpu, [1], optim_cpu, train_data, prof_cpu, iter, 1, comm, conf)
+        Hamster.train_step!(ham_dev, [1], optim_dev, train_data, prof_dev, iter, 1, comm, conf)
+        @test prof_cpu.L_train[1, iter] ≈ prof_dev.L_train[1, iter]
+    end
+    tb = ham_dev.models[1]
+    @test Hamster.has_exponents(tb) && any(!iszero, tb.radial.c)
+    @test get_params(ham_cpu.models[1]) ≈ get_params(tb) atol=1e-10
+    @test maxdiff(Matrix.(get_hr(ham_cpu, 1)), get_dense_device_hr(ham_dev, 1)) < 1e-10
 end
