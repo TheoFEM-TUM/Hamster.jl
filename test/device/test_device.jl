@@ -127,7 +127,8 @@ end
         if polarizable
             for (key, value) in ["method" => "wolf", "rcut" => 8.0, "alpha" => 0.3]; set_value!(conf, key, "Ewald", value); end
             set_value!(conf, "polarizability", "Pb", 2.5); set_value!(conf, "polarizability", "Br", 1.5)
-            set_value!(conf, "charge_scale_p", "Pb", 0.4); set_value!(conf, "update_polarizability", "Ewald", true)
+            set_value!(conf, "charge_scale_p", "Pb", 0.4); set_value!(conf, "coupling", "Ewald", "orbital")
+            set_value!(conf, "update_polarizability", "Ewald", true)
         end
         ham_cpu, ham_dev = get_device_test_hams(conf, ArrayDevice(JLArray))
         @test maxdiff(Matrix.(get_hr(ham_cpu, 1)), get_dense_device_hr(ham_dev, 1)) < 1e-10

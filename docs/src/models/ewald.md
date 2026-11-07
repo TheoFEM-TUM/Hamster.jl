@@ -18,7 +18,8 @@ for the orbital ``o`` of atom ``i``, where:
 
 - ``\phi_i`` is the electrostatic potential at atomic site ``i`` (computed via Ewald, PME, Wolf, or Zahn), optionally
   including the potential of induced dipoles (see [Induced Dipoles](#Induced-Dipoles))
-- ``\gamma_{s(i), l(o)}`` is a coupling parameter per species and orbital type (s, p or d)
+- ``\gamma_{s(i), l(o)}`` is a coupling parameter: one per species (default), one in total or one per species and
+  orbital type (s, p or d), see [Couplings](#Couplings)
 - ``s(i)`` denotes the atomic species of atom ``i`` and ``l(o)`` the orbital type of ``o``
 ---
 
@@ -108,15 +109,26 @@ config.
 
 ---
 
-## Coupling per Species and Orbital Type
+## Couplings
 
-The coupling ``\gamma_{s,l}`` is a parameter per species and orbital type (s, p or d). All couplings start from
-`charge_scale` of the `Ewald` block, which can be set per species in the atom blocks, e.g. for a hyperparameter search
-over `Pb_charge_scale`, and per orbital type with `charge_scale_s`, `charge_scale_p` and `charge_scale_d`:
+How many couplings the model has is set by `coupling` in the `Ewald` block:
+
+| `coupling` | couplings | set with |
+|---|---|---|
+| `global` | one for all species and orbitals | `charge_scale` of the `Ewald` block |
+| `species` (default) | one per species | `charge_scale` of the atom block (default: of the `Ewald` block) |
+| `orbital` | one per species and orbital type (s, p, d) | `charge_scale_s`, `charge_scale_p`, `charge_scale_d` of the atom block (default: its `charge_scale`) |
+
+With `coupling = global`, the couplings describe one screening of the potential for all orbitals, the most constrained
+choice. Separate couplings per orbital type describe that orbitals of different extent average the potential over
+different regions: a diffuse orbital sees a smaller part of the potential at its nucleus than a compact one. Tags that
+the chosen mode does not use stop the run (`charge_scale` in an atom block with `global`, `charge_scale_<l>` without
+`orbital`). For example, a hyperparameter search over `Pb_charge_scale`, or a smaller coupling of the Pb p orbitals:
 
 ```bash
 begin Ewald
     charge_scale = 0.6
+    coupling = orbital
 end
 
 begin atom Pb
@@ -126,19 +138,15 @@ begin atom Pb
 end
 ```
 
-Separate couplings per orbital type describe that orbitals of different extent average the potential over different
-regions: a diffuse orbital sees a smaller part of the potential at its nucleus than a compact one.
-
-With `update = true` in the `Ewald` block, the couplings of all species and orbital types are fitted together with the
-other models, using the gradient
+With `update = true` in the `Ewald` block, the couplings are fitted together with the other models, e.g. with
+`coupling = orbital` using the gradient
 ``\partial L / \partial \gamma_{s,l} = -\sum_{i \in s} \sum_{o \in i,\, l(o) = l} \mathrm{Re}\,(\partial L / \partial H_{R=0})_{oo}\, \phi_i``.
-The couplings are written to `params.dat` at the end of a fit after the TB and SOC parameters: one `ewald_<element>`
-line if all orbital types of a species have the same coupling, else `ewald_<element>_<l>` lines (`<l>` = s, p or d,
-e.g. `ewald_Pb_s`, `ewald_Pb_p`). They are read with `init_params = params.dat` in the `Ewald` block, which takes
-precedence over the atom blocks; an `ewald_<element>` line (as in parameter files of earlier versions, with one coupling
-per species) sets the coupling of all orbital types of the species, so these models give the same Hamiltonians.
-Since a fit with `update = true` has one coupling per orbital type, refitting such a model can change its couplings
-and results.
+The couplings are written to `params.dat` at the end of a fit after the TB and SOC parameters as `ewald_<element>`
+lines (with `global` the same value for every species), and with `coupling = orbital` as `ewald_<element>_<l>` lines
+(`<l>` = s, p or d, e.g. `ewald_Pb_s`, `ewald_Pb_p`) where the orbital types of a species differ. They are read with
+`init_params = params.dat` in the `Ewald` block, which takes precedence over the atom blocks; an `ewald_<element>`
+line sets all orbital types of the species. A file with couplings per orbital type needs `coupling = orbital`, and
+`coupling = global` needs the same coupling for all species in the file.
 Without `init_params`, the `ewald_` lines of a parameter file are ignored, so that an explicitly set `charge_scale`
 (e.g. in a hyperparameter search) is not overwritten. The effective charges `qeff` and thus the
 electrostatic potential (and its neutrality) are not changed by the coupling.
@@ -168,7 +176,7 @@ averages of charges from DFT (e.g. Hirshfeld charges) and have to be adjusted, e
 so that the formula unit is neutral. If a structure is not neutral, Hamster stops and lists the charges of all sites.
 With site-dependent charges, this also catches unexpected bonding, e.g. an H atom that is not bonded to C or N and
 keeps `qeff`. The sites found and their charges are listed in the Ewald model summary in `hamster.out`, e.g.
-`H(N) 0.349 (24)`. The couplings stay parameters per species and orbital type.
+`H(N) 0.349 (24)`. The couplings do not depend on the sites.
 
 ## Induced Dipoles
 
@@ -281,14 +289,13 @@ training and the validation set). Settings from the config file are not repeated
       structures:                  6
       method, rcut:                ewald, 5.50 Å
       alpha:                       0.7273 1/Å (4 / rcut)
-      couplings γ:                 Br p 0.6, Pb s 0.6, Pb p 0.6
+      couplings γ:                 Br 0.6, Pb 0.6
       subtracted species mean φ̄:   Br 4.7532 V, Pb -8.1202 V
 
-  Onsite corrections Δε = -γ (φ - φ̄) per species and orbital type (meV):
-    orbital sites      σ    min     p1    p99    max  max/σ  >3σ % σ_strc    δφ̄
-    Br p      144  193.8 -459.9 -398.3  409.8  520.1   2.68   0.00    5.3    2.2
-    Pb s       48  143.1 -319.6 -296.8  299.4  347.0   2.43   0.00    6.2    2.5
-    Pb p       48  143.1 -319.6 -296.8  299.4  347.0   2.43   0.00    6.2    2.5
+  Onsite corrections Δε = -γ (φ - φ̄) per species (meV):
+    species sites      σ    min     p1    p99    max  max/σ  >3σ % σ_strc    δφ̄
+    Br        144  193.8 -459.9 -398.3  409.8  520.1   2.68   0.00    5.3    2.2
+    Pb         48  143.1 -319.6 -296.8  299.4  347.0   2.43   0.00    6.2    2.5
 
     φ̄: species mean of the site potentials over all structures of this run.
     σ: width of Δε; max/σ: largest |Δε| relative to σ; >3σ %: fraction of
@@ -301,8 +308,9 @@ training and the validation set). Settings from the config file are not repeated
 ================================================================================
 ```
 
-- `couplings γ` lists the coupling of each species and orbital type (marked `fitted` with `update = true`); with induced
-  dipoles, a line `polarizabilities (Å³)` follows, and φ in the table includes the dipole potential.
+- `couplings γ` lists the couplings (`all`, per species or per species and orbital type, see `coupling`; marked
+  `fitted` with `update = true`), and the table has one row per coupling. With induced dipoles, a line
+  `polarizabilities (Å³)` follows, and φ in the table includes the dipole potential.
 - `φ̄` is the species mean that is subtracted (see [Mean Centering](#Mean-Centering)). It is taken over the structures
   of the current run, so it can differ between training, validation and later runs.
 - `σ`, `min`, `max` and the 1% / 99% percentiles describe the distribution of the corrections. `max/σ` and `>3σ %`

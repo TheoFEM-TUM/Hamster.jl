@@ -64,9 +64,11 @@ get_charge_scale(conf::Config, type)::Float64 = conf("charge_scale", type) == "d
 
 Coupling of the on-site energies of the orbitals with angular momentum `l` (0, 1, 2) of the species `type` to the
 electrostatic potential: `charge_scale_s`, `charge_scale_p` or `charge_scale_d` of the atom block, else `charge_scale`
-of the atom block, else `charge_scale` of the `Ewald` block.
+of the atom block, else `charge_scale` of the `Ewald` block. `l = -1` (one coupling for all orbitals, `coupling = species`):
+`charge_scale` of the atom block, else of the `Ewald` block.
 """
 function get_charge_scale(conf::Config, type, l)::Float64
+    l < 0 && return get_charge_scale(conf, type)
     key = "charge_scale_" * "spdf"[l+1]
     return conf(key, type) == "default" ? get_charge_scale(conf, type) : conf(key, type)
 end
@@ -93,7 +95,7 @@ get_nnaxes(conf::Config, type)::Bool = conf("nnaxes", type) == "default" ? false
 @configtag nnaxes Bool false "orient the orbital axes along the bonds to the nearest neighbours (the number of neighbours depends on the number of orbitals)." "atom" per_atom=true getter=:custom category="basis"
 @configtag qeff Float64 0.0 "effective charge of the species for the Ewald model; qeff_<element> (e.g. qeff_N = 0.349 in the block of H) sets the charge of the atoms bonded to <element>." "atom" per_atom=true getter=:custom category="electrostatics" see_also=["charge_scale", "site_rcut"]
 @configtag charge_scale Float64 0.0 "coupling of the on-site energies of the species to the electrostatic potential." "atom" per_atom=true getter=:custom default_doc="charge_scale of the Ewald block" category="electrostatics" see_also=["qeff"]
-@configtag charge_scale_s Float64 0.0 "coupling of the on-site energies of the s orbitals of the species to the electrostatic potential." "atom" per_atom=true getter=:custom default_doc="charge_scale of the atom block" category="electrostatics" see_also=["charge_scale"]
-@configtag charge_scale_p Float64 0.0 "coupling of the on-site energies of the p orbitals of the species to the electrostatic potential." "atom" per_atom=true getter=:custom default_doc="charge_scale of the atom block" category="electrostatics" see_also=["charge_scale"]
-@configtag charge_scale_d Float64 0.0 "coupling of the on-site energies of the d orbitals of the species to the electrostatic potential." "atom" per_atom=true getter=:custom default_doc="charge_scale of the atom block" category="electrostatics" see_also=["charge_scale"]
+@configtag charge_scale_s Float64 0.0 "coupling of the on-site energies of the s orbitals of the species to the electrostatic potential (coupling = orbital in the Ewald block)." "atom" per_atom=true getter=:custom default_doc="charge_scale of the atom block" category="electrostatics" see_also=["charge_scale"]
+@configtag charge_scale_p Float64 0.0 "coupling of the on-site energies of the p orbitals of the species to the electrostatic potential (coupling = orbital in the Ewald block)." "atom" per_atom=true getter=:custom default_doc="charge_scale of the atom block" category="electrostatics" see_also=["charge_scale"]
+@configtag charge_scale_d Float64 0.0 "coupling of the on-site energies of the d orbitals of the species to the electrostatic potential (coupling = orbital in the Ewald block)." "atom" per_atom=true getter=:custom default_doc="charge_scale of the atom block" category="electrostatics" see_also=["charge_scale"]
 @configtag polarizability Float64 0.0 "polarizability (Å³) of the species: first-order dipoles induced by the field of the effective charges add their potential to the electrostatic on-site model (method = wolf or zahn)." "atom" per_atom=true getter=:custom default_doc="0 (not polarizable)" category="electrostatics" see_also=["qeff", "update_polarizability"]

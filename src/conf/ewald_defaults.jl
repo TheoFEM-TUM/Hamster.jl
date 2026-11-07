@@ -9,7 +9,8 @@ A model to account for long-term electrostatics (Ewald summation) is constructed
 get_ewald(conf::Config)::Bool = haskey(conf.blocks, "Ewald") || (conf("ewald") ≠ "default" ? conf("ewald") : false)
 @configtag ewald Bool false "electrostatic on-site model (also switched on by an Ewald block)." getter=:custom default_doc="true if an Ewald block is present, else false" category="model"
 
-@configtag update Bool false "fit the Ewald coupling of each species and orbital type s, p, d (starting from charge_scale, charge_scale_<l> or init_params)." "Ewald" category="model"
+@configtag update Bool false "fit the Ewald couplings (one in total, per species or per species and orbital type, see coupling), starting from charge_scale, charge_scale_<l> or init_params." "Ewald" category="model"
+@configtag coupling String "species" "Ewald couplings: global (one coupling for all species, charge_scale of the Ewald block), species (one per species, charge_scale of the atom blocks) or orbital (one per species and orbital type s, p, d, charge_scale_<l> of the atom blocks)." "Ewald" category="model" values=["global", "species", "orbital"] see_also=["charge_scale"]
 @configtag update_polarizability Bool false "fit the polarizabilities of the polarizable species (atom tag polarizability), independent of update." "Ewald" category="model" see_also=["polarizability"]
 @configtag init_params String "default" "parameter file with the Ewald couplings (ewald_<element> or ewald_<element>_<l> lines, <l> = s, p or d) and polarizabilities (polarizability_<element> lines), e.g. params.dat of a fit; default: charge_scale and polarizability of the config." "Ewald" category="model" default_doc="none: the couplings start from charge_scale, the polarizabilities from polarizability"
 @configtag method String "ewald" "method of the electrostatic sum: ewald (Ewald/PME), wolf or zahn (case-insensitive)." "Ewald" category="electrostatics" values=["ewald", "wolf", "zahn"]
