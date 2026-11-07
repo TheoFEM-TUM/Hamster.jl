@@ -100,7 +100,7 @@ Device copies of the parameters of all models. They are only uploaded again if t
 """
 function device_params(ham, ctx)
     return map(enumerate(ham.models)) do (m, model)
-        params = get_params(model)
+        params = device_param_values(model)
         cached = get(ctx.param_cache, m, nothing)
         if isnothing(cached) || cached[1] ≠ params
             cached = (copy(params), to_device(ctx.device, ComplexF64.(params)))
@@ -216,7 +216,7 @@ function get_device_param_gradient(ham, index, vs, dL_dE, phase)
     w = to_device(ctx.device, Float64.(dL_dE))
     launch_kernel!(hellman_feynman_kernel!, G, length(G), lmap.I, lmap.J, lmap.Ridx, phase, vs, w)
 
-    grads = [zeros(length(get_params(model))) for model in ham.models]
+    grads = [zeros(length(device_param_values(model))) for model in ham.models]
     for block in lmap.blocks
         grads[block.model_index] .+= Array(parameter_gradient(block, G))
     end
@@ -280,6 +280,10 @@ function get_model_gradient(soc_model::SOCModel, indices, reg, g::RawModelGradie
 end
 
 function get_model_gradient(ewald::EwaldOnsites, indices, reg, g::RawModelGradient; soc=true)
-    ewald.update || return zeros(length(ewald.params))
-    return g.grad + backward(reg, ewald.params)
+    mask = update_mask(ewald)
+    any(!iszero, mask) || return zeros(length(ewald.params))
+    nc, np = length(ewald.coupling_labels), length(ewald.pol_labels)
+    Gp = reshape(g.grad[nc+1:end], nc, np)
+    grad = vcat(g.grad[1:nc] .+ Gp * polarizabilities(ewald), Gp' * couplings(ewald))
+    return mask .* (grad + backward(reg, ewald.params))
 end

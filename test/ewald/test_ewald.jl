@@ -46,9 +46,9 @@ end
     set_value!(conf, "alpha", "Cs", 9)
     set_value!(conf, "alpha", "Pb", 13)
     set_value!(conf, "alpha", "Br", 13)
-    set_value!(conf, "poscar", joinpath(@__DIR__, "test_files/POSCAR_cspbbr3"))
+    set_value!(conf, "poscar", joinpath(@__DIR__, "..", "model", "test_files/POSCAR_cspbbr3"))
     set_value!(conf, "load_rllm", true)
-    set_value!(conf, "rllm_file", joinpath(@__DIR__, "test_files/rllm_cspbbr3.dat"))
+    set_value!(conf, "rllm_file", joinpath(@__DIR__, "..", "model", "test_files/rllm_cspbbr3.dat"))
     set_value!(conf, "verbosity", 2)
     set_value!(conf, "rcut", 5.5)
 
@@ -266,7 +266,7 @@ end
         set_value!(conf, "qeff", "Br", -0.756)
         set_value!(conf, "poscar", joinpath(dir, "POSCAR"))
         set_value!(conf, "load_rllm", true)
-        set_value!(conf, "rllm_file", joinpath(@__DIR__, "test_files/rllm_cspbbr3.dat"))
+        set_value!(conf, "rllm_file", joinpath(@__DIR__, "..", "model", "test_files/rllm_cspbbr3.dat"))
         set_value!(conf, "rcut", 5.5)
         strc = Structure(conf)
         basis = Basis(strc, conf)
@@ -299,9 +299,9 @@ end
     set_value!(conf, "qeff", "Cs", 1)
     set_value!(conf, "qeff", "Pb", 2)
     set_value!(conf, "qeff", "Br", -1)
-    set_value!(conf, "poscar", joinpath(@__DIR__, "test_files/POSCAR_cspbbr3_distorted"))
+    set_value!(conf, "poscar", joinpath(@__DIR__, "..", "model", "test_files/POSCAR_cspbbr3_distorted"))
     set_value!(conf, "load_rllm", true)
-    set_value!(conf, "rllm_file", joinpath(@__DIR__, "test_files/rllm_cspbbr3.dat"))
+    set_value!(conf, "rllm_file", joinpath(@__DIR__, "..", "model", "test_files/rllm_cspbbr3.dat"))
     set_value!(conf, "verbosity", 2)
     set_value!(conf, "rcut", 5.5)
 
@@ -402,9 +402,9 @@ end
     set_value!(conf, "qeff", "Cs", 1)
     set_value!(conf, "qeff", "Pb", 2)
     set_value!(conf, "qeff", "Br", -1)
-    set_value!(conf, "poscar", joinpath(@__DIR__, "test_files/POSCAR_cspbbr3_distorted"))
+    set_value!(conf, "poscar", joinpath(@__DIR__, "..", "model", "test_files/POSCAR_cspbbr3_distorted"))
     set_value!(conf, "load_rllm", true)
-    set_value!(conf, "rllm_file", joinpath(@__DIR__, "test_files/rllm_cspbbr3.dat"))
+    set_value!(conf, "rllm_file", joinpath(@__DIR__, "..", "model", "test_files/rllm_cspbbr3.dat"))
     set_value!(conf, "rcut", 5.5)
     set_value!(conf, "verbosity", 0)
     strc = Structure(conf)
@@ -436,8 +436,8 @@ end
     set_value!(conf, "charge_scale", "Ewald", 0.5)
     set_value!(conf, "charge_scale", "Pb", 0.3)
     per_species = EwaldOnsites([strc], [basis], comm, conf)
-    for (label, γ) in zip(per_species.param_labels, per_species.params)
-        @test γ ≈ (Hamster.number_to_element(label) == "Pb" ? 0.3 : 0.5)
+    for ((type, _), γ) in zip(per_species.coupling_labels, per_species.params)
+        @test γ ≈ (Hamster.number_to_element(type) == "Pb" ? 0.3 : 0.5)
     end
 
     # Fitted coupling written to params.dat (after the TB and SOC parameters, which are kept) and read with init_params
@@ -451,7 +451,7 @@ end
             set_value!(conf, "init_params", "Ewald", joinpath(dir, "params.dat"))
             loaded = EwaldOnsites([strc], [basis], comm, conf)
             @test loaded.params ≈ model.params
-            @test loaded.param_labels == model.param_labels
+            @test loaded.coupling_labels == model.coupling_labels
         end
     end
 end
@@ -476,9 +476,9 @@ end
         set_value!(conf, "qeff", "Cs", 1)
         set_value!(conf, "qeff", "Pb", 2)
         set_value!(conf, "qeff", "Br", -1)
-        set_value!(conf, "poscar", joinpath(@__DIR__, "test_files/POSCAR_cspbbr3_distorted"))
+        set_value!(conf, "poscar", joinpath(@__DIR__, "..", "model", "test_files/POSCAR_cspbbr3_distorted"))
         set_value!(conf, "load_rllm", true)
-        set_value!(conf, "rllm_file", joinpath(@__DIR__, "test_files/rllm_cspbbr3.dat"))
+        set_value!(conf, "rllm_file", joinpath(@__DIR__, "..", "model", "test_files/rllm_cspbbr3.dat"))
         set_value!(conf, "rcut", 5.5)
         set_value!(conf, "verbosity", 0)
         return conf
@@ -581,7 +581,7 @@ end
             set_value!(conf, "qeff_N", "H", 0.349)
             set_value!(conf, "qeff_C", "H", 0.12)
         end
-        set_value!(conf, "poscar", joinpath(@__DIR__, "test_files/POSCAR_mapbbr3"))
+        set_value!(conf, "poscar", joinpath(@__DIR__, "..", "model", "test_files/POSCAR_mapbbr3"))
         set_value!(conf, "rcut", 5.5)
         set_value!(conf, "method", "Ewald", "wolf")
         set_value!(conf, "rcut", "Ewald", 12.0)
@@ -650,6 +650,130 @@ end
             set_value!(different, "qeff_N", "H", 0.3)
             set_value!(different, "init_params", "Ewald", "params.dat")
             @test_throws ErrorException Hamster.apply_ewald_settings!(different)
+        end
+    end
+end
+
+@testset "Induced dipoles and couplings per orbital type" begin
+    function cspbbr3_conf(; kwargs...)
+        conf = get_empty_config()
+        for (element, orbitals, q) in [("Cs", "s", 1), ("Pb", "s px py pz", 2), ("Br", "px py pz", -1)]
+            set_value!(conf, "orbitals", element, orbitals); set_value!(conf, "qeff", element, q)
+        end
+        for (key, value) in ["poscar" => joinpath(@__DIR__, "..", "model", "test_files/POSCAR_cspbbr3_distorted"), "load_rllm" => true, "rcut" => 5.5,
+                             "rllm_file" => joinpath(@__DIR__, "..", "model", "test_files/rllm_cspbbr3.dat"), "verbosity" => 0]
+            set_value!(conf, key, value)
+        end
+        for (key, value) in ["method" => "wolf", "rcut" => 8.0, "alpha" => 0.3]; set_value!(conf, key, "Ewald", value); end
+        for (key, block, value) in values(kwargs); set_value!(conf, key, block, value); end
+        return conf
+    end
+    conf = cspbbr3_conf(; (Symbol("pol_$e") => ("polarizability", e, p) for (e, p) in [("Pb", 2.75), ("Br", 1.5)])...)
+    strc = Structure(conf); basis = Basis(strc, conf)
+    pos = Hamster.get_ion_positions(strc.ions, apply_distortion=true)
+    q, _ = Hamster.get_site_charges(strc, conf, positions=pos)
+    types = Hamster.number_to_element.(Hamster.get_ion_types(strc.ions))
+
+    for method in ("wolf", "zahn")
+        groups = [t == "Pb" ? 1 : t == "Br" ? 2 : 0 for t in types]
+        Φ = Hamster.induced_dipole_potentials(pos, q, strc.lattice, groups, 2; rcut=8.0, alpha=0.3, method=method)
+        f = Hamster.get_field_kernel(method)
+        images = [strc.lattice * [a, b, c] for a in -2:2 for b in -2:2 for c in -2:2]
+        neighbours(i) = [(j, d, norm(d)) for j in eachindex(pos), T in images for d in (pos[i] - pos[j] - T,) if 1e-10 < norm(d) < 8.0]
+        E = [sum((Hamster.ke * q[j] * f(r, 0.3, 8.0) / r * d for (j, d, r) in neighbours(i)), init=zeros(3)) for i in eachindex(pos)]
+        Φ_direct = [sum((f(r, 0.3, 8.0) / r * dot(E[j], d) for (j, d, r) in neighbours(i) if groups[j] == g), init=0.0) for i in eachindex(pos), g in 1:2]
+        @test Φ ≈ Φ_direct rtol=1e-10
+    end
+
+    set_value!(conf, "charge_scale", "Ewald", 0.6); set_value!(conf, "charge_scale_p", "Pb", 0.3)
+    @test_throws ErrorException EwaldOnsites([strc], [basis], comm, conf, write_summary=false)
+    set_value!(conf, "coupling", "Ewald", "orbital")
+    model = EwaldOnsites([strc], [basis], comm, conf, update=true, update_polarizability=true)
+    @test !EwaldOnsites([strc], [basis], comm, conf, update=true, write_summary=false).update_polarizability
+    @test Hamster.number_to_element.(model.pol_labels) == ["Br", "Pb"] && collect(Hamster.polarizabilities(model)) ≈ [1.5, 2.75]
+    @test Dict(model.coupling_labels .=> Hamster.couplings(model))[(Hamster.element_to_number("Pb"), 1)] ≈ 0.3
+    @test all(abs(sum(model.dipole_potentials[1][types[model_atoms] .== e, t])) < 1e-10
+              for model_atoms in (eachindex(types),) for e in ("Pb", "Br", "Cs") for t in 1:2)
+    φ = model.potentials[1] .+ model.dipole_potentials[1] * collect(Hamster.polarizabilities(model))
+    @test Hamster.site_potentials(model, 1) ≈ φ
+    H = Matrix(get_hr(model, Hamster.Dense(), 1)[Hamster.findR0(strc.Rs)])
+    labels, atoms = Hamster.orbital_labels(strc, basis)
+    expected = [-(startswith(l, "Pb-p") ? 0.3 : 0.6) * φ[a] for (l, a) in zip(labels, atoms)]
+    @test diag(H) ≈ expected && H ≈ Diagonal(expected)
+    @test diag(Matrix(get_hr(model, Hamster.Dense(), 1, apply_soc=true)[Hamster.findR0(strc.Rs)])) ≈ repeat(expected, inner=2)
+
+    model.params .= model.params .+ 0.05 .* (1:length(model.params))
+    reg = Hamster.Regularization(conf, lambda=0.0)
+    for soc in (false, true)
+        Hr = get_hr(model, Hamster.Dense(), 1, apply_soc=soc)
+        G = [randn(ComplexF64, size(H)) for H in Hr]
+        loss(θ) = (model.params .= θ; real(sum(sum(G[R] .* get_hr(model, Hamster.Dense(), 1, apply_soc=soc)[R]) for R in eachindex(G))))
+        θ0 = copy(model.params)
+        grad = Hamster.get_model_gradient(model, [1], reg, [G]; soc=soc)
+        fd = [(loss(θ0 .+ 1e-5 .* (eachindex(θ0) .== p)) - loss(θ0 .- 1e-5 .* (eachindex(θ0) .== p))) / 2e-5 for p in eachindex(θ0)]
+        model.params .= θ0
+        @test grad ≈ fd rtol=1e-6
+        terms = Hamster.linear_terms(model, 1; soc=soc)
+        v = Hamster.device_param_values(model)
+        hr = zeros(size(Hr[1])); raw = zeros(length(v))
+        for (key, col, val) in zip(terms.keys, terms.cols, terms.vals)
+            hr[key[2], key[3]] += val * v[col]; raw[col] += val * real(G[key[1]][key[2], key[3]])
+        end
+        @test hr ≈ real(Matrix(Hr[Hamster.findR0(strc.Rs)]))
+        @test Hamster.get_model_gradient(model, [1], reg, Hamster.RawModelGradient(raw); soc=soc) ≈ grad
+    end
+
+    fixed_pol = EwaldOnsites([strc], [basis], comm, conf, update=true, update_polarizability=false, write_summary=false)
+    reg_λ = Hamster.Regularization(conf, lambda=0.1)
+    g = Hamster.get_model_gradient(fixed_pol, [1], reg_λ, [get_hr(fixed_pol, Hamster.Dense(), 1)]; soc=false)
+    @test all(iszero, g[end-1:end]) && any(!iszero, g[1:end-2])
+
+    mktempdir() do dir
+        cd(dir) do
+            Hamster.write_params(Hamster.ParameterLabel[], Float64[], conf)
+            Hamster.write_params(model, conf)
+            text = read("params.dat", String)
+            @test occursin(r"ewald_Pb_s\s", text) && occursin(r"ewald_Pb_p\s", text) && occursin(r"ewald_Br\s", text)
+            @test occursin(r"polarizability_Pb\s", text) && occursin(r"polarizability_Br\s", text)
+            @test_throws ErrorException EwaldOnsites([strc], [basis], comm, cspbbr3_conf(init=("init_params", "Ewald", joinpath(dir, "params.dat"))), write_summary=false)
+            plain = cspbbr3_conf(c=("coupling", "Ewald", "orbital"), init=("init_params", "Ewald", joinpath(dir, "params.dat")))
+            loaded = EwaldOnsites([strc], [basis], comm, plain, write_summary=false)
+            @test loaded.pol_labels == model.pol_labels && loaded.coupling_labels == model.coupling_labels
+            @test loaded.params ≈ model.params
+            @test get_hr(loaded, Hamster.Dense(), 1)[Hamster.findR0(strc.Rs)] ≈ get_hr(model, Hamster.Dense(), 1)[Hamster.findR0(strc.Rs)]
+            write("old.dat", replace(text, r"ewald_Pb_s\s+\S+\n" => "", r"ewald_Pb_p(\s+)" => s"ewald_Pb\1"))
+            old = EwaldOnsites([strc], [basis], comm, cspbbr3_conf(c=("coupling", "Ewald", "orbital"), init=("init_params", "Ewald", joinpath(dir, "old.dat"))), write_summary=false)
+            pb = findall(label -> Hamster.number_to_element(label[1]) == "Pb", old.coupling_labels)
+            @test length(pb) == 2 && old.params[pb[1]] == old.params[pb[2]] ≈ model.params[pb[2]]
+        end
+    end
+
+    for (key, value) in ["method" => "ewald", "slab_axis" => 3]
+        bad = cspbbr3_conf(pol=("polarizability", "Pb", 1.0), m=(key, "Ewald", value))
+        @test_throws ErrorException EwaldOnsites([strc], [basis], comm, bad, write_summary=false)
+    end
+
+    species = EwaldOnsites([strc], [basis], comm, cspbbr3_conf(), write_summary=false)
+    @test all(l -> l[2] == -1, species.coupling_labels) && length(species.coupling_labels) == 3
+    global_conf = cspbbr3_conf(g=("coupling", "Ewald", "global"), s=("charge_scale", "Ewald", 0.7))
+    global_model = EwaldOnsites([strc], [basis], comm, global_conf, update=true, write_summary=false)
+    @test global_model.coupling_labels == [(0x00, -1)] && global_model.params[1] ≈ 0.7
+    species.params .= 0.7
+    @test get_hr(global_model, Hamster.Dense(), 1)[Hamster.findR0(strc.Rs)] ≈ get_hr(species, Hamster.Dense(), 1)[Hamster.findR0(strc.Rs)]
+    Hr = get_hr(global_model, Hamster.Dense(), 1); G = [randn(ComplexF64, size(H)) for H in Hr]
+    lossg(γ) = (global_model.params .= γ; real(sum(sum(G[R] .* get_hr(global_model, Hamster.Dense(), 1)[R]) for R in eachindex(G))))
+    gg = Hamster.get_model_gradient(global_model, [1], Hamster.Regularization(global_conf, lambda=0.0), [G]; soc=false)
+    @test gg[1] ≈ (lossg([0.7 + 1e-5]) - lossg([0.7 - 1e-5])) / 2e-5 rtol=1e-6
+    global_model.params .= 0.7
+    @test_throws ErrorException EwaldOnsites([strc], [basis], comm, cspbbr3_conf(g=("coupling", "Ewald", "global"), s=("charge_scale", "Pb", 0.5)), write_summary=false)
+    mktempdir() do dir
+        cd(dir) do
+            Hamster.write_params(Hamster.ParameterLabel[], Float64[], global_conf)
+            Hamster.write_params(global_model, global_conf)
+            _, _, _, _, _, types, values = Hamster.read_params("params.dat")
+            @test sort(types) == ["Br", "Cs", "Pb"] && all(≈(0.7), values)
+            reread = EwaldOnsites([strc], [basis], comm, cspbbr3_conf(init=("init_params", "Ewald", joinpath(dir, "params.dat"))), write_summary=false)
+            @test all(≈(0.7), reread.params)
         end
     end
 end

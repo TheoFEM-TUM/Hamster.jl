@@ -66,10 +66,15 @@ if test_all || test_only == "Model"
         include("model/test_chebyshev.jl")
         include("model/test_ham_grad.jl")
         include("model/test_model.jl")
-        include("model/test_ewald.jl")
         include("model/test_eff_ham.jl")
         include("model/test_ham_write.jl")
         include("model/test_linear_scaling.jl")
+    end
+end
+
+if test_all || test_only == "Ewald"
+    @testset "Ewald" begin
+        include("ewald/test_ewald.jl")
     end
 end
 

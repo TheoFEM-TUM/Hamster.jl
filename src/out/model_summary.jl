@@ -60,6 +60,7 @@ Append a summary of the Ewald onsite model to `hamster.out`.
 function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         rank=0,
         label="",
+        species=ewald.species,
         species_mean,
         structure_means,
         method=ewald_method(get_ewald_method(conf)),
@@ -76,81 +77,117 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         filename="hamster.out")
 
     all_site_counts = isnothing(site_counts) ? nothing : MPI.gather(site_counts, comm, root=0)
-    nspecies = length(ewald.param_labels)
-    local_Δε = [Float64[] for _ in 1:nspecies]
-    for n in eachindex(ewald.potentials), (ϕ, type) in zip(ewald.potentials[n], ewald.types_per_strc[n])
-        p = findfirst(==(type), ewald.param_labels)
-        push!(local_Δε[p], -1000 * ewald.params[p] * ϕ)
+    γ = couplings(ewald)
+    local_Δε = [Float64[] for _ in ewald.coupling_labels]
+    for n in eachindex(ewald.potentials), (ϕ, type) in zip(site_potentials(ewald, n), ewald.types_per_strc[n])
+        for (c, (t, _)) in enumerate(ewald.coupling_labels)
+            (t == type || t == 0) && push!(local_Δε[c], -1000 * γ[c] * ϕ)
+        end
     end
-
     all_Δε = MPI.gather(local_Δε, comm, root=0)
     all_structure_means = MPI.gather(structure_means, comm, root=0)
     nstrc = MPI.Reduce(length(ewald.potentials), +, comm, root=0)
     (rank ≠ 0 || !isfile(filename)) && return nothing
 
-    Δε = [reduce(vcat, (Δε_rank[p] for Δε_rank in all_Δε), init=Float64[]) for p in 1:nspecies]
-    structure_means = reduce(vcat, all_structure_means)
-
+    Δε = [reduce(vcat, (Δε_rank[c] for Δε_rank in all_Δε), init=Float64[]) for c in eachindex(ewald.coupling_labels)]
     open(filename, "a") do io
         println(io)
         write_separator(io)
         println(io, summary_title("Ewald", label))
         write_separator(io, char='-')
-        elements = number_to_element.(ewald.param_labels)
-        write_summary_line(io, "structures", nstrc)
-        write_summary_line(io, "method, rcut", @sprintf("%s, %.2f Å", method, rcut))
-        write_summary_line(io, "alpha", @sprintf("%.4f 1/Å", alpha) * (alpha_auto ? " ($(lowercase(method) ∈ ("wolf", "zahn") ? 3 : 4) / rcut)" : ""))
-        grid_rebuilt && write_summary_line(io, "real-space neighbor grid", "rebuilt (Ewald rcut > TB rcut or grid_size)")
-        slab_axis > 0 && write_summary_line(io, "slab (vacuum along a$slab_axis)",
-                                            (lowercase(method) == "ewald" ? "dipole correction" : "plane-averaged long range added") *
-                                            (slab_scale == 1 ? "" : @sprintf(" (× %.4g)", slab_scale)))
-        cluster && write_summary_line(io, "isolated cluster", "dipole correction (vacuum boundary, cubic box)")
-        (slab_axis > 0 || cluster || charge_compensation ≠ "global") && write_summary_line(io, "net charge compensated",
-            Dict("global" => "uniformly over all atoms", "surface" => "on the outermost layers (no average field inside)",
-                 "local" => "on atoms with missing neighbors")[charge_compensation])
-        means = join(["$e $(@sprintf("%.4f", m)) V" for (e, m) in zip(elements, species_mean)], ", ")
-        write_summary_line(io, "subtracted species mean φ̄", centering == "structure" ? "per structure (mean over all: $means)" : means)
-        if !isnothing(all_site_counts)
-            counts = mergewith(+, all_site_counts...)
-            write_summary_line(io, "site charges (sites)", join(["$site $q ($n)" for ((site, q), n) in sort(collect(counts))], ", "))
-        end
+        write_ewald_settings(io, ewald, nstrc; species=species, species_mean=species_mean, method=method, rcut=rcut, alpha=alpha,
+                             alpha_auto=alpha_auto, grid_rebuilt=grid_rebuilt, slab_axis=slab_axis, slab_scale=slab_scale, cluster=cluster,
+                             charge_compensation=charge_compensation, centering=centering,
+                             site_counts=isnothing(all_site_counts) ? nothing : mergewith(+, all_site_counts...))
         println(io)
-        println(io, "  Onsite corrections Δε = -γ (φ - φ̄) per species (meV):")
-        widths = [7, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6]
-        write_table_row(io, ["species", "sites", "σ", "min", "p1", "p99", "max", "max/σ", ">3σ %", "σ_strc", "δφ̄"], widths)
-        δφ̄ = zeros(nspecies)
-        for (p, type) in enumerate(ewald.param_labels)
-            s = correction_statistics(Δε[p])
-            means = [m for (t, m) in structure_means if t == type]
-            σ_strc = length(means) > 1 ? 1000 * abs(ewald.params[p]) * std(means, corrected=false) : NaN
-            δφ̄[p] = centering == "structure" ? NaN : mean_uncertainty(σ_strc, length(means), s.σ, s.n)
-            write_table_row(io, [elements[p], string(s.n), format_number(s.σ, 1), format_number(s.min, 1), format_number(s.p1, 1),
-                                 format_number(s.p99, 1), format_number(s.max, 1), format_number(s.tail, 2),
-                                 format_number(100 * s.frac3σ, 2), format_number(σ_strc, 1), format_number(δφ̄[p], 1)], widths)
-        end
-        println(io)
-        write_legend(io, centering == "structure" ? "φ̄: species mean of the site potentials of each structure (centering = structure)." :
-                                                    "φ̄: species mean of the site potentials over all structures of this run.")
-        write_legend(io, "sites: number of sites of the species in all structures.")
-        write_legend(io, "σ: standard deviation of Δε; min, max: smallest and largest Δε.")
-        write_legend(io, "p1, p99: 1st and 99th percentiles, i.e. 1% of the sites have a Δε below p1 and 1% above p99.")
-        write_legend(io, "max/σ: largest |Δε| relative to σ; large values indicate a heavy tail.")
-        write_legend(io, ">3σ %: percentage of sites with |Δε| > 3σ (0.27% for a Gaussian distribution).")
-        write_legend(io, "σ_strc: spread of the per-structure species means, i.e. the part of Δε that is lost if the " *
-                         "model is built for a single structure" * (centering == "structure" ? " (removed here)." : "."))
-        write_legend(io, "δφ̄: uncertainty of φ̄ in meV of Δε, σ_strc / √(number of structures) (single structure: " *
-                         "σ / √sites). The onsite corrections shift by about δφ̄ if other structures are computed " *
-                         "together" * (centering == "structure" ? " (none with centering = structure)." : "."))
-        worst = maximum(x -> isnan(x) ? 0.0 : x, δφ̄, init=0.0)
-        if worst > EWALD_MEAN_TOL
-            warning = "The species means φ̄ subtracted from the Ewald potentials are uncertain by up to " *
-                      "$(@sprintf("%.1f", worst)) meV (δφ̄), so the onsite corrections depend on the structures computed " *
-                      "together. Compute more structures in one run (or larger cells)."
-            println(io)
-            write_legend(io, "Warning: " * warning)
-            @warn warning
-        end
+        write_ewald_corrections(io, ewald, Δε, reduce(vcat, all_structure_means), centering)
         write_separator(io)
+    end
+    return nothing
+end
+
+"""
+    coupling_name((type, l))
+
+Name of an Ewald coupling in the model summary: `all` (`coupling = global`), the element (`species`) or element and orbital
+type, e.g. `Pb p` (`orbital`).
+"""
+coupling_name((type, l)) = type == 0 ? "all" : l < 0 ? number_to_element(type) : "$(number_to_element(type)) $("spdf"[l+1])"
+
+"""
+    write_ewald_settings(io, ewald, nstrc; kwargs...)
+
+Settings part of the Ewald model summary: method, range, slab and cluster terms, couplings, polarizabilities, subtracted
+species means and site charges (`site_counts`, summed over the ranks).
+"""
+function write_ewald_settings(io, ewald, nstrc; species, species_mean, method, rcut, alpha, alpha_auto, grid_rebuilt, slab_axis,
+                              slab_scale, cluster, charge_compensation, centering, site_counts)
+    write_summary_line(io, "structures", nstrc)
+    write_summary_line(io, "method, rcut", @sprintf("%s, %.2f Å", method, rcut))
+    write_summary_line(io, "alpha", @sprintf("%.4f 1/Å", alpha) * (alpha_auto ? " ($(lowercase(method) ∈ ("wolf", "zahn") ? 3 : 4) / rcut)" : ""))
+    grid_rebuilt && write_summary_line(io, "real-space neighbor grid", "rebuilt (Ewald rcut > TB rcut or grid_size)")
+    slab_axis > 0 && write_summary_line(io, "slab (vacuum along a$slab_axis)",
+                                        (lowercase(method) == "ewald" ? "dipole correction" : "plane-averaged long range added") *
+                                        (slab_scale == 1 ? "" : @sprintf(" (× %.4g)", slab_scale)))
+    cluster && write_summary_line(io, "isolated cluster", "dipole correction (vacuum boundary, cubic box)")
+    (slab_axis > 0 || cluster || charge_compensation ≠ "global") && write_summary_line(io, "net charge compensated",
+        Dict("global" => "uniformly over all atoms", "surface" => "on the outermost layers (no average field inside)",
+             "local" => "on atoms with missing neighbors")[charge_compensation])
+    write_summary_line(io, "couplings γ" * (ewald.update ? " (fitted)" : ""),
+                       join(["$(coupling_name(label)) $(@sprintf("%.4g", g))" for (label, g) in zip(ewald.coupling_labels, couplings(ewald))], ", "))
+    isempty(ewald.pol_labels) || write_summary_line(io, "polarizabilities (Å³)" * (ewald.update_polarizability ? " (fitted)" : ""),
+        join(["$(number_to_element(t)) $(@sprintf("%.4g", p))" for (t, p) in zip(ewald.pol_labels, polarizabilities(ewald))], ", ") *
+        " (first-order induced dipoles)")
+    means = join(["$(number_to_element(e)) $(@sprintf("%.4f", m)) V" for (e, m) in zip(species, species_mean)], ", ")
+    write_summary_line(io, "subtracted species mean φ̄", centering == "structure" ? "per structure (mean over all: $means)" : means)
+    isnothing(site_counts) || write_summary_line(io, "site charges (sites)", join(["$site $q ($n)" for ((site, q), n) in sort(collect(site_counts))], ", "))
+    return nothing
+end
+
+"""
+    write_ewald_corrections(io, ewald, Δε, structure_means, centering)
+
+Table of the onsite corrections `Δε` (meV, per coupling) of the Ewald model summary with their legend, and a warning if
+the subtracted species means are uncertain by more than `EWALD_MEAN_TOL` meV.
+"""
+function write_ewald_corrections(io, ewald, Δε, structure_means, centering)
+    species_rows = any(label -> label[2] < 0, ewald.coupling_labels)
+    println(io, "  Onsite corrections Δε = -γ (φ - φ̄) per " * (species_rows ? "species" : "species and orbital type") * " (meV)" *
+                (isempty(ewald.pol_labels) ? ":" : ", φ including the induced dipoles:"))
+    widths = [7, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6]
+    write_table_row(io, [species_rows ? "species" : "orbital", "sites", "σ", "min", "p1", "p99", "max", "max/σ", ">3σ %", "σ_strc", "δφ̄"], widths)
+    γ = couplings(ewald)
+    δφ̄ = map(enumerate(ewald.coupling_labels)) do (c, label)
+        s = correction_statistics(Δε[c])
+        means = [m for (t, m) in structure_means if t == label[1] || label[1] == 0]
+        σ_strc = length(means) > 1 ? 1000 * abs(γ[c]) * std(means, corrected=false) : NaN
+        δ = centering == "structure" ? NaN : mean_uncertainty(σ_strc, length(means), s.σ, s.n)
+        write_table_row(io, [coupling_name(label), string(s.n), format_number(s.σ, 1), format_number(s.min, 1), format_number(s.p1, 1),
+                             format_number(s.p99, 1), format_number(s.max, 1), format_number(s.tail, 2),
+                             format_number(100 * s.frac3σ, 2), format_number(σ_strc, 1), format_number(δ, 1)], widths)
+        δ
+    end
+    println(io)
+    write_legend(io, centering == "structure" ? "φ̄: species mean of the site potentials of each structure (centering = structure)." :
+                                                "φ̄: species mean of the site potentials over all structures of this run.")
+    write_legend(io, "sites: number of sites of the species in all structures.")
+    write_legend(io, "σ: standard deviation of Δε; min, max: smallest and largest Δε.")
+    write_legend(io, "p1, p99: 1st and 99th percentiles, i.e. 1% of the sites have a Δε below p1 and 1% above p99.")
+    write_legend(io, "max/σ: largest |Δε| relative to σ; large values indicate a heavy tail.")
+    write_legend(io, ">3σ %: percentage of sites with |Δε| > 3σ (0.27% for a Gaussian distribution).")
+    write_legend(io, "σ_strc: spread of the per-structure species means, i.e. the part of Δε that is lost if the " *
+                     "model is built for a single structure" * (centering == "structure" ? " (removed here)." : "."))
+    write_legend(io, "δφ̄: uncertainty of φ̄ in meV of Δε, σ_strc / √(number of structures) (single structure: " *
+                     "σ / √sites). The onsite corrections shift by about δφ̄ if other structures are computed " *
+                     "together" * (centering == "structure" ? " (none with centering = structure)." : "."))
+    worst = maximum(x -> isnan(x) ? 0.0 : x, δφ̄, init=0.0)
+    if worst > EWALD_MEAN_TOL
+        warning = "The species means φ̄ subtracted from the Ewald potentials are uncertain by up to " *
+                  "$(@sprintf("%.1f", worst)) meV (δφ̄), so the onsite corrections depend on the structures computed " *
+                  "together. Compute more structures in one run (or larger cells)."
+        println(io)
+        write_legend(io, "Warning: " * warning)
+        @warn warning
     end
     return nothing
 end

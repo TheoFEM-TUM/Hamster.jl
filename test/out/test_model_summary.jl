@@ -71,6 +71,7 @@ end
             for element in ["Cs", "Pb", "Br"]
                 @test occursin(Regex("\\n    $element\\s+\\d+ "), ewald)
             end
+            @test occursin("couplings γ", ewald) && !occursin("polarizabilities", ewald)
         end
     end
 end
