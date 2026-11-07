@@ -107,7 +107,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         charge_compensation = get_ewald_charge_compensation(conf),
         centering       = conf("centering", "Ewald") == "default" ? (slab_axis > 0 || cluster ? "structure" : "global") : get_ewald_centering(conf),
         update          = get_ewald_update(conf),
-        update_polarizability = conf("update_polarizability", "Ewald") == "default" ? update : get_ewald_update_polarizability(conf),
+        update_polarizability = get_ewald_update_polarizability(conf),
         label           = "",
         write_summary   = true)
 

@@ -686,7 +686,8 @@ end
     end
 
     set_value!(conf, "charge_scale", "Ewald", 0.6); set_value!(conf, "charge_scale_p", "Pb", 0.3)
-    model = EwaldOnsites([strc], [basis], comm, conf, update=true)
+    model = EwaldOnsites([strc], [basis], comm, conf, update=true, update_polarizability=true)
+    @test !EwaldOnsites([strc], [basis], comm, conf, update=true, write_summary=false).update_polarizability
     @test Hamster.number_to_element.(model.pol_labels) == ["Br", "Pb"] && collect(Hamster.polarizabilities(model)) ≈ [1.5, 2.75]
     @test Dict(model.coupling_labels .=> Hamster.couplings(model))[(Hamster.element_to_number("Pb"), 1)] ≈ 0.3
     @test all(abs(sum(model.dipole_potentials[1][types[model_atoms] .== e, t])) < 1e-10

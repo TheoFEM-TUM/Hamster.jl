@@ -205,9 +205,10 @@ dipoles respond only to the charges, not to each other (first order), so the pot
 polarizabilities: the dipole potentials ``\Phi`` are computed once per structure and centered per species like
 ``\phi``. Induced dipoles need `method = wolf` or `zahn` and are not available for slabs and clusters.
 
-The polarizabilities are model parameters like the couplings. They are fitted with `update_polarizability = true` in the
-`Ewald` block (default: the value of `update`), written to `params.dat` as `polarizability_<element>` lines and read
-with `init_params` of the `Ewald` block. Species with the tag `polarizability` (also `polarizability = 0`) or a
+Induced dipoles are only used if a species has the tag `polarizability`. The polarizabilities are fixed unless
+`update_polarizability = true` is set in the `Ewald` block (independent of `update`, which fits the couplings). They are
+written to `params.dat` as `polarizability_<element>` lines and read with `init_params` of the `Ewald` block. Species
+with the tag `polarizability` (also `polarizability = 0`, e.g. to fit it from zero) or a
 `polarizability_<element>` line in that file are polarizable. A good starting point are polarizabilities fitted to the
 electrostatic potentials at the nuclei of DFT calculations (VASP: "average (electrostatic) potential at core" in the
 OUTCAR), together with fixed couplings.
