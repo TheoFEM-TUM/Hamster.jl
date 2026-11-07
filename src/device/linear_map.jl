@@ -42,15 +42,65 @@ function push_term!(terms::SparseTerms, R, i, j, col, val; soc=false)
 end
 
 """
+    RadialTerms(terms, h0, logr, n)
+
+Linear terms of a TB model with `n` parameters and radial exponents (`RadialExponents`). The columns `1:n` of `terms` are
+the geometry tensor `h0 (d / Å)^(-c)`, the columns `n+1:2n` its derivative `-h0 (d / Å)^(-c) ln(d / Å)` w.r.t. the
+exponents (divided by the parameter), whose device parameters are zero: they do not change the Hamiltonian, but give the
+gradient w.r.t. the exponents. `h0` and `logr` are the values without the factor and `ln(d / Å)` of every term.
+"""
+struct RadialTerms
+    terms :: SparseTerms{Float64}
+    h0 :: Vector{Float64}
+    logr :: Vector{Float64}
+    n :: Int64
+end
+
+"""
+    radial_term_values(cols, h0, logr, c, n)
+
+Values of the terms of `RadialTerms` (columns `cols`) for the exponents `c`.
+"""
+function radial_term_values(cols, h0, logr, c, n)
+    return map(eachindex(cols)) do t
+        col = cols[t]
+        f = h0[t] * exp(-c[col > n ? col - n : col] * logr[t])
+        col > n ? -f * logr[t] : f
+    end
+end
+
+"""
     linear_terms(model, index; soc=false)
 
-Return the linear terms (`SparseTerms` or `GaussianKernelTerms`) of `model` for the structure `index`, such that the sum of
-all terms reproduces `get_hr(model, mode, index, apply_soc=soc)`.
+Return the linear terms (`SparseTerms`, `GaussianKernelTerms` or `RadialTerms`) of `model` for the structure `index`, such
+that the sum of all terms reproduces `get_hr(model, mode, index, apply_soc=soc)`.
 """
 function linear_terms(model::TBModel, index; soc=false)
     h = model.hs[index]
     global_params = model.params_per_strc[index]
-    terms = SparseTerms(Float64, length(model.params))
+    n = length(model.params)
+    has_exponents(model) || return tb_linear_terms(h, global_params, n, soc)
+    terms = SparseTerms(Float64, 2n)
+    h0s, logrs = Float64[], Float64[]
+    for R in axes(h, 2), v in axes(h, 1)
+        A = h[v, R]; h0 = model.radial.h0[index][v, R]; lr = model.radial.logr[index][v, R]
+        for j in axes(A, 2), k in nzrange(A, j)
+            for (col, val) in ((global_params[v], nonzeros(A)[k]), (n + global_params[v], -nonzeros(A)[k] * lr[k]))
+                push_term!(terms, R, rowvals(A)[k], j, col, val, soc=soc)
+                for _ in spin_keys(R, 0, 0, soc); push!(h0s, h0[k]); push!(logrs, lr[k]); end
+            end
+        end
+    end
+    return RadialTerms(terms, h0s, logrs, n)
+end
+
+"""
+    tb_linear_terms(h, global_params, n, soc)
+
+`SparseTerms` of a geometry tensor `h` whose parameters are `global_params` of `n` model parameters.
+"""
+function tb_linear_terms(h, global_params, n, soc)
+    terms = SparseTerms(Float64, n)
     for R in axes(h, 2), v in axes(h, 1)
         for (i, j, val) in zip(findnz(h[v, R])...)
             push_term!(terms, R, i, j, global_params[v], val, soc=soc)
@@ -134,10 +184,12 @@ end
 
 Parameters of `model` in the device code path, which builds the Hamiltonian as `A * device_param_values(model)` with the
 linear terms `A` of `linear_terms`: the parameters of the model, except for `EwaldOnsites`, whose shifts are bilinear in
-the couplings `γ` and polarizabilities `p`: `[γ; vec(γ p')]`.
+the couplings `γ` and polarizabilities `p`: `[γ; vec(γ p')]`, and TB models with radial exponents, whose geometry tensor
+depends on the exponents (updated in the device blocks, see `DeviceRadialBlock`): `[V; 0]` (see `RadialTerms`).
 """
 device_param_values(model) = get_params(model)
 device_param_values(ewald::EwaldOnsites) = vcat(couplings(ewald), vec(couplings(ewald) * polarizabilities(ewald)'))
+device_param_values(model::TBModel) = has_exponents(model) ? vcat(model.params, zeros(length(model.params))) : model.params
 
 """
     DeviceSparseBlock
@@ -154,6 +206,42 @@ struct DeviceSparseBlock{IV, V}
     t_rowptr :: IV
     t_colval :: IV
     t_nzval :: V
+end
+
+"""
+    DeviceRadialBlock
+
+Device representation of `RadialTerms` of model `model_index`: the `DeviceSparseBlock` `inner` and, on the host, what is
+needed to recompute its values when the radial exponents change (`update_radial_block!`): the values without the factor
+`h0`, `logr`, the column `cols` of every term, the positions `perm` and `t_perm` of the nonzeros of `A` and `At` in the
+terms, and the exponents `c` of the current values.
+"""
+struct DeviceRadialBlock{B}
+    model_index :: Int64
+    nparams :: Int64
+    inner :: B
+    h0 :: Vector{Float64}
+    logr :: Vector{Float64}
+    cols :: Vector{Int64}
+    perm :: Vector{Int64}
+    t_perm :: Vector{Int64}
+    n :: Int64
+    c :: Vector{Float64}
+end
+
+"""
+    update_radial_block!(block::DeviceRadialBlock, c)
+
+Recompute the values of a `DeviceRadialBlock` for the radial exponents `c` (if they changed) and copy them to the device.
+"""
+function update_radial_block!(block::DeviceRadialBlock, c)
+    block.c == c && return block
+    vals = radial_term_values(block.cols, block.h0, block.logr, c, block.n)
+    T = eltype(block.inner.nzval)
+    copyto!(block.inner.nzval, T.(vals[block.perm]))
+    copyto!(block.inner.t_nzval, T.(vals[block.t_perm]))
+    block.c .= c
+    return block
 end
 
 """
@@ -217,9 +305,10 @@ The arrays of the `DeviceLinearMap` of structure `index` on the host (see `Devic
 """
 function host_linear_map(models, index, Nε, NR; soc=false)
     all_terms = [(m, linear_terms(model, index, soc=soc)) for (m, model) in enumerate(models)]
+    term_keys(terms) = terms isa RadialTerms ? terms.terms.keys : terms.keys
 
     # Union of all entries, sorted by (R, i, j)
-    codes = unique!(sort!(reduce(vcat, [encode_entry.(terms.keys, Nε) for (_, terms) in all_terms], init=Int64[])))
+    codes = unique!(sort!(reduce(vcat, [encode_entry.(term_keys(terms), Nε) for (_, terms) in all_terms], init=Int64[])))
     Nent = length(codes)
     Ridx = codes .÷ Nε^2 .+ 1
     I = mod.(codes .÷ Nε, Nε) .+ 1
@@ -227,11 +316,18 @@ function host_linear_map(models, index, Nε, NR; soc=false)
     entry_index(key) = searchsortedfirst(codes, encode_entry(key, Nε))
 
     blocks = map(all_terms) do (m, terms)
-        rows = tmap(entry_index, terms.keys)
+        rows = tmap(entry_index, term_keys(terms))
         if terms isa SparseTerms
             A = sparse(rows, terms.cols, terms.vals, Nent, terms.nparams)
             At = copy(transpose(A))          # no duplicate (entry, parameter) pairs, so this equals sparse(cols, rows, vals)
             (m=m, nparams=terms.nparams, A=A, At=At)
+        elseif terms isa RadialTerms
+            t = terms.terms
+            A = sparse(rows, t.cols, t.vals, Nent, t.nparams)
+            # positions of the terms in the nonzeros of A and At (same pattern, no duplicates)
+            P = sparse(rows, t.cols, Float64.(eachindex(t.cols)), Nent, t.nparams)
+            (m=m, nparams=t.nparams, A=A, At=copy(transpose(A)), h0=terms.h0, logr=terms.logr, cols=t.cols, n=terms.n,
+             perm=Int64.(nonzeros(copy(transpose(P)))), t_perm=Int64.(nonzeros(P)), c=copy(models[m].radial.c))
         else
             allunique(rows) || error("Kernel model contains duplicate matrix elements.")
             (m=m, nparams=size(terms.D, 2), rows=rows, X=terms.X, D=terms.D, γ=1 / (2 * terms.σ^2))
@@ -280,8 +376,10 @@ function DeviceLinearMap(host::NamedTuple, device)
         if haskey(b, :A)
             T = eltype(b.A.nzval)
             # The CSC arrays of At (A) are the CSR arrays of A (At)
-            DeviceSparseBlock(b.m, b.nparams, dev(b.At.colptr), dev(b.At.rowval), to_device(device, T.(b.At.nzval)),
+            inner = DeviceSparseBlock(b.m, b.nparams, dev(b.At.colptr), dev(b.At.rowval), to_device(device, T.(b.At.nzval)),
                 dev(b.A.colptr), dev(b.A.rowval), to_device(device, T.(b.A.nzval)))
+            haskey(b, :perm) || return inner
+            DeviceRadialBlock(b.m, b.nparams, inner, b.h0, b.logr, b.cols, b.perm, b.t_perm, b.n, b.c)
         else
             DeviceKernelBlock(b.m, b.nparams, dev(b.rows), to_device(device, b.X), to_device(device, b.D), b.γ)
         end

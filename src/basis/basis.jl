@@ -75,7 +75,7 @@ nparams(basis::Basis) = length(basis.parameters)
 
 """
     get_geometry_tensor(strc, basis, conf=get_empty_config(); file=nothing, comm=nothing, npar=Threads.nthreads(),
-                        rcut=get_rcut(conf), sp_tol=get_sp_tol(conf), rcut_tol=get_rcut_tol(conf))
+                        rcut=get_rcut(conf), sp_tol=get_sp_tol(conf), rcut_tol=get_rcut_tol(conf), log_distances=false)
 
 Geometry tensor of the structure `strc` in the basis `basis`: a matrix `h[v, R]` of sparse `Nε × Nε` matrices with the
 contribution of parameter `v` to the Hamiltonian between the home cell and the translation `R`, such that
@@ -89,6 +89,8 @@ A pair of ions is included if its distance is within `rcut` for the reference po
 - `npar`: number of threads; the grid cells are split into `4 npar` chunks.
 - `rcut`, `rcut_tol`: cutoff radius and width of the smooth cutoff (above `rcut` if positive, below if negative).
 - `sp_tol`: entries with a smaller absolute value are dropped.
+- `log_distances`: also return `ln(d / Å)` of the bond of every nonzero of `h[v, R]` (0 for on-site entries), as a matrix
+  of vectors in the order of `nonzeros(h[v, R])` (see `RadialExponents`).
 """
 function get_geometry_tensor(strc, basis, conf=get_empty_config();
                              file=nothing,
@@ -96,14 +98,15 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
                              npar=Threads.nthreads(),
                              rcut=get_rcut(conf),
                              sp_tol=get_sp_tol(conf),
-                             rcut_tol=get_rcut_tol(conf))
+                             rcut_tol=get_rcut_tol(conf),
+                             log_distances=false)
     Ts = frac_to_cart(strc.Rs, strc.lattice)
     lookup = geometry_tensor_lookup(strc, basis, conf, file=file, comm=comm)
     nn_cutoffs = get_nn_cutoffs(strc.ions, Ts, strc.point_grid, conf)
     onsite, sepNN = get_onsite(conf), get_sepNN(conf)
 
     parts = tmap(grid_cell_chunks(strc.point_grid, n=4 * npar)) do chunk
-        entries = (v=Int64[], i=Int64[], j=Int64[], R=Int64[], val=Float64[])
+        entries = (v=Int64[], i=Int64[], j=Int64[], R=Int64[], val=Float64[], logr=Float64[])
         radial = zeros(length(basis.overlaps))
         angles = zeros(5)
         for (grid_point, inds) in chunk, nn_grid_point in nn_grid_points(grid_point, strc.point_grid.dictR),
@@ -120,11 +123,18 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
             ion_label = IonLabel(lookup.ion_types[iion1], lookup.ion_types[iion2], sorted=false)
             nnlabel = get_nn_label(r, nn_cutoffs[ion_label], conf, onsite=onsite, sepNN=sepNN)
             radial_parts!(radial, lookup, ion_label, r, fcut(r, rcut, rcut_tol))
+            nentries = length(entries.v)
             add_bond_entries!(entries, angles, lookup, basis, iion1, iion2, R, r⃗₁, r⃗₂, nnlabel, radial, sp_tol)
+            log_distances && append!(entries.logr, fill(r > 1e-8 ? log(r) : 0.0, length(entries.v) - nentries))
         end
         entries
     end
-    return assemble_geometry_tensor(parts, length(basis.parameters), size(strc.Rs, 2), length(basis))
+    NV, NR, Nε = length(basis.parameters), size(strc.Rs, 2), length(basis)
+    h = assemble_geometry_tensor(parts, NV, NR, Nε)
+    log_distances || return h
+    # All entries of a matrix element belong to the same bond, so the duplicates have the same distance
+    logr = assemble_geometry_tensor(parts, NV, NR, Nε, field=:logr, combine=(a, b) -> a)
+    return h, nonzeros.(logr)
 end
 
 """
@@ -313,9 +323,10 @@ end
 """
     assemble_geometry_tensor(parts, NV, NR, Nε)
 
-Sparse matrices `h[v, R]` from the entries collected by the tasks.
+Sparse matrices `h[v, R]` from the entries collected by the tasks: the values `field` of the entries, where `combine` joins
+the values of duplicate entries.
 """
-function assemble_geometry_tensor(parts, NV, NR, Nε)
+function assemble_geometry_tensor(parts, NV, NR, Nε; field=:val, combine=+)
     counts = zeros(Int64, NV, NR)
     for part in parts, (v, R) in zip(part.v, part.R)
         counts[v, R] += 1
@@ -327,11 +338,11 @@ function assemble_geometry_tensor(parts, NV, NR, Nε)
     for part in parts, n in eachindex(part.v)
         v, R = part.v[n], part.R[n]
         m = counts[v, R] += 1
-        is[v, R][m] = part.i[n]; js[v, R][m] = part.j[n]; vals[v, R][m] = part.val[n]
+        is[v, R][m] = part.i[n]; js[v, R][m] = part.j[n]; vals[v, R][m] = part[field][n]
     end
     h_out = Matrix{SparseMatrixCSC{Float64, Int64}}(undef, NV, NR)
     tforeach(CartesianIndices(h_out)) do I
-        h_out[I] = sparse(is[I], js[I], vals[I], Nε, Nε)
+        h_out[I] = sparse(is[I], js[I], vals[I], Nε, Nε, combine)
     end
     return h_out
 end

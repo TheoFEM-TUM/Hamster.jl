@@ -11,6 +11,7 @@ struct Sparse<:SparsityMode end
 struct Dense<:SparsityMode end
 
 @configtag tb_model Bool true "build TB model." category="model"
+@configtag radial_exponent Bool false "additional distance dependence (d/Å)^(-c) of every hopping parameter, with one exponent c per parameter (exponent_<label> lines in params.dat, start 0, i.e. unchanged); fitted with update_radial_exponent." category="model" see_also=["update_radial_exponent"]
 @configtag sp_tol Float64 1e-10 "tolerance for value to be considered zero." category="model"
 
 """

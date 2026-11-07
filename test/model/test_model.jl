@@ -124,3 +124,81 @@ end
         end
     end
 end
+
+@testset "Radial exponents" begin
+    files = joinpath(@__DIR__, "test_files")
+    function radial_conf(radial; update=true)
+        local rc = get_empty_config()
+        for (element, orbitals) in [("Cs", "s"), ("Pb", "s px py pz"), ("Br", "px py pz")]; set_value!(rc, "orbitals", element, orbitals); end
+        for (key, value) in ["poscar" => joinpath(files, "POSCAR_cspbbr3_distorted"), "load_rllm" => true, "rcut" => 5.5,
+                             "rllm_file" => joinpath(files, "rllm_cspbbr3.dat"), "verbosity" => 0, "radial_exponent" => radial]
+            set_value!(rc, key, value)
+        end
+        set_value!(rc, "update_radial_exponent", "Optimizer", update)
+        return rc
+    end
+    conf = radial_conf(true)
+    strc = Structure(conf); basis = Basis(strc, conf)
+    plain = TBModel([strc], [basis], comm, radial_conf(false), write_summary=false)
+    model = TBModel([strc], [basis], comm, conf, write_summary=false)
+    @test get_hr(model, Hamster.Dense(), 1) == get_hr(plain, Hamster.Dense(), 1)
+    hop = Hamster.hopping_parameters(model)
+    @test !isempty(hop) && length(hop) < length(model.params) && length(get_params(model)) == 2length(model.params)
+
+    h, logr = Hamster.get_geometry_tensor(strc, basis, conf, log_distances=true)
+    pos = Hamster.get_ion_positions(strc.ions, apply_distortion=true); Ts = Hamster.frac_to_cart(strc.Rs, strc.lattice)
+    atom = reduce(vcat, [fill(i, n) for (i, n) in enumerate(size(basis))])
+    for v in hop[1:3], R in axes(h, 2)
+        rows, cols, _ = findnz(h[v, R])
+        @test exp.(logr[v, R]) ≈ [norm(pos[atom[i]] - (pos[atom[j]] + Ts[:, R])) for (i, j) in zip(rows, cols)]
+    end
+    @test all(iszero, logr[findfirst(p -> p.nnlabel == 0, model.param_labels), Hamster.findR0(strc.Rs)])
+
+    c = [v ∈ hop ? 0.5 + 0.3 * sin(v) : 0.0 for v in eachindex(model.params)]
+    θ0 = vcat(1 .+ 0.1 .* sin.(eachindex(model.params)), c)
+    Hamster.set_params!(model, θ0)
+    for v in hop, R in axes(h, 2)
+        @test nonzeros(model.hs[1][v, R]) ≈ nonzeros(h[v, R]) .* exp.(-c[v] .* logr[v, R])
+    end
+    @test Hamster.base_geometry_tensor(model, 1) == h
+
+    Hr = get_hr(model, Hamster.Dense(), 1)
+    G = [[sin(i + 2j + 3R) for i in axes(Hr[R], 1), j in axes(Hr[R], 2)] for R in eachindex(Hr)]
+    loss(θ) = (Hamster.set_params!(model, θ); sum(sum(G[R] .* real(get_hr(model, Hamster.Dense(), 1)[R])) for R in eachindex(G)))
+    reg = Hamster.Regularization(0., 0., 2)
+    grad = Hamster.get_model_gradient(model, [1], reg, [G])
+    checked = vcat(1:3, length(model.params) .+ hop[1:4])
+    fd = [(loss(θ0 .+ 1e-6 .* (eachindex(θ0) .== p)) - loss(θ0 .- 1e-6 .* (eachindex(θ0) .== p))) / 2e-6 for p in checked]
+    Hamster.set_params!(model, θ0)
+    @test grad[checked] ≈ fd rtol=1e-6
+    @test all(iszero, grad[length(model.params) .+ setdiff(eachindex(model.params), hop)])
+
+    terms = Hamster.linear_terms(model, 1); p = Hamster.device_param_values(model)
+    hr = [zeros(size(G[1])) for _ in G]; raw = zeros(length(p))
+    for (key, col, val) in zip(terms.terms.keys, terms.terms.cols, terms.terms.vals)
+        hr[key[1]][key[2], key[3]] += val * p[col]; raw[col] += val * G[key[1]][key[2], key[3]]
+    end
+    @test all(hr[R] ≈ real(Hr[R]) for R in eachindex(hr))
+    @test Hamster.get_model_gradient(model, [1], reg, Hamster.RawModelGradient(raw)) ≈ grad
+
+    fixed = TBModel([strc], [basis], comm, radial_conf(true, update=false), write_summary=false)
+    Hamster.set_params!(fixed, θ0)
+    @test all(iszero, Hamster.get_model_gradient(fixed, [1], reg, [G])[length(model.params)+1:end])
+    Hamster.copy_params!(fixed, model)
+    @test get_hr(fixed, Hamster.Dense(), 1) == Hr
+
+    mktempdir() do dir
+        cd(dir) do
+            Hamster.write_params(model, conf)
+            @test count("exponent_", read("params.dat", String)) == length(hop)
+            labels, values = Hamster.read_params("params.dat")[10:11]
+            @test labels == model.param_labels[hop] && values == c[hop]
+            set_value!(conf, "init_params", "params.dat")
+            loaded = TBModel([strc], [basis], comm, conf, write_summary=false)
+            @test get_params(loaded) ≈ θ0 && get_hr(loaded, Hamster.Dense(), 1) ≈ Hr
+            @test_throws ErrorException TBModel(strc, basis, conf)
+            set_value!(conf, "radial_exponent", false)
+            @test get_params(TBModel([strc], [basis], comm, conf, write_summary=false)) ≈ θ0[1:length(model.params)]
+        end
+    end
+end
