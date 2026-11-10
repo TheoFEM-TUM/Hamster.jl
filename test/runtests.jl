@@ -26,6 +26,7 @@ if test_all || test_only == "Config"
         include("conf/test_config.jl")
         include("conf/test_read_config.jl")
         include("conf/test_defaults.jl")
+        include("conf/test_model_io.jl")
     end
 end
 

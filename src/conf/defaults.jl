@@ -11,6 +11,9 @@
 @configtag write_hr      Bool get_write_current(conf) "Whether to write real-space Hamiltonians. Defaults to true if write_current=true." category="input/output" default_doc="true if write_current = true, else false" see_also=["ham_file"]
 @configtag kpoints String "gamma" "file/method for defining k-points (gamma, EIGENVAL, filename.h5)." category="diagonalization"
 @configtag save_vecs Bool false "Whether eigenvectors are stored." category="input/output"
+@configtag model_file String "model.h5" "Path to HDF5 file for saving/loading complete model state (parameters + hyperparameters)." category="input/output"
+@configtag load_model Bool false "Load model from model_file at startup, overwriting config tags with stored values." category="input/output" see_also=["model_file", "save_model"]
+@configtag save_model Bool false "Save complete model state to model_file after initialization." category="input/output" see_also=["model_file", "load_model"]
 
 
 # ====================
