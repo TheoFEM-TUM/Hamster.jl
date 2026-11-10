@@ -115,6 +115,38 @@ dependence to a small number of physically interpretable hyperparameters.
 The required overlap integrals are precomputed and interpolated using cubic
 splines, making Hamiltonian construction efficient during training and
 evaluation.
+The radial functions of a species are set by its tags `alpha` (the effective charge ``\alpha``, which sets how fast
+the functions and with them the matrix elements fall off with distance) and `n` (the order of the radial polynomial).
+By default, all orbitals of a species share them. The distance dependence of the hoppings then follows from only one
+decay per species, so the slopes of different hoppings of the same species pair, e.g. the ``s``–``p`` hopping and the
+``p``–``p`` hoppings between Pb and Br, cannot be changed independently: increasing ``\alpha`` of Pb makes all of them
+decay faster.
+
+### Orbital-specific `alpha`
+
+The tags `alpha_s`, `alpha_p` and `alpha_d` set ``\alpha`` of the orbitals with this angular momentum of a species; the
+orbitals without such a tag use `alpha`:
+
+```bash
+begin atom Pb
+    alpha = 39.6        # p orbitals
+    alpha_s = 65.0      # s orbitals
+    orbitals = s px py pz
+end
+```
+
+The radial function of a hopping between an orbital of angular momentum ``l`` of one species and ``l'`` of the other
+uses ``\alpha_l`` of the first and ``\alpha_{l'}`` of the second species. In the example, the Pb ``s``–Br ``p``
+hopping depends on `alpha_s` of Pb and `alpha` of Br, the Pb ``p``–Br ``p`` hoppings on `alpha` of Pb and Br, and the
+Pb–Pb hoppings on both. A Pb ``6s`` orbital is more compact than the ``6p`` orbital (relativistic contraction), which a
+single ``\alpha`` cannot describe, and with separate values the distance dependence of the ``s``–``p`` and ``p``–``p``
+hoppings can be adjusted independently, e.g. when fitting to structures with different bond lengths.
+
+Without `alpha_s`, `alpha_p` and `alpha_d`, the models are unchanged. The orbital-specific values are written to the
+header of `params.dat` as `<element>_alpha_<s|p|d>` lines, only if they are set, and are checked against the config like
+`<element>_alpha`. They can be hyperparameters (`Pb_alpha_s` in the `params` of the `HyperOpt` block). The radial
+functions in `rllm.dat` (`load_rllm = true`) are not recomputed: after changing an `alpha_<l>`, they have to be
+calculated again.
 
 ## Final Matrix Element
 

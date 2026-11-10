@@ -130,3 +130,25 @@ end
     parameters_c, Vs = read_params(string(@__DIR__)*"/test_files/cspbbr3_params.dat")
     @test sort(string.(parameters)) == sort(string.(parameters_c))
 end
+@testset "Orbital-specific alpha in the parameter file" begin
+    labels = Hamster.string_to_param_label.(["NN1_Br+Pb_spσ", "NN1_Br+Pb_ppσ"])
+    function header(conf)
+        mktempdir() do dir
+            cd(dir) do
+                Hamster.write_params(labels, [1.0, 2.0], conf)
+                return Hamster.read_params("params.dat")[5]
+            end
+        end
+    end
+    conf = get_empty_config()
+    for (element, alpha) in (("Pb", 37.0), ("Br", 14.3)); set_value!(conf, "alpha", element, alpha); end
+    @test !any(occursin("_alpha_", key) for key in keys(header(conf)))
+    @test @test_nowarn Hamster.check_consistency(header(conf), conf)
+
+    set_value!(conf, "alpha_s", "Pb", 50.0)
+    values = header(conf)
+    @test values["Pb_alpha"] == "37.0" && values["Pb_alpha_s"] == "50.0" && !haskey(values, "Pb_alpha_p") && !haskey(values, "Br_alpha_s")
+    @test @test_nowarn Hamster.check_consistency(values, conf)
+    set_value!(conf, "alpha_s", "Pb", 55.0)
+    @test_logs (:warn, r"not consistent") !Hamster.check_consistency(values, conf)
+end

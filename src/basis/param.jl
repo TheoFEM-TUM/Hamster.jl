@@ -235,6 +235,9 @@ function write_params(parameters::Vector, parameter_values::Vector, ion_types::V
     for ion_type in unique_ion_types
         println(file, "  $ion_type"*"_alpha = ", get_alpha(conf, ion_type))
         println(file, "  $ion_type"*"_n = ", get_n(conf, ion_type))
+        for (l, letter) in enumerate("spd")
+            conf("alpha_$letter", ion_type) == "default" || println(file, "  $(ion_type)_alpha_$letter = ", get_alpha(conf, ion_type, l - 1))
+        end
     end
     if !isnothing(ewald_settings)
         println(file, "  ewald_method = ", ewald_settings.method)
@@ -375,6 +378,9 @@ function check_consistency(conf_values, conf::Config)
         if occursin("_n", key)
             ion_type = string(split(key, "_")[1])
             push!(consistent, value == string(get_n(conf, ion_type)))
+        elseif occursin(r"_alpha_[spd]$", key)
+            ion_type = string(split(key, "_")[1])
+            push!(consistent, value == string(get_alpha(conf, ion_type, findfirst(key[end], "spd") - 1)))
         elseif occursin("_alpha", key)
             ion_type = string(split(key, "_")[1])
             push!(consistent, value == string(get_alpha(conf, ion_type)))
