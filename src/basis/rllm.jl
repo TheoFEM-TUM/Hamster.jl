@@ -163,7 +163,7 @@ Interpolates an overlap and stores the resulting cubic spline in the overlap's `
 function interpolate_overlap(overlap, conf::Config)
     itper = AdaptiveInterpolator(conf)
     ns = Int64[get_n(conf, number_to_element(overlap.ion_label.types[i])) for i in 1:2]
-    αs = Float64[get_alpha(conf, number_to_element(overlap.ion_label.types[i])) for i in 1:2]
+    αs = [l -> get_alpha(conf, number_to_element(overlap.ion_label.types[i]), l) for i in 1:2]
     f(r) = distance_dependence(overlap.type, overlap.orbconfig, r, ns, αs)
     xs, ys = interpolate_f(itper, f)
     return CubicSpline(xs, ys)
@@ -179,7 +179,7 @@ Computes the distance-dependent interaction between two orbitals, based on their
 - `orbconfig::OrbitalConfiguration`: The configuration of the orbitals involved in the interaction, which determines the orbital angular momenta.
 - `r`: The distance between the two orbitals in the interaction.
 - `ns`: A vector containing the quantum numbers `n` for the two orbitals.
-- `αs`: A vector containing the exponential decay factors `α` for the two orbitals.
+- `αs`: A vector containing the exponential decay factors `α` for the two orbitals, or functions of the angular momentum `l` of the orbital that return `α` (orbital-specific `α`, see `get_alpha`).
 
 # Returns
 - The integral `I` of the overlap function between the two orbitals over the given distance `r`, modified by a sign factor if necessary.
@@ -191,10 +191,11 @@ integrand has cusps (exponential radial functions), and the cubature stops at an
 1e-6), well below the interpolation tolerance.
 """
 function distance_dependence(ME, orbconfig, r, ns, αs)::Float64
-    R₁ = ndict[ns[1]](αs[1]); R₂ = ndict[ns[2]](αs[2])
     param = string(ME)
     m = mdict_inv[param[3]]
     l₁, l₂ = typeof(orbconfig) == MirrOrb ? (ldict_inv[param[2]], ldict_inv[param[1]]) : (ldict_inv[param[1]], ldict_inv[param[2]])
+    α₁, α₂ = αs[1] isa Number ? αs[1] : αs[1](l₁), αs[2] isa Number ? αs[2] : αs[2](l₂)
+    R₁ = ndict[ns[1]](α₁); R₂ = ndict[ns[2]](α₂)
     sign = l₁ > l₂ ? (-1)^(l₁+l₂) : 1
     Y₁, Y₂ = get_spherical.([l₁, l₂], m)
     f = Overlap(Y₁, R₁, zeros(3), Y₂, R₂, [0., 0., r])

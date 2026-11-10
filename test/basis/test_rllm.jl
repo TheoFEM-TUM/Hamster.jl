@@ -131,3 +131,49 @@ end
         end
     end
 end
+
+@testset "Orbital-specific alpha" begin
+    files = joinpath(@__DIR__, "..", "model", "test_files")
+    function pbbr_conf(extra...)
+        local c = get_empty_config()
+        for (element, orbitals, alpha) in (("Cs", "s", 38.6), ("Pb", "s px py pz", 37.0), ("Br", "px py pz", 14.3))
+            set_value!(c, "orbitals", element, orbitals); set_value!(c, "alpha", element, alpha)
+        end
+        for (key, value) in ["poscar" => joinpath(files, "POSCAR_cspbbr3_distorted"), "rcut" => 5.5, "verbosity" => 0, "interpolate_rllm" => true]
+            set_value!(c, key, value)
+        end
+        for (key, element, value) in extra; set_value!(c, key, element, value); end
+        return c
+    end
+    function pbbr_splines(conf)
+        strc = Structure(conf); overlaps = Hamster.get_unique_overlaps([Basis(strc, conf)])
+        return Dict(string(o.type) => Hamster.interpolate_overlap(o, conf) for o in overlaps
+                    if Set(Hamster.number_to_element.(o.ion_label.types)) == Set(["Pb", "Br"]))
+    end
+    xs = 1.5:0.5:4.5
+
+    conf = pbbr_conf()
+    @test [Hamster.get_alpha(conf, "Pb", l) for l in 0:2] == fill(37.0, 3)
+    conf_s = pbbr_conf(("alpha_s", "Pb", 50.0))
+    @test [Hamster.get_alpha(conf_s, "Pb", l) for l in 0:2] == [50.0, 37.0, 37.0] && Hamster.get_alpha(conf_s, "Pb") == 37.0
+    @test Hamster.get_alpha(conf_s, "Br", 1) == 14.3
+
+    base = pbbr_splines(conf)
+    @test sort(collect(keys(base))) == ["ppπ", "ppσ", "spσ"]
+    same = pbbr_splines(pbbr_conf(("alpha_s", "Pb", 37.0), ("alpha_p", "Pb", 37.0)))
+    @test all(same[k].(xs) == base[k].(xs) for k in keys(base))
+
+    faster = pbbr_splines(conf_s)
+    @test faster["ppσ"].(xs) == base["ppσ"].(xs) && faster["ppπ"].(xs) == base["ppπ"].(xs)
+    @test maximum(abs.(faster["spσ"].(xs) .- base["spσ"].(xs))) > 1e-3
+
+    p_only = pbbr_splines(pbbr_conf(("alpha_p", "Pb", 30.0)))
+    @test p_only["spσ"].(xs) == base["spσ"].(xs)
+    @test all(maximum(abs.(p_only[k].(xs) .- base[k].(xs))) > 1e-3 for k in ("ppσ", "ppπ"))
+
+    ss = first(o for o in Hamster.get_unique_overlaps([Basis(Structure(conf), conf)]) if string(o.type) == "ssσ")
+    for α in (1.0, 2.5), R in (0.0, 0.7, 2.0, 4.5)
+        by_l = [l -> l == 0 ? α : 7.0 for _ in 1:2]
+        @test Hamster.distance_dependence(ss.type, ss.orbconfig, R, [1, 1], by_l) ≈ exp(-α * R) * (1 + α * R + (α * R)^2 / 3) atol=1e-6
+    end
+end

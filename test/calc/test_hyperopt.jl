@@ -51,6 +51,7 @@ end
     @test Hamster.hyperopt_tag("lr") == ("lr", "Optimizer")
     @test Hamster.hyperopt_tag("niter") == ("niter", "Optimizer")
     @test Hamster.hyperopt_tag("Ga_alpha") == ("alpha", "Ga")
+    @test Hamster.hyperopt_tag("Ga_alpha_s") == ("alpha_s", "Ga")
     @test Hamster.hyperopt_tag("wk_1") == ("wk_1", "Optimizer")
     @test_throws "per species" Hamster.hyperopt_tag("n")
     @test_throws "several blocks" Hamster.hyperopt_tag("alpha")
