@@ -50,3 +50,10 @@ All ranks of `comm` participate in export and loading. Rank zero writes a tempor
 file and replaces the destination after a successful write. Loading a missing,
 incomplete or unsupported-version file raises an error. The format version is stored
 in the `version` dataset.
+
+### Model file API
+
+```@docs
+Hamster.save_model
+Hamster.load_model!
+```
