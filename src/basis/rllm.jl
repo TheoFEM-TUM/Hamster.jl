@@ -321,17 +321,18 @@ function read_rllm(
     file = nothing
 ) where {T}
 
-    if occursin(".h5", filename)
+    if occursin(".h5", filename) || !isnothing(file)
         if isnothing(file)
             file = h5open(filename, "r", comm)
             close_file = true
         else
             close_file = false
         end
+        radial_file = haskey(file, "model/rllm") ? file["model/rllm"] : file
         for overlap in overlaps
             overlap_str = string(overlap, apply_oc=true)
 
-            data = read(file[overlap_str])  # force full read
+            data = read(radial_file[overlap_str])  # force full read
 
             rllm_dict[overlap_str] =
                 CubicSpline(data[:, 1], data[:, 2])

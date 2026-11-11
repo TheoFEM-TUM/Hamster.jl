@@ -155,6 +155,7 @@ Initializes spin-orbit coupling (SOC) parameters for a given set of ions based o
     ignored; elements without an entry in the file start from zero (with a warning if `warn=true`).
 """
 function init_soc_params(ion_types, conf=get_empty_config(); initas=get_soc_init_params(conf), warn=true)
+    get_load_model(conf) && return model_parameter_values(conf, "soc", string.(ion_types))
     Nparams = length(ion_types)
     init_mode = get_init_mode(initas)
     if init_mode == :zeros

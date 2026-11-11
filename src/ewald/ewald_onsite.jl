@@ -278,7 +278,7 @@ parameter file `initas`, the species of its `polarizability_<element>` lines.
 """
 function polarizable_species(conf; initas=get_ewald_init_params(conf))
     types = [type for type in keys(conf.blocks) if haskey(elements, Symbol(type)) && conf("polarizability", type) ≠ "default"]
-    if initas ≠ "default"
+    if !get_load_model(conf) && initas ≠ "default"
         append!(types, read_params(initas)[8])
     end
     return sort(unique(element_to_number.(types)))
@@ -439,6 +439,7 @@ of the model (`init_params` of the `Ewald` block, else `init_params`) where they
 setting in `conf` differs from the file (unless `check_params = false`). See `apply_ewald_settings!`.
 """
 function adopt_ewald_settings!(conf; rank=0, verbosity=get_verbosity(conf))
+    get_load_model(conf) && return nothing
     get_ewald_check_params(conf) || return nothing
     file = get_ewald_init_params(conf) ≠ "default" ? get_ewald_init_params(conf) : string(get_init_params(conf))
     isfile(file) || return nothing
@@ -490,6 +491,10 @@ of the atom block, else its `charge_scale`, else the `charge_scale` of the `Ewal
 atom block. With `coupling = global`, the file must have the same coupling for all `species`.
 """
 function init_ewald_params(coupling_labels, pol_labels, conf; species=UInt8[], initas=get_ewald_init_params(conf))
+    if get_load_model(conf)
+        labels = vcat(["$t,$l" for (t,l) in coupling_labels], ["pol,$t" for t in pol_labels])
+        return model_parameter_values(conf, "ewald", labels)
+    end
     γ = Float64[type == 0 ? get_ewald_charge_scale(conf) : get_charge_scale(conf, number_to_element(type), l) for (type, l) in coupling_labels]
     p = Float64[get_polarizability(conf, number_to_element(type)) for type in pol_labels]
     if initas ≠ "default"

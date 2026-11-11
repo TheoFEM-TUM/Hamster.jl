@@ -73,12 +73,6 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
                                                 rank=active_rank, nranks=active_size, label="validation set",
                                                 write_summary=write_output, ml_data_points=get_ml_data_points(ham_train, conf))
       
-      # Save model to file if requested
-      if get_save_model(conf)
-          all_strcs = vcat(train_strcs, val_strcs)
-          all_bases = vcat(train_bases, val_bases)
-          save_model(ham_train, all_strcs, all_bases, conf, comm_active, rank=active_rank)
-      end
       Nε_train = get_number_of_bands_per_structure(train_bases, local_train_inds, soc=get_soc(conf))
       Nε_val = get_number_of_bands_per_structure(val_bases, local_val_inds, soc=get_soc(conf))
 
@@ -94,6 +88,9 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       prof = HamsterProfiler(3, conf)
       
       optimize_model!(ham_train, ham_val, optim, dl, prof, comm_active, conf, rank=active_rank, nranks=active_size)
+      if get_save_model(conf)
+          save_model(ham_train, train_strcs, train_bases, conf, comm_active; rank=active_rank)
+      end
       if rank == 0 && write_output
          write_params(ham_train, conf)
       end

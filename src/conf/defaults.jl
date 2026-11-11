@@ -13,7 +13,7 @@
 @configtag save_vecs Bool false "Whether eigenvectors are stored." category="input/output"
 @configtag model_file String "model.h5" "Path to HDF5 file for saving/loading complete model state (parameters + hyperparameters)." category="input/output"
 @configtag load_model Bool false "Load model from model_file at startup, overwriting config tags with stored values." category="input/output" see_also=["model_file", "save_model"]
-@configtag save_model Bool false "Save complete model state to model_file after initialization." category="input/output" see_also=["model_file", "load_model"]
+@configtag save_model Bool false "Export model parameters, settings and radial tables to model_file after initialization or, in a fit, after the final optimization step." category="input/output" see_also=["model_file", "load_model"]
 
 
 # ====================
