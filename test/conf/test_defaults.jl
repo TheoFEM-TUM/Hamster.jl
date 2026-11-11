@@ -147,5 +147,12 @@ end
 
     # Test 12: test multiple values
     set_value!(conf, "stepsizes", "HyperOpt", "0.1 0.2")
-    @test Hamster.get_hyperopt_stepsizes(conf) == [0.1, 0.2] 
+    @test Hamster.get_hyperopt_stepsizes(conf) == [0.1, 0.2]
+
+    # Test 13: test metric default, case insensitivity and invalid values
+    @test Hamster.get_hyperopt_metric(conf) == "loss"
+    set_value!(conf, "metric", "HyperOpt", "BG")
+    @test Hamster.get_hyperopt_metric(conf) == "bg"
+    set_value!(conf, "metric", "HyperOpt", "gap")
+    @test_throws ErrorException Hamster.get_hyperopt_metric(conf)
 end

@@ -13,9 +13,10 @@ Evaluate a given set of hyperparameters by updating a configuration and running 
 - `verbosity::Int`: Verbosity level (default = pulled from configuration).
 
 # Returns
-- `Float64`: The minimum training loss obtained from the optimization calculation.
+- `Float64`: The minimum of the hyperparameter optimization objective `metric` (see [`get_hyperopt_loss`](@ref)),
+  or `Inf` if the optimization run of this trial crashed (the error is logged and the hyperparameter optimization continues).
 """
-function hyper_optimize(params, labels, prof, comm, conf; rank=0, nranks=1, verbosity=get_verbosity(conf), validate=get_validate(conf))::Float64
+function hyper_optimize(params, labels, prof, comm, conf; rank=0, nranks=1, verbosity=get_verbosity(conf), validate=get_validate(conf), metric=get_hyperopt_metric(conf))::Float64
     if rank == 0 && verbosity > 0; println("========================================"); end # coverage: ignore
 
     param_values = map(labels) do label
@@ -35,14 +36,34 @@ function hyper_optimize(params, labels, prof, comm, conf; rank=0, nranks=1, verb
     end
 
     begin_time = MPI.Wtime()
-    prof_opt = Hamster.run_calculation(Val{:optimization}(), comm, conf, rank=rank, nranks=nranks, write_output=false)
+    # A crashing trial (e.g., unstable hyperparameters or running out of memory) is scored with Inf instead of aborting
+    # the whole hyperparameter optimization. An interrupt (Ctrl-C) still aborts.
+    prof_opt, failure = try
+        (Hamster.run_calculation(Val{:optimization}(), comm, conf, rank=rank, nranks=nranks, write_output=false), nothing)
+    catch err
+        err isa InterruptException && rethrow()
+        (nothing, (err, catch_backtrace()))
+    end
     time = MPI.Wtime() - begin_time
     prof.timings[1, iter] = time
-    Lmin = validate ? minimum(prof_opt.L_val) : minimum(prof_opt.L_train)
-    
-    if verbosity > 1; @printf("  Final training loss: %.6f\n", minimum(prof_opt.L_train)); end # coverage: ignore
-    if verbosity > 1 && validate; @printf("  Final validation loss: %.6f\n", minimum(prof_opt.L_val)); end # coverage: ignore
-    
+
+    # All ranks have to agree on whether the trial failed; only the first failing rank reports the error
+    Nranks = MPI.Comm_size(comm)
+    first_failed = MPI.Allreduce(isnothing(failure) ? Nranks : rank, min, comm)
+    if first_failed < Nranks
+        if rank == first_failed; @error "Hyperopt trial $iter crashed on rank $rank and is scored with Inf." exception=failure; end
+        Lmin = Inf
+        GC.gc() # free the memory of the crashed run, e.g., after running out of memory
+    else
+        # The losses are only reduced onto rank 0, so the objective is evaluated there and shared with all ranks
+        Lmin = MPI.bcast(rank == 0 ? get_hyperopt_loss(prof_opt, metric, validate=validate) : nothing, comm, root=0)
+        if rank == 0 && !isfinite(Lmin); @warn "No $(validate ? "validation" : "training") $metric was recorded for this trial (check valeachiter and niter)."; end
+
+        if verbosity > 1; @printf("  Final training loss: %.6f\n", minimum(prof_opt.L_train)); end # coverage: ignore
+        if verbosity > 1 && validate; @printf("  Final validation loss: %.6f\n", minimum(prof_opt.L_val)); end # coverage: ignore
+        if verbosity > 1; @printf("  Hyperopt objective (%s %s): %.6f\n", validate ? "validation" : "training", metric, Lmin); end # coverage: ignore
+    end
+
     prof.L_train[1, iter] = Lmin
     # COV_EXCL_START
     if rank == 0 && verbosity > 0
@@ -57,6 +78,29 @@ function hyper_optimize(params, labels, prof, comm, conf; rank=0, nranks=1, verb
 end
 
 """
+    get_hyperopt_loss(prof, metric="loss"; validate=false) -> Float64
+
+Objective of the hyperparameter optimization: the minimum over all iterations of the optimization run profiled in the
+`HamsterProfiler` `prof` of the metric `metric`, i.e., the training loss function (`loss`), the mean absolute error of the
+eigenvalues (`mae`) or the band gap error (`bg`). It is taken from the validation set if `validate` and from the training
+set otherwise. Iterations without a recorded value (after early stopping, or not validated because of `valeachiter`) are
+skipped; if there are none, `Inf` is returned.
+"""
+function get_hyperopt_loss(prof, metric="loss"; validate=false)::Float64
+    Ls = if metric == "loss"
+        validate ? prof.L_val : prof.L_train
+    elseif metric == "mae"
+        validate ? prof.L_val_MAE : prof.L_train_MAE
+    elseif metric == "bg"
+        validate ? prof.L_val_BG : prof.L_train_BG
+    else
+        error("Unknown HyperOpt metric $metric (loss, MAE or BG).")
+    end
+    recorded = filter(!iszero, Ls)
+    return isempty(recorded) ? Inf : minimum(recorded)
+end
+
+"""
     run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=1, verbosity=get_verbosity(conf))
 
 Performs random search hyperparameter optimization by repeatedly evaluating randomly sampled parameter configurations.
@@ -68,10 +112,13 @@ Performs random search hyperparameter optimization by repeatedly evaluating rand
 - `rank::Int`: MPI rank (default = 0).
 - `nranks::Int`: Number of MPI processes (default = 1).
 - `verbosity::Int`: Controls the amount of output printed (default = retrieved from `conf`).
+- `metric::String`: Objective that is minimized: `loss` (training loss function), `mae` or `bg` (band gap error only).
+- `validate::Bool`: Whether the objective is evaluated on the validation set (otherwise the training set).
 """
 function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=1, verbosity=get_verbosity(conf), 
             params=get_hyperopt_params(conf), lowerbounds=get_hyperopt_lowerbounds(conf), upperbounds=get_hyperopt_upperbounds(conf),
-            stepsizes=get_hyperopt_stepsizes(conf), mode=get_hyperopt_mode(conf), Niter=get_hyperopt_niter(conf), log_modes = get_hyperopt_log_modes(conf))
+            stepsizes=get_hyperopt_stepsizes(conf), mode=get_hyperopt_mode(conf), Niter=get_hyperopt_niter(conf), log_modes = get_hyperopt_log_modes(conf),
+            metric=get_hyperopt_metric(conf), validate=get_validate(conf))
 
     if verbosity == 1; set_value!(conf, "verbosity", 0); end # coverage: ignore
     
@@ -100,7 +147,7 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
                 )
                 for (k, v) in ps_raw
             )
-            L_local = hyper_optimize(ps, params, prof, comm, conf, rank=rank, nranks=nranks, verbosity=verbosity)
+            L_local = hyper_optimize(ps, params, prof, comm, conf, rank=rank, nranks=nranks, verbosity=verbosity, validate=validate, metric=metric)
             tell!(trialhist, trial_i, L_local)
         end
     else
@@ -113,19 +160,25 @@ function run_calculation(::Val{:hyper_optimization}, comm, conf; rank=0, nranks=
                 param_values = [possible_values[iter]...]
             end
             param_dict = Dict(Symbol(param)=>value for (param, value) in zip(params, param_values))
-            L_local = hyper_optimize(param_dict, params, prof, comm, conf, rank=rank, nranks=nranks, verbosity=verbosity)
+            L_local = hyper_optimize(param_dict, params, prof, comm, conf, rank=rank, nranks=nranks, verbosity=verbosity, validate=validate, metric=metric)
         end
     end
 
     if rank == 0 && verbosity > 0; println("========================================"); end
 
     Lmin, indmin = findmin(prof.L_train[1, :])
+    Nfailed = count(isinf, prof.L_train[1, :])
+    if rank == 0 && Nfailed > 0; @warn "$Nfailed of $Niter hyperopt trials failed and were scored with Inf."; end
     # COV_EXCL_START
     if rank == 0 && verbosity > 0
         println("Final status:")
-        println("  Minimal loss: $Lmin")
-        for (index, param) in enumerate(params)
-            println("   $param = $(prof.param_values[index, indmin])")
+        if isinf(Lmin)
+            println("  All trials failed.")
+        else
+            println("  Minimal $(validate ? "validation" : "training") $metric: $Lmin")
+            for (index, param) in enumerate(params)
+                println("   $param = $(prof.param_values[index, indmin])")
+            end
         end
         println("========================================")
     end

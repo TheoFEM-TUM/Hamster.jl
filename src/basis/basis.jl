@@ -298,12 +298,13 @@ end"""
 function get_geometry_tensors(strcs, bases, subdirs :: Vector{String}, conf=get_empty_config();
                                 comm=nothing,
                                 rank=0,
-                                nranks=1
+                                nranks=1,
+                                verbosity=get_verbosity(conf)
                             )
 
     hs = Vector{Any}()
     for (strc, basis, subdir) in zip(strcs, bases, subdirs)
-        println("Rank $rank: Getting geometry tensor for structure in subdir: ", subdir)
+        if verbosity > 1; println("Rank $rank: Getting geometry tensor for structure in subdir: ", subdir); end
         h = get_geometry_tensor(strc, basis, subdir, conf, comm=comm, rank=rank, nranks=nranks)
         push!(hs, h)
     end

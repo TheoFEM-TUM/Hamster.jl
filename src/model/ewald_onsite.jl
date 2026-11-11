@@ -172,13 +172,21 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
 end
 
 """
-    init_ewald_params(param_labels, conf)
+    init_ewald_params(param_labels, conf; initas=get_ewald_init_params(conf))
 
-Initialize Ewald onsite parameters for each species in `param_labels`.
-
-Returns a vector filled with the global charge scaling factor from `conf`.
+Initialize Ewald onsite parameters for each species in `param_labels`: from the `ewald_<element>` lines of the parameter
+file `initas` (e.g. the `params.dat` of a fit) if given, otherwise (and for species missing in the file) with the global
+charge scaling factor `charge_scale` from `conf`.
 """
-init_ewald_params(param_labels, conf) = ones(length(param_labels)) * get_ewald_charge_scale(conf)
+function init_ewald_params(param_labels, conf; initas=get_ewald_init_params(conf))
+    params = ones(length(param_labels)) * get_ewald_charge_scale(conf)
+    if initas ≠ "default"
+        _, _, _, _, _, ewald_types, ewald_parameters = read_params(initas)
+        file_params = Dict(zip(ewald_types, ewald_parameters))
+        params = Float64[get(file_params, number_to_element(type), params[p]) for (p, type) in enumerate(param_labels)]
+    end
+    return params
+end
 
 get_params(ewald::EwaldOnsites) = ewald.params
 
@@ -284,12 +292,29 @@ function get_model_gradient(ewald::EwaldOnsites, indices, reg, dL_dHr; soc=true)
 end
 
 """
-    write_params(ewald::EwaldOnsites, conf=get_empty_config())
+    write_params(ewald::EwaldOnsites, conf=get_empty_config(); filename="params.dat")
 
-Write the Ewald onsite parameters to a file.
-
-Currently not implemented.
+Add the Ewald couplings to the parameter file `filename` (written by the TB and SOC models before), where they are read
+with `init_params = params.dat` in the `Ewald` block, and the Ewald settings (`ewald_settings`) to its header. The
+coupling of a species is written as an `ewald_<element>` line.
 """
-function write_params(ewald::EwaldOnsites, conf=get_empty_config())
-    #currently does nothing
+function write_params(ewald::EwaldOnsites, conf=get_empty_config(); filename="params.dat")
+    isfile(filename) || return nothing
+    parameters, parameter_values, ion_types, soc_parameters, _ = read_params(filename)
+    ewald_types = number_to_element.(ewald.param_labels)
+    write_params(parameters, parameter_values, ion_types, soc_parameters, conf, filename=replace(filename, r"\.dat$" => ""),
+                 ewald_types=ewald_types, ewald_parameters=ewald.params, ewald_settings=ewald_settings(conf, types=ewald_types))
+end
+
+"""
+    ewald_settings(conf; types=String[])
+
+Settings that define the Ewald potentials: method, rcut, α and the charges `qeff`, written to the header of the parameter
+file of a fit. The charges are listed for all ion types with a `qeff` tag and for the ion types `types` (e.g. the species
+of the Ewald model, whose charge may come from `auto_qeff`).
+"""
+function ewald_settings(conf; types=String[])
+    qeff_types = sort(unique(vcat([type for (type, block) in conf.blocks if haskey(block, "qeff")], collect(types))))
+    return (method=lowercase(get_ewald_method(conf)), rcut=get_ewald_rcut(conf), alpha=get_ewald_alpha(conf),
+            qeff=[(type, get_qeff(conf, type)) for type in qeff_types])
 end

@@ -16,6 +16,14 @@ The `update` tag in the `Ewald` block determines whether the Ewald scaling param
 get_ewald_update(conf::Config)::Bool = conf("update", "Ewald") == "default" ? false : conf("update", "Ewald")
 
 """
+    init_params=default
+
+The `init_params` tag in the `Ewald` block sets a parameter file with the Ewald couplings (`ewald_<element>` lines), e.g.
+the `params.dat` of a fit. By default, the couplings start from `charge_scale`.
+"""
+get_ewald_init_params(conf::Config)::String = conf("init_params", "Ewald") == "default" ? "default" : string(conf("init_params", "Ewald"))
+
+"""
     auto_qeff=false
 
 If `auto_qeff = true` in the `Ewald` block, ion types without an explicit `qeff` tag get a default effective charge

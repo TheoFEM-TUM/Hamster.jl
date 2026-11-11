@@ -58,7 +58,8 @@ function get_rllm_from_file(overlaps::Vector{TBOverlap},file = nothing, conf=get
         #if verbosity > 1 && rank == 0; println("     Reading distance dependence from file..."); end
         read_rllm(overlaps,file, comm, rllm_dict, filename=rllm_file)
     end
-    if verbosity > 0 && rank == 0; println("     Finished in $time s."); end
+    # Called once per structure, so only reported for verbosity > 1
+    if verbosity > 1 && rank == 0; println("     Read distance dependence in $time s."); end
     return rllm_dict
 end
 
@@ -74,13 +75,14 @@ function get_rllm(overlaps, conf=get_empty_config();
     #file_path = targetdir == "missing" ? rllm_file : joinpath(targetdir, rllm_file)
     #rllm_file = file_path
     rllm_dict = Dict{String, CubicSpline{Float64}}()
-    if verbosity > 0 && rank == 0; println("     Getting distance dependence..."); end
+    # Called once per structure (in its subdirectory), so only reported for verbosity > 1
+    if verbosity > 1 && rank == 0; println("     Getting distance dependence..."); end
     time = @elapsed if load_rllm
         if verbosity > 1 && rank == 0; println("     Reading distance dependence from file..."); end
         read_rllm(overlaps, comm, rllm_dict, filename=rllm_file)
     else
         i = 0
-        println("interpolate_rllm:", interpolate_rllm)
+        if verbosity > 1 && rank == 0; println("     interpolate_rllm: ", interpolate_rllm); end
         #if isfile(rllm_file) && rank == 0 && interpolate_rllm; rm(rllm_file); end
         #if isfile(rllm_file) && rank == 0 && interpolate_rllm; set_value!(conf, "interpolate_rllm", false); end
         rank_rllm_file = nranks > 1 ? get_rank_filename(rllm_file, rank) : rllm_file
@@ -106,7 +108,7 @@ function get_rllm(overlaps, conf=get_empty_config();
         time = @elapsed interpolate_overlaps!(rllm_dict, overlaps, conf, verbosity=verbosity)
         save_rllm(rllm_dict, comm, filename=rank_rllm_file, rank=rank, nranks=nranks)
     end
-    if verbosity > 0; println("     Finished in $time s."); end
+    if verbosity > 1 && rank == 0; println("     Finished in $time s."); end
     return rllm_dict
 end
 
@@ -394,11 +396,12 @@ function precalc_rllm(bases::Any; comm = nothing, rank = 0, nranks = 1, conf,
     stop  = min((rank + 1) * chunk, noverlaps)
     local_unique_overlaps_strings = unique_overlaps_strings[start:stop]
     nlocal = length(local_unique_overlaps_strings)
-    println("Rank: $rank calculating $nlocal overlaps")
+    if verbosity > 0 && rank == 0; println("     Interpolating $noverlaps distance dependences on $nranks rank(s)..."); end
+    if verbosity > 1; println("     Rank $rank calculating $nlocal overlaps"); end
     rank_rllm_file = nranks > 1 ? get_rank_filename(rllm_file, rank) : rllm_file
     rllm_dict = Dict{String, CubicSpline{Float64}}()
     interpolate_overlaps!(rllm_dict, local_unique_overlaps_strings, conf, verbosity=rank == 0 ? verbosity : 0)
-    println("Rank $rank finished rllm")
+    if verbosity > 1; println("     Rank $rank finished rllm"); end
     #MPI.Barrier(comm)
     save_rllm(rllm_dict, comm, filename=rank_rllm_file, rank=rank, nranks=nranks)
     MPI.Barrier(comm)

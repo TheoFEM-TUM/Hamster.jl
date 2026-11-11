@@ -108,3 +108,20 @@ Possible options:
 - `tpe`: Tree-structured Parzen Estimator
 """
 get_hyperopt_mode(conf::Config)::String = conf("mode", "HyperOpt") == "default" ? "random" : conf("mode", "HyperOpt")
+
+"""
+**metric** = loss
+
+The `metric::String` tag sets the objective that is minimized by the hyperparameter optimization (not case sensitive).
+It is evaluated on the validation set if `validate` is true, and on the training set otherwise.
+
+Possible options:
+- `loss`: the same loss function as in the training (`loss` in the `Optimizer` block; default)
+- `BG`: only the band gap error
+- `MAE`: the mean absolute error of the eigenvalues
+"""
+function get_hyperopt_metric(conf::Config)::String
+    metric = conf("metric", "HyperOpt") == "default" ? "loss" : lowercase(string(conf("metric", "HyperOpt")))
+    metric ∈ ("loss", "mae", "bg") || error("Unknown HyperOpt metric $metric (loss, MAE or BG).")
+    return metric
+end

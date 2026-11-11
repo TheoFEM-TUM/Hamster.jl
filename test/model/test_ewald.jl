@@ -151,3 +151,50 @@ end
     ewald_model = EwaldOnsites([strc], [basis], comm, conf)
     @test length(ewald_model.params) == 3
 end
+
+@testset "Ewald parameter IO" begin
+    conf = get_empty_config()
+    set_value!(conf, "orbitals", "Cs", "s")
+    set_value!(conf, "orbitals", "Pb", "s px py pz")
+    set_value!(conf, "orbitals", "Br", "px py pz")
+    set_value!(conf, "qeff", "Cs", 1)
+    set_value!(conf, "qeff", "Pb", 2)
+    set_value!(conf, "qeff", "Br", -1)
+    set_value!(conf, "poscar", joinpath(@__DIR__, "test_files/POSCAR_cspbbr3_distorted"))
+    set_value!(conf, "load_rllm", true)
+    set_value!(conf, "rllm_file", joinpath(@__DIR__, "test_files/rllm_cspbbr3.dat"))
+    set_value!(conf, "verbosity", 0)
+    set_value!(conf, "rcut", 5.5)
+    strc = Structure(conf)
+    basis = Basis(strc, conf)
+    tb_parameters, tb_values = read_params(joinpath(@__DIR__, "test_files/params.dat"))
+
+    cd(mktempdir()) do
+        ewald_model = EwaldOnsites([strc], [basis], comm, conf)
+        ewald_model.params .= [0.5, 1.5, 2.5]
+        elements = Hamster.number_to_element.(ewald_model.param_labels)
+
+        # Test 1: without a parameter file of the TB model, nothing is written
+        write_params(ewald_model, conf)
+        @test !isfile("params.dat")
+
+        # Test 2: the couplings and settings are added to the TB and SOC parameters
+        write_params(tb_parameters, tb_values, ["Pb"], [0.3], conf, filename="params")
+        write_params(ewald_model, conf)
+        parameters, values, soc_types, soc_values, conf_values, ewald_types, ewald_values = read_params("params.dat")
+        @test parameters == tb_parameters && values == tb_values
+        @test soc_types == ["Pb"] && soc_values == [0.3]
+        @test ewald_types == elements && ewald_values == [0.5, 1.5, 2.5]
+        @test conf_values["ewald_method"] == "ewald"
+        @test conf_values["ewald_rcut"] == "5.5"
+        @test conf_values["ewald_qeff_Br"] == "-1.0"
+        @test Hamster.check_consistency(conf_values, conf)
+
+        # Test 3: the couplings are read with init_params; species missing in the file start from charge_scale
+        set_value!(conf, "init_params", "Ewald", "params.dat")
+        @test EwaldOnsites([strc], [basis], comm, conf).params == [0.5, 1.5, 2.5]
+        write_params(tb_parameters, tb_values, [], [], conf, filename="params", ewald_types=elements[1:2], ewald_parameters=[0.5, 1.5])
+        set_value!(conf, "charge_scale", "Ewald", 0.7)
+        @test EwaldOnsites([strc], [basis], comm, conf).params == [0.5, 1.5, 0.7]
+    end
+end

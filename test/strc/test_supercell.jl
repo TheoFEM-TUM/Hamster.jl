@@ -72,6 +72,19 @@ path = joinpath(@__DIR__, "test_files")
     @test train_indices == [2, 5, 6]
     @test val_indices == [2, 5, 6]
 
+    # Test 10a: A _PC system without val_config_inds in the *.h5 file (e.g. hamster_out.h5 of a run with pc_weight_val = 0)
+    inds_file = joinpath(mktempdir(), "conf_inds.h5")
+    h5write(inds_file, "CsBaBr_3/train_config_inds", [2, 5, 6])
+    h5write(inds_file, "CsBaBr_3/val_config_inds", [7, 8])
+    h5write(inds_file, "CsBaBr_3_PC/train_config_inds", [1])
+    conf = get_empty_config()
+    set_value!(conf, "config_inds", "Supercell", inds_file)
+    set_value!(conf, "val_config_inds", "Supercell", inds_file)
+    kwargs = (train_mode="md", val_mode="md", validate=true, Nconf=3, Nconf_max=100, val_ratio=0.2, pc_weight=1)
+    @test Hamster.get_config_index_sample("CsBaBr_3", conf; kwargs...) == ([2, 5, 6], [7, 8])
+    @test Hamster.get_config_index_sample("CsBaBr_3_PC", conf; kwargs..., pc_weight_val=0) == ([1], [])
+    @test Hamster.get_config_index_sample("CsBaBr_3_PC", conf; kwargs..., pc_weight_val=1) == ([1], [1])
+
     # Test 10b: Partially provided train indices are topped up without duplicates
     conf = get_empty_config()
     set_value!(conf, "config_inds", "Supercell", "1 2 3")

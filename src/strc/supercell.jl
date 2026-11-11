@@ -360,8 +360,8 @@ function get_config_index_sample(system, conf=get_empty_config();
         push!(train_config_inds, 1)
     end
 
-    # Validation config inds
-    val_config_inds = read_config_inds(system, val_inds_conf, "val_config_inds")
+    # Validation config inds (a parameter file of a previous run may have none for a system, e.g. a _PC system with pc_weight_val = 0)
+    val_config_inds = read_config_inds(system, val_inds_conf, "val_config_inds", missing_ok=true)
 
     if length(val_config_inds) < Nconf && (lowercase(val_mode) ∈ ["md", "universal"])  && endswith(system, "_PC") == false
         Nval = train_mode == val_mode ? round(Int64, max(Nconf, 1) * val_ratio) : Nconf
