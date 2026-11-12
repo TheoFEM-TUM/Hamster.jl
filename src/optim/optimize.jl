@@ -77,7 +77,7 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_emp
         if verbosity > 0 && rank == 0; println("Restored the parameters of iteration $best_iter (validation $es_metric: $(round(best_value, digits=6)))."); end
     end
     if get_offset(conf) && get_onsite_shift(conf) == "end"
-        shift_onsite_params!(ham_train, optim.losses, comm, rank=rank, verbosity=verbosity)
+        shift_onsite_params!(ham_train, optim.losses, comm, val_losses=optim.val_losses, rank=rank, verbosity=verbosity)
     end
     print_final_status(prof; verbosity=verbosity, iter=final_iter)
 end
@@ -100,9 +100,10 @@ end
 Subtracts the mean energy offset across systems from the diagonal onsite parameters of the `TBModel` in `ham`. The
 offsets (TB minus reference) are averaged per system first, so that every system counts once. As the diagonal onsites
 enter H as an identity block, this shifts the TB spectra rigidly onto the reference energies on average. The offsets
-stored in `losses` are shifted accordingly. Nothing is done if the TB parameters are not updated.
+stored in `losses` (and in `val_losses`, which do not enter the mean) are shifted accordingly. Nothing is done if the
+TB parameters are not updated.
 """
-function shift_onsite_params!(ham, losses, comm; rank=0, verbosity=1)
+function shift_onsite_params!(ham, losses, comm; val_losses=(), rank=0, verbosity=1)
     any(model -> model isa TBModel && any(model.update), ham.models) || return
     all_systems_offsets = MPI.gather([(l.system, l.offset) for l in losses], comm, root=0)
     Δ = Ref(0.0)
@@ -126,7 +127,26 @@ function shift_onsite_params!(ham, losses, comm; rank=0, verbosity=1)
         end
     end
     for l in losses; l.offset -= Δ; end
+    for l in val_losses; l.offset -= Δ; end
     if rank == 0 && verbosity > 1; println(" Onsite shift: $(-Δ) eV"); end
+end
+
+"""
+    average_system_offsets(systems_offsets, comm; rank=0)
+
+Averages the energy offsets per system over all ranks. `systems_offsets` holds the local `(system, offset)` pairs;
+every rank receives the `Dict` of system => mean offset.
+"""
+function average_system_offsets(systems_offsets, comm; rank=0)
+    all_systems_offsets = MPI.gather(systems_offsets, comm, root=0)
+    all_systems_offsets = MPI.bcast(rank == 0 ? reduce(vcat, all_systems_offsets) : nothing, comm, root=0)
+    sums = Dict{String, Float64}()
+    counts = Dict{String, Int}()
+    for (system, offset) in all_systems_offsets
+        sums[system] = get(sums, system, 0.0) + offset
+        counts[system] = get(counts, system, 0) + 1
+    end
+    return Dict(system => sums[system] / counts[system] for system in keys(sums))
 end
 
 """
@@ -224,34 +244,8 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         push!(systems_offsets, (optim.losses[index].system, offset))
     end
     if offset_step >= iter
-        elapsed = @elapsed begin
-            all_systems_offsets = MPI.gather(systems_offsets, comm, root = 0)
-
-            # Flatten on rank 0
-            if rank == 0
-                all_systems_offsets = reduce(vcat, all_systems_offsets)
-            else
-                all_systems_offsets = nothing
-            end
-
-            # Broadcast to all ranks
-            all_systems_offsets = MPI.bcast(all_systems_offsets, comm, root = 0)
-
-            # Every rank computes the averages
-            sums = Dict{String, Float64}()
-            counts = Dict{String, Int}()
-
-            for (system, offset) in all_systems_offsets
-                sums[system] = get(sums, system, 0.0) + offset
-                counts[system] = get(counts, system, 0) + 1
-            end
-
-            systems_offsets_averages = Dict(
-                system => sums[system] / counts[system]
-                for system in keys(sums)
-            )
-        end
-    else 
+        elapsed = @elapsed systems_offsets_averages = average_system_offsets(systems_offsets, comm, rank=rank)
+    else
         systems_offsets_averages = nothing
         elapsed = 0
     end
@@ -316,7 +310,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         set_params!(model, params)
     end
     if get_offset(conf) && onsite_shift == "step"
-        shift_onsite_params!(ham_train, optim.losses, comm, rank=rank, verbosity=verbosity)
+        shift_onsite_params!(ham_train, optim.losses, comm, val_losses=optim.val_losses, rank=rank, verbosity=verbosity)
     end
     #optim.adam.eta = lr_min + 0.5 * (lr - lr_min) * (1 + cos(π * iter / optim.Niter))
     update_time_local = MPI.Wtime() - update_begin
@@ -364,27 +358,37 @@ Evaluates the validation loss for a Hamiltonian model over a given validation da
 - `L_val`: The average validation loss computed over all validation structures. This value is also stored in `prof.L_val` at the index corresponding to `iter`.
 - Updates to `prof.val_times`: The elapsed time for the validation step is stored in `prof.val_times[iter]`.
 """
-function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1, valeachiter=valeachiter, conf =get_empty_config())
+function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1, valeachiter=valeachiter, conf =get_empty_config(), offset_step=get_offset_step(conf))
     ls_weight = get_ls_weight(conf)
     nbatch = get_nbatch(conf)
     val_begin = MPI.Wtime()
     load_sms = nbatch > 1 && !(uses_device_path(ham_val) && val_data isa AbstractVector{<:EigData})
     if load_sms; load_simmats!(ham_val, 1:ham_val.Nstrc); end
-    pc_weights = Float64[]
-    Ls_val = map(1:ham_val.Nstrc) do index
-        push!(pc_weights, losses[index].pc_weight)
-        forward(ham_val, index, losses[index], val_data[index])[1] 
+    # Diagonalize once and keep only the eigenvalues
+    Es_val = Vector{Any}(undef, ham_val.Nstrc)
+    systems_offsets = Tuple{String, Float64}[]
+    for index in 1:ham_val.Nstrc
+        cache, offset = forward(ham_val, index, val_data[index], losses[index])
+        Es_val[index] = cache[1]
+        push!(systems_offsets, (losses[index].system, offset))
     end
+    # Offsets are shared per system as in `train_step!`, but averaged over the validation data. They are updated as long
+    # as the training offsets were not frozen at some iteration since the last validation, and frozen afterwards.
+    if iter - valeachiter < offset_step
+        systems_offsets_averages = average_system_offsets(systems_offsets, comm, rank=rank)
+        for index in 1:ham_val.Nstrc
+            losses[index].offset = systems_offsets_averages[losses[index].system]
+        end
+    end
+    Ls_all = map(index -> forward(Es_val[index], losses[index], val_data[index]), 1:ham_val.Nstrc)
+    pc_weights = Float64[losses[index].pc_weight for index in 1:ham_val.Nstrc]
+    Ls_val = Float64[L[1] for L in Ls_all]
     pc_weights_tot = MPI.Allreduce(sum(pc_weights), +, comm)
     Ls_val_sum = ls_weight ? MPI.Allreduce(sum(Ls_val .* pc_weights), +, comm) : MPI.Allreduce(sum(ones(size(Ls_val)) .* pc_weights), +, comm)
     Ls_val_weights = ls_weight ? Ls_val ./ (Ls_val_sum / pc_weights_tot) .* pc_weights : ones(size(Ls_val)) ./ (Ls_val_sum / pc_weights_tot) .* pc_weights
     Ls_val = Ls_val_weights .* Ls_val
-    Ls_val_MAE = map(1:ham_val.Nstrc) do index
-        forward(ham_val, index, losses[index], val_data[index])[3] * losses[index].pc_weight
-    end
-    Ls_val_BG = map(1:ham_val.Nstrc) do index
-        forward(ham_val, index, losses[index], val_data[index])[4] * losses[index].pc_weight
-    end
+    Ls_val_MAE = Float64[Ls_all[index][2] * losses[index].pc_weight for index in 1:ham_val.Nstrc]
+    Ls_val_BG = Float64[Ls_all[index][3] * losses[index].pc_weight for index in 1:ham_val.Nstrc]
 
     all_systems = MPI.gather(ham_val.systems, comm, root=0)
     all_losses = MPI.gather(Ls_val, comm, root=0)
