@@ -60,6 +60,11 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1,
         ham, strcs, bases = build_hamiltonian(conf, comm_active, local_inds, mode=mode, rank=active_rank, nranks=active_size,
                                               verbosity=verbosity, sparse_iterators=false)
 
+        # Save model to file if requested
+        if get_save_model(conf)
+            save_model(ham, strcs, bases, conf, comm_active, rank=active_rank)
+        end
+
         Niter = sum(length.(values(local_inds)))
         prof = HamsterProfiler(3, conf, Niter=Niter, Nbatch=1)
 

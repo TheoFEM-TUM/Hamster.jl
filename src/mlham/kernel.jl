@@ -73,7 +73,9 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         get_tb_descriptor(model.hs[n], model.params, strcs[n], bases[n], conf)
     end
     external_data_points = !isnothing(data_points)
-    if external_data_points
+    if get_load_model(conf)
+        params, data_points = model_ml_parameters(conf)
+    elseif external_data_points
         params = zeros(length(data_points))
     elseif get_init_mode(get_ml_init_params(conf)) ≠ :file
         Npoints_local = floor(Int64, Npoints / nranks)
@@ -98,7 +100,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         end
         # COV_EXCL_STOP
     end
-    if !external_data_points
+    if !external_data_points && !get_load_model(conf)
         params, data_points = init_ml_params!(data_points, conf, mode=mode, update_ml=update_ml)
     end
     kernel = HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml)
@@ -305,6 +307,7 @@ are taken from the file; settings that are set and differ raise an error (`check
 the header contained all settings of `ML_HEADER_TAGS` keep the defaults for the missing ones.
 """
 function apply_ml_settings!(conf)
+    get_load_model(conf) && return nothing
     files = String[]
     get_init_mode(get_ml_init_params(conf)) == :file && push!(files, get_ml_init_params(conf))
     get_ml_mode(conf) == "expand" && push!(files, get_ml_filename(conf))

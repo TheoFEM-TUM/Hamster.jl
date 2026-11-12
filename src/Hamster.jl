@@ -9,7 +9,7 @@ include("parse/commandline.jl")
 
 include("conf/config.jl"); include("conf/read_config.jl")
 include("conf/defaults.jl"); include("conf/strc_defaults.jl"); include("conf/atom_defaults.jl"); include("conf/basis_defaults.jl")
-include("conf/model_defaults.jl"); include("conf/optim_defaults.jl"); include("conf/supercell_defaults.jl") 
+include("conf/model_defaults.jl"); include("conf/optim_defaults.jl"); include("conf/supercell_defaults.jl")
 include("conf/ml_defaults.jl"); include("conf/soc_defaults.jl"); include("conf/hyperopt_defaults.jl"); include("conf/ewald_defaults.jl"); include("conf/dos_defaults.jl"); include("conf/tag_help.jl")
 
 include("out/output.jl")
@@ -36,6 +36,7 @@ include("device/device.jl"); include("device/kernels.jl"); include("device/linea
 include("out/model_summary.jl")
 include("out/dos.jl")
 
+include("conf/model_io.jl")
 include("calc/setup.jl"); include("calc/optimization.jl"); include("calc/standard.jl"); include("calc/hyperopt.jl")
 
 include("main.jl")
@@ -51,6 +52,7 @@ export ParameterLabel, read_params, write_params, Basis, get_geometry_tensor, np
 export TBModel, EffectiveHamiltonian, get_params, set_params!, copy_params!
 export get_hamiltonian, diagonalize, get_hr, init_params!
 export write_hr, read_hr, write_ham, read_ham, write_current, read_current
+export save_model, load_model!, get_model_file, get_load_model, get_save_model
 
 export SOCModel
 

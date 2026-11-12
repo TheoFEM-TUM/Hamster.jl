@@ -55,18 +55,20 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
         precalc_rllm(bases, conf, rank=rank, nranks=nranks, comm=comm)
     end
     file = nothing
-    if occursin(".h5", filename)
+    if occursin(".h5", filename) || get_load_model(conf)
         if isnothing(comm)
             file = h5open(filename, "r")
         else
             file = h5open(filename, "r", comm)
         end
     end
-    hs = map(eachindex(strcs)) do n
-        get_geometry_tensor(strcs[n], bases[n], conf, file=file, comm=comm)
-    end
-    if occursin(".h5", filename)
-        close(file)
+    # Closed also on errors, otherwise an MPI-IO file is closed by its finalizer after MPI.Finalize
+    hs = try
+        map(eachindex(strcs)) do n
+            get_geometry_tensor(strcs[n], bases[n], conf, file=file, comm=comm)
+        end
+    finally
+        isnothing(file) || close(file)
     end
 
     param_labels_local = unique(Iterators.flatten([basis.parameters for basis in bases]))
@@ -240,6 +242,10 @@ Initialize the parameters of a `model` based on the provided configuration and i
 - `warn`: Warn about model parameters that are missing in the parameter file (they keep the value 1).
 """
 function init_params!(model, conf=get_empty_config(); initas=get_init_params(conf), warn=true)
+    if get_load_model(conf)
+        set_params!(model, model_parameter_values(conf, "tb", string.(model.param_labels)))
+        return
+    end
     init_mode = get_init_mode(initas)
     if init_mode == :ones
         set_params!(model, ones(length(model.params)))

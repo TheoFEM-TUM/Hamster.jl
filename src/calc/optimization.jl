@@ -66,12 +66,13 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       active_rank = MPI.Comm_rank(comm_active)
       active_size = MPI.Comm_size(comm_active)
       Rs = get_translation_vectors_for_hr_fit(conf)
-      ham_train, _, train_bases = build_hamiltonian(conf, comm_active, local_train_inds, mode=get_train_mode(conf), Rs=Rs,
+      ham_train, train_strcs, train_bases = build_hamiltonian(conf, comm_active, local_train_inds, mode=get_train_mode(conf), Rs=Rs,
                                                     reindex=true, rank=active_rank, nranks=active_size, label="training set",
                                                     write_summary=write_output, training=true)
-      ham_val, _, val_bases = build_hamiltonian(conf, comm_active, local_val_inds, mode=get_val_mode(conf), Rs=Rs, reindex=true,
+      ham_val, val_strcs, val_bases = build_hamiltonian(conf, comm_active, local_val_inds, mode=get_val_mode(conf), Rs=Rs, reindex=true,
                                                 rank=active_rank, nranks=active_size, label="validation set",
                                                 write_summary=write_output, ml_data_points=get_ml_data_points(ham_train, conf))
+      
       Nε_train = get_number_of_bands_per_structure(train_bases, local_train_inds, soc=get_soc(conf))
       Nε_val = get_number_of_bands_per_structure(val_bases, local_val_inds, soc=get_soc(conf))
 
@@ -87,6 +88,9 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       prof = HamsterProfiler(3, conf)
       
       optimize_model!(ham_train, ham_val, optim, dl, prof, comm_active, conf, rank=active_rank, nranks=active_size)
+      if get_save_model(conf)
+          save_model(ham_train, train_strcs, train_bases, conf, comm_active; rank=active_rank)
+      end
       if rank == 0 && write_output
          write_params(ham_train, conf)
       end
