@@ -95,10 +95,10 @@ function precompile_configs(dir, data)
         options(poscar, params, "kpoints = $eigenval") * PRECOMPILE_ATOMS,
         options(poscar, params, "sp_mode = true", "sp_diag = true", "neig = 2", "eig_target = 3.0") * PRECOMPILE_ATOMS,
         options(poscar, params, "sp_mode = true", "kpoints = $eigenval_h5") * md() * ml("init_params = rand") * PRECOMPILE_ATOMS_ML,
-        # Optimization (MD data): TB (dense, with validation), TB (sparse), ML with and without batched SimMats, SOC
+        # Optimization (MD data): TB (dense, with validation), TB (sparse), ML (on the fly and with batched SimMats), SOC
         options(poscar, params) * md() * optimizer(eigenval_h5, "val_mode = universal", "val_data = $eigenval_h5", "val_ratio = 0.5") * PRECOMPILE_ATOMS,
         options(poscar, params, "sp_mode = true") * md() * optimizer(eigenval_h5) * PRECOMPILE_ATOMS,
-        options(poscar, params, "sp_mode = true") * md() * optimizer(eigenval_h5, "update_tb = false") * ml() * PRECOMPILE_ATOMS_ML,
+        options(poscar, params, "sp_mode = true") * md() * optimizer(eigenval_h5, "update_tb = false") * ml("sim_mat = false") * PRECOMPILE_ATOMS_ML,
         options(poscar, params, "sp_mode = true") * md("nbatch = 2") * optimizer(eigenval_h5, "update_tb = false") *
             ml("kernel_strat = Hamerly") * PRECOMPILE_ATOMS_ML,
         options(poscar, "init_params = $(joinpath(data, "params_soc.dat"))", "soc = true") * md() * optimizer(eigenval_soc_h5) *

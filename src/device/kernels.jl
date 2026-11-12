@@ -41,6 +41,39 @@ hr[rows[t]] += vals[t], i.e., a contribution to the real-space Hamiltonian that 
     @inbounds hr[rows[t]] += vals[t]
 end
 
+@inline function squared_distance(X, t, D, n)
+    d2 = zero(eltype(X))
+    @inbounds for a in axes(X, 1)
+        δ = X[a, t] - D[a, n]
+        d2 += δ * δ
+    end
+    return d2
+end
+
+"""
+hr[rows[t]] += Σ_n p[n] * exp(-|X[:, t] - D[:, n]|² * γ), i.e., the Gaussian kernel model with γ = 1/(2σ²).
+"""
+@kernel function gaussian_kernel_hr_kernel!(hr, @Const(rows), @Const(X), @Const(D), @Const(p), γ)
+    t = @index(Global)
+    acc = zero(eltype(p))
+    @inbounds for n in axes(D, 2)
+        acc += p[n] * exp(-squared_distance(X, t, D, n) * γ)
+    end
+    @inbounds hr[rows[t]] += acc
+end
+
+"""
+g[n] = Σ_t real(G[rows[t]]) * exp(-|X[:, t] - D[:, n]|² * γ), the gradient of the Gaussian kernel model.
+"""
+@kernel function gaussian_kernel_grad_kernel!(g, @Const(rows), @Const(X), @Const(D), @Const(G), γ)
+    n = @index(Global)
+    acc = zero(eltype(g))
+    @inbounds for t in axes(X, 2)
+        acc += real(G[rows[t]]) * exp(-squared_distance(X, t, D, n) * γ)
+    end
+    @inbounds g[n] = acc
+end
+
 """
 Hk[q, k] = Σ_{e ∈ group(q)} hr[e] * phase[Ridx[e], k], where group(q) contains all entries of the real-space
 Hamiltonian that contribute to the nonzero `q` of the k-space Hamiltonian.

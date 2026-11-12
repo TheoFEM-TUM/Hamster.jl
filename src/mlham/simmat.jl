@@ -458,7 +458,7 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; c
         end
     end
     structure_descriptors = nothing
-    return [SimMat(Desc_Vec[i], (descr_sizes[i], N_dp), sim_params) for i in 1:N_mats]
+    return simmat_type(nkeys)[SimMat(Desc_Vec[i], (descr_sizes[i], N_dp), sim_params) for i in 1:N_mats]
 end
 
 """

@@ -1,111 +1,22 @@
 """
-    mutable struct HamiltonianKernel{S<:SimMat}
+    mutable struct HamiltonianKernel{T1, T2, T3}
 
-A kernel structure used for computing weighted similarity functions.
+A kernel structure used for computing weighted similarity functions. The similarities of the descriptors to all data points
+are evaluated on the fly (`sim_mat = false`); see `HamiltonianKernelPrecalced` for precalculated similarity matrices (default).
 
 # Fields
-- `ws :: Vector{Float64}`: Weights for each sample point.
-- `xs :: Vector{T1}`: Sample points.
+- `params :: Vector{Float64}`: Weights for each data point.
+- `data_points :: Vector{T1}`: Data points.
 - `sim_params :: T2`: Parameters for the similarity function.
-- `sms :: Vector{S}`: Precomputed kernel features, one `SimMat` per structure.
-- `simmat_file :: String`: HDF5 file the `SimMat`s are written to / loaded from when they are batched (`nbatch > 1`).
+- `structure_descriptors :: Vector{T3}`: Descriptors of the matrix elements of each structure (one sparse matrix per `R`).
+- `update :: Bool`: Whether the parameters are optimized.
 """
-mutable struct HamiltonianKernel{S<:SimMat}
+mutable struct HamiltonianKernel{T1, T2, T3}
     params :: Vector{Float64}
-    kp :: Kernelpoints
-    sim_params :: Float64
+    data_points :: Vector{T1}
+    sim_params :: T2
+    structure_descriptors :: Vector{T3}
     update :: Bool
-    sms :: Vector{S}
-    simmat_file :: String
-end
-
-HamiltonianKernel(params, kp, sim_params, update, sms) = HamiltonianKernel(params, kp, sim_params, update, sms, simmat_filename(0))
-
-
-
-"""
-    HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update, tol) -> HamiltonianKernel
-"""
-function HamiltonianKernel(params :: Vector{Float64},
-    kp,
-    sim_params,
-    structure_descriptors,
-    update :: Bool,
-    tol :: Float64;
-    conf = get_empty_config(),
-    rank = 0,
-    systems = nothing,
-    simmat_prefix = "simmat"
-    )
-
-    nbatch = get_nbatch(conf)
-    label = replace(simmat_prefix, r"^simmat_?" => "")
-    if nbatch > 1 && !isempty(structure_descriptors)
-        # compute, write and drop the kernel features batch by batch to limit the peak memory
-        simmat_file = simmat_filename(rank; prefix = simmat_prefix)
-        sms = nothing
-        for (batch_id, inds) in enumerate(chunks(1:length(structure_descriptors), n = nbatch))
-            sms_batch = get_kernel_features(structure_descriptors[inds], kp, sim_params, tol, conf = conf, rank = rank,
-                                            systems = systems === nothing ? nothing : systems[inds], label = label)
-            write_simmat(sms_batch; filename = simmat_file, append = batch_id > 1)
-            sms_empty = [get_empty_simmat(s) for s in sms_batch]
-            sms = sms === nothing ? sms_empty : append!(sms, sms_empty)
-            sms_batch = nothing
-            GC.gc()
-        end
-    else
-        sms = get_kernel_features(structure_descriptors, kp, sim_params, tol, conf = conf, rank = rank, systems = systems, label = label)
-        simmat_file = simmat_filename(rank; prefix = simmat_prefix)
-    end
-    return HamiltonianKernel(params,kp, sim_params, update, sms, simmat_file)
-end
-
-"""
-    unload_simmats!(kernel::HamiltonianKernel, indices)
-
-Replaces `kernel.sms[i]` for all `i` in `indices` by empty `SimMat`s (see `get_empty_simmat`) to free memory.
-"""
-function unload_simmats!(kernel::HamiltonianKernel, indices)
-    for i in indices
-        kernel.sms[i] = get_empty_simmat(kernel.sms[i])
-    end
-    return kernel
-end
-
-"""
-    load_simmats!(kernel::HamiltonianKernel, indices; filename=kernel.simmat_file)
-
-Replaces `kernel.sms[i]` for all `i` in `indices` by the `SimMat`s read with `read_simmat_index` from `filename`.
-"""
-function load_simmats!(kernel::HamiltonianKernel, indices; filename = kernel.simmat_file)
-    for i in indices
-        kernel.sms[i] = read_simmat_index(i; filename = filename)
-    end
-    return kernel
-end
-
-"""
-    HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update) -> HamiltonianKernel
-"""
-function HamiltonianKernel(params :: Vector{Float64},
-    kp,
-    sim_params,
-    structure_descriptors,
-    update :: Bool,
-    weights;
-    conf = get_empty_config(),
-    rank = 0
-    )
-
-    return HamiltonianKernel(params,
-    kp,
-    sim_params,
-    structure_descriptors,
-    update,
-    1e-8,
-    weights;
-    conf = conf,
-    rank = rank)
 end
 
 #ham_val = EffectiveHamiltonian(val_strcs, val_bases, comm_active, conf, rank=active_rank, nranks=active_size, ml_data_points=get_ml_data_points(ham_train, conf))
@@ -113,7 +24,8 @@ end
 """
     HamiltonianKernel(strcs, bases, model, conf)
 
-Constructor for a HamiltonianKernel model.
+Constructor for a HamiltonianKernel model. Returns a `HamiltonianKernelPrecalced` (precalculated similarity matrices) if
+`sim_mat = true`.
 """
 function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, model, comm, conf=get_empty_config(), data_points = nothing; 
                             verbosity=get_verbosity(conf),
@@ -127,6 +39,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
                             kernel_chunck_size = get_kernel_chunk_size(conf),
                             kernel_strat = get_kernel_strat(conf),
                             sample_norm = get_sample_norm(conf),
+                            sim_mat = get_ml_sim_mat(conf),
                             rank=0,
                             nranks=1,
                             simmat_prefix="simmat")
@@ -405,13 +318,6 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         weights = ones(Int, length(data_points))
     end
     params, data_points = init_ml_params!(data_points, conf)
-    kp, params = get_sorted_Kernelpoints(data_points, weights, params, conf)
-    
-    if get_verbosity(conf) >= 2
-        #ok = check_consistency(kp.datapoints, params; key_ranges=kp.key_ranges)
-        #ok2 = verify_kernelpoints(kp, conf)
-    end
-
 
     if rank == 0
         filename = only_sample ? "ml_params_sample" : "ml_params_temp"
@@ -423,16 +329,12 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         end
     end
 
-    return HamiltonianKernel(params, kp, sim_params,structure_descriptors, update_ml, sp_tol;
-            conf =conf,
-            rank = rank,
-            systems = systems,
-            simmat_prefix = simmat_prefix)
-
-
-
+    kernel = HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml)
+    return sim_mat ? HamiltonianKernelPrecalced(kernel, rank, systems, conf, weights=weights, tol=sp_tol, simmat_prefix=simmat_prefix) : kernel
 end
 
+
+(k::HamiltonianKernel)(xin) = mapreduce(wx->wx[1]*exp_sim(wx[2], xin, σ=k.sim_params), +, zip(k.params, k.data_points))
 
 """
     get_hr(kernel::HamiltonianKernel, mode, index; apply_soc=false) -> Vector{Matrix{Float64}}
@@ -450,55 +352,42 @@ Constructs a set of real-space Hamiltonians from a `HamiltonianKernel`.
 # Returns
 - A vector of real-space Hamiltonian matrices, optionally modified with SOC transformations.
 """
-
-
-function get_hr(kernel::HamiltonianKernel, mode, index; apply_soc=false)
-    @views desc_vec = kernel.sms[index].feature_vec
-    (NR, Ne) = kernel.sms[index].feature_shape[1]
-    key_ranges = kernel.kp.key_ranges
-    Hr = get_empty_complex_hamiltonians(Ne, NR, mode)
-
-    for R in 1:NR
-        nnz_ham = desc_vec[R][2]
-
-        # Per-task storage: each thread writes only to its own slot m, so no contention
-        Is = Vector{Int}(undef, nnz_ham)
-        Js = Vector{Int}(undef, nnz_ham)
-        Vs = Vector{ComplexF64}(undef, nnz_ham)
-        #keep = falses(nnz_ham)
-
-        tforeach(1:nnz_ham) do m
-            desc_vec_single, (i, j, key) = @views desc_vec[R][1][m]
-
-            if !haskey(key_ranges, key)
-                @warn "key not found in key_ranges, skipping" key=key R=R m=m
-                return
-            end
-
-            params = @views kernel.params[key_ranges[key]]
-            if length(desc_vec_single) != length(params)
-                @warn "length mismatch, skipping" key=key R=R m=m len_desc=length(desc_vec_single) len_params=length(params)
-                return
-            end
-
-            val = dot(desc_vec_single, params)
-
-            Is[m] = i
-            Js[m] = j
-            Vs[m] = val
-            #keep[m] = true
-
+function get_hr(kernel::HamiltonianKernel, mode::Dense, index; apply_soc=false)
+    h_env = kernel.structure_descriptors[index]
+    Hr = get_empty_complex_hamiltonians(size(h_env[1], 1), length(h_env), mode)
+    for R in eachindex(h_env)
+        is, js, hins = findnz(h_env[R])
+        vals = evaluate_kernel(kernel, hins)
+        for t in eachindex(vals)
+            Hr[R][is[t], js[t]] = vals[t]
         end
-
-        # Sequential, safe construction of the sparse matrix for this R
-        #Hr[R] = sparse(Is[keep], Js[keep], Vs[keep], Ne, Ne)
-        Hr[R] = sparse(Is, Js, Vs, Ne, Ne)
     end
-
     return apply_soc ? apply_spin_basis.(Hr) : Hr
 end
 
+function get_hr(kernel::HamiltonianKernel, mode::Sparse, index; apply_soc=false)
+    h_env = kernel.structure_descriptors[index]
+    Nε = size(h_env[1], 1)
+    Hr = get_empty_complex_hamiltonians(Nε, length(h_env), mode)
+    for R in eachindex(h_env)
+        is, js, hins = findnz(h_env[R])
+        Hr[R] = sparse(is, js, evaluate_kernel(kernel, hins), Nε, Nε)
+    end
+    return apply_soc ? apply_spin_basis.(Hr) : Hr
+end
 
+"""
+    evaluate_kernel(kernel::HamiltonianKernel, hins) -> Vector{Float64}
+
+Evaluate the kernel model for every descriptor in `hins` (in parallel).
+"""
+function evaluate_kernel(kernel::HamiltonianKernel, hins)
+    vals = Vector{Float64}(undef, length(hins))
+    tforeach(eachindex(hins)) do t
+        vals[t] = kernel(hins[t])
+    end
+    return vals
+end
 
 """
     update!(kernel::HamiltonianKernel, opt, grad)
@@ -528,6 +417,19 @@ Retrieve the parameters associated with a `HamiltonianKernel`.
 get_params(kernel::HamiltonianKernel) = kernel.params
 
 """
+    copy_params!(receiving_model::HamiltonianKernel, sending_model::HamiltonianKernel) -> Nothing
+
+Copy parameters from one Hamiltonian kernel to another.
+
+# Arguments
+- `receiving_model::HamiltonianKernel`: The kernel that will receive the parameters.
+- `sending_model::HamiltonianKernel`: The kernel providing the parameters.
+"""
+function copy_params!(receiving_model::HamiltonianKernel, sending_model::HamiltonianKernel)
+    set_params!(receiving_model, get_params(sending_model))
+end
+
+"""
     write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filename=get_ml_filename(conf))
 
 Writes the parameters and configuration settings of a HamiltonianKernel object to a file.
@@ -538,7 +440,7 @@ Writes the parameters and configuration settings of a HamiltonianKernel object t
 - `filename`: The name of the file to which the data will be written (default: `get_ml_filename(conf)`).
 """
 function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filename=get_ml_filename(conf))
-    data_points = kernel.kp.datapoints
+    data_points = kernel.data_points
     open(filename*".dat", "w") do file
         # Write header to file
         println(file, "begin ", get_system(conf))
@@ -747,12 +649,12 @@ Set the parameters of a `HamiltonianKernel` instance.
 - Updates the `Vs` field of the `kernel` in place if the consistency checks pass.
 """
 function set_params!(kernel::HamiltonianKernel, params)
-    #throw_error = length(kernel.data_points) ≠ length(params)
-    #if throw_error
-    #    error("Parameter vector is not of correct size ($(length(kernel.data_points)) ≠ $(length(params)))!")
-    #else
+    throw_error = length(kernel.data_points) ≠ length(params)
+    if throw_error
+        error("Parameter vector is not of correct size ($(length(kernel.data_points)) ≠ $(length(params)))!")
+    else
         kernel.params = params
-    #end
+    end
 end
 
 """
@@ -769,87 +671,31 @@ Computes the gradient of the model parameters for a given `HamiltonianKernel`.
 # Returns
 - `dparams`: A vector containing the computed gradients of the model parameters.
 """
-
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
-    Nparams = length(kernel.params)
-    kernel.update || return zeros(Nparams)
-    # The (structure, R) blocks of the batch; the entries of all blocks are numbered consecutively
-    blocks = [(bi, R) for bi in eachindex(indices) for R in eachindex(dL_dHr[bi])]
-    block_ends = cumsum([kernel.sms[indices[bi]].feature_vec[R][2] for (bi, R) in blocks])
-    Nentries = isempty(block_ends) ? 0 : last(block_ends)
-
-    # Every task accumulates the (unweighted) contributions of a contiguous range of entries into its own buffer
-    ntasks = clamp(cld(Nentries, 4096), 1, Threads.nthreads())
-    buffers = tmap(chunks(1:Nentries, n=ntasks)) do entry_range
-        dparams_task = zeros(Nparams)
-        isempty(entry_range) && return dparams_task
-        for b in searchsortedfirst(block_ends, first(entry_range)):searchsortedfirst(block_ends, last(entry_range))
-            bi, R = blocks[b]
-            block_start = b == 1 ? 1 : block_ends[b-1] + 1
-            ms = (max(first(entry_range), block_start):min(last(entry_range), block_ends[b])) .- (block_start - 1)
-            accumulate_kernel_gradient!(dparams_task, kernel.sms[indices[bi]].feature_vec[R][1], ms, dL_dHr[bi][R], kernel.kp.key_ranges, soc)
-        end
-        return dparams_task
-    end
-
-    # Sum the buffers (in a fixed order), apply the weights of the kernel points and add the regularization
-    dparams = backward(reg, kernel.params)
-    weights = kernel.kp.weights
-    tforeach(chunks(1:Nparams, n=Threads.nthreads())) do param_range
-        @inbounds for n in param_range
-            s = 0.0
-            for dparams_task in buffers
-                s += dparams_task[n]
-            end
-            dparams[n] += weights[n] * s
-        end
-    end
-    return dparams
-end
-
-"""
-    accumulate_kernel_gradient!(dparams, entries, ms, dL_dHr_R, key_ranges, soc)
-
-Add the gradient contributions `feature * real(dL_dHr_R[i, j])` of the entries `entries[ms]` of one `R` block to `dparams`,
-visiting only the stored values of the sparse feature vectors. Entries that `get_hr` skips are skipped as well.
-"""
-function accumulate_kernel_gradient!(dparams, entries, ms, dL_dHr_R, key_ranges, soc)
-    for m in ms
-        feature, (i, j, key) = entries[m]
-        param_range = get(key_ranges, key, nothing)
-        (isnothing(param_range) || length(feature) ≠ length(param_range)) && continue
-        g = soc ? real(dL_dHr_R[2i-1, 2j-1] + dL_dHr_R[2i, 2j]) : real(dL_dHr_R[i, j])
-        offset = first(param_range) - 1
-        nzind = SparseArrays.nonzeroinds(feature)
-        nzval = SparseArrays.nonzeros(feature)
-        @inbounds for q in eachindex(nzind)
-            dparams[offset + nzind[q]] += nzval[q] * g
-        end
-    end
-    return dparams
-end
-
-function get_model_gradient_old(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc=false)
     dparams = zeros(length(kernel.params))
-    weights = kernel.kp.weights
-    #weights = ones(length(dparams)) # for unweighted gradients
-    #weights = (weights .-1) .*2 .+1
     if kernel.update
-        tforeach( eachindex(dparams)) do n
-            for (bi, index) in enumerate(indices)
-                @views desc_vec = kernel.sms[index].feature_vec[n]
-                for R in eachindex(dL_dHr[bi])
-                    for (i, j, exp_val) in zip(findnz(desc_vec[R])...)
-                        if !soc
-                            dparams[n] += weights[n] .* exp_val .* real(dL_dHr[bi][R][i, j])
-                        else
-                            i1 = 2*i-1; j1 = 2*j-1
-                            i2 = 2*i; j2 = 2*j
-                            dparams[n] += weights[n] .* exp_val .* real(dL_dHr[bi][R][i1, j1] + dL_dHr[bi][R][i2, j2])
-                        end
+        # Collect the descriptors and the gradient w.r.t. their matrix elements once (instead of once per parameter)
+        hins = eltype(eltype(kernel.structure_descriptors[first(indices)]))[]
+        gs = Float64[]
+        for (bi, index) in enumerate(indices)
+            h_env = kernel.structure_descriptors[index]
+            for R in eachindex(dL_dHr[bi])
+                for (i, j, hin) in zip(findnz(h_env[R])...)
+                    push!(hins, hin)
+                    if !soc
+                        push!(gs, real(dL_dHr[bi][R][i, j]))
+                    else
+                        push!(gs, real(dL_dHr[bi][R][2i-1, 2j-1] + dL_dHr[bi][R][2i, 2j]))
                     end
                 end
             end
+        end
+        tforeach(eachindex(dparams)) do n
+            acc = 0.0
+            for t in eachindex(hins)
+                acc += exp_sim(kernel.data_points[n], hins[t], σ=kernel.sim_params) * gs[t]
+            end
+            dparams[n] = acc
         end
         dparams_penal = backward(reg, kernel.params)
         return dparams .+ dparams_penal

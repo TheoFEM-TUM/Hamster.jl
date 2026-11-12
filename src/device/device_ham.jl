@@ -19,12 +19,12 @@ function DeviceContext(device, models, strcs, bases, conf=get_empty_config(); so
     # The host arrays of the structures are built in parallel, the transfers to the device one after another.
     # With nbatch > 1, the SimMats of the kernel models are only loaded for one batch of structures at a time.
     batches = map(chunks(eachindex(strcs), n=nbatch)) do indices
-        nbatch > 1 && foreach(model -> model isa HamiltonianKernel && load_simmats!(model, indices), models)
+        nbatch > 1 && foreach(model -> model isa HamiltonianKernelPrecalced && load_simmats!(model, indices), models)
         hosts = tmap(indices) do index
             Nε = soc ? 2 * length(bases[index]) : length(bases[index])
             host_linear_map(models, index, Nε, size(strcs[index].Rs, 2), soc=soc)
         end
-        nbatch > 1 && foreach(model -> model isa HamiltonianKernel && unload_simmats!(model, indices), models)
+        nbatch > 1 && foreach(model -> model isa HamiltonianKernelPrecalced && unload_simmats!(model, indices), models)
         return [DeviceLinearMap(host, device) for host in hosts]
     end
     maps = reduce(vcat, batches)
@@ -73,6 +73,10 @@ function accumulate_hr!(hr, block::DeviceConstantBlock, p)
     launch_kernel!(constant_hr_kernel!, hr, length(block.rows), block.rows, block.vals)
 end
 
+function accumulate_hr!(hr, block::DeviceKernelBlock, p)
+    launch_kernel!(gaussian_kernel_hr_kernel!, hr, length(block.rows), block.rows, block.X, block.D, p, block.γ)
+end
+
 """
     parameter_gradient(block, G)
 
@@ -84,6 +88,11 @@ function parameter_gradient(block::DeviceSparseBlock, G)
 end
 
 parameter_gradient(block::DeviceConstantBlock, G) = zeros(block.nparams)
+
+function parameter_gradient(block::DeviceKernelBlock, G)
+    g = similar(G, Float64, block.nparams)
+    launch_kernel!(gaussian_kernel_grad_kernel!, g, block.nparams, block.rows, block.X, block.D, G, block.γ)
+end
 
 """
     get_device_hamiltonian(lmap, hr, phase, sp_diag)
@@ -276,6 +285,11 @@ function get_model_gradient(model::TBModel, indices, reg, g::RawModelGradient; s
 end
 
 function get_model_gradient(kernel::HamiltonianKernel, indices, reg, g::RawModelGradient; soc=false)
+    kernel.update || return zeros(length(kernel.params))
+    return g.grad .+ backward(reg, kernel.params)
+end
+
+function get_model_gradient(kernel::HamiltonianKernelPrecalced, indices, reg, g::RawModelGradient; soc=false)
     kernel.update || return zeros(length(kernel.params))
     return kernel.kp.weights .* g.grad .+ backward(reg, kernel.params)
 end

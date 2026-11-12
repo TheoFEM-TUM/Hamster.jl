@@ -129,6 +129,14 @@ get_sample_norm(conf::Config)::Bool = conf("sample_norm", "ML") == "default" ? f
 
 get_sim_tol(conf::Config)::Float64 = conf("sim_tol", "ML") == "default" ? 0.01 : conf("sim_tol", "ML")
 
+"""
+    sim_mat=true
+
+The `sim_mat::Bool` tag determines whether the similarity matrix of the ML descriptors is precalculated (`HamiltonianKernelPrecalced`, default).
+With `sim_mat = false`, the similarities to all data points are evaluated on the fly (`HamiltonianKernel`), which needs less memory but more time.
+"""
+get_ml_sim_mat(conf::Config)::Bool = conf("sim_mat", "ML") == "default" ? true : conf("sim_mat", "ML")
+
 function get_key_dims(conf::Config)::Vector{Int64}
     #key_dims = conf("key_dims", "ML") == Int64[] ? conf("key_dims", "ML") : [conf("key_dims", "ML")]
     key_dims = conf("key_dims", "ML")

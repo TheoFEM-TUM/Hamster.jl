@@ -29,6 +29,18 @@ struct ConstantTerms{T}
 end
 
 """
+    GaussianKernelTerms(keys, X, D, σ)
+
+Host representation of the Gaussian kernel model `Hr[R][i, j] = Σ_n params[n] * exp(-|X[:, t] - D[:, n]|² / 2σ²)` with `keys[t] = (R, i, j)`.
+"""
+struct GaussianKernelTerms
+    keys :: Vector{NTuple{3, Int64}}
+    X :: Matrix{Float64}
+    D :: Matrix{Float64}
+    σ :: Float64
+end
+
+"""
     spin_keys(R, i, j, soc)
 
 Return the entries of `kron(H, I_spin)` that the element `H[i, j]` contributes to (see `apply_spin_basis`).
@@ -44,7 +56,7 @@ end
 """
     linear_terms(model, index; soc=false)
 
-Return the linear terms (`SparseTerms` or `ConstantTerms`) of `model` for the structure `index`, such that the sum of
+Return the linear terms (`SparseTerms`, `ConstantTerms` or `GaussianKernelTerms`) of `model` for the structure `index`, such that the sum of
 all terms reproduces `get_hr(model, mode, index, apply_soc=soc)`.
 """
 function linear_terms(model::TBModel, index; soc=false)
@@ -73,6 +85,26 @@ function linear_terms(model::TBModel, index; soc=false)
 end
 
 function linear_terms(kernel::HamiltonianKernel, index; soc=false)
+    h_env = kernel.structure_descriptors[index]
+    Ndim = length(first(kernel.data_points))
+    n = sum(nnz, h_env, init=0) * (soc ? 2 : 1)
+    keys = Vector{NTuple{3, Int64}}(undef, n)
+    X = Matrix{Float64}(undef, Ndim, n)
+    t = 0
+    for R in eachindex(h_env)
+        for (i, j, hin) in zip(findnz(h_env[R])...)
+            for key in spin_keys(R, i, j, soc)
+                t += 1
+                keys[t] = key
+                X[:, t] .= hin
+            end
+        end
+    end
+    D = reduce(hcat, Vector{Float64}.(kernel.data_points))
+    return GaussianKernelTerms(keys, X, D, kernel.sim_params)
+end
+
+function linear_terms(kernel::HamiltonianKernelPrecalced, index; soc=false)
     desc_vec = kernel.sms[index].feature_vec
     key_ranges = kernel.kp.key_ranges
     terms = SparseTerms(Float64, length(kernel.params))
@@ -80,7 +112,7 @@ function linear_terms(kernel::HamiltonianKernel, index; soc=false)
         features, nnz_ham = desc_vec[R]
         for m in 1:nnz_ham
             feature, (i, j, key) = features[m]
-            # Entries that `get_hr(::HamiltonianKernel, ...)` skips
+            # Entries that `get_hr(::HamiltonianKernelPrecalced, ...)` skips
             haskey(key_ranges, key) && length(feature) == length(key_ranges[key]) || continue
             param_range = key_ranges[key]
             for (n, val) in zip(findnz(feature)...)
@@ -152,6 +184,20 @@ struct DeviceConstantBlock{IV, V}
 end
 
 """
+    DeviceKernelBlock
+
+Device representation of `GaussianKernelTerms` of model `model_index`. `rows[t]` is the entry of descriptor `X[:, t]`.
+"""
+struct DeviceKernelBlock{IV, M}
+    model_index :: Int64
+    nparams :: Int64
+    rows :: IV
+    X :: M
+    D :: M
+    γ :: Float64
+end
+
+"""
     DeviceLinearMap
 
 Precomputed, device-resident description of the real- and k-space Hamiltonians of one structure.
@@ -213,6 +259,9 @@ function host_linear_map(models, index, Nε, NR; soc=false)
             A = sparse(rows, terms.cols, terms.vals, Nent, terms.nparams)
             At = copy(transpose(A))          # no duplicate (entry, parameter) pairs, so this equals sparse(cols, rows, vals)
             (m=m, nparams=terms.nparams, A=A, At=At)
+        elseif terms isa GaussianKernelTerms
+            allunique(rows) || error("Kernel model contains duplicate matrix elements.")
+            (m=m, nparams=size(terms.D, 2), rows=rows, X=terms.X, D=terms.D, γ=1 / (2 * terms.σ^2))
         else
             # Sum the contributions to the same entry, such that every entry is written by one work item
             v = sparsevec(rows, terms.vals, Nent)
@@ -264,6 +313,8 @@ function DeviceLinearMap(host::NamedTuple, device)
             # The CSC arrays of At (A) are the CSR arrays of A (At)
             DeviceSparseBlock(b.m, b.nparams, dev(b.At.colptr), dev(b.At.rowval), to_device(device, T.(b.At.nzval)),
                 dev(b.A.colptr), dev(b.A.rowval), to_device(device, T.(b.A.nzval)))
+        elseif haskey(b, :X)
+            DeviceKernelBlock(b.m, b.nparams, dev(b.rows), to_device(device, b.X), to_device(device, b.D), b.γ)
         else
             DeviceConstantBlock(b.m, b.nparams, dev(b.rows), to_device(device, ComplexF64.(b.vals)))
         end

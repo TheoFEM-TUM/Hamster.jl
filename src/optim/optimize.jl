@@ -133,18 +133,18 @@ end
     load_simmats!(ham::EffectiveHamiltonian, indices)
     unload_simmats!(ham::EffectiveHamiltonian, indices)
 
-Loads / unloads the `SimMat`s of the structures `indices` for every `HamiltonianKernel` in `ham.models`.
+Loads / unloads the `SimMat`s of the structures `indices` for every `HamiltonianKernelPrecalced` in `ham.models`.
 """
 function load_simmats!(ham::EffectiveHamiltonian, indices)
     for model in ham.models
-        model isa HamiltonianKernel && load_simmats!(model, indices)
+        model isa HamiltonianKernelPrecalced && load_simmats!(model, indices)
     end
     return ham
 end
 
 function unload_simmats!(ham::EffectiveHamiltonian, indices)
     for model in ham.models
-        model isa HamiltonianKernel && unload_simmats!(model, indices)
+        model isa HamiltonianKernelPrecalced && unload_simmats!(model, indices)
     end
     return ham
 end
