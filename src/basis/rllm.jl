@@ -331,6 +331,8 @@ function read_rllm(
         radial_file = haskey(file, "model/rllm") ? file["model/rllm"] : file
         for overlap in overlaps
             overlap_str = string(overlap, apply_oc=true)
+            haskey(radial_file, overlap_str) ||
+                error("Radial table $overlap_str missing in $(HDF5.filename(file))")
 
             data = read(radial_file[overlap_str])  # force full read
 

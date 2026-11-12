@@ -212,6 +212,72 @@ end
             MPI.Barrier(comm)
             @test_throws ErrorException load_model!(conf, comm; filename=bad, rank=rank)
         end
+        @testset "Incomplete or mismatched model files" begin
+            conf = model_io_config()
+            set_value!(conf, "model", "ML", true)
+            set_value!(conf, "npoints", "ML", 4 * MPI.Comm_size(comm))
+            set_value!(conf, "ncluster", "ML", 1)
+            ham, strcs, bases = model_io_build(conf, comm)
+            file = joinpath(dir, "complete.h5")
+            save_model(ham, strcs, bases, conf, comm; filename=file, rank=rank)
+            variants = [("noml", f -> delete_object(f, "model/ml"), "model/ml/params"),
+                        ("notb", f -> delete_object(f, "model/tb"), "model/tb/params"),
+                        ("norllm", f -> delete_object(f, "model/rllm"), "model/rllm")]
+            for (name, damage, message) in variants
+                damaged = joinpath(dir, "$name.h5")
+                if rank == 0
+                    cp(file, damaged)
+                    h5open(damage, damaged, "r+")
+                end
+                MPI.Barrier(comm)
+                err = try load_model!(model_io_config(), comm; filename=damaged, rank=rank); nothing catch e; e end
+                @test err isa ErrorException && occursin(message, err.msg)
+            end
+            onetable = joinpath(dir, "onetable.h5")
+            if rank == 0
+                cp(file, onetable)
+                h5open(f -> delete_object(f["model/rllm"], first(keys(f["model/rllm"]))), onetable, "r+")
+            end
+            MPI.Barrier(comm)
+            loaded = model_io_config()
+            load_model!(loaded, comm; filename=onetable, rank=rank)
+            err = try model_io_build(loaded, comm); nothing catch e; e end
+            @test err isa ErrorException && occursin("Radial table", err.msg)
+            noopt = joinpath(dir, "noopt.h5")
+            if rank == 0
+                cp(file, noopt)
+                h5open(f -> delete_object(f, "config/Options/rcut"), noopt, "r+")
+            end
+            MPI.Barrier(comm)
+            if rank == 0
+                @test_logs (:warn, r"lacks the settings rcut") match_mode=:any load_model!(model_io_config(); filename=noopt)
+            end
+            other = get_empty_config()
+            set_value!(other, "poscar", joinpath(@__DIR__, "..", "model", "test_files", "POSCAR_cspbbr3"))
+            set_value!(other, "verbosity", 0)
+            load_model!(other, comm; filename=file, rank=rank)
+            err = try model_io_build(other, comm); nothing catch e; e end
+            @test err isa ErrorException && occursin("no settings for Br, Cs, Pb", err.msg)
+        end
+        if MPI.Comm_size(comm) == 1
+            @testset "hamster.out lists the loaded settings" begin
+                cd(dir) do
+                    conf = model_io_config()
+                    set_value!(conf, "rcut", 5.5)
+                    ham, strcs, bases = model_io_build(conf, comm)
+                    save_model(ham, strcs, bases, conf, comm; filename="listing.h5")
+                    run_conf = get_empty_config()
+                    set_value!(run_conf, "poscar", conf("poscar"))
+                    set_value!(run_conf, "verbosity", 0)
+                    set_value!(run_conf, "load_model", true)
+                    set_value!(run_conf, "model_file", "listing.h5")
+                    Hamster.main(comm, run_conf)
+                    out = read("hamster.out", String)
+                    @test occursin(r"rcut = 5\.5", out)
+                    @test occursin(r"rllm_file = \S*listing\.h5", out)
+                end
+            end
+        end
     finally
         MPI.Barrier(comm)
         rank == 0 && rm(dir; recursive=true, force=true)

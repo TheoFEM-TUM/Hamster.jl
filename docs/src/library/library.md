@@ -72,6 +72,11 @@ Pages = ["conf/read_config.jl", "conf/config.jl", "conf/tag_help.jl", "conf/defa
          "soc_defaults.jl", "hyperopt_defaults.jl", "ewald_defaults.jl", "dos_defaults.jl"]
 ```
 
+```@docs
+Hamster.check_model_contents
+Hamster.check_model_species
+```
+
 # Output
 
 ```@autodocs

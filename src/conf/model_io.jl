@@ -163,6 +163,7 @@ function load_model!(conf::Config, comm=nothing; filename=nothing, rank=0)
                     end
                 end
                 flags = Dict(name => read(file["model/$(name)_enabled"]) for name in ("tb", "soc", "ewald", "ml"))
+                check_model_contents(file, flags, options, filename)
                 (options, blocks, flags, nothing)
             end
         catch err
@@ -201,6 +202,39 @@ function load_model!(conf::Config, comm=nothing; filename=nothing, rank=0)
     set_value!(conf, "load_rllm", true)
     set_value!(conf, "rllm_file", abspath(filename))
     return conf
+end
+
+"""
+    check_model_contents(file, flags, options, filename)
+
+Throw an error if the model file lacks the parameters or radial tables of an enabled model, and warn about model
+settings that are missing in the file (their defaults are used, e.g. for tags added after the file was written).
+"""
+function check_model_contents(file, flags, options, filename)
+    required = Dict("tb" => ["model/tb/labels", "model/tb/params", "model/rllm"],
+                    "soc" => ["model/soc/labels", "model/soc/params"],
+                    "ewald" => ["model/ewald/labels", "model/ewald/params"],
+                    "ml" => ["model/ml/params", "model/ml/points"])
+    missing = [path for (name, paths) in required if flags[name] for path in paths if !haskey(file, path)]
+    isempty(missing) || error("Incomplete model file $filename: missing $(join(sort(missing), ", "))")
+    absent = [lowercase(tag.name) for tag in CONFIG_TAGS if model_config_option(tag) && !haskey(options, lowercase(tag.name))]
+    isempty(absent) || @warn "Model file $filename lacks the settings $(join(absent, ", ")); their defaults are used."
+    return nothing
+end
+
+"""
+    check_model_species(strcs, conf)
+
+Throw an error if a structure contains species without settings (atom block) in the loaded model file.
+"""
+function check_model_species(strcs, conf)
+    get_load_model(conf) || return nothing
+    known = sort([block for block in keys(conf.blocks) if haskey(elements, Symbol(block))])
+    species = unique(string(number_to_element(ion.type)) for strc in strcs for ion in strc.ions)
+    missing = sort(setdiff(species, known))
+    isempty(missing) || error("Model file $(get_model_file(conf)) has no settings for $(join(missing, ", ")) " *
+                              "(species of the model: $(join(known, ", ")))")
+    return nothing
 end
 
 # Called during construction, before descriptors and electrostatic centering use weights.

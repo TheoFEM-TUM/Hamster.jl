@@ -61,6 +61,8 @@ and the combination of the per-structure eigenvalue files.
 """
 function run_main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity(conf))
     set_seed!(conf, rank=rank)
+    # Before the settings are written, so that hamster.out lists the settings of the loaded model
+    get_load_model(conf) && load_model!(conf, comm, rank=rank)
     hostnames = MPI.gather(readchomp(`hostname`), comm, root=0)
     # On every rank (Julia's default is half of the threads); the loops over k-points set their own
     BLAS.set_num_threads(1)

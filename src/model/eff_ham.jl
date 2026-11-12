@@ -34,6 +34,7 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
         return EffectiveHamiltonian(0, Nothing[], String[], Dense(), Dense(), 1e-10, Tuple{Int64, Int64, Int64}[], false, [zeros(3, 1)], nothing)
     end
 
+    check_model_species(strcs, conf)
     if rank == 0 && verbosity > 0; println("Building effective Hamiltonian model..."); end
     eff_ham_begin_time = MPI.Wtime() 
 

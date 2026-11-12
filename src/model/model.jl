@@ -62,11 +62,13 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
             file = h5open(filename, "r", comm)
         end
     end
-    hs = map(eachindex(strcs)) do n
-        get_geometry_tensor(strcs[n], bases[n], conf, file=file, comm=comm)
-    end
-    if occursin(".h5", filename) || get_load_model(conf)
-        close(file)
+    # Closed also on errors, otherwise an MPI-IO file is closed by its finalizer after MPI.Finalize
+    hs = try
+        map(eachindex(strcs)) do n
+            get_geometry_tensor(strcs[n], bases[n], conf, file=file, comm=comm)
+        end
+    finally
+        isnothing(file) || close(file)
     end
 
     param_labels_local = unique(Iterators.flatten([basis.parameters for basis in bases]))

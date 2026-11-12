@@ -43,11 +43,6 @@ Load the local structures (`local_inds`: configuration indices per system), buil
 """
 function build_hamiltonian(conf, comm, local_inds; mode, Rs=zeros(3, 1), reindex=false, rank=0, nranks=1,
                            verbosity=get_verbosity(conf), kwargs...)
-    # Load model from file if requested
-    if get_load_model(conf)
-        load_model!(conf, comm, rank=rank)
-    end
-    
     if rank == 0 && verbosity > 1; println("Getting structures..."); end
     begin_time = MPI.Wtime()
     strcs = mapreduce(vcat, local_inds, init=Structure[]) do (system, inds)
