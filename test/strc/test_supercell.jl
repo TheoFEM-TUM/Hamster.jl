@@ -354,3 +354,51 @@ end
     end
     @test all(correct_atom_positions)
 end
+
+@testset "Separate validation set config indices" begin
+    strc_file = joinpath(path, "structures_universal.h5")  # CsBaBr_3, CsBaCl_3 (10 configs each), CsBaBr_3_PC
+    inds_file = joinpath(mktempdir(), "inds.h5")
+    h5open(inds_file, "w") do f
+        f["CsBaBr_3/train_config_inds"] = [1, 2, 3]
+        f["CsBaBr_3/val_config_inds"] = [4, 5]
+        # no CsBaCl_3 group (validation-only system)
+    end
+
+    # Test 1: Validation indices come from val_config_inds (never from config_inds) and are topped up to Nconf
+    kwargs = (Nconf=4, Nconf_min=1, Nconf_max=10, validate=true, train_mode="universal", val_mode="universal", val_inds_conf=inds_file)
+    val_inds = Hamster.get_val_config_index_sample("CsBaBr_3"; kwargs...)
+    @test val_inds[1:2] == [4, 5]
+    @test length(val_inds) == 4 && allunique(val_inds) && all(i -> 1 ≤ i ≤ 10, val_inds)
+    val_inds = Hamster.get_val_config_index_sample("CsBaCl_3"; kwargs...)
+    @test length(val_inds) == 4 && allunique(val_inds) && all(i -> 1 ≤ i ≤ 10, val_inds)
+    @test Hamster.get_val_config_index_sample("CsBaBr_3"; kwargs..., val_inds_conf=[7, 8, 9, 10]) == [7, 8, 9, 10]
+    @test Hamster.get_val_config_index_sample("CsBaBr_3"; kwargs..., val_inds_conf="none", Nconf=10) == collect(1:10)
+    @test Hamster.get_val_config_index_sample("CsBaBr_3"; kwargs..., validate=false) == Int64[]
+    @test Hamster.get_val_config_index_sample("CsBaBr_3_PC"; kwargs..., pc_weight_val=0) == Int64[]
+    @test Hamster.get_val_config_index_sample("CsBaBr_3_PC"; kwargs..., pc_weight_val=1) == [1]
+
+    # Test 2: get_config_inds_for_systems with is_val returns and writes the validation indices
+    conf = get_empty_config()
+    set_value!(conf, "XDATCAR", "Supercell", strc_file)
+    set_value!(conf, "XDATCAR_val", "Supercell", strc_file)
+    set_value!(conf, "Nconf", "Supercell", 4)
+    set_value!(conf, "Nconf_max", "Supercell", 100)
+    set_value!(conf, "config_inds", "Supercell", inds_file)
+    set_value!(conf, "val_config_inds", "Supercell", inds_file)
+    set_value!(conf, "train_mode", "Optimizer", "universal")
+    set_value!(conf, "val_mode", "Optimizer", "universal")
+    systems_val = Hamster.get_systems(conf, is_val=true)
+    @test systems_val == ["CsBaBr_3", "CsBaCl_3"]
+    train_inds, val_inds = cd(mktempdir()) do
+        inds = Hamster.get_config_inds_for_systems(systems_val, MPI.COMM_WORLD, conf, write_output=true, is_val=true)
+        for system in systems_val
+            @test h5read("hamster_out.h5", "$system/val_config_inds") == inds[2][system]
+            @test !h5open(f -> haskey(f, "$system/train_config_inds"), "hamster_out.h5", "r")
+        end
+        inds
+    end
+    @test all(isempty, values(train_inds))
+    @test val_inds["CsBaBr_3"][1:2] == [4, 5]
+    @test length(val_inds["CsBaBr_3"]) == 4
+    @test length(val_inds["CsBaCl_3"]) == 4 && all(i -> 1 ≤ i ≤ 10, val_inds["CsBaCl_3"])  # Nconf_max capped by the file
+end

@@ -208,7 +208,10 @@ function get_config_inds_for_systems(
             end
         end
 
-        system_train_inds, system_val_inds = if !optimize && get_filter_config_inds(conf) && !endswith(system, "_PC")
+        system_train_inds, system_val_inds = if is_val
+            # Separate validation set (val_ratio = 0): only validation indices, read from val_config_inds
+            Int64[], get_val_config_index_sample(system, conf; Nconf=Nconf, Nconf_max=Nconf_max)
+        elseif !optimize && get_filter_config_inds(conf) && !endswith(system, "_PC")
             get_filtered_config_index_sample(system, conf; Nconf=Nconf, Nconf_max=Nconf_max, rank=rank), Int64[]
         else
             get_config_index_sample(system, conf; Nconf=Nconf, Nconf_max=Nconf_max)
@@ -227,8 +230,7 @@ function get_config_inds_for_systems(
 
                 if optimize
                     if is_val
-                        #delete!(g, "val_config_inds")
-                        write(g, "val_config_inds", system_train_inds)
+                        write(g, "val_config_inds", system_val_inds)
                     else
                         write(g, "train_config_inds", system_train_inds)
                         if get_val_ratio(conf) > 0
@@ -398,6 +400,49 @@ function get_config_index_sample(system, conf=get_empty_config();
     end
 
     return train_config_inds, val_config_inds
+end
+
+"""
+    get_val_config_index_sample(system, conf=get_empty_config(); Nconf=get_Nconf(conf), Nconf_min=get_Nconf_min(conf), Nconf_max=get_Nconf_max(conf), validate=get_validate(conf), train_mode=get_train_mode(conf), val_mode=get_val_mode(conf), val_inds_conf=get_val_config_inds(conf), pc_weight_val=get_pc_weight_val(conf))
+
+Selects validation configuration indices for `system` when the validation set is sampled independently of the training set
+(`val_ratio = 0`, e.g., validation structures from `xdatcar_val` and eigenvalues from `val_data`).
+
+Indices are read from `val_config_inds` (from `.h5` files: `<system>/val_config_inds`; a missing dataset or group yields no indices).
+In MD/universal mode, they are topped up to `Nconf` by random sampling from `Nconf_min:Nconf_max`. Training indices are not used.
+`_PC` systems get `[1]` if `pc_weight_val ≠ 0`.
+
+# Returns
+- `Vector{Int64}`: The validation configuration indices.
+"""
+function get_val_config_index_sample(system, conf=get_empty_config();
+                                Nconf=get_Nconf(conf),
+                                Nconf_min=get_Nconf_min(conf),
+                                Nconf_max=get_Nconf_max(conf),
+                                validate=get_validate(conf),
+                                train_mode=get_train_mode(conf),
+                                val_mode=get_val_mode(conf),
+                                val_inds_conf=get_val_config_inds(conf),
+                                pc_weight_val=get_pc_weight_val(conf))::Vector{Int64}
+    if !validate
+        return Int64[]
+    elseif endswith(system, "_PC")
+        return pc_weight_val != 0 ? [1] : Int64[]
+    elseif pc_weight_val > 100000
+        return Int64[]
+    end
+
+    val_config_inds = read_config_inds(system, val_inds_conf, "val_config_inds", missing_ok=true)
+
+    if (lowercase(val_mode) ∈ ["md", "universal"] || lowercase(val_mode) == lowercase(train_mode)) && length(val_config_inds) < Nconf
+        remaining_indices = setdiff(Nconf_min:Nconf_max, val_config_inds)
+        Nval = min(Nconf - length(val_config_inds), length(remaining_indices))
+        append!(val_config_inds, sample(remaining_indices, Nval, replace=false, ordered=true))
+    elseif isempty(val_config_inds)
+        push!(val_config_inds, 1)
+    end
+
+    return val_config_inds
 end
 
 """

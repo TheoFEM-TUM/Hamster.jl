@@ -40,10 +40,11 @@ function get_config_inds(conf::Config)::Union{String, Vector{Int64}}
     end
 end
 """
-    config_inds=none
+    val_config_inds=none
 
-The `config_inds` tag sets a file from which configuration indices are read. By default, indices are not read from file.
-It is also possible to provide a list of integers directly.
+The `val_config_inds` tag sets a file from which validation configuration indices are read. By default, indices are not read from file.
+It is also possible to provide a list of integers directly. From `.h5` files, the indices are read from `<system>/val_config_inds`.
+With a separate validation set (`val_ratio = 0`, e.g., `xdatcar_val`), the indices refer to the validation structure file.
 """
 function get_val_config_inds(conf::Config)::Union{String, Vector{Int64}}
     if conf("val_config_inds", "Supercell") == "default" 

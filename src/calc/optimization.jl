@@ -76,7 +76,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       if rank == 0
          println("Rank 0 Number of Validation Systems: ", length(systems_val))
       end
-      val_config_inds,_  = get_config_inds_for_systems(systems_val, comm, conf, rank=rank, write_output=write_output, is_val=true)
+      _, val_config_inds = get_config_inds_for_systems(systems_val, comm, conf, rank=rank, write_output=write_output, is_val=true)
    end
    if rank == 0 && verbosity > 0
       Nind_train = sum(length(v) for v in values(train_config_inds))
