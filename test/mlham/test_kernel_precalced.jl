@@ -17,8 +17,8 @@
     expected = [2.0 * Hamster.exp_sim(point, point, σ=0.5) + 3.0 * Hamster.exp_sim(second_point, point, σ=0.5),
                 2.0 * Hamster.exp_sim(point, second_point, σ=0.5) + 3.0 * Hamster.exp_sim(second_point, second_point, σ=0.5)]
     expected_matrix = [expected[1] expected[2]; 0.0 0.0]
-    @test get_hr(kernel, Hamster.Dense(), 1)[1] ≈ expected_matrix
-    @test Matrix(get_hr(kernel, Hamster.Sparse(), 1)[1]) ≈ expected_matrix
+    @test get_hr(kernel, Hamster.Dense(), 1)[1] ≈ expected_matrix rtol=1e-6
+    @test Matrix(get_hr(kernel, Hamster.Sparse(), 1)[1]) ≈ expected_matrix rtol=1e-6
 
     set_params!(kernel, [4.0, 5.0])
     @test get_params(kernel) == [4.0, 5.0]
@@ -78,17 +78,29 @@ end
     end
 
     # Without key buckets and similarity cutoff, the precalculated similarities reproduce the on-the-fly kernel
+    # (up to the Float32 precision of the stored similarities)
     set_value!(conf, "key_dims", "ML", 0)
     set_value!(conf, "sim_tol", "ML", 0.0)
     kernel = Hamster.HamiltonianKernelPrecalced(base_kernel, 0, ["test"], conf)
     for mode in (Hamster.Dense(), Hamster.Sparse())
-        @test all(Matrix.(get_hr(base_kernel, mode, 1)) .≈ Matrix.(get_hr(kernel, mode, 1)))
+        @test all(isapprox.(Matrix.(get_hr(base_kernel, mode, 1)), Matrix.(get_hr(kernel, mode, 1)), rtol=1e-6))
     end
     base_kernel.update = kernel.update = true
     dL_dHr = [[sprand(ComplexF64, size(H)..., 0.5) .+ H for H in get_hr(base_kernel, Hamster.Sparse(), 1)]]
     reg = Hamster.Regularization(conf)
     perm = [findfirst(==(x), base_kernel.data_points) for x in kernel.kp.datapoints]
-    @test Hamster.get_model_gradient(kernel, [1], reg, dL_dHr) ≈ Hamster.get_model_gradient(base_kernel, [1], reg, dL_dHr)[perm]
+    @test Hamster.get_model_gradient(kernel, [1], reg, dL_dHr) ≈ Hamster.get_model_gradient(base_kernel, [1], reg, dL_dHr)[perm] rtol=1e-6
+
+    # Writing the SimMats to file (batch by batch) and reading them back reproduces them exactly
+    sms = [kernel.sms[1], Hamster.get_empty_simmat(kernel.sms[1]), kernel.sms[1]]
+    file = joinpath(mktempdir(), "simmat_test.h5")
+    write_simmat(sms[1:2], filename=file)
+    write_simmat(sms[3:3], filename=file, append=true)
+    same(a, b) = a.feature_shape == b.feature_shape && a.sim_params == b.sim_params && length(a.blocks) == length(b.blocks) &&
+                 all(getfield(x, f) == getfield(y, f) for (x, y) in zip(a.blocks, b.blocks) for f in fieldnames(Hamster.SimMatBlock))
+    @test all(same.(read_simmat(filename=file), sms))
+    @test same(read_simmat_index(3, filename=file), sms[3])
+    @test Hamster.nnz(kernel.sms[1]) > 0 && Hamster.simmat_bytes(kernel.sms[1]) == 16 * Hamster.nentries(kernel.sms[1]) + 8 * Hamster.nnz(kernel.sms[1])
 end
 
 @testset "On-the-fly kernel in the device code path" begin

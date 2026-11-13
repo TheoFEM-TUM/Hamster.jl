@@ -87,8 +87,11 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       end
       println("Total : $Nind_train train_inds | $Nind_val val_inds")
    end
-   local_train_inds = split_indices_into_chunks(train_config_inds, nranks, get_train_data(conf), rank=rank)
-   local_val_inds = split_indices_into_chunks(val_config_inds, nranks, get_val_data(conf), rank=rank)
+   # Balance the structures across ranks by their estimated size (number of Hamiltonian matrix elements)
+   train_costs = MPI.bcast(rank == 0 ? get_system_costs(keys(train_config_inds), conf, mode=get_train_mode(conf)) : nothing, comm, root=0)
+   val_costs = MPI.bcast(rank == 0 ? get_system_costs(keys(val_config_inds), conf, mode=get_val_mode(conf), is_val=true) : nothing, comm, root=0)
+   local_train_inds = split_indices_into_chunks(train_config_inds, nranks, train_costs, rank=rank)
+   local_val_inds = split_indices_into_chunks(val_config_inds, nranks, val_costs, rank=rank)
    if target_dir != "missing"
       subdirs_dict = get_subdirs(target_dir, systems)
       local_subdirs = [subdirs_dict[k] for k in local_train_inds.keys if haskey(subdirs_dict, k)]

@@ -1,5 +1,5 @@
 """
-    mutable struct HamiltonianKernelPrecalced{S<:SimMat}
+    mutable struct HamiltonianKernelPrecalced
 
 A kernel model with precalculated similarity matrices (`sim_mat = true`, default), i.e., the similarities of the descriptors of all
 matrix elements to the data points are computed once and stored as `SimMat`s (see `HamiltonianKernel` for the model that
@@ -10,15 +10,15 @@ evaluates them on the fly).
 - `kp :: Kernelpoints`: Kernel points data including sampling points and key ranges.
 - `sim_params :: Float64`: Parameters for the similarity function.
 - `update :: Bool`: Flag indicating whether parameters should be updated during optimization.
-- `sms :: Vector{S}`: Precomputed kernel features, one `SimMat` per structure.
+- `sms :: Vector{SimMat}`: Precomputed kernel features, one `SimMat` per structure.
 - `simmat_file :: String`: HDF5 file the `SimMat`s are written to / loaded from when they are batched (`nbatch > 1`).
 """
-mutable struct HamiltonianKernelPrecalced{S<:SimMat}
+mutable struct HamiltonianKernelPrecalced
     params :: Vector{Float64}
     kp :: Kernelpoints
     sim_params :: Float64
     update :: Bool
-    sms :: Vector{S}
+    sms :: Vector{SimMat}
     simmat_file :: String
 end
 
@@ -127,48 +127,22 @@ Constructs a set of real-space Hamiltonians from a `HamiltonianKernelPrecalced`.
 - A vector of real-space Hamiltonian matrices, optionally modified with SOC transformations.
 """
 function get_hr(kernel::HamiltonianKernelPrecalced, mode, index; apply_soc=false)
-    @views desc_vec = kernel.sms[index].feature_vec
-    (NR, Ne) = kernel.sms[index].feature_shape[1]
-    key_ranges = kernel.kp.key_ranges
+    sm = kernel.sms[index]
+    (NR, Ne) = sm.feature_shape[1]
+    params = kernel.params
     Hr = get_empty_complex_hamiltonians(Ne, NR, mode)
-
     for R in 1:NR
-        nnz_ham = desc_vec[R][2]
-
-        # Per-task storage: each thread writes only to its own slot m, so no contention
-        Is = Vector{Int}(undef, nnz_ham)
-        Js = Vector{Int}(undef, nnz_ham)
-        Vs = Vector{ComplexF64}(undef, nnz_ham)
-        #keep = falses(nnz_ham)
-
-        tforeach(1:nnz_ham) do m
-            desc_vec_single, (i, j, key) = @views desc_vec[R][1][m]
-
-            if !haskey(key_ranges, key)
-                @warn "key not found in key_ranges, skipping" key=key R=R m=m
-                return
+        block = sm.blocks[R]
+        Vs = Vector{ComplexF64}(undef, nentries(block))
+        tforeach(eachindex(Vs)) do m
+            s = 0.0
+            @inbounds for q in block.ptr[m]:block.ptr[m+1]-1
+                s += block.val[q] * params[block.idx[q]]
             end
-
-            params = @views kernel.params[key_ranges[key]]
-            if length(desc_vec_single) != length(params)
-                @warn "length mismatch, skipping" key=key R=R m=m len_desc=length(desc_vec_single) len_params=length(params)
-                return
-            end
-
-            val = dot(desc_vec_single, params)
-
-            Is[m] = i
-            Js[m] = j
-            Vs[m] = val
-            #keep[m] = true
-
+            Vs[m] = s
         end
-
-        # Sequential, safe construction of the sparse matrix for this R
-        #Hr[R] = sparse(Is[keep], Js[keep], Vs[keep], Ne, Ne)
-        Hr[R] = sparse(Is, Js, Vs, Ne, Ne)
+        Hr[R] = sparse(Vector{Int}(block.is), Vector{Int}(block.js), Vs, Ne, Ne)
     end
-
     return apply_soc ? apply_spin_basis.(Hr) : Hr
 end
 
@@ -234,7 +208,7 @@ function get_model_gradient(kernel::HamiltonianKernelPrecalced, indices, reg, dL
     kernel.update || return zeros(Nparams)
     # The (structure, R) blocks of the batch; the entries of all blocks are numbered consecutively
     blocks = [(bi, R) for bi in eachindex(indices) for R in eachindex(dL_dHr[bi])]
-    block_ends = cumsum([kernel.sms[indices[bi]].feature_vec[R][2] for (bi, R) in blocks])
+    block_ends = cumsum([nentries(kernel.sms[indices[bi]].blocks[R]) for (bi, R) in blocks])
     Nentries = isempty(block_ends) ? 0 : last(block_ends)
 
     # Every task accumulates the (unweighted) contributions of a contiguous range of entries into its own buffer
@@ -246,7 +220,7 @@ function get_model_gradient(kernel::HamiltonianKernelPrecalced, indices, reg, dL
             bi, R = blocks[b]
             block_start = b == 1 ? 1 : block_ends[b-1] + 1
             ms = (max(first(entry_range), block_start):min(last(entry_range), block_ends[b])) .- (block_start - 1)
-            accumulate_kernel_gradient!(dparams_task, kernel.sms[indices[bi]].feature_vec[R][1], ms, dL_dHr[bi][R], kernel.kp.key_ranges, soc)
+            accumulate_kernel_gradient!(dparams_task, kernel.sms[indices[bi]].blocks[R], ms, dL_dHr[bi][R], soc)
         end
         return dparams_task
     end
@@ -267,52 +241,17 @@ function get_model_gradient(kernel::HamiltonianKernelPrecalced, indices, reg, dL
 end
 
 """
-    accumulate_kernel_gradient!(dparams, entries, ms, dL_dHr_R, key_ranges, soc)
+    accumulate_kernel_gradient!(dparams, block::SimMatBlock, ms, dL_dHr_R, soc)
 
-Add the gradient contributions `feature * real(dL_dHr_R[i, j])` of the entries `entries[ms]` of one `R` block to `dparams`,
-visiting only the stored values of the sparse feature vectors. Entries that `get_hr` skips are skipped as well.
+Add the gradient contributions `feature * real(dL_dHr_R[i, j])` of the entries `ms` of one `R` block to `dparams`.
 """
-function accumulate_kernel_gradient!(dparams, entries, ms, dL_dHr_R, key_ranges, soc)
-    for m in ms
-        feature, (i, j, key) = entries[m]
-        param_range = get(key_ranges, key, nothing)
-        (isnothing(param_range) || length(feature) ≠ length(param_range)) && continue
+function accumulate_kernel_gradient!(dparams, block::SimMatBlock, ms, dL_dHr_R, soc)
+    @inbounds for m in ms
+        i, j = block.is[m], block.js[m]
         g = soc ? real(dL_dHr_R[2i-1, 2j-1] + dL_dHr_R[2i, 2j]) : real(dL_dHr_R[i, j])
-        offset = first(param_range) - 1
-        nzind = SparseArrays.nonzeroinds(feature)
-        nzval = SparseArrays.nonzeros(feature)
-        @inbounds for q in eachindex(nzind)
-            dparams[offset + nzind[q]] += nzval[q] * g
+        for q in block.ptr[m]:block.ptr[m+1]-1
+            dparams[block.idx[q]] += block.val[q] * g
         end
     end
     return dparams
-end
-
-function get_model_gradient_old(kernel::HamiltonianKernelPrecalced, indices, reg, dL_dHr; soc=false)
-    dparams = zeros(length(kernel.params))
-    weights = kernel.kp.weights
-    #weights = ones(length(dparams)) # for unweighted gradients
-    #weights = (weights .-1) .*2 .+1
-    if kernel.update
-        tforeach( eachindex(dparams)) do n
-            for (bi, index) in enumerate(indices)
-                @views desc_vec = kernel.sms[index].feature_vec[n]
-                for R in eachindex(dL_dHr[bi])
-                    for (i, j, exp_val) in zip(findnz(desc_vec[R])...)
-                        if !soc
-                            dparams[n] += weights[n] .* exp_val .* real(dL_dHr[bi][R][i, j])
-                        else
-                            i1 = 2*i-1; j1 = 2*j-1
-                            i2 = 2*i; j2 = 2*j
-                            dparams[n] += weights[n] .* exp_val .* real(dL_dHr[bi][R][i1, j1] + dL_dHr[bi][R][i2, j2])
-                        end
-                    end
-                end
-            end
-        end
-        dparams_penal = backward(reg, kernel.params)
-        return dparams .+ dparams_penal
-    else
-        return dparams
-    end
 end

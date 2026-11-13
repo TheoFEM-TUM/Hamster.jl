@@ -467,55 +467,65 @@ function split_indices_into_chunks(indices::AbstractVector{T}, nchunks; rank=0) 
     end
  end
 
-function zigzag_indices(n, nchunks)
-    # Returns chunk assignment for positions 0..n-1
-    result = Vector{Int}(undef, n)
-    for i in 0:n-1
-        round_num = i ÷ nchunks
-        pos_in_round = i % nchunks
-        if iseven(round_num)
-            result[i+1] = pos_in_round          # forward: 0 1 2
-        else
-            result[i+1] = nchunks - 1 - pos_in_round  # reverse: 2 1 0
-        end
-    end
-    return result
-end
+"""
+    split_indices_into_chunks(indices::AbstractDict, nchunks, costs=Dict{String, Float64}(); rank=0) -> OrderedDict
 
-function split_indices_into_chunks(indices::Dict{String, Vector{T}}, nchunks, data_path; rank=0) where {T}
-    systems = unique(keys(indices))
-    nelecs = get_nelecs(systems, data_path)
-
-    all_pairs = [(sys, i) for (sys, idxs) in indices for i in idxs]
-    sort!(all_pairs, by=((sys, _),) -> nelecs[sys], rev=true)
-
-    assignments = zigzag_indices(length(all_pairs), nchunks)
-    my_pairs = [all_pairs[i] for i in 1:length(all_pairs) if assignments[i] == rank]
-
+Distributes the configurations `indices` (system => config indices) over `nchunks` ranks and returns those of `rank`.
+The configurations are assigned greedily, largest first (longest-processing-time scheduling): sorted by the cost of
+their system (descending), each goes to the rank with the lowest total cost so far (ties: fewer configurations, then
+lower rank). This balances the memory and the time per step across ranks much better than equal numbers of
+configurations when the systems differ in size. Systems missing in `costs` cost 1, so without costs the configurations
+are spread evenly (the counts differ by at most one). The result is the same on every rank.
+"""
+function split_indices_into_chunks(indices::AbstractDict{String, <:AbstractVector{T}}, nchunks, costs=Dict{String, Float64}(); rank=0) where {T}
+    cost(sys) = Float64(get(costs, sys, 1.0))
+    all_pairs = sort!([(sys, i) for (sys, idxs) in indices for i in idxs], by = ((sys, i),) -> (-cost(sys), sys, i))
+    loads = zeros(Float64, nchunks)
+    counts = zeros(Int64, nchunks)
     local_inds = OrderedDict{String, Vector{T}}()
-    for (sys, i) in my_pairs
-        push!(get!(local_inds, sys, T[]), i)
+    for (sys, i) in all_pairs
+        r = argmin(k -> (loads[k], counts[k], k), 1:nchunks)
+        loads[r] += cost(sys)
+        counts[r] += 1
+        r - 1 == rank && push!(get!(local_inds, sys, T[]), i)
     end
     return local_inds
 end
 
+"""
+    estimate_structure_cost(rs_ion, atom_types, lattice, conf=get_empty_config(); rcut=get_rcut(conf)) -> Float64
 
-function split_indices_into_chunks(indices::Dict{String, Vector{T}}, nchunks; rank=0) where {T}
-    all_pairs = [(sys, i) for (sys, idxs) in indices for i in idxs]
-
-    chunk_indices = collect(chunks(all_pairs, n=nchunks))
-
-    if length(chunk_indices) ≥ rank + 1
-        local_inds = OrderedDict{String, Vector{T}}()
-        for (sys, i) in chunk_indices[rank+1]
-            push!(get!(local_inds, sys, T[]), i)
+Estimated number of real-space Hamiltonian matrix elements of a structure (Cartesian positions `rs_ion`): the sum of
+`norb(i) * norb(j)` over all atom pairs `(i, j, R)` within `rcut`. The memory of the similarity matrices and the time
+per step grow with this number, so it is used to balance the structures across ranks.
+"""
+function estimate_structure_cost(rs_ion, atom_types, lattice, conf=get_empty_config(); rcut=get_rcut(conf))
+    norb = Dict(t => length(get_orbitals(conf, number_to_element(t))) for t in unique(atom_types))
+    Ts = frac_to_cart(get_translation_vectors(rs_ion, lattice, rcut=rcut), lattice)
+    cost = 0
+    for (i, j, R) in iterate_nn_grid_points(PointGrid(rs_ion, Ts, grid_size=rcut))
+        if normdiff(rs_ion[:, i], rs_ion[:, j], Ts[:, R]) ≤ rcut
+            cost += norb[atom_types[i]] * norb[atom_types[j]]
         end
-        return local_inds
-    else
-        return Dict{String, Vector{T}}()
     end
+    return Float64(cost)
 end
 
+"""
+    get_system_costs(systems, conf=get_empty_config(); mode=get_train_mode(conf), is_val=false) -> Dict{String, Float64}
+
+The `estimate_structure_cost` of the reference structure of every system, used by `split_indices_into_chunks`.
+Only computed in `universal` mode (several systems in one file); otherwise empty (all configurations cost the same).
+"""
+function get_system_costs(systems, conf=get_empty_config(); mode=get_train_mode(conf), is_val=false)
+    costs = Dict{String, Float64}()
+    lowercase(mode) == "universal" || return costs
+    for system in systems
+        rs_0, atom_types, lattice, _ = read_structure_file(system, conf, mode="universal", is_val=is_val)
+        costs[system] = max(estimate_structure_cost(rs_0, atom_types, lattice, conf), 1.0)
+    end
+    return costs
+end
 
 """
     get_number_of_bands_per_structure(bases, indices; soc=false) -> Dict{String, Int}

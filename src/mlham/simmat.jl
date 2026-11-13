@@ -332,48 +332,67 @@ function verify_kernelpoints(kp::Kernelpoints, conf = get_empty_config();
 end
 
 """
-    struct SimMat{T}
+    struct SimMatBlock
 
-A structure storing precomputed similarity matrix features of a single structure for efficient Hamiltonian evaluation.
+Precomputed kernel features of the matrix elements of one real-space block `R` of a structure, in a flat (CSR-like) layout.
+Entry `m` is the matrix element `(is[m], js[m])`; its feature vector has the stored values `val[q]` at the (global)
+parameter indices `idx[q]` for `q ∈ ptr[m]:ptr[m+1]-1`, such that `H[is[m], js[m]] = Σ_q val[q] * params[idx[q]]`.
+
+Compared to one `SparseVector` per entry, this layout needs no per-entry heap allocations and stores 8 instead of 16 bytes
+per nonzero (`Int32` index, `Float32` value; the similarities lie in `(sim_tol, 1]`, so `Float32` is accurate to ~1e-7).
+"""
+struct SimMatBlock
+    is :: Vector{Int32}
+    js :: Vector{Int32}
+    ptr :: Vector{Int64}
+    idx :: Vector{Int32}
+    val :: Vector{Float32}
+end
+
+SimMatBlock() = SimMatBlock(Int32[], Int32[], [1], Int32[], Float32[])
+
+"""
+    nentries(block::SimMatBlock)
+
+Number of matrix elements (entries) of a `SimMatBlock`.
+"""
+nentries(block::SimMatBlock) = length(block.is)
+SparseArrays.nnz(block::SimMatBlock) = length(block.idx)
+
+"""
+    struct SimMat
+
+Precomputed similarity matrix features of a single structure for efficient Hamiltonian evaluation.
 
 # Fields
-- `feature_vec :: Vector{T}`: Feature vectors per real-space lattice vector `R`, each a tuple `(entries, nnz)`
-  where `entries[n] = (sparse_feature_vector, (i_mat, j_mat, key))`.
-- `feature_shape :: Tuple{Tuple{Int64, Int64}, Int64}`: Tuple containing ((N_R, Ne), number_of_datapoints).
-- `sim_params :: Float64`: Similarity function parameter (e.g., Gaussian width σ).
-
-# Notes
-- Feature vectors contain sparse vectors computed as exponential similarities between data points and structure descriptors.
-- The feature vectors are filtered by a tolerance to eliminate small contributions.
+- `blocks :: Vector{SimMatBlock}`: The features of the matrix elements per real-space lattice vector `R`.
+- `feature_shape :: Tuple{Tuple{Int64, Int64}, Int64}`: `((N_R, Ne), number_of_datapoints)`.
+- `sim_params :: Float64`: Similarity function parameter (Gaussian width σ).
 """
-struct SimMat{T}
-    feature_vec :: Vector{T}
+struct SimMat
+    blocks :: Vector{SimMatBlock}
     feature_shape :: Tuple{Tuple{Int64, Int64}, Int64}
     sim_params :: Float64
 end
 
-"""
-    simmat_type(nkeys) -> Type
-
-Returns the concrete `SimMat` type produced by `get_kernel_features` for `nkeys` key dimensions.
-"""
-function simmat_type(nkeys)
-    EntryT = Tuple{SparseVector{Float64, Int64}, Tuple{Int64, Int64, NTuple{nkeys,Int64}}}
-    return SimMat{Tuple{Vector{EntryT}, Int64}}
-end
+SparseArrays.nnz(sm::SimMat) = sum(nnz, sm.blocks; init = 0)
+nentries(sm::SimMat) = sum(nentries, sm.blocks; init = 0)
 
 """
-    get_empty_simmat(nkeys=1; sim_params=0.0) -> SimMat
+    simmat_bytes(sm::SimMat) -> Int64
+
+Approximate memory of the stored features of a `SimMat` in bytes (16 per entry and 8 per nonzero).
+"""
+simmat_bytes(sm::SimMat) = 16 * nentries(sm) + 8 * nnz(sm)
+
+"""
+    get_empty_simmat(; sim_params=0.0) -> SimMat
     get_empty_simmat(sm::SimMat) -> SimMat
 
-Returns an empty `SimMat` (no `R` blocks, shape `((0, 0), 0)`) with the same type as the output of
-`get_kernel_features` for `nkeys` key dimensions, or with the same type and `sim_params` as `sm`.
+Returns an empty `SimMat` (no `R` blocks, shape `((0, 0), 0)`), with the `sim_params` of `sm` in the second form.
 """
-get_empty_simmat(nkeys = 1; sim_params = 0.0) = get_empty_simmat(simmat_type(nkeys), sim_params)
-get_empty_simmat(sm::SimMat) = get_empty_simmat(typeof(sm), sm.sim_params)
-get_empty_simmat(::Type{SimMat{T}}, sim_params) where {T} = SimMat(T[], ((0, 0), 0), Float64(sim_params))
-
-
+get_empty_simmat(; sim_params = 0.0) = SimMat(SimMatBlock[], ((0, 0), 0), Float64(sim_params))
+get_empty_simmat(sm::SimMat) = get_empty_simmat(sim_params = sm.sim_params)
 
 """
     get_kernel_features(structure_descriptors, kp, sim_params, tol; conf, rank, systems, key_dims, label)
@@ -384,7 +403,7 @@ Generates precomputed kernel feature vectors based on structure descriptors and 
 - `structure_descriptors`: Vector of structure descriptor matrices (one per structure).
 - `kp::Kernelpoints`: Sorted kernel points containing data points and key ranges.
 - `sim_params::Float64`: Gaussian width parameter σ for exponential similarity function.
-- `tol::Float64`: Tolerance threshold for filtering small feature values (default: 0.1).
+- `tol::Float64`: Unused (kept for the call signature); the cutoff is `sim_tol`.
 - `conf`: Configuration object (default: `get_empty_config()`).
 - `rank`: MPI rank for distributed computation and logging (default: 0).
 - `systems`: Labels for each structure (default: auto-generated strings).
@@ -393,72 +412,79 @@ Generates precomputed kernel feature vectors based on structure descriptors and 
 - `coverage_file`: File to which the coverage log messages are appended (default: `"ml_coverage.txt"`).
 
 # Returns
-- `Vector{SimMat{T}}`: One similarity matrix per structure containing feature vectors, descriptor shape, and parameters.
+- `Vector{SimMat}`: One similarity matrix per structure.
 
 # Notes
-- Computes exponential similarities between each structural descriptor element and all data points in its key bucket.
-- Filters features below tolerance to maintain sparsity.
-- Provides detailed logging of coverage statistics (number of non-zero features vs. total elements).
+- Computes exponential similarities between each structural descriptor element and the data points in its key bucket
+  within the cutoff radius, keeping the values `> sim_tol`.
+- Entries whose key has no data points get no features (they contribute zero).
+- Logs per structure the coverage (entries with at least one feature), the mean number of nonzeros per entry and the
+  memory of the features.
 """
 function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; conf = get_empty_config(), rank = 0, systems = nothing, key_dims = get_key_dims(conf), hyperopt_iter = get_hyperopt_niter(conf), verbosity = get_verbosity(conf), sim_tol = get_sim_tol(conf), label = "", coverage_file = "ml_coverage.txt")
-    #dim_weights = get_dim_weights(conf)
     data_points = kp.datapoints
     key_ranges = kp.key_ranges
 
     nkeys = max(length(key_dims), 1)
-    KeyT = NTuple{nkeys,Int64}
-
     keyfun = if isempty(key_dims)
         hin -> (0,)
     else
         hin -> ntuple(j -> Int64(hin[key_dims[j]]), nkeys)
     end
 
-    N_mats = size(structure_descriptors)[1]
+    N_mats = length(structure_descriptors)
     systems = systems === nothing ? [string("system_", i) for i in 1:N_mats] : systems
-    N_dp = size(data_points)[1]
-    descr_sizes = [(size(structure_descriptors[i])[1], size(structure_descriptors[i][1])[1]) for i in 1:N_mats]
-    Desc_Vec = [
-        [ begin
-            n = nnz(structure_descriptors[i][R])
-            (Vector{Tuple{SparseVector{Float64, Int64}, Tuple{Int64, Int64, KeyT}}}(undef, n), n)
-        end
-        for R in 1:descr_sizes[i][1] ]
-        for i in 1:N_mats
-        ]
+    N_dp = length(data_points)
     bucket_keys = collect(keys(key_ranges))
     bucket_trees = Dict(zip(bucket_keys, tmap(key -> KeyBucketTree(@view(data_points[key_ranges[key]])), bucket_keys)))
     radius = similarity_radius(sim_params, sim_tol)
-    N_test = zeros(Int64, N_mats)
-    N_total = zeros(Int64, N_mats)
+
+    sms = Vector{SimMat}(undef, N_mats)
     for i in 1:N_mats
-        N_R, Ne = descr_sizes[i]
+        N_R = length(structure_descriptors[i])
+        Ne = size(structure_descriptors[i][1], 1)
+        blocks = Vector{SimMatBlock}(undef, N_R)
+        N_covered = 0
         for R in 1:N_R
-            h_env_R = structure_descriptors[i][R]
-            touples = collect(zip(findnz(h_env_R)...))
-            N_total_temp  = length(touples)
-            N_test_temp = zeros(N_total_temp)
-            tforeach(1:length(touples)) do n
-                i_mat, j_mat, hin = touples[n]
-                key = keyfun(hin)
-                val_vec = kernel_feature(bucket_trees[key], hin, sim_params, sim_tol, radius)
-                covered = nnz(val_vec) > 0 ? 1 : 0
-                N_test_temp[n] = covered
-                Desc_Vec[i][R][1][n] = (val_vec,(i_mat,j_mat, key))
+            is, js, hins = findnz(structure_descriptors[i][R])
+            # Every task computes the features of a contiguous range of entries into its own flat buffers
+            ranges = collect(chunks(eachindex(hins), n = clamp(cld(length(hins), 256), 1, Threads.nthreads())))
+            parts = tmap(ranges) do entry_range
+                counts = Vector{Int64}(undef, length(entry_range))
+                idx = Int32[]; val = Float32[]
+                for (t, n) in enumerate(entry_range)
+                    hin = hins[n]
+                    key = keyfun(hin)
+                    nz_before = length(idx)
+                    if haskey(bucket_trees, key)
+                        kernel_feature!(idx, val, bucket_trees[key], hin, sim_params, sim_tol, radius, first(key_ranges[key]) - 1)
+                    end
+                    counts[t] = length(idx) - nz_before
+                end
+                (counts, idx, val)
             end
-            N_test[i] += sum(N_test_temp)
-            N_total[i] += N_total_temp
+            counts = reduce(vcat, (p[1] for p in parts); init = Int64[])
+            ptr = Vector{Int64}(undef, length(counts) + 1)
+            ptr[1] = 1
+            for m in eachindex(counts); ptr[m+1] = ptr[m] + counts[m]; end
+            blocks[R] = SimMatBlock(Int32.(is), Int32.(js), ptr,
+                                    reduce(vcat, (p[2] for p in parts); init = Int32[]),
+                                    reduce(vcat, (p[3] for p in parts); init = Float32[]))
+            N_covered += count(>(0), counts)
         end
+        sms[i] = SimMat(blocks, ((N_R, Ne), N_dp), sim_params)
         if hyperopt_iter < 2 && verbosity > 0
-            msg = "Rank $rank$(isempty(label) ? "" : " ($label)"): Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Ncovered = ( $(N_test[i]) / $(N_total[i]) ) || $(ceil(Int, N_test[i] / N_total[i] * 100 )) %"
+            N_total = nentries(sms[i])
+            msg = "Rank $rank$(isempty(label) ? "" : " ($label)"): Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) " *
+                  "with Ncovered = ( $N_covered / $N_total ) || $(N_total > 0 ? ceil(Int, N_covered / N_total * 100) : 0) % " *
+                  "| nnz/entry = $(round(nnz(sms[i]) / max(N_total, 1), digits=1)) | $(round(simmat_bytes(sms[i]) / 2^20, digits=1)) MB"
             @info msg
             open(coverage_file, "a") do file
                 println(file, msg)
             end
         end
     end
-    structure_descriptors = nothing
-    return simmat_type(nkeys)[SimMat(Desc_Vec[i], (descr_sizes[i], N_dp), sim_params) for i in 1:N_mats]
+    return sms
 end
 
 """
@@ -469,7 +495,7 @@ Returns the per-rank HDF5 file path `"\$(dir)/\$(prefix)_rank\$(rank).h5"` used 
 simmat_filename(rank; prefix = "simmat", dir = "tmp") = joinpath(dir, string(prefix, "_rank", rank, ".h5"))
 
 """
-    write_simmat(sms::AbstractVector{<:SimMat}, rank=0; prefix="simmat", dir="tmp", filename=simmat_filename(rank; prefix, dir), append=false)
+    write_simmat(sms::AbstractVector{SimMat}, rank=0; prefix="simmat", dir="tmp", filename=simmat_filename(rank; prefix, dir), append=false)
 
 Writes the vector of `SimMat`s produced by `get_kernel_features` to an HDF5 file (one file per MPI rank, serial HDF5).
 The parent directory of `filename` (by default `tmp/`) is created if it does not exist.
@@ -477,70 +503,46 @@ With `append=true` the `SimMat`s are appended to an existing file (as structures
 so that the features can be computed and written batch by batch. All datasets are chunked and extendible.
 
 # File layout
-All nested entries `sms[i].feature_vec[R][1][n]` are flattened in (i, R, n) order:
+All blocks and entries are flattened in (i, R, m) order:
 - `descr_sizes :: Matrix{Int64}` (2 × N_mats): columns `(N_R, Ne)` of `sms[i].feature_shape[1]`.
 - `N_dp :: Vector{Int64}`, `sim_params :: Vector{Float64}` (N_mats): remaining fields of each `SimMat`.
 - `n_entries :: Vector{Int64}` (Σ N_R): number of entries per (i, R) block.
-- `index :: Matrix{Int64}` (2 + nkeys × N_entries): `(i_mat, j_mat, key...)` per entry.
-- `sv_len`, `sv_nnz :: Vector{Int64}` (N_entries): length and number of stored values of each sparse vector.
-- `sv_nzind :: Vector{Int64}`, `sv_nzval :: Vector{Float64}` (Σ sv_nnz): concatenated sparse vector data.
+- `ij :: Matrix{Int32}` (2 × N_entries): matrix element `(i, j)` of each entry.
+- `entry_nnz :: Vector{Int64}` (N_entries): number of stored features of each entry.
+- `idx :: Vector{Int32}`, `val :: Vector{Float32}` (Σ entry_nnz): parameter indices and values of the features.
 - `offsets :: Matrix{Int64}` (3 × N_mats + 1): cumulative (block, entry, nonzero) offsets per structure,
   so that a single structure can be read with `read_simmat_index`.
-- Attribute `nkeys`.
 """
-function write_simmat(sms::AbstractVector{<:SimMat}, rank = 0; prefix = "simmat", dir = "tmp", filename = simmat_filename(rank; prefix = prefix, dir = dir), append = false)
+function write_simmat(sms::AbstractVector{SimMat}, rank = 0; prefix = "simmat", dir = "tmp", filename = simmat_filename(rank; prefix = prefix, dir = dir), append = false)
     N_mats = length(sms)
-    nkeys = isconcretetype(eltype(sms)) ? _simmat_nkeys(eltype(sms)) : 1
-
-    N_blocks = sum(sm -> length(sm.feature_vec), sms; init = 0)
-    N_entries = sum(sm -> sum(b -> length(b[1]), sm.feature_vec; init = 0), sms; init = 0)
-    N_nz = sum(sm -> sum(b -> sum(e -> nnz(e[1]), b[1]; init = 0), sm.feature_vec; init = 0), sms; init = 0)
+    all_blocks = [block for sm in sms for block in sm.blocks]
 
     descr_mat = zeros(Int64, 2, N_mats)
     N_dp = zeros(Int64, N_mats)
     sim_params = zeros(Float64, N_mats)
-    n_entries = zeros(Int64, N_blocks)
-    index = zeros(Int64, 2 + nkeys, N_entries)
-    sv_len = zeros(Int64, N_entries)
-    sv_nnz = zeros(Int64, N_entries)
-    sv_nzind = zeros(Int64, N_nz)
-    sv_nzval = zeros(Float64, N_nz)
     offsets = zeros(Int64, 3, N_mats + 1)
-
     b = 0; e = 0; z = 0
     for (i, sm) in enumerate(sms)
         offsets[:, i] .= (b, e, z)
         (descr_mat[1, i], descr_mat[2, i]), N_dp[i] = sm.feature_shape
         sim_params[i] = sm.sim_params
-        for block in sm.feature_vec
-            b += 1
-            n_entries[b] = length(block[1])
-            for (sv, (i_mat, j_mat, key)) in block[1]
-                e += 1
-                index[1, e] = i_mat
-                index[2, e] = j_mat
-                for k in 1:nkeys
-                    index[2 + k, e] = key[k]
-                end
-                sv_len[e] = length(sv)
-                nz = nnz(sv)
-                sv_nnz[e] = nz
-                sv_nzind[z+1:z+nz] .= SparseArrays.nonzeroinds(sv)
-                sv_nzval[z+1:z+nz] .= SparseArrays.nonzeros(sv)
-                z += nz
-            end
-        end
+        b += length(sm.blocks); e += nentries(sm); z += nnz(sm)
     end
     offsets[:, N_mats + 1] .= (b, e, z)
 
+    n_entries = Int64[nentries(block) for block in all_blocks]
+    ij = permutedims(hcat(reduce(vcat, (block.is for block in all_blocks); init = Int32[]),
+                          reduce(vcat, (block.js for block in all_blocks); init = Int32[])))
+    entry_nnz = reduce(vcat, (diff(block.ptr) for block in all_blocks); init = Int64[])
+    idx = reduce(vcat, (block.idx for block in all_blocks); init = Int32[])
+    val = reduce(vcat, (block.val for block in all_blocks); init = Float32[])
+
     datasets = ("descr_sizes" => descr_mat, "N_dp" => N_dp, "sim_params" => sim_params, "n_entries" => n_entries,
-                "index" => index, "sv_len" => sv_len, "sv_nnz" => sv_nnz, "sv_nzind" => sv_nzind, "sv_nzval" => sv_nzval)
+                "ij" => ij, "entry_nnz" => entry_nnz, "idx" => idx, "val" => val)
 
     mkpath(dirname(abspath(filename)))
     if append && isfile(filename)
         h5open(filename, "r+") do file
-            nkeys_file = read_attribute(file, "nkeys")
-            nkeys_file == nkeys || error("Cannot append SimMats with nkeys = $nkeys to $filename (nkeys = $nkeys_file)")
             # shift the local offsets by the totals already stored in the file
             offsets .+= file["offsets"][:, end]
             for (name, data) in datasets
@@ -554,7 +556,6 @@ function write_simmat(sms::AbstractVector{<:SimMat}, rank = 0; prefix = "simmat"
                 _create_dataset(file, name, data)
             end
             _create_dataset(file, "offsets", offsets)
-            attributes(file)["nkeys"] = nkeys
         end
     end
     return filename
@@ -584,28 +585,14 @@ function _append_dataset!(dset, data::AbstractArray)
     return dset
 end
 
-_simmat_nkeys(::Type{SimMat{Tuple{Vector{Tuple{SparseVector{Float64, Int64}, Tuple{Int64, Int64, NTuple{N,Int64}}}}, Int64}}}) where {N} = N
-
 """
     read_simmat(rank=0; prefix="simmat", dir="tmp", filename=simmat_filename(rank; prefix, dir)) -> Vector{SimMat}
 
-Reads the `SimMat`s previously written with `write_simmat` and rebuilds them with the same nested structure
-and types as returned by `get_kernel_features`.
+Reads all `SimMat`s previously written with `write_simmat`.
 """
 function read_simmat(rank = 0; prefix = "simmat", dir = "tmp", filename = simmat_filename(rank; prefix = prefix, dir = dir))
-    data = h5open(filename, "r") do file
-        (descr_mat = read(file, "descr_sizes"),
-         N_dp = read(file, "N_dp"),
-         sim_params = read(file, "sim_params"),
-         n_entries = read(file, "n_entries"),
-         index = read(file, "index"),
-         sv_len = read(file, "sv_len"),
-         sv_nnz = read(file, "sv_nnz"),
-         sv_nzind = read(file, "sv_nzind"),
-         sv_nzval = read(file, "sv_nzval"),
-         nkeys = read_attribute(file, "nkeys"))
-    end
-    return _build_simmats(data, Val(Int(data.nkeys)))
+    N_mats = h5open(file -> size(file["descr_sizes"], 2), filename, "r")
+    return [read_simmat_index(i; filename = filename) for i in 1:N_mats]
 end
 
 """
@@ -623,16 +610,25 @@ function read_simmat_index(index::Integer, rank = 0; prefix = "simmat", dir = "t
          N_dp = file["N_dp"][index],
          sim_params = file["sim_params"][index],
          n_entries = _read_range(file["n_entries"], b0+1:b1),
-         index = _read_range(file["index"], e0+1:e1),
-         sv_len = _read_range(file["sv_len"], e0+1:e1),
-         sv_nnz = _read_range(file["sv_nnz"], e0+1:e1),
-         sv_nzind = _read_range(file["sv_nzind"], z0+1:z1),
-         sv_nzval = _read_range(file["sv_nzval"], z0+1:z1),
-         nkeys = read_attribute(file, "nkeys"))
+         ij = _read_range(file["ij"], e0+1:e1),
+         entry_nnz = _read_range(file["entry_nnz"], e0+1:e1),
+         idx = _read_range(file["idx"], z0+1:z1),
+         val = _read_range(file["val"], z0+1:z1))
     end
-    nkeys = Int(data.nkeys)
-    return _build_simmat(simmat_type(nkeys), Val(nkeys), data.descr, data.N_dp, data.sim_params,
-                         data.n_entries, data.index, data.sv_len, data.sv_nnz, data.sv_nzind, data.sv_nzval)
+    N_R, Ne = Int64(data.descr[1]), Int64(data.descr[2])
+    blocks = Vector{SimMatBlock}(undef, N_R)
+    e = 0; z = 0
+    for R in 1:N_R
+        n = data.n_entries[R]
+        counts = @view data.entry_nnz[e+1:e+n]
+        ptr = Vector{Int64}(undef, n + 1)
+        ptr[1] = 1
+        for m in 1:n; ptr[m+1] = ptr[m] + counts[m]; end
+        nz = ptr[end] - 1
+        blocks[R] = SimMatBlock(data.ij[1, e+1:e+n], data.ij[2, e+1:e+n], ptr, data.idx[z+1:z+nz], data.val[z+1:z+nz])
+        e += n; z += nz
+    end
+    return SimMat(blocks, ((N_R, Ne), Int64(data.N_dp)), Float64(data.sim_params))
 end
 
 # Reads the range r along the last dimension of dset (hyperslab), returning an empty array for an empty range.
@@ -642,49 +638,6 @@ function _read_range(dset, r)
     else
         return isempty(r) ? zeros(eltype(dset), size(dset, 1), 0) : dset[:, r]
     end
-end
-
-function _build_simmats(data, ::Val{nkeys}) where {nkeys}
-    SimMatT = simmat_type(nkeys)
-    N_mats = size(data.descr_mat, 2)
-
-    b = 0; e = 0; z = 0
-    sms = Vector{SimMatT}(undef, N_mats)
-    for i in 1:N_mats
-        N_R = data.descr_mat[1, i]
-        n_ent = sum(@view(data.n_entries[b+1:b+N_R]); init = 0)
-        n_nz = sum(@view(data.sv_nnz[e+1:e+n_ent]); init = 0)
-        sms[i] = _build_simmat(SimMatT, Val(nkeys), @view(data.descr_mat[:, i]), data.N_dp[i], data.sim_params[i],
-                               @view(data.n_entries[b+1:b+N_R]), @view(data.index[:, e+1:e+n_ent]),
-                               @view(data.sv_len[e+1:e+n_ent]), @view(data.sv_nnz[e+1:e+n_ent]),
-                               @view(data.sv_nzind[z+1:z+n_nz]), @view(data.sv_nzval[z+1:z+n_nz]))
-        b += N_R; e += n_ent; z += n_nz
-    end
-    return sms
-end
-
-# Rebuilds a single SimMat from the flattened arrays of one structure (all indexed starting at 1).
-function _build_simmat(::Type{SimMatT}, ::Val{nkeys}, descr, N_dp, sim_params, n_entries, index, sv_len, sv_nnz, sv_nzind, sv_nzval) where {SimMatT, nkeys}
-    BlockT = eltype(fieldtype(SimMatT, :feature_vec))
-    EntryT = eltype(fieldtype(BlockT, 1))
-    N_R, Ne = Int64(descr[1]), Int64(descr[2])
-
-    e = 0; z = 0
-    blocks = Vector{BlockT}(undef, N_R)
-    for R in 1:N_R
-        n = n_entries[R]
-        entries = Vector{EntryT}(undef, n)
-        for m in 1:n
-            e += 1
-            nz = sv_nnz[e]
-            sv = SparseVector{Float64, Int64}(sv_len[e], sv_nzind[z+1:z+nz], sv_nzval[z+1:z+nz])
-            z += nz
-            key = ntuple(k -> Int64(index[2 + k, e]), nkeys)
-            entries[m] = (sv, (Int64(index[1, e]), Int64(index[2, e]), key))
-        end
-        blocks[R] = (entries, n)
-    end
-    return SimMat(blocks, ((N_R, Ne), Int64(N_dp)), Float64(sim_params))
 end
 
 """
@@ -750,15 +703,15 @@ function build_node!(tree, points, lo, hi, leaf_size)
 end
 
 """
-    kernel_feature(tree, x, σ, sim_tol, radius) -> SparseVector
+    kernel_feature!(idx, val, tree, x, σ, sim_tol, radius, offset) -> Int
 
-Similarities `exp_sim(point, x; σ)` of the descriptor `x` to the data points of a key bucket, keeping only the values
-`> sim_tol`. Only the points within `radius` of `x` are evaluated (see `similarity_radius`).
+Appends the similarities `exp_sim(point, x; σ)` of the descriptor `x` to the data points of a key bucket that are
+`> sim_tol` to `val`, and their parameter indices (`offset` + index in the bucket) to `idx`, sorted by index. Only the
+points within `radius` of `x` are evaluated (see `similarity_radius`). Returns the number of appended values.
 """
-function kernel_feature(tree::KeyBucketTree, x, σ, sim_tol, radius)
+function kernel_feature!(idx, val, tree::KeyBucketTree, x, σ, sim_tol, radius, offset)
     radius2 = radius^2
-    nzind = Int64[]
-    nzval = Float64[]
+    n0 = length(idx)
     stack = [1]
     @inbounds while !isempty(stack)
         node = pop!(stack)
@@ -768,10 +721,10 @@ function kernel_feature(tree::KeyBucketTree, x, σ, sim_tol, radius)
                 point = tree.points[k]
                 # Cheap rejection of the points outside the radius before the exponential is evaluated
                 sum(abs2, point - x) > radius2 && continue
-                val = exp_sim(point, x; σ=σ)
-                if abs(val) > sim_tol && val ≠ 0
-                    push!(nzind, tree.perm[k])
-                    push!(nzval, val)
+                s = exp_sim(point, x; σ=σ)
+                if abs(s) > sim_tol && s ≠ 0
+                    push!(idx, Int32(offset + tree.perm[k]))
+                    push!(val, Float32(s))
                 end
             end
         else
@@ -779,6 +732,11 @@ function kernel_feature(tree::KeyBucketTree, x, σ, sim_tol, radius)
             x[dim] + radius >= tree.split_val[node] && push!(stack, tree.right[node])
         end
     end
-    p = sortperm(nzind)
-    return SparseVector(length(tree.points), nzind[p], nzval[p])
+    # Sort the new values by parameter index (memory locality in `get_hr` and the gradient)
+    if length(idx) - n0 > 1
+        p = sortperm(@view(idx[n0+1:end]))
+        idx[n0+1:end] = idx[n0 .+ p]
+        val[n0+1:end] = val[n0 .+ p]
+    end
+    return length(idx) - n0
 end
