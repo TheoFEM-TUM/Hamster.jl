@@ -281,6 +281,15 @@ get_offset_mode(conf::Config)::String = conf("offset_mode", "Optimizer") == "def
 get_offset_step(conf::Config)::Int64 = conf("offset_step", "Optimizer") == "default" ? get_niter(conf) : conf("offset_step", "Optimizer")
 
 """
+    weighted_offset=true
+
+If `weighted_offset` is true, the energy offset of each structure (TB minus reference) is averaged with the band and
+k-point weights of the loss. Otherwise, it is the plain mean difference over all bands and k-points, independent of the
+weights.
+"""
+get_weighted_offset(conf::Config)::Bool = conf("weighted_offset", "Optimizer") == "default" ? true : conf("weighted_offset", "Optimizer")
+
+"""
     onsite_shift="step"
 
 The `onsite_shift` tag determines when the diagonal onsite parameters are shifted by minus the mean energy offset across

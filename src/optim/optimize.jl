@@ -256,7 +256,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
             optim.losses[index].offset = systems_offsets_averages[optim.losses[index].system]
         end
         f_time = @elapsed L_train, L_train_MAE, L_train_BG = forward(caches[i][1], optim.losses[index], train_data[index])
-        forward_times[i] += (f_time + elapsed)
+        forward_times[i] += f_time
         push!(Ls_train, L_train)
         push!(Ls_train_MAE, L_train_MAE * optim.losses[index].pc_weight)
         push!(Ls_train_BG, L_train_BG * optim.losses[index].pc_weight)
@@ -319,7 +319,8 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     L_train = MPI.Reduce(sum(Ls_train), +, comm, root=0)
     L_train_MAE = MPI.Reduce(sum(Ls_train_MAE), +, comm, root=0)
     L_train_BG = MPI.Reduce(sum(Ls_train_BG), +, comm, root=0)
-    forward_time = MPI.Reduce(sum(forward_times), +, comm, root=0)
+    # The offset averaging happens once per iteration, so its time is counted once per rank and not per structure
+    forward_time = MPI.Reduce(sum(forward_times) + elapsed, +, comm, root=0)
     backward_time = MPI.Reduce(sum(backward_times), +, comm, root=0) 
     update_time = MPI.Reduce(update_time_local, +, comm, root=0)
 
