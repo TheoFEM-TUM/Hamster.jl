@@ -243,6 +243,7 @@ function write_params(parameters::Vector, parameter_values::Vector, ion_types::V
         println(file, "  ewald_method = ", ewald_settings.method)
         println(file, "  ewald_rcut = ", ewald_settings.rcut)
         println(file, "  ewald_alpha = ", ewald_settings.alpha)
+        ewald_settings.epsilon_inf == 1 || println(file, "  ewald_epsilon_inf = ", ewald_settings.epsilon_inf)
         for (type, q) in ewald_settings.qeff
             println(file, "  ewald_qeff_$type = ", q)
         end
