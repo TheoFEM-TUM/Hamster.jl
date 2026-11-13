@@ -236,3 +236,37 @@ end
     # Without validation the mode is not used
     @test isempty(Hamster.get_hr_data("universal", joinpath(path, "md_hr.h5"), empty=true))
 end
+
+@testset "Eigenvalue weights from the data file" begin
+    path = joinpath(@__DIR__, "test_files")
+    kp = h5read(joinpath(path, "eigenvalues_md.h5"), "kpoints")
+    Es = h5read(joinpath(path, "eigenvalues_md.h5"), "eigenvalues")
+    nb, nk, _ = size(Es)
+    W3 = reshape(collect(1.0:length(Es)), size(Es))
+    dir = mktempdir()
+    function load(W; mode="md", group="", bandmin=3, inds=[2, 4])
+        file = joinpath(dir, "eig_weights.h5")
+        isfile(file) && rm(file)
+        h5open(file, "w") do f
+            g = group == "" ? f : create_group(f, group)
+            g["kpoints"] = kp
+            g["eigenvalues"] = mode == "pc" ? Es[:, :, 1] : Es
+            isnothing(W) || (g["weights"] = W)
+        end
+        return Hamster.get_eig_data(mode, file, nb - bandmin + 1; inds=inds, bandmin=bandmin, system=group)
+    end
+
+    @test all(d -> isempty(d.w), load(nothing))
+    data = load(W3)
+    @test data[1].w == W3[3:end, :, 2] && data[2].w == W3[3:end, :, 4]
+    @test data[2].Es == Es[3:end, :, 4]
+    @test load(W3[:, :, 1])[2].w == W3[3:end, :, 1]
+    @test load(W3[:, 1, 1])[1].w == repeat(W3[3:end, 1, 1], 1, nk)
+    @test load(W3, mode="universal", group="system_a")[2].w == W3[3:end, :, 4]
+    @test load(W3[:, :, 1], mode="pc", bandmin=1)[1].w == W3[:, :, 1]
+
+    @test_throws ArgumentError load(W3[:, 1:end-1, 1])
+    @test_throws ArgumentError load(-W3)
+    @test_throws ArgumentError load(fill(NaN, nb))
+    @test_throws ArgumentError load(vcat(ones(2), zeros(nb - 2)))
+end

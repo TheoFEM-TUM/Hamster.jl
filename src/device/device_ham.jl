@@ -228,13 +228,13 @@ function device_forward(ham, index, loss, data::EigData)
     Hk, phase = get_device_hamiltonian(ham, index, data.kp)
     Neig = ham.sp_diag isa Sparse ? ctx.neig : Hk.Nε
     Es, vs = device_eigen(Hk, ham.sp_diag, Neig=Neig, target=ctx.target, method=ctx.method)
-    L_train = loss(Es, data.Es)
+    L_train = loss(Es, data)
     return L_train, (Es, vs, phase)
 end
 
 function device_backward(ham, index, loss, data::EigData, cache)
     Es, vs, phase = cache
-    dL_dE = backward(loss, Es, data.Es)
+    dL_dE = backward(loss, Es, data)
     return get_device_param_gradient(ham, index, vs, dL_dE, phase)
 end
 

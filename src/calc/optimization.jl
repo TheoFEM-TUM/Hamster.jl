@@ -84,6 +84,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       if active_rank == 0
          weight_warning(dl, Nε, Nk, val_weights, conf, write_output=write_output)
       end
+      data_weight_note(dl, conf, comm_active, rank=active_rank, write_output=write_output)
       optim = GDOptimizer(Nε, Nk, conf, val_weights=val_weights)
       prof = HamsterProfiler(3, conf)
       

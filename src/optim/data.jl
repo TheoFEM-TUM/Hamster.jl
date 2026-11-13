@@ -6,11 +6,16 @@ A struct for storing eigenvalue data associated with k-points.
 # Fields
 - `kp::Matrix{Float64}`: A matrix where each column represents a k-point. 
 - `Es::Matrix{Float64}`: A matrix where each column represents the eigenvalues corresponding to the respective k-point.
+- `w::Matrix{Float64}`: Weights of the eigenvalues in the loss (same size as `Es`), from the `weights` dataset of an
+  HDF5 data file; empty (0 × 0) if the file has none.
 """
 struct EigData
     kp :: Matrix{Float64}
     Es :: Matrix{Float64}
+    w :: Matrix{Float64}
 end
+
+EigData(kp, Es) = EigData(kp, Es, zeros(0, 0))
 
 """
     HrData{M}
@@ -184,10 +189,12 @@ function read_eigenvalue_data_from_path(path, inds, band_indices, Nε; system=""
             Es = read(g["eigenvalues"])
             inds_ = length(inds) ≤ size(Es, 3) ? inds : collect(1:size(Es, 3))
             check_band_range(path, size(Es, 1), band_indices)
+            W = haskey(g, "weights") ? read(g["weights"]) : nothing
+            w(n) = eigenvalue_weights(W, size(Es), band_indices, n, path)
             if kp isa Matrix{Float64}
-                return [EigData(kp, Es[band_indices, :, n]) for n in inds_]
+                return [EigData(kp, Es[band_indices, :, n], w(n)) for n in inds_]
             elseif kp isa Array{Float64, 3}
-                return [EigData(kp[:, :, n], Es[band_indices, :, n]) for n in inds_]
+                return [EigData(kp[:, :, n], Es[band_indices, :, n], w(n)) for n in inds_]
             end
         end
     else
@@ -201,14 +208,16 @@ end
     read_pc_eigenvalue_data(path, band_indices) -> EigData
 
 Read the eigenvalues of a single structure (pc mode) from a VASP `EIGENVAL` file or from an HDF5 file with the
-datasets `kpoints` (3 × Nk or 3 × Nk × 1) and `eigenvalues` (Nb × Nk or Nb × Nk × 1).
+datasets `kpoints` (3 × Nk or 3 × Nk × 1) and `eigenvalues` (Nb × Nk or Nb × Nk × 1), and optionally `weights` (see
+`eigenvalue_weights`).
 """
 function read_pc_eigenvalue_data(path, band_indices)
     if occursin(".h5", path)
         kp, Es = h5read(path, "kpoints"), h5read(path, "eigenvalues")
         size(Es, 3) == 1 || throw(ArgumentError("$path contains $(size(Es, 3)) structures, but pc mode uses the data of one structure; use md mode or a file with one structure."))
         check_band_range(path, size(Es, 1), band_indices)
-        return EigData(kp[:, :, 1], Es[band_indices, :, 1])
+        W = h5open(f -> haskey(f, "weights") ? read(f["weights"]) : nothing, path)
+        return EigData(kp[:, :, 1], Es[band_indices, :, 1], eigenvalue_weights(W, size(Es), band_indices, 1, path))
     end
     kp, Es = read_eigenval(path)
     check_band_range(path, size(Es, 1), band_indices)
@@ -224,6 +233,32 @@ number of orbitals) go beyond the `nbands` bands in the data file `path`.
 function check_band_range(path, nbands, band_indices)
     maximum(band_indices) ≤ nbands || throw(ArgumentError("$path has $nbands bands, but bands $(minimum(band_indices)) to $(maximum(band_indices)) are needed ($(length(band_indices)) bands, one per orbital of the structure). Check bandmin/val_bandmin, bandmultiplicity and train_mode/val_mode."))
     return nothing
+end
+
+"""
+    eigenvalue_weights(W, shape, band_indices, n, path) -> Matrix{Float64}
+
+Weights of the fitted eigenvalues `band_indices` of structure `n` from the `weights` dataset `W` of the data file `path`
+(`nothing`: no weights, an empty matrix). `W` has the shape of the eigenvalues (bands × k-points × structures, `shape`),
+bands × k-points (the same for all structures) or bands (the same for all k-points and structures). The weights must be
+finite and non-negative, and not all zero for a structure.
+"""
+function eigenvalue_weights(W, shape, band_indices, n, path)
+    isnothing(W) && return zeros(0, 0)
+    nb, nk = shape[1], shape[2]
+    w = if size(W) == (nb,)
+        repeat(Float64.(W[band_indices]), 1, nk)
+    elseif size(W) == (nb, nk)
+        Float64.(W[band_indices, :])
+    elseif ndims(W) == 3 && size(W) == (nb, nk, get(shape, 3, 1))
+        Float64.(W[band_indices, :, n])
+    else
+        throw(ArgumentError("weights in $path has size $(size(W)); use the size of the eigenvalues $(Tuple(shape)), " *
+                            "bands × k-points ($nb, $nk) or bands ($nb,)."))
+    end
+    all(x -> isfinite(x) && x ≥ 0, w) || throw(ArgumentError("weights in $path must be finite and non-negative."))
+    any(>(0), w) || throw(ArgumentError("weights in $path are zero for all fitted eigenvalues of structure $n."))
+    return w
 end
 
 """
