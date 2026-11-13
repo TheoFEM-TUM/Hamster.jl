@@ -27,7 +27,7 @@ include("ewald/ewald_helper.jl"); include("ewald/ewald.jl"); include("ewald/ewal
 
 include("soc/soc_utils.jl"); include("soc/soc_matrix.jl"); include("soc/soc_model.jl")
 
-include("optim/adam.jl"); include("optim/loss.jl"); include("optim/data.jl"); include("optim/gd_optimizer.jl"); include("optim/profiler.jl")
+include("optim/adam.jl"); include("optim/data.jl"); include("optim/loss.jl"); include("optim/gd_optimizer.jl"); include("optim/profiler.jl")
 include("optim/optimize.jl")
 
 include("mlham/descriptor.jl"); include("mlham/simmat.jl"); include("mlham/kernel.jl") ; include("mlham/kernel_precalced.jl")
