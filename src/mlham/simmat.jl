@@ -440,6 +440,9 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; c
     radius = similarity_radius(sim_params, sim_tol)
 
     sms = Vector{SimMat}(undef, N_mats)
+    # Number of features and entries computed so far, used to size the buffers of the tasks in advance
+    nnz_done = 0
+    entries_done = 0
     for i in 1:N_mats
         N_R = length(structure_descriptors[i])
         Ne = size(structure_descriptors[i][1], 1)
@@ -449,32 +452,48 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; c
             is, js, hins = findnz(structure_descriptors[i][R])
             # Every task computes the features of a contiguous range of entries into its own flat buffers
             ranges = collect(chunks(eachindex(hins), n = clamp(cld(length(hins), 256), 1, Threads.nthreads())))
+            # Expected features per entry (with 10 % margin), such that the buffers rarely have to grow (and be copied)
+            nnz_per_entry = entries_done > 0 ? 1.1 * nnz_done / entries_done : 0.0
             parts = tmap(ranges) do entry_range
-                # `local`: `counts` is also a variable of the enclosing loop body, which the tasks must not share
+                # All variables of the tasks are `local`, such that they are not shared with the enclosing loop body
                 local counts = Vector{Int64}(undef, length(entry_range))
-                local idx = Int32[]
-                local val = Float32[]
+                local capacity = ceil(Int, nnz_per_entry * length(entry_range))
+                local idx = sizehint!(Int32[], capacity)
+                local val = sizehint!(Float32[], capacity)
+                local scratch = FeatureScratch()
                 for (t, n) in enumerate(entry_range)
                     hin = hins[n]
                     key = keyfun(hin)
-                    nz_before = length(idx)
-                    if haskey(bucket_trees, key)
-                        kernel_feature!(idx, val, bucket_trees[key], hin, sim_params, sim_tol, radius, first(key_ranges[key]) - 1)
-                    end
-                    counts[t] = length(idx) - nz_before
+                    counts[t] = haskey(bucket_trees, key) ?
+                        kernel_feature!(idx, val, bucket_trees[key], hin, sim_params, sim_tol, radius, first(key_ranges[key]) - 1, scratch) : 0
                 end
                 (counts, idx, val)
             end
-            counts = reduce(vcat, (p[1] for p in parts); init = Int64[])
-            ptr = Vector{Int64}(undef, length(counts) + 1)
+            # Copy the buffers of the tasks into the flat arrays of the block (allocated once with their final size)
+            entry_counts = Vector{Int64}(undef, length(hins))
+            block_idx = Vector{Int32}(undef, sum(p -> length(p[2]), parts; init = 0))
+            block_val = Vector{Float32}(undef, length(block_idx))
+            entry_offset = 0
+            nz_offset = 0
+            for (part_counts, part_idx, part_val) in parts
+                copyto!(entry_counts, entry_offset + 1, part_counts, 1, length(part_counts))
+                copyto!(block_idx, nz_offset + 1, part_idx, 1, length(part_idx))
+                copyto!(block_val, nz_offset + 1, part_val, 1, length(part_val))
+                entry_offset += length(part_counts)
+                nz_offset += length(part_idx)
+            end
+            parts = nothing
+            ptr = Vector{Int64}(undef, length(entry_counts) + 1)
             ptr[1] = 1
-            for m in eachindex(counts); ptr[m+1] = ptr[m] + counts[m]; end
-            blocks[R] = SimMatBlock(Int32.(is), Int32.(js), ptr,
-                                    reduce(vcat, (p[2] for p in parts); init = Int32[]),
-                                    reduce(vcat, (p[3] for p in parts); init = Float32[]))
-            N_covered += count(>(0), counts)
+            for m in eachindex(entry_counts); ptr[m+1] = ptr[m] + entry_counts[m]; end
+            blocks[R] = SimMatBlock(Int32.(is), Int32.(js), ptr, block_idx, block_val)
+            N_covered += count(>(0), entry_counts)
+            nnz_done += length(block_idx)
+            entries_done += length(hins)
         end
         sms[i] = SimMat(blocks, ((N_R, Ne), N_dp), sim_params)
+        # The buffers of the tasks are garbage now; collecting it per structure keeps the heap from growing over all structures
+        GC.gc(false)
         if hyperopt_iter < 2 && verbosity > 0
             N_total = nentries(sms[i])
             msg = "Rank $rank$(isempty(label) ? "" : " ($label)"): Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) " *
@@ -705,16 +724,33 @@ function build_node!(tree, points, lo, hi, leaf_size)
 end
 
 """
-    kernel_feature!(idx, val, tree, x, σ, sim_tol, radius, offset) -> Int
+    FeatureScratch()
+
+Reusable work buffers of `kernel_feature!` (the node stack of the tree search and the found `(index, value)` pairs),
+such that computing the features of many entries does not allocate. Every task needs its own `FeatureScratch`.
+"""
+struct FeatureScratch
+    stack :: Vector{Int64}
+    pairs :: Vector{Tuple{Int32, Float32}}
+end
+
+FeatureScratch() = FeatureScratch(Int64[], Tuple{Int32, Float32}[])
+
+"""
+    kernel_feature!(idx, val, tree, x, σ, sim_tol, radius, offset, scratch=FeatureScratch()) -> Int
 
 Appends the similarities `exp_sim(point, x; σ)` of the descriptor `x` to the data points of a key bucket that are
 `> sim_tol` to `val`, and their parameter indices (`offset` + index in the bucket) to `idx`, sorted by index. Only the
 points within `radius` of `x` are evaluated (see `similarity_radius`). Returns the number of appended values.
+Apart from the growth of `idx` and `val`, no memory is allocated once the buffers of `scratch` are large enough.
 """
-function kernel_feature!(idx, val, tree::KeyBucketTree, x, σ, sim_tol, radius, offset)
+function kernel_feature!(idx, val, tree::KeyBucketTree, x, σ, sim_tol, radius, offset, scratch::FeatureScratch=FeatureScratch())
     radius2 = radius^2
-    n0 = length(idx)
-    stack = [1]
+    stack = scratch.stack
+    pairs = scratch.pairs
+    empty!(stack)
+    empty!(pairs)
+    push!(stack, 1)
     @inbounds while !isempty(stack)
         node = pop!(stack)
         dim = tree.split_dim[node]
@@ -725,8 +761,7 @@ function kernel_feature!(idx, val, tree::KeyBucketTree, x, σ, sim_tol, radius, 
                 sum(abs2, point - x) > radius2 && continue
                 s = exp_sim(point, x; σ=σ)
                 if abs(s) > sim_tol && s ≠ 0
-                    push!(idx, Int32(offset + tree.perm[k]))
-                    push!(val, Float32(s))
+                    push!(pairs, (Int32(offset + tree.perm[k]), Float32(s)))
                 end
             end
         else
@@ -734,11 +769,14 @@ function kernel_feature!(idx, val, tree::KeyBucketTree, x, σ, sim_tol, radius, 
             x[dim] + radius >= tree.split_val[node] && push!(stack, tree.right[node])
         end
     end
-    # Sort the new values by parameter index (memory locality in `get_hr` and the gradient)
-    if length(idx) - n0 > 1
-        p = sortperm(@view(idx[n0+1:end]))
-        idx[n0+1:end] = idx[n0 .+ p]
-        val[n0+1:end] = val[n0 .+ p]
+    # Sort the values by parameter index (memory locality in `get_hr` and the gradient); QuickSort sorts in place
+    sort!(pairs; by=first, alg=QuickSort)
+    n0 = length(idx)
+    resize!(idx, n0 + length(pairs))
+    resize!(val, n0 + length(pairs))
+    @inbounds for (q, (i, v)) in enumerate(pairs)
+        idx[n0 + q] = i
+        val[n0 + q] = v
     end
-    return length(idx) - n0
+    return length(pairs)
 end
