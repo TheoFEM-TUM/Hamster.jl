@@ -450,8 +450,10 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; c
             # Every task computes the features of a contiguous range of entries into its own flat buffers
             ranges = collect(chunks(eachindex(hins), n = clamp(cld(length(hins), 256), 1, Threads.nthreads())))
             parts = tmap(ranges) do entry_range
-                counts = Vector{Int64}(undef, length(entry_range))
-                idx = Int32[]; val = Float32[]
+                # `local`: `counts` is also a variable of the enclosing loop body, which the tasks must not share
+                local counts = Vector{Int64}(undef, length(entry_range))
+                local idx = Int32[]
+                local val = Float32[]
                 for (t, n) in enumerate(entry_range)
                     hin = hins[n]
                     key = keyfun(hin)
