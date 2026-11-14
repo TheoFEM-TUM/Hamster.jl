@@ -43,7 +43,8 @@ function SOCModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=g
     param_labels_local = UInt8.(collect(keys(soc_matrices_per_type)))
     param_labels = MPI.gather(param_labels_local, comm, root=0)
     if rank == 0
-        param_labels = unique(Iterators.flatten(param_labels))
+        # Sorted, such that the order of the elements does not depend on how the structures are distributed over the ranks
+        param_labels = sort!(unique(Iterators.flatten(param_labels)))
         nparams = length(param_labels)
     else
         param_labels = UInt8[]
@@ -193,6 +194,21 @@ function set_params!(soc_model::SOCModel, params)
     else
         soc_model.params = params
     end
+end
+
+"""
+    copy_params!(receiving_model::SOCModel, sending_model::SOCModel) -> Nothing
+
+Copies the SOC parameters of `sending_model` to the elements of `receiving_model` with the same label (element), such
+that the parameters are assigned correctly even if the two models list their elements in a different order.
+Elements of `receiving_model` that `sending_model` does not have keep their parameters.
+"""
+function copy_params!(receiving_model::SOCModel, sending_model::SOCModel)
+    for (i, sending_label) in enumerate(sending_model.param_labels)
+        j = findfirst(==(sending_label), receiving_model.param_labels)
+        j === nothing || (receiving_model.params[j] = sending_model.params[i])
+    end
+    return nothing
 end
 
 """

@@ -122,7 +122,8 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     param_labels_local = Iterators.flatten(types_per_strc)
     param_labels = MPI.gather(param_labels_local, comm, root=0)
     if rank == 0
-        param_labels = unique(Iterators.flatten(param_labels))
+        # Sorted, such that the order of the elements does not depend on how the structures are distributed over the ranks
+        param_labels = sort!(unique(Iterators.flatten(param_labels)))
         nparams = length(param_labels)
     else
         param_labels = UInt8[]

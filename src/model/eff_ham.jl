@@ -261,18 +261,25 @@ end
 
 Copy parameters from one EffectiveHamiltonian (`sending_ham`) to another (`receiving_ham`).
 
+The TB, Ewald and SOC parameters are copied by their labels (parameter labels and elements, respectively): the two
+Hamiltonians are built from different structures (e.g. training and validation set, distributed differently over the
+ranks), so their parameters need not be in the same order. The remaining models (ML) are copied by position.
+
 # Arguments
 - `receiving_ham`: The Hamiltonian object that will receive the parameters.
 - `sending_ham`: The Hamiltonian object providing the parameters to be copied.
 """
 function copy_params!(receiving_ham::H1, sending_ham::H2) where {H1,H2<:EffectiveHamiltonian}
-    for (receiving_model, sending_model) in zip(receiving_ham.models, sending_ham.models) 
-        if typeof(sending_model) <: TBModel && typeof(receiving_model) <: TBModel
-             set_params!(receiving_model, get_params(sending_model), get_params_labels(sending_model))
+    for (receiving_model, sending_model) in zip(receiving_ham.models, sending_ham.models)
+        if sending_model isa TBModel && receiving_model isa TBModel
+            set_params!(receiving_model, get_params(sending_model), get_params_labels(sending_model))
+        elseif sending_model isa EwaldOnsites && receiving_model isa EwaldOnsites
+            copy_params!(receiving_model, sending_model)  # matched by element
+        elseif sending_model isa SOCModel && receiving_model isa SOCModel
+            copy_params!(receiving_model, sending_model)  # matched by element
         else
-            set_params!(receiving_model, get_params(sending_model)) 
+            set_params!(receiving_model, get_params(sending_model))
         end
-        #todo SOC
     end
 end
 
