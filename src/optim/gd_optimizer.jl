@@ -32,7 +32,8 @@ Creates a gradient descent optimizer for a given loss function, regularization t
 - `conf::Any`: Configuration object for the optimizer, defaults to `get_empty_config()`.
 - `lr::Float64` (optional): Learning rate for the Adam optimizer. Defaults to the value returned by `get_lr(conf)`.
 - `Niter::Int` (optional): Number of iterations for the optimization process. Defaults to the value returned by `get_niter(conf)`.
-- `val_weights::Bool` (optional): If true, same weights are used for validation as for training.
+- `val_weights::Bool` (optional): If true, the band and k-point weights (`wE`, `wk`) of the training are also used
+  for validation. The weights of the validation data (`weights` dataset) are used if `val_weights = true` in `conf`.
 """
 function GDOptimizer(Nε, Nk, conf=get_empty_config(); lr=get_lr(conf), Niter=get_niter(conf), val_weights=get_val_weights(conf))
     loss = Nε == 0 && Nk == 0 ? Loss(conf) : Loss(Nε, Nk, conf)
@@ -41,6 +42,7 @@ function GDOptimizer(Nε, Nk, conf=get_empty_config(); lr=get_lr(conf), Niter=ge
     else
         val_loss = Loss(conf)
     end
+    get_val_weights(conf) || (val_loss = without_data_weights(val_loss))
     reg = Regularization(conf)
     adam = Adam(lr)
     return GDOptimizer(loss, val_loss, reg, adam, Niter)
@@ -81,3 +83,23 @@ function weight_warning(dl, Nε, Nk, val_weights, conf; write_output=true)
     return nothing
 end
 
+
+"""
+    data_weight_note(dl, conf, comm=nothing; rank=0, write_output=true) -> (train, val)
+
+Whether the training and validation data have weights of the eigenvalues (`weights` dataset of the HDF5 data files),
+over all ranks of `comm`. If any data has weights, rank 0 writes a line to `hamster.out` (with `write_output`).
+"""
+function data_weight_note(dl, conf, comm=nothing; rank=0, write_output=true)
+    has_weights(data) = any(d -> d isa EigData && !isempty(d.w), data)
+    flags = Int[has_weights(dl.train_data), has_weights(dl.val_data)]
+    isnothing(comm) || (flags = MPI.Allreduce(flags, max, comm))
+    train, val = flags .== 1
+    if rank == 0 && write_output && (train || val)
+        parts = String[]
+        train && push!(parts, "training data: used")
+        val && push!(parts, get_val_weights(conf) ? "validation data: used" : "validation data: not used (val_weights = false)")
+        append_output_line("Weights of the eigenvalues from the data files ($(join(parts, "; "))).")
+    end
+    return train, val
+end

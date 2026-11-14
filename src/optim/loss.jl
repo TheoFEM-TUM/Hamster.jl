@@ -10,16 +10,27 @@ A structure representing a (weighted) loss function for evaluating the differenc
 - `wk::Vector{Float64}`: A vector of weights applied to the error terms along the `ŷ` dimension (predicted values).
 - `N::Float64`: Normalization factor, typically the product of the sums of `wE` and `wk`.
 - `n::Int64`: The order of the norm used for the loss function (e.g., 1 for L1 norm, 2 for L2 norm, etc.).
+- `data_weights::Bool`: whether the weights of the data (`weights` dataset of an HDF5 eigenvalue file, see `EigData`)
+  multiply the errors.
 """
 struct Loss
     wE :: Vector{Float64}
     wk :: Vector{Float64}
     N :: Float64
     n :: Int64
+    data_weights :: Bool
 end
 
+Loss(wE, wk, N, n) = Loss(wE, wk, N, n, true)
 Loss(wE::Vector{Float64}, wk::Vector{Float64}, n::Int64) = Loss(wE, wk, sum(wE)*sum(wk), n)
 Loss(n::Int64) = Loss(Float64[], Float64[], 0, n)
+
+"""
+    without_data_weights(l::Loss) -> Loss
+
+The loss `l` without the weights of the data (e.g. for validation with `val_weights = false`).
+"""
+without_data_weights(l::Loss) = Loss(l.wE, l.wk, l.N, l.n, false)
 
 """
     Loss(Nε, Nk; conf=get_empty_config(), loss=get_loss(conf), wE=get_band_weights(conf, Nε), wk=get_kpoint_weights(conf, Nk))
@@ -205,3 +216,30 @@ Compute the gradient of the regularization penalty with respect to the input (pa
   with respect to the corresponding element in `x`.
 """
 backward(R::Regularization, x) = R.λ .* map(y -> abs(y) > R.b ? sign(y) * R.n * (abs(y)-R.b)^(R.n-1) : 0., x)
+"""
+    forward(l::Loss, y, data::EigData)
+    backward(l::Loss, y, data::EigData)
+
+Loss and its gradient with respect to the eigenvalues `y` for the reference eigenvalues of `data`. If `data` has
+weights (`data.w`, from the `weights` dataset of the data file) and `l.data_weights`, every error |yᵢ - ŷᵢ|ⁿ is
+multiplied by its weight, with the same normalization as without them (the number of eigenvalues, or Σ wE ⋅ Σ wk with
+band and k-point weights): weights of one give the unweighted loss.
+"""
+function forward(l::Loss, y, data::EigData)
+    use_data_weights(l, data) || return forward(l, y, data.Es)
+    L = @. abs(y - data.Es)^l.n * data.w
+    return isempty(l.wE) && isempty(l.wk) ? sum(L) / length(L) : 1/l.N * (l.wE' * L * l.wk)
+end
+
+function backward(l::Loss, y, data::EigData)
+    dL = backward(l, y, data.Es)
+    use_data_weights(l, data) && (dL .*= data.w)
+    return dL
+end
+
+"""
+    use_data_weights(l::Loss, data::EigData) -> Bool
+
+Whether the loss `l` applies the weights of `data` (`l.data_weights` and `data` has weights).
+"""
+use_data_weights(l::Loss, data::EigData) = l.data_weights && !isempty(data.w)

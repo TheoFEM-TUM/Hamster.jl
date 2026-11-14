@@ -207,7 +207,7 @@ function forward(ham::EffectiveHamiltonian, index, loss, data::EigData)
     if uses_device_path(ham); return device_forward(ham, index, loss, data); end
     Hk = get_hamiltonian(ham, index, data.kp)
     Es, vs = diagonalize(Hk)
-    L_train = loss(Es, data.Es)
+    L_train = loss(Es, data)
     return L_train, (Es, vs)
 end
 
@@ -236,7 +236,7 @@ The function behavior varies depending on the type of `data`, which can be eithe
 function backward(ham::EffectiveHamiltonian, index, loss, data::EigData, cache, conf=get_empty_config())
     if uses_device_path(ham); return device_backward(ham, index, loss, data, cache); end
     Es_tb, vs = cache
-    dL_dE = backward(loss, Es_tb, data.Es)
+    dL_dE = backward(loss, Es_tb, data)
     return get_loss_gradient_hr(dL_dE, vs, ham.Rs[index], data.kp, ham.sp_mode, ham.sp_iterators[index], sp_tol=ham.sp_tol)
 end
 

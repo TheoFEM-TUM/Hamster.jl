@@ -110,6 +110,26 @@ end
     end
 end
 
+@testset "Device loss and gradients with weights of the data match CPU" begin
+    conf = get_device_test_config(sp_mode=true, sim_mat=false)
+    ham_cpu, ham_dev = get_device_test_hams(conf, ArrayDevice(JLArray))
+    loss = Loss(2); reg = Regularization(conf)
+    Es, _ = diagonalize(get_hamiltonian(ham_cpu, 1, ks_device_test))
+    W = reshape(collect(range(0.0, 2.0, length=length(Es))), size(Es))
+    data = Hamster.EigData(ks_device_test, Es .+ 0.1 .* reshape(cos.(1:length(Es)), size(Es)), W)
+    L_cpu, cache_cpu = Hamster.forward(ham_cpu, 1, loss, data)
+    L_dev, cache_dev = Hamster.forward(ham_dev, 1, loss, data)
+    @test L_cpu ≈ L_dev
+    @test !(L_cpu ≈ Hamster.forward(ham_cpu, 1, loss, Hamster.EigData(ks_device_test, data.Es))[1])
+    dL_dHr = Hamster.backward(ham_cpu, 1, loss, data, cache_cpu, conf)
+    g_dev = Hamster.backward(ham_dev, 1, loss, data, cache_dev, conf)
+    for (model_index, model) in enumerate(ham_cpu.models)
+        grad_cpu = Hamster.get_model_gradient(model, [1], reg, [dL_dHr])
+        grad_dev = Hamster.get_model_gradient(ham_dev.models[model_index], [1], reg, Hamster.model_gradient_input([g_dev], model_index))
+        @test grad_cpu ≈ grad_dev atol=1e-8
+    end
+end
+
 @testset "Device gradient of the Ewald coupling matches CPU" begin
     # Distorted CsPbBr3 cell (inequivalent Br sites, so that the centered potentials do not vanish), TB + Ewald
     path = joinpath(@__DIR__, "..", "model", "test_files")

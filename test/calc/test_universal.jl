@@ -60,3 +60,36 @@ end
         end
     end
 end
+
+@testset "Universal fit with weights of the eigenvalue data" begin
+    mktempdir() do dir
+        cd(dir) do
+            path = joinpath(@__DIR__, "test_files")
+            strc_file = joinpath(dir, "strc_file.h5")
+            write_universal_strc_file(strc_file)
+            kp_gaas, Es_gaas, _ = Hamster.read_eigenval(joinpath(path, "EIGENVAL_gaas"))
+            kp_cspbbr3, Es_cspbbr3, _ = Hamster.read_eigenval(joinpath(path, "EIGENVAL_cspbbr3"))
+            function fit(scale)
+                eig_file = joinpath(dir, "eig_file.h5")
+                isfile(eig_file) && rm(eig_file)
+                h5open(eig_file, "w") do f
+                    for (name, kp, Es) in (("cspbbr3", kp_cspbbr3, reshape(Es_cspbbr3[14:end, :], 17, 84, 1)),
+                                           ("gaas", kp_gaas, reshape(Es_gaas, 48, 56, 1)))
+                        g = create_group(f, name)
+                        g["kpoints"] = kp; g["eigenvalues"] = Es
+                        isnothing(scale) || (g["weights"] = fill(scale, size(Es, 1)))
+                    end
+                end
+                conf = get_config(filename=joinpath(path, "hconf_universal"))
+                set_value!(conf, "rllm_file", joinpath(path, "rllm_universal.dat"))
+                set_value!(conf, "train_data", "Optimizer", eig_file)
+                set_value!(conf, "xdatcar", "Supercell", strc_file)
+                set_value!(conf, "niter", "Optimizer", 2)
+                return Hamster.main(comm, conf, rank=rank).L_train
+            end
+            L = fit(nothing)
+            @test fit(1.0) ≈ L
+            @test fit(2.0)[:, 1] ≈ 2 .* L[:, 1]
+        end
+    end
+end

@@ -171,13 +171,13 @@ end
 
 
 @configtag val_ratio Float64 ifelse(get_validate(conf),0.2,0.) "ratio between training and validation set size." "Optimizer" category="validation" default_doc="0.2 if validate = true, else 0"
-@configtag val_weights Bool false "if true, same weights are used for training and validation." "Optimizer" category="validation"
+@configtag val_weights Bool false "if true, same weights are used for training and validation (wE, wk and the weights dataset of the validation data)." "Optimizer" category="validation"
 @configtag printeachbatch Bool get_verbosity(conf)>1 "profiler prints after each batch." "Optimizer" category="output" default_doc="true if verbosity > 1"
 @configtag printeachiter Int64 1 "iteration interval for profiler prints." "Optimizer" category="output"
 @configtag valeachiter Int64 1 "iteration interval for validation." "Optimizer" category="validation"
 
 @configtag update_tb Bool true "update the TB parameters in a fit: true, false, or a list of parameter indices (in the order of params.dat)." "Optimizer" getter=:custom value=(conf -> conf("update_tb", "Optimizer") == "default" ? haskey(conf, "Optimizer") : conf("update_tb", "Optimizer")) default_doc="true in a fit" category="parameters"
-@configtag wE Vector{Float64} Float64[] "weight of each band in the loss; single bands or ranges can be set with wE_<band> or wE_<first>-<last> (e.g. wE_3 = 2, wE_10-20 = 0.5)." "Optimizer" getter=:custom value=(conf -> conf("wE", "Optimizer") == "default" ? "1 for all bands" : conf("wE", "Optimizer")) default_doc="1 for all bands" category="bands and weights" see_also=["wk", "bandmin"]
+@configtag wE Vector{Float64} Float64[] "weight of each band in the loss; single bands or ranges can be set with wE_<band> or wE_<first>-<last> (e.g. wE_3 = 2, wE_10-20 = 0.5). Ignored if the training structures differ in the number of bands; per-structure weights can be given as a weights dataset in the HDF5 eigenvalue file." "Optimizer" getter=:custom value=(conf -> conf("wE", "Optimizer") == "default" ? "1 for all bands" : conf("wE", "Optimizer")) default_doc="1 for all bands" category="bands and weights" see_also=["wk", "bandmin"]
 @configtag wk Vector{Float64} Float64[] "weight of each k-point in the loss; single k-points or ranges can be set with wk_<k> or wk_<first>-<last> (e.g. wk_1 = 5)." "Optimizer" getter=:custom value=(conf -> conf("wk", "Optimizer") == "default" ? "1 for all k-points" : conf("wk", "Optimizer")) default_doc="1 for all k-points" category="bands and weights" see_also=["wE"]
 @configtag eig_fit Bool true "fit to eigenvalue data; at the moment only the default of eig_val (the training data is chosen by hr_fit)." "Optimizer" getter=:custom default_doc="true (false if hr_fit = true)" category="data" see_also=["hr_fit"]
 @configtag eig_val Bool true "validate with eigenvalue data." "Optimizer" getter=:custom default_doc="same as eig_fit" category="validation"

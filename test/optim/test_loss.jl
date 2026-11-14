@@ -197,3 +197,45 @@ end
     set_value!(conf, "validate", "Optimizer", true)
     @test_logs (:warn, r"not used for validation") Hamster.weight_warning(Hamster.DataLoader([d1], [d2]), 3, 5, false, conf, write_output=false)
 end
+
+@testset "Weights of the eigenvalue data" begin
+    y = rand(3, 4); ŷ = rand(3, 4); w = rand(3, 4); kp = rand(3, 4)
+    data = Hamster.EigData(kp, ŷ, w)
+    for n in (1, 2)
+        loss = Loss(n)
+        @test loss(y, data) ≈ sum(@. abs(y - ŷ)^n * w) / length(y)
+        @test Hamster.backward(loss, y, data) ≈ FiniteDiff.finite_difference_gradient(y -> loss(y, data), y)
+        @test loss(y, Hamster.EigData(kp, ŷ, ones(3, 4))) ≈ loss(y, ŷ)
+        @test loss(y, Hamster.EigData(kp, ŷ)) == loss(y, ŷ)
+        @test Hamster.backward(loss, y, Hamster.EigData(kp, ŷ, ones(3, 4))) ≈ Hamster.backward(loss, y, ŷ)
+        unweighted = Hamster.without_data_weights(loss)
+        @test unweighted(y, data) == loss(y, ŷ)
+        @test Hamster.backward(unweighted, y, data) == Hamster.backward(loss, y, ŷ)
+
+        wE = rand(3); wk = rand(4)
+        loss_w = Loss(wE, wk, n)
+        @test loss_w(y, data) ≈ wE' * (@. abs(y - ŷ)^n * w) * wk / (sum(wE) * sum(wk))
+        @test Hamster.backward(loss_w, y, data) ≈ FiniteDiff.finite_difference_gradient(y -> loss_w(y, data), y)
+    end
+
+    conf = get_empty_config()
+    set_value!(conf, "lr", "Optimizer", 0.1)
+    optim = Hamster.GDOptimizer(0, 0, conf)
+    @test optim.loss.data_weights && !optim.val_loss.data_weights
+    set_value!(conf, "val_weights", "Optimizer", true)
+    @test Hamster.GDOptimizer(0, 0, conf).val_loss.data_weights
+end
+
+@testset "Note on the weights of the eigenvalue data" begin
+    conf = get_empty_config()
+    with_w = Hamster.EigData(rand(3, 2), rand(2, 2), ones(2, 2))
+    without_w = Hamster.EigData(rand(3, 2), rand(2, 2))
+    @test Hamster.data_weight_note(Hamster.DataLoader([without_w], [without_w]), conf, write_output=false) == (false, false)
+    @test Hamster.data_weight_note(Hamster.DataLoader([with_w, without_w], Hamster.EigData[]), conf, write_output=false) == (true, false)
+    mktempdir() do dir
+        cd(dir) do
+            Hamster.data_weight_note(Hamster.DataLoader([with_w], [with_w]), conf)
+            @test occursin("validation data: not used (val_weights = false)", read("hamster.out", String))
+        end
+    end
+end
