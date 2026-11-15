@@ -162,3 +162,29 @@ end
     dL_dHr_true = [FiniteDiff.finite_difference_gradient(Hr->mse(Hr, Hr_2[i]), Hr_1[i])/length(Hr_1) for i in eachindex(Hr_1)]
     @test all([dL_dHr ≈ dL_dHr_true for i in eachindex(dL_dHr)])
 end
+@testset "ls_weight switches the eigenvalue error weighting" begin
+    Nε, Nk, N_VBM = 4, 5, 2
+    y, ŷ = rand(Nε, Nk), rand(Nε, Nk)
+    wE, wk = rand(Nε) .+ 0.5, ones(Nk)
+    weighted = Loss(copy(wE), copy(wk), 2, 0.0, false, 1.0, "individual", N_VBM, 0.0, 1.0)
+    unweighted = Loss(copy(wE), copy(wk), 2, 0.0, false, 1.0, "individual", N_VBM, 0.0, 1.0, ls_weight=false)
+    @test weighted.ls_weight && !unweighted.ls_weight
+
+    # Without ls_weight, the loss is the plain band/k-point weighted loss (gap_weight = 1)
+    Δy = y - ŷ
+    Δy = Δy .- Hamster.calc_offset(unweighted, ŷ, y)
+    @test Hamster.forward(unweighted, y, ŷ) ≈ wE' * (Δy .^ 2) * wk / (sum(wE) * sum(wk))
+    @test Hamster.backward(unweighted, y, ŷ) ≈ @. 2 * Δy * wE * wk' / (sum(wE) * sum(wk))
+
+    # With ls_weight, each error is additionally weighted by its size relative to the mean error of its band
+    w = abs.(Δy) ./ vec(mean(abs.(Δy), dims=2))
+    @test Hamster.forward(weighted, y, ŷ) ≈ wE' * (Δy .^ 2 .* w) * wk / (sum(wE) * sum(wk))
+
+    # The config tags: ls_weight for the eigenvalues, system_ls_weight for the structures (both default to true)
+    conf = get_empty_config()
+    @test Hamster.get_ls_weight(conf) && Hamster.get_system_ls_weight(conf)
+    set_value!(conf, "ls_weight", "Optimizer", false)
+    @test !Hamster.get_ls_weight(conf) && Hamster.get_system_ls_weight(conf)
+    losses = Hamster.Losses([Nε], [Nk], Nε * Nk, [N_VBM], [0], [1], ["sys"], conf)
+    @test !losses[1].ls_weight
+end

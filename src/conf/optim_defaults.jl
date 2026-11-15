@@ -302,4 +302,20 @@ get_min_delta(conf::Config)::Float64 = conf("min_delta", "Optimizer") == "defaul
 
 get_gap_weight(conf::Config)::Float64 = conf("gap_weight", "Optimizer") == "default" ? 1.0 : conf("gap_weight", "Optimizer")
 
+"""
+    ls_weight=true
+
+If `ls_weight` is true, the error of each eigenvalue in the loss of a structure is weighted by its size relative to the
+mean error of its band over the k-points (`|Δε| / mean_k |Δε|`), such that badly fitted eigenvalues get more weight.
+If false, all eigenvalues are weighted only by the band and k-point weights (and `gap_weight`).
+"""
 get_ls_weight(conf::Config)::Bool = conf("ls_weight", "Optimizer") == "default" ? true : conf("ls_weight", "Optimizer")
+
+"""
+    system_ls_weight=true
+
+If `system_ls_weight` is true, the loss of each structure is weighted by its loss relative to the (`pc_weight`-weighted)
+mean loss over all structures, such that badly fitted structures get more weight. If false, the structures are weighted
+only by their `pc_weight`.
+"""
+get_system_ls_weight(conf::Config)::Bool = conf("system_ls_weight", "Optimizer") == "default" ? true : conf("system_ls_weight", "Optimizer")

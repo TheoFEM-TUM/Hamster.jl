@@ -200,7 +200,7 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
     warmup_ratio=get_warmup_ratio(conf),
     lr_warmup=get_lr_warmup(conf),
     offset_step = get_offset_step(conf),
-    ls_weight = get_ls_weight(conf),
+    system_ls_weight = get_system_ls_weight(conf),
     nbatch = get_nbatch(conf),
     onsite_shift = get_onsite_shift(conf)
     )
@@ -263,9 +263,9 @@ function train_step!(ham_train, indices, optim, train_data, prof, iter, batch_id
         push!(pc_weights, optim.losses[index].pc_weight)
     end
     pc_weights_tot = MPI.Allreduce(sum(pc_weights), +, comm)
-    L_train_sum = ls_weight ? MPI.Allreduce(sum(Ls_train .* pc_weights), +, comm) : MPI.Allreduce(sum(ones(size(Ls_train)) .* pc_weights), +, comm)
+    L_train_sum = system_ls_weight ? MPI.Allreduce(sum(Ls_train .* pc_weights), +, comm) : MPI.Allreduce(sum(ones(size(Ls_train)) .* pc_weights), +, comm)
     
-    L_trains_weights = ls_weight ? Ls_train ./ (L_train_sum / pc_weights_tot) .* pc_weights : ones(size(Ls_train)) ./ (L_train_sum / pc_weights_tot) .* pc_weights
+    L_trains_weights = system_ls_weight ? Ls_train ./ (L_train_sum / pc_weights_tot) .* pc_weights : ones(size(Ls_train)) ./ (L_train_sum / pc_weights_tot) .* pc_weights
     Ls_train = L_trains_weights .* Ls_train
 
     dL_dHr = map(enumerate(indices)) do (i, index)
@@ -360,7 +360,7 @@ Evaluates the validation loss for a Hamiltonian model over a given validation da
 - Updates to `prof.val_times`: The elapsed time for the validation step is stored in `prof.val_times[iter]`.
 """
 function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1, valeachiter=valeachiter, conf =get_empty_config(), offset_step=get_offset_step(conf))
-    ls_weight = get_ls_weight(conf)
+    system_ls_weight = get_system_ls_weight(conf)
     nbatch = get_nbatch(conf)
     val_begin = MPI.Wtime()
     load_sms = nbatch > 1 && !(uses_device_path(ham_val) && val_data isa AbstractVector{<:EigData})
@@ -385,8 +385,8 @@ function val_step!(ham_val, losses, val_data, prof, iter, comm; rank=0, nranks=1
     pc_weights = Float64[losses[index].pc_weight for index in 1:ham_val.Nstrc]
     Ls_val = Float64[L[1] for L in Ls_all]
     pc_weights_tot = MPI.Allreduce(sum(pc_weights), +, comm)
-    Ls_val_sum = ls_weight ? MPI.Allreduce(sum(Ls_val .* pc_weights), +, comm) : MPI.Allreduce(sum(ones(size(Ls_val)) .* pc_weights), +, comm)
-    Ls_val_weights = ls_weight ? Ls_val ./ (Ls_val_sum / pc_weights_tot) .* pc_weights : ones(size(Ls_val)) ./ (Ls_val_sum / pc_weights_tot) .* pc_weights
+    Ls_val_sum = system_ls_weight ? MPI.Allreduce(sum(Ls_val .* pc_weights), +, comm) : MPI.Allreduce(sum(ones(size(Ls_val)) .* pc_weights), +, comm)
+    Ls_val_weights = system_ls_weight ? Ls_val ./ (Ls_val_sum / pc_weights_tot) .* pc_weights : ones(size(Ls_val)) ./ (Ls_val_sum / pc_weights_tot) .* pc_weights
     Ls_val = Ls_val_weights .* Ls_val
     Ls_val_MAE = Float64[Ls_all[index][2] * losses[index].pc_weight for index in 1:ham_val.Nstrc]
     Ls_val_BG = Float64[Ls_all[index][3] * losses[index].pc_weight for index in 1:ham_val.Nstrc]

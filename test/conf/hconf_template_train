@@ -79,7 +79,8 @@ begin Optimizer
     # band_edge_weight  = 5       # default: max(0.25*sum(wE), 5); 1 = no extra weight
     gap_weight       = 1.0
     min_delta        = 0.0
-    ls_weight        = true
+    ls_weight        = true       # weight eigenvalues by their error
+    system_ls_weight = true       # weight structures by their loss
     offset           = true
     offset_mode      = system     # system | one_system | individual
     # offset_step    = 1          # default = niter
