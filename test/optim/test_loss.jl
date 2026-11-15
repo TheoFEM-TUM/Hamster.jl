@@ -174,7 +174,7 @@ end
     Δy = y - ŷ
     Δy = Δy .- Hamster.calc_offset(unweighted, ŷ, y)
     @test Hamster.forward(unweighted, y, ŷ) ≈ wE' * (Δy .^ 2) * wk / (sum(wE) * sum(wk))
-    @test Hamster.backward(unweighted, y, ŷ) ≈ @. 2 * Δy * wE * wk' / (sum(wE) * sum(wk))
+    @test Hamster.backward(unweighted, y, ŷ) ≈ 2 .* Δy .* (wE * wk') ./ (sum(wE) * sum(wk))
 
     # With ls_weight, each error is additionally weighted by its size relative to the mean error of its band
     w = abs.(Δy) ./ vec(mean(abs.(Δy), dims=2))
