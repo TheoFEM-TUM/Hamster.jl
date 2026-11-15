@@ -196,5 +196,30 @@ end
         write_params(tb_parameters, tb_values, [], [], conf, filename="params", ewald_types=elements[1:2], ewald_parameters=[0.5, 1.5])
         set_value!(conf, "charge_scale", "Ewald", 0.7)
         @test EwaldOnsites([strc], [basis], comm, conf).params == [0.5, 1.5, 0.7]
+
+        # Test 4: the species means are always written to the header and read with mean_params
+        write_params(tb_parameters, tb_values, [], [], conf, filename="params")
+        write_params(ewald_model, conf)
+        conf_values = read_params("params.dat")[5]
+        for (element, mean) in zip(elements, ewald_model.species_mean)
+            @test parse(Float64, conf_values["ewald_mean_$element"]) == mean
+        end
+
+        shift = [0.1, 0.2, 0.3]
+        settings = Hamster.ewald_settings(conf, types=elements, means=collect(zip(elements, ewald_model.species_mean .+ shift)))
+        write_params(tb_parameters, tb_values, [], [], conf, filename="params", ewald_settings=settings)
+        set_value!(conf, "mean_params", "Ewald", "params.dat")
+        shifted_model = EwaldOnsites([strc], [basis], comm, conf)
+        @test shifted_model.species_mean ≈ ewald_model.species_mean .+ shift
+        for (i, type) in enumerate(ewald_model.types_per_strc[1])
+            p = findfirst(==(type), ewald_model.param_labels)
+            @test shifted_model.potentials[1][i] ≈ ewald_model.potentials[1][i] - shift[p]
+        end
+
+        # Species missing in the file keep the mean over the current structures
+        settings = Hamster.ewald_settings(conf, types=elements, means=collect(zip(elements[1:2], ewald_model.species_mean[1:2] .+ shift[1:2])))
+        write_params(tb_parameters, tb_values, [], [], conf, filename="params", ewald_settings=settings)
+        partial_model = @test_logs (:warn, r"No Ewald mean potential") EwaldOnsites([strc], [basis], comm, conf)
+        @test partial_model.species_mean ≈ ewald_model.species_mean .+ [shift[1:2]; 0.0]
     end
 end

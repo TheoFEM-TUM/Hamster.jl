@@ -24,6 +24,16 @@ the `params.dat` of a fit. By default, the couplings start from `charge_scale`.
 get_ewald_init_params(conf::Config)::String = conf("init_params", "Ewald") == "default" ? "default" : string(conf("init_params", "Ewald"))
 
 """
+    mean_params=default
+
+The `mean_params` tag in the `Ewald` block sets a parameter file with the per-species mean potentials (`ewald_mean_<element>`
+header lines, written with every fit), e.g. the `params.dat` of a fit. The site potentials are then centered with these
+means, such that the Ewald onsites of a structure do not depend on which other structures are in the run (e.g. use the
+training means for validation or standard runs). By default, the means are computed over all structures of the run.
+"""
+get_ewald_mean_params(conf::Config)::String = conf("mean_params", "Ewald") == "default" ? "default" : string(conf("mean_params", "Ewald"))
+
+"""
     auto_qeff=false
 
 If `auto_qeff = true` in the `Ewald` block, ion types without an explicit `qeff` tag get a default effective charge

@@ -37,6 +37,11 @@ onsite parameters.
     Flag indicating whether onsite corrections should be updated during
     optimization/training.
 
+- `species_mean::Vector{Float64}`:
+    Mean potential per species (ordered as `param_labels`) that was subtracted
+    from the site potentials. Written to the parameter file of a fit and read
+    with the `mean_params` tag.
+
 # Description
 The `EwaldOnsites` object encapsulates the electrostatic contribution to
 tight-binding onsite energies, computed from effective charges via Ewald
@@ -57,12 +62,16 @@ Builds the container by:
 1. Computing electrostatic potentials for each structure
 2. Gathering unique species across MPI ranks
 3. Initializing per-species parameters
-4. Computing global per-species mean potentials (MPI-reduced)
+4. Computing global per-species mean potentials (MPI-reduced), or reading
+   them from the parameter file `mean_params`
 5. Subtracting these means from all site potentials
 
 # Notes
 - Potentials are only defined up to a constant; per-species centering ensures
   consistency with onsite fitting.
+- With computed means, the onsites of a structure depend on the other
+  structures in the run. Set `mean_params` (e.g. to the `params.dat` of the
+  training run) to center all structures with fixed means.
 - The choice of electrostatic method (Ewald, Wolf, Zahn) affects the physical
   interpretation of the stored potentials.
 """
@@ -74,6 +83,7 @@ mutable struct EwaldOnsites{P, T, N}
     norb_per_strc :: Vector{N}
     Rs_info :: Matrix{Int64}
     update :: Bool
+    species_mean :: Vector{Float64}
 end
 
 function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=get_empty_config(); 
@@ -82,7 +92,8 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         rcut            = get_ewald_rcut(conf),
         alpha           = get_ewald_alpha(conf),
         mesh_spacing    = get_ewald_mesh_spacing(conf),
-        update          = get_ewald_update(conf))
+        update          = get_ewald_update(conf),
+        mean_params     = get_ewald_mean_params(conf))
 
     types_per_strc = Vector{UInt8}[]
     norb_per_strc = Vector{Int64}[]
@@ -161,6 +172,10 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     end
     MPI.Bcast!(species_mean, comm, root=0)
 
+    if mean_params ≠ "default"
+        read_species_mean!(species_mean, param_labels, mean_params, conf, verbose=rank==0)
+    end
+
     for n in eachindex(potentials)
         for i in eachindex(potentials[n])
             typ = types_per_strc[n][i]
@@ -169,7 +184,40 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         end
     end
 
-    return EwaldOnsites(params, param_labels, potentials, types_per_strc, norb_per_strc, Rs_info, update)
+    return EwaldOnsites(params, param_labels, potentials, types_per_strc, norb_per_strc, Rs_info, update, species_mean)
+end
+
+"""
+    read_species_mean!(species_mean, param_labels, filename, conf; verbose=true)
+
+Overwrite the per-species mean potentials `species_mean` (ordered as `param_labels`) with the `ewald_mean_<element>` header
+lines of the parameter file `filename`. Species missing in the file keep their mean computed from the current structures
+(with a warning). Also warns if the Ewald settings (method, rcut, α, charges) in the file differ from `conf`, since the
+means are then not comparable to the current potentials.
+"""
+function read_species_mean!(species_mean, param_labels, filename, conf; verbose=true)
+    conf_values = read_params(filename)[5]
+    for (p, type) in enumerate(param_labels)
+        element = number_to_element(type)
+        key = "ewald_mean_$element"
+        if haskey(conf_values, key)
+            species_mean[p] = parse(Float64, conf_values[key])
+        elseif verbose
+            @warn "No Ewald mean potential for $element in $filename: using the mean over the current structures."
+        end
+    end
+
+    settings = ewald_settings(conf, types=number_to_element.(param_labels))
+    expected = Dict("ewald_method" => string(settings.method), "ewald_rcut" => string(settings.rcut),
+                    "ewald_alpha" => string(settings.alpha))
+    for (type, q) in settings.qeff
+        expected["ewald_qeff_$type"] = string(q)
+    end
+    mismatched = [key for (key, value) in expected if haskey(conf_values, key) && conf_values[key] ≠ value]
+    if verbose && !isempty(mismatched)
+        @warn "Ewald settings $(join(sort(mismatched), ", ")) in $filename differ from the config: the mean potentials read from it may not match the current potentials."
+    end
+    return species_mean
 end
 
 """
@@ -297,25 +345,28 @@ end
 
 Add the Ewald couplings to the parameter file `filename` (written by the TB and SOC models before), where they are read
 with `init_params = params.dat` in the `Ewald` block, and the Ewald settings (`ewald_settings`) to its header. The
-coupling of a species is written as an `ewald_<element>` line.
+coupling of a species is written as an `ewald_<element>` line. The per-species mean potentials used to center the site
+potentials are always written to the header (`ewald_mean_<element>`), where they are read with `mean_params = params.dat`.
 """
 function write_params(ewald::EwaldOnsites, conf=get_empty_config(); filename="params.dat")
     isfile(filename) || return nothing
     parameters, parameter_values, ion_types, soc_parameters, _ = read_params(filename)
     ewald_types = number_to_element.(ewald.param_labels)
     write_params(parameters, parameter_values, ion_types, soc_parameters, conf, filename=replace(filename, r"\.dat$" => ""),
-                 ewald_types=ewald_types, ewald_parameters=ewald.params, ewald_settings=ewald_settings(conf, types=ewald_types))
+                 ewald_types=ewald_types, ewald_parameters=ewald.params,
+                 ewald_settings=ewald_settings(conf, types=ewald_types, means=collect(zip(ewald_types, ewald.species_mean))))
 end
 
 """
-    ewald_settings(conf; types=String[])
+    ewald_settings(conf; types=String[], means=Tuple{String, Float64}[])
 
-Settings that define the Ewald potentials: method, rcut, α and the charges `qeff`, written to the header of the parameter
-file of a fit. The charges are listed for all ion types with a `qeff` tag and for the ion types `types` (e.g. the species
-of the Ewald model, whose charge may come from `auto_qeff`).
+Settings that define the Ewald potentials: method, rcut, α, the charges `qeff` and the per-species mean potentials `means`
+(pairs of element and mean), written to the header of the parameter file of a fit. The charges are listed for all ion
+types with a `qeff` tag and for the ion types `types` (e.g. the species of the Ewald model, whose charge may come from
+`auto_qeff`).
 """
-function ewald_settings(conf; types=String[])
+function ewald_settings(conf; types=String[], means=Tuple{String, Float64}[])
     qeff_types = sort(unique(vcat([type for (type, block) in conf.blocks if haskey(block, "qeff")], collect(types))))
     return (method=lowercase(get_ewald_method(conf)), rcut=get_ewald_rcut(conf), alpha=get_ewald_alpha(conf),
-            qeff=[(type, get_qeff(conf, type)) for type in qeff_types])
+            qeff=[(type, get_qeff(conf, type)) for type in qeff_types], mean=means)
 end

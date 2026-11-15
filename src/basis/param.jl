@@ -208,7 +208,7 @@ Writes the tight-binding (TB) parameters, system configuration, and optional spi
 # Keyword Arguments
 - `filename`: The name of the file (excluding the extension) to which the data will be written (default: `"params"`).
 - `ewald_types`, `ewald_parameters`: Ewald coupling per ion type (optional), written as `ewald_<type>` lines (e.g. `ewald_Pb`).
-- `ewald_settings`: Ewald method, rcut, α and charges (optional, see `ewald_settings`), written to the header.
+- `ewald_settings`: Ewald method, rcut, α, charges and per-species mean potentials (optional, see `ewald_settings`), written to the header.
 
 # File Format
 The file written contains the following:
@@ -238,6 +238,9 @@ function write_params(parameters::Vector, parameter_values::Vector, ion_types::V
         println(file, "  ewald_alpha = ", ewald_settings.alpha)
         for (type, q) in ewald_settings.qeff
             println(file, "  ewald_qeff_$type = ", q)
+        end
+        for (type, mean) in get(ewald_settings, :mean, ())
+            println(file, "  ewald_mean_$type = ", mean)
         end
     end
     println(file, "end")
