@@ -63,10 +63,10 @@ function ewald_sum(pos, q, lattice;
 
     grid_time = @elapsed begin
         if isnothing(Rs)
-            Rs = get_translation_vectors(hcat(pos...), lattice; Rmax=get_Rmax(lattice, rcut=rcut), rcut=rcut)
+            Rs = get_translation_vectors(reduce(hcat, pos), lattice; Rmax=get_Rmax(lattice, rcut=rcut), rcut=rcut)
         end
         if isnothing(point_grid)
-            point_grid = PointGrid(hcat(pos...), frac_to_cart(Rs, lattice), grid_size=rcut)
+            point_grid = PointGrid(reduce(hcat, pos), frac_to_cart(Rs, lattice), grid_size=rcut)
         end
     end
 

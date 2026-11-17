@@ -90,6 +90,9 @@ function precompile_configs(dir, data)
     md(lines...) = block("Supercell", "Nconf = 2", "Nconf_min = 1", "Nconf_max = 3", "xdatcar = $(joinpath(dir, "structures.h5"))", "poscar = $(joinpath(data, "SC_POSCAR"))", lines...)
     optimizer(train, lines...) = block("Optimizer", "niter = 2", "lr = 0.01", "loss = MAE", "train_data = $train", "train_mode = universal", lines...)
     ml(lines...) = block("ML", "ncluster = 3", "npoints = 10", "sample_strat = split", lines...)
+    # Ewald onsites as in the MD fits: Wolf summation with the automatic effective charges (Ga +3, As −3)
+    ewald(lines...) = block("Ewald", "method = wolf", "auto_qeff = true", "rcut = 7", "alpha = 0.3", lines...)
+    params_soc = "init_params = $(joinpath(data, "params_soc.dat"))"
     return [
         # Standard runs: dense, sparse with shift-invert, MD snapshots with ML
         options(poscar, params, "kpoints = $eigenval") * PRECOMPILE_ATOMS,
@@ -103,6 +106,13 @@ function precompile_configs(dir, data)
             ml("kernel_strat = Hamerly") * PRECOMPILE_ATOMS_ML,
         options(poscar, "init_params = $(joinpath(data, "params_soc.dat"))", "soc = true") * md() * optimizer(eigenval_soc_h5) *
             block("SOC", "update = true", "init_params = zeros") * PRECOMPILE_ATOMS,
+        # Ewald: standard run with TB + ML + Ewald (MD snapshots), TB + Ewald optimization, and a sparse SOC + ML + Ewald
+        # run that only builds the Hamiltonians (skip_diag)
+        options(poscar, params, "sp_mode = true", "kpoints = $eigenval_h5") * md() * ml("init_params = rand") * ewald() *
+            PRECOMPILE_ATOMS_ML,
+        options(poscar, params, "sp_mode = true") * md() * optimizer(eigenval_h5) * ewald("update = true") * PRECOMPILE_ATOMS,
+        options(poscar, params_soc, "soc = true", "sp_mode = true", "sp_diag = true", "skip_diag = true") * md() *
+            ml("init_params = rand") * ewald() * block("SOC", "update = false", "init_params = zeros") * PRECOMPILE_ATOMS_ML,
     ]
 end
 
