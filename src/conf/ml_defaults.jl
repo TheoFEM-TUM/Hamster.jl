@@ -12,7 +12,10 @@
 @configtag env_scale Float64 1.0 "scaling factor for environment features." "ML" category="descriptor"
 @configtag strc_scale Float64 1.0 "scaling factor for structural features." "ML" category="descriptor"
 @configtag sim_params Float64 0.1 "similarity parameter for kernel model." "ML" category="model"
-@configtag sampling String "random" "sampling method for each cluster of descriptors: random or farthest (farthest-point sampling); r and f for short." "ML" category="data points" values=["random", "farthest", "r", "f"]
+@configtag sampling String "random" "sampling method for each cluster of descriptors: random, farthest (farthest-point sampling) or uncertainty (greedy largest GP posterior variance w.r.t. the already selected points); r, f and u for short." "ML" category="data points" values=["random", "farthest", "r", "f", "uncertainty", "u"]
+@configtag unc_noise Float64 decide_ml_unc_noise(conf) "noise level λ of the Gaussian-process posterior variance (prediction uncertainty of the kernel model, between 0 and 1); should match the regularization lambda of the fit." "ML" category="uncertainty" default_doc="lambda of the Optimizer block if > 0, else 1e-3" see_also=["sampling", "unc_threshold", "uncertainty"]
+@configtag unc_threshold Float64 0.5 "the model summary warns about out-of-distribution predictions if the mean prediction uncertainty of a structure exceeds this value (GP posterior variance, between 0 and 1)." "ML" category="uncertainty" see_also=["unc_noise", "uncertainty"]
+@configtag uncertainty Bool true "whether the prediction uncertainty (GP posterior variance of the kernel model) is computed, written to the model summary and available via get_uncertainty." "ML" category="uncertainty" see_also=["unc_noise", "unc_threshold"]
 @configtag apply_distortion Bool false "whether distortions are considered in descriptor." "ML" category="descriptor"
 @configtag apply_distance_distortion Bool false "whether distortions (distance only) are considered in descriptor." "ML" category="descriptor"
 @configtag apply_orthogonality Bool false "enforce orthogonality of atomic orbitals of different l, m (r=0)" "ML" category="descriptor"
@@ -26,4 +29,9 @@ function decide_ml_update(conf::Config)::Bool
     else
         return false
     end
+end
+
+function decide_ml_unc_noise(conf::Config)::Float64
+    λ = get_lambda(conf)
+    return λ > 0 ? λ : DEFAULT_UNCERTAINTY_NOISE
 end

@@ -128,6 +128,20 @@ end
     @test Hamster.get_ml_mode(conf) == "expand"
     set_value!(conf, "mode", "ML", "eval")
     @test Hamster.get_ml_mode(conf) == "eval"
+
+    # Test 6: uncertainty tags
+    conf = get_empty_config()
+    @test Hamster.get_ml_uncertainty(conf) == true
+    @test Hamster.get_ml_unc_threshold(conf) == 0.5
+    @test Hamster.get_ml_unc_noise(conf) == 1e-3          # no Optimizer lambda
+    set_value!(conf, "lambda", "Optimizer", 0.01)
+    @test Hamster.get_ml_unc_noise(conf) == 0.01           # defaults to the regularization lambda
+    set_value!(conf, "unc_noise", "ML", 1e-4)
+    @test Hamster.get_ml_unc_noise(conf) == 1e-4
+    set_value!(conf, "sampling", "ML", "uncertainty")
+    @test Hamster.get_ml_sampling(conf) == "uncertainty"
+    set_value!(conf, "sampling", "ML", "bogus")
+    @test !isempty(Hamster.check_config_values(conf))
 end
 
 @testset "SOC defaults" begin

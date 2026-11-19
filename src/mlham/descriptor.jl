@@ -239,7 +239,7 @@ function get_environmental_descriptor(h, V, strc, basis, conf::Config; apply_par
 end
 
 """
-    sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random")
+    sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random", sim_params=0.1, noise=DEFAULT_UNCERTAINTY_NOISE)
 
 Selects a subset of descriptor vectors using K-Means clustering, weighted by cluster size and spread.
 
@@ -248,14 +248,18 @@ Selects a subset of descriptor vectors using K-Means clustering, weighted by clu
 - `Ncluster::Int=1`: The number of clusters for K-Means.
 - `Npoints::Int=1`: The total number of descriptor vectors to select.
 - `alpha::Float64=0.5`: A weighting factor (0 ≤ α ≤ 1) that balances selection between cluster size (α → 1) and spread (α → 0).
-- `ml_sampling::String`: Determines how points are selected from each cluster. Defaults to random.
+- `ml_sampling::String`: Determines how points are selected from each cluster: `random`, `farthest` (farthest-point sampling)
+  or `uncertainty` (greedy largest GP posterior variance w.r.t. the already selected points, see [`uncertainty_sampling`](@ref));
+  `r`, `f` and `u` for short.
+- `sim_params::Float64`: Kernel width σ (only used for `uncertainty`).
+- `noise::Float64`: GP noise level λ (only used for `uncertainty`).
 
 # Returns
 - A matrix of selected descriptor vectors with `Npoints` columns.
 """
-function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random")
-    lowercase(ml_sampling) ∈ ("random", "farthest", "r", "f") ||
-        error("Unknown ML sampling '$ml_sampling'. Valid options are random and farthest.")
+function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=0.5, ml_sampling="random", sim_params=0.1, noise=DEFAULT_UNCERTAINTY_NOISE)
+    lowercase(ml_sampling) ∈ ("random", "farthest", "r", "f", "uncertainty", "u") ||
+        error("Unknown ML sampling '$ml_sampling'. Valid options are random, farthest and uncertainty.")
     result = kmeans(descriptors, Ncluster)
     indices = result.assignments
     centroids = result.centers
@@ -287,21 +291,52 @@ function sample_structure_descriptors(descriptors; Ncluster=1, Npoints=1, alpha=
     end
 
     selected_indices = Int64[]
-    for c in eachindex(cluster_sizes)
-        cluster_indices = findall(x -> x == c, indices)
-        num_to_take = min(points_per_cluster[c], length(cluster_indices))
-        
-        selected = Int64[]
-        if lowercase(ml_sampling)[1] == 'r'
-            selected = sample(cluster_indices, num_to_take, replace=false)
-        elseif lowercase(ml_sampling)[1] == 'f'
-            selected = farthest_point_sampling(descriptors, cluster_indices, num_to_take)
+    if lowercase(ml_sampling) ∈ ("uncertainty", "u")
+        append!(selected_indices, uncertainty_sampling(descriptors, indices, nonzero_clusters, points_per_cluster, centroids, sim_params, noise))
+    else
+        for c in eachindex(cluster_sizes)
+            cluster_indices = findall(x -> x == c, indices)
+            num_to_take = min(points_per_cluster[c], length(cluster_indices))
+
+            selected = Int64[]
+            if lowercase(ml_sampling)[1] == 'r'
+                selected = sample(cluster_indices, num_to_take, replace=false)
+            elseif lowercase(ml_sampling)[1] == 'f'
+                selected = farthest_point_sampling(descriptors, cluster_indices, num_to_take)
+            end
+            append!(selected_indices, selected)
         end
-        append!(selected_indices, selected)
     end
     summary = (nz_clusters = length(cluster_sizes), cluster_sizes = cluster_sizes, points_per_cluster = points_per_cluster, cluster_variances = cluster_variances)
 
     return SVector{size(descriptors, 1), Float64}[SVector{size(descriptors, 1)}(descriptors[:, index]) for index in selected_indices]
+end
+
+"""
+    uncertainty_sampling(descriptors, assignments, cluster_ids, points_per_cluster, centroids, σ, noise) -> Vector{Int64}
+
+Greedy uncertainty sampling of descriptor points: within each cluster, pick `points_per_cluster[c]` descriptors one at a
+time, each time the one with the largest GP posterior variance (`GPVariance`) with respect to the already selected points,
+seeded with the cluster centroids. This selects the most out-of-distribution descriptors of each cluster as kernel data
+points. Returns the selected column indices of `descriptors`.
+"""
+function uncertainty_sampling(descriptors, assignments, cluster_ids, points_per_cluster, centroids, σ, noise)
+    d = size(descriptors, 1)
+    seeds = [SVector{d, Float64}(centroids[:, c]) for c in cluster_ids]
+    gp = GPVariance(seeds, σ, noise)
+    selected = Int64[]
+    for (ci, c) in enumerate(cluster_ids)
+        cand = findall(==(c), assignments)
+        quota = min(points_per_cluster[ci], length(cand))
+        for _ in 1:quota
+            vars = gp_variances(gp, view(descriptors, :, cand))
+            t = argmax(vars)
+            push!(selected, cand[t])
+            gp = gp_append(gp, SVector{d, Float64}(descriptors[:, cand[t]]))
+            deleteat!(cand, t)
+        end
+    end
+    return selected
 end
 
 """

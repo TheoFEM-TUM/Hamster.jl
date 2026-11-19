@@ -79,7 +79,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         params = zeros(length(data_points))
     elseif get_init_mode(get_ml_init_params(conf)) ≠ :file
         Npoints_local = floor(Int64, Npoints / nranks)
-        data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
+        data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf), sim_params=sim_params, noise=get_ml_unc_noise(conf))
         local_counts::Int32 = length(data_points_local)
         counts = MPI.Gather(local_counts, 0, comm)
         counts = MPI.bcast(counts, 0, comm)

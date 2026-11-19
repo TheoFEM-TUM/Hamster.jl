@@ -307,33 +307,64 @@ end
 """
     write_model_summary(kernel::HamiltonianKernel, strcs, bases, comm, conf; kwargs...)
 
-Append a summary of the ML model to `hamster.out`.
+Append a summary of the ML model to `hamster.out`: the coverage of the descriptors by the kernel data points and, if
+`uncertainty = true` (ML block), the prediction uncertainty (GP posterior variance of the kernel model, see
+[`GPVariance`](@ref)), with a warning for out-of-distribution structures whose mean uncertainty exceeds `unc_threshold`.
 """
 function write_model_summary(kernel::HamiltonianKernel, strcs, bases, comm, conf=get_empty_config();
-        rank=0, label="", sim_tol=get_ml_sim_tol(conf), filename="hamster.out")
+        rank=0, label="", sim_tol=get_ml_sim_tol(conf), filename="hamster.out",
+        uncertainty=get_ml_uncertainty(conf), unc_noise=get_ml_unc_noise(conf), unc_threshold=get_ml_unc_threshold(conf))
 
+    gp = uncertainty ? GPVariance(kernel.data_points, kernel.sim_params, unc_noise) : nothing
     histograms = Dict{String, Vector{Int64}}()
     minima = Dict{String, Float64}()
+    unc_histograms = uncertainty ? Dict{String, Vector{Int64}}() : nothing
+    unc_maxima = uncertainty ? Dict{String, Float64}() : nothing
+    strc_unc = uncertainty ? Tuple{String, Float64, Float64}[] : nothing
     for n in eachindex(strcs)
         group = descriptor_groups(strcs[n], bases[n])
+        ion_of_orbital = [iion for iion in eachindex(bases[n].orbitals) for _ in bases[n].orbitals[iion]]
+        u_atom = uncertainty ? zeros(length(strcs[n].ions)) : nothing
+        nelem = uncertainty ? zeros(Int, length(strcs[n].ions)) : nothing
+        vmax = 0.0
         for R in eachindex(kernel.structure_descriptors[n])
             is, js, xs = findnz(kernel.structure_descriptors[n][R])
+            isempty(xs) && continue
             sims = max_similarities(xs, kernel.data_points, kernel.sim_params)
-            for (i, j, s) in zip(is, js, sims)
+            vars = uncertainty ? gp_variances(gp, xs) : sims
+            for (t, (i, j)) in enumerate(zip(is, js))
                 g = group(i, j, R)
+                s = sims[t]
                 histogram = get!(() -> zeros(Int64, NBINS_COVERAGE), histograms, g)
                 histogram[clamp(ceil(Int64, s * NBINS_COVERAGE), 1, NBINS_COVERAGE)] += 1
                 minima[g] = min(get(minima, g, 1.0), s)
+                if uncertainty
+                    v = vars[t]
+                    unc_histogram = get!(() -> zeros(Int64, NBINS_COVERAGE), unc_histograms, g)
+                    unc_histogram[clamp(ceil(Int64, v * NBINS_COVERAGE), 1, NBINS_COVERAGE)] += 1
+                    unc_maxima[g] = max(get(unc_maxima, g, 0.0), v)
+                    u_atom[ion_of_orbital[i]] += v
+                    nelem[ion_of_orbital[i]] += 1
+                    vmax = max(vmax, v)
+                end
             end
         end
+        # Per-atom mean of the per-element variances (in [0, 1]), averaged over the atoms
+        uncertainty && push!(strc_unc, (strcs[n].system, mean(u_atom[i] / max(nelem[i], 1) for i in eachindex(u_atom)), vmax))
     end
 
     all_histograms = MPI.gather(histograms, comm, root=0)
     all_minima = MPI.gather(minima, comm, root=0)
+    all_unc_histograms = uncertainty ? MPI.gather(unc_histograms, comm, root=0) : nothing
+    all_unc_maxima = uncertainty ? MPI.gather(unc_maxima, comm, root=0) : nothing
+    all_strc_unc = uncertainty ? MPI.gather(strc_unc, comm, root=0) : nothing
     (rank ≠ 0 || !isfile(filename)) && return nothing
 
     histograms = mergewith(+, all_histograms...)
     minima = mergewith(min, all_minima...)
+    unc_histograms = uncertainty ? mergewith(+, all_unc_histograms...) : nothing
+    unc_maxima = uncertainty ? mergewith(max, all_unc_maxima...) : nothing
+    strc_unc = uncertainty ? reduce(vcat, all_strc_unc) : nothing
     groups = sort(collect(keys(histograms)), by=g -> (!endswith(g, "onsite"), g))
     total = sum(sum, values(histograms), init=0)
 
@@ -365,6 +396,37 @@ function write_model_summary(kernel::HamiltonianKernel, strcs, bases, comm, conf
         write_legend(io, "<tol %: percentage of descriptors with a similarity below sim_tol; <0.5 %: below 0.5.")
         write_legend(io, "Descriptors with a small similarity to all data points are outside the training data; " *
                          "there, the ML correction is close to zero and the model falls back to TB.")
+        if uncertainty
+            println(io)
+            println(io, "  Prediction uncertainty: GP posterior variance of the kernel model (unc_noise = $unc_noise)")
+            widths = [12, 11, 7, 7, 7]
+            write_table_row(io, ["group", "descriptors", "mean", "p99", "max"], widths)
+            for g in groups
+                h = unc_histograms[g]
+                write_table_row(io, [g, string(sum(h)), @sprintf("%.4f", sum(h .* (1:NBINS_COVERAGE)) / (sum(h) * NBINS_COVERAGE)),
+                                     @sprintf("%.4f", histogram_quantile(h, 0.99)), @sprintf("%.4f", unc_maxima[g])], widths)
+            end
+            ū = [su[2] for su in strc_unc]
+            n_ood = count(>(unc_threshold), ū)
+            write_summary_line(io, "mean uncertainty per structure", @sprintf("min %.4f, median %.4f, max %.4f (%d of %d above %g)",
+                                                                              minimum(ū), median(ū), maximum(ū), n_ood, length(ū), unc_threshold))
+            println(io)
+            write_legend(io, "GP posterior variance 1 - k(x,D)(K + λI)⁻¹k(D,x) of the kernel prediction at each descriptor: " *
+                             "about 0 at a data point, close to 1 far from all data points (out of distribution).")
+            write_legend(io, "mean: mean variance of the group; p99, max: 99th percentile and maximum.")
+            write_legend(io, "mean uncertainty per structure: per-atom mean of the per-element variances (get_uncertainty), " *
+                             "averaged over the atoms, between 0 and 1; structures above unc_threshold are out of distribution.")
+            if n_ood > 0
+                worst = sort(strc_unc, by=s -> s[2], rev=true)[1:min(end, 5)]
+                warning = "$n_ood of $(length(ū)) structures have a mean prediction uncertainty above $unc_threshold " *
+                          "(out-of-distribution descriptors, worst: " *
+                          join(["$(s[1]) ($(@sprintf("%.3f", s[2])))" for s in worst], ", ") *
+                          "). The ML model extrapolates there; check these predictions against DFT."
+                println(io)
+                write_legend(io, "Warning: " * warning)
+                @warn warning
+            end
+        end
         write_separator(io)
     end
     return nothing

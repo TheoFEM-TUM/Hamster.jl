@@ -62,6 +62,11 @@ end
             for group in ["Cs onsite", "Pb onsite", "Br onsite", "Br+Pb"]
                 @test occursin(Regex("\\n    " * replace(group, "+" => "\\+") * "\\s+\\d+"), ml)
             end
+            # prediction uncertainty (GP posterior variance) section
+            @test occursin("Prediction uncertainty", ml)
+            @test occursin("mean uncertainty per structure", ml)
+            u, ū = Hamster.get_uncertainty(ham, 1, noise=Hamster.get_ml_unc_noise(conf))
+            @test length(u) == length(basis)
             @test occursin("ML Model Summary (validation set)", out)
             @test ham_val.models[2].data_points == ham.models[2].data_points
 
@@ -72,6 +77,37 @@ end
                 @test occursin(Regex("\\n    $element\\s+\\d+ "), ewald)
             end
             @test occursin("couplings γ", ewald) && !occursin("polarizabilities", ewald)
+        end
+    end
+end
+
+@testset "ML prediction uncertainty in the model summary" begin
+    conf = get_summary_test_config()
+    strc = Structure(conf)
+    basis = Basis(strc, conf)
+    mktempdir() do dir
+        cd(dir) do
+            # Default: uncertainty section present; with a threshold above 1 (the score is in [0, 1]) no warning
+            set_value!(conf, "unc_threshold", "ML", 2.0)
+            touch("hamster.out")
+            EffectiveHamiltonian([strc], [basis], comm, conf)
+            ml = summary_block(read("hamster.out", String), "ML Model Summary")
+            @test occursin("Prediction uncertainty", ml) && occursin("mean uncertainty per structure", ml)
+            @test !occursin("Warning", ml)
+
+            # Low threshold: out-of-distribution warning
+            set_value!(conf, "unc_threshold", "ML", 1e-12)
+            rm("hamster.out"); touch("hamster.out")
+            EffectiveHamiltonian([strc], [basis], comm, conf)
+            ml = summary_block(read("hamster.out", String), "ML Model Summary")
+            @test occursin("Warning", ml) && occursin("out-of-distribution", ml)
+
+            # uncertainty = false: no uncertainty section
+            set_value!(conf, "uncertainty", "ML", false)
+            rm("hamster.out"); touch("hamster.out")
+            EffectiveHamiltonian([strc], [basis], comm, conf)
+            ml = summary_block(read("hamster.out", String), "ML Model Summary")
+            @test !occursin("Prediction uncertainty", ml)
         end
     end
 end

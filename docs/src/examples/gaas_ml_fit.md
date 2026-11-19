@@ -22,6 +22,9 @@ In practice, it is recommended to perform hyperparameter optimization for the ML
 **Sampling of descriptor vectors** is controlled by:  
 - `npoints`: Number of descriptor vectors to sample.  
 - `ncluster`: Number of clusters used in k-means clustering.  
+- `sampling`: How the points are picked within each cluster: `random`, `farthest` (farthest-point sampling) or `uncertainty` (greedy largest GP posterior variance with respect to the already selected points, i.e. the most out-of-distribution descriptors).  
+
+The prediction uncertainty (GP posterior variance of the kernel model) of every structure is reported in the ML model summary in `hamster.out`; structures whose mean uncertainty exceeds `unc_threshold` (default 0.5) are flagged as out-of-distribution.
 
 **Kernel model parameters** can be modified via:  
 - `sim_params`: Kernel width.  
