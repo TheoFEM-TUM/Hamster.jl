@@ -319,6 +319,10 @@ Greedy uncertainty sampling of descriptor points: within each cluster, pick `poi
 time, each time the one with the largest GP posterior variance (`GPVariance`) with respect to the already selected points,
 seeded with the cluster centroids. This selects the most out-of-distribution descriptors of each cluster as kernel data
 points. Returns the selected column indices of `descriptors`.
+
+After each pick, the candidate variances are updated incrementally with the rank-1 downdate
+`var(x) ← var(x) − (k(x, x_new) − k(x, S) A⁻¹ k(S, x_new))² / s` (O(n_c · N) per pick instead of re-solving O(n_c · N²)),
+where `S` are the selected points, `A = K + noise·I` and `s = var(x_new) + noise`.
 """
 function uncertainty_sampling(descriptors, assignments, cluster_ids, points_per_cluster, centroids, σ, noise)
     d = size(descriptors, 1)
@@ -328,15 +332,46 @@ function uncertainty_sampling(descriptors, assignments, cluster_ids, points_per_
     for (ci, c) in enumerate(cluster_ids)
         cand = findall(==(c), assignments)
         quota = min(points_per_cluster[ci], length(cand))
+        quota ≤ 0 && continue
+        vars = gp_variances(gp, view(descriptors, :, cand))
         for _ in 1:quota
-            vars = gp_variances(gp, view(descriptors, :, cand))
             t = argmax(vars)
+            x_new = SVector{d, Float64}(descriptors[:, cand[t]])
             push!(selected, cand[t])
-            gp = gp_append(gp, SVector{d, Float64}(descriptors[:, cand[t]]))
-            deleteat!(cand, t)
+            v = [exp_sim(p, x_new, σ=σ) for p in gp.data_points]
+            u = gp.L.U \ (gp.L.L \ v)      # A⁻¹ v with A = K + noise·I = L Lᵀ
+            s = 1 + noise - dot(v, u)       # = var(x_new) + noise > 0
+            downdate_variances!(vars, descriptors, cand, gp.data_points, x_new, u, s, σ)
+            gp = gp_append(gp, x_new)
+            deleteat!(cand, t); deleteat!(vars, t)
         end
     end
     return selected
+end
+
+"""
+    downdate_variances!(vars, X, cand, points, x_new, u, s, σ; chunk=4096)
+
+Update the candidate variances `vars` (for columns `cand` of `X`) after adding `x_new` to the GP data points `points`:
+`var(x) ← max(var(x) − (k(x, x_new) − k(x, S) u)² / s, 0)` with `u = A⁻¹ k(S, x_new)` and `s = var(x_new) + noise`.
+"""
+function downdate_variances!(vars, X, cand, points, x_new, u, s, σ; chunk::Int=4096)
+    tforeach(chunks(1:length(cand), size=chunk)) do ch
+        K = Matrix{Float64}(undef, length(points), length(ch))
+        knew = Vector{Float64}(undef, length(ch))
+        for (j, t) in enumerate(ch)
+            x = view(X, :, cand[t])
+            for (n, p) in enumerate(points)
+                @inbounds K[n, j] = exp_sim(p, x, σ=σ)
+            end
+            @inbounds knew[j] = exp_sim(x_new, x, σ=σ)
+        end
+        c = K' * u
+        @inbounds for (j, t) in enumerate(ch)
+            vars[t] = max(vars[t] - (knew[j] - c[j])^2 / s, 0.0)
+        end
+    end
+    return nothing
 end
 
 """

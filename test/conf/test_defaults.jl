@@ -133,9 +133,11 @@ end
     conf = get_empty_config()
     @test Hamster.get_ml_uncertainty(conf) == true
     @test Hamster.get_ml_unc_threshold(conf) == 0.5
-    @test Hamster.get_ml_unc_noise(conf) == 1e-3          # no Optimizer lambda
+    @test Hamster.get_ml_unc_rel(conf) == 2.0
+    @test Hamster.get_ml_unc_max_desc(conf) == 10000
+    @test Hamster.get_ml_unc_noise(conf) == 1e-3           # fixed default, independent of the Optimizer lambda
     set_value!(conf, "lambda", "Optimizer", 0.01)
-    @test Hamster.get_ml_unc_noise(conf) == 0.01           # defaults to the regularization lambda
+    @test Hamster.get_ml_unc_noise(conf) == 1e-3
     set_value!(conf, "unc_noise", "ML", 1e-4)
     @test Hamster.get_ml_unc_noise(conf) == 1e-4
     set_value!(conf, "sampling", "ML", "uncertainty")

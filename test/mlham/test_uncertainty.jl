@@ -28,11 +28,37 @@ end
     @test length(sel2) == 4 && length(unique(sel2)) == 4
     @test_throws ErrorException Hamster.sample_structure_descriptors(X, Ncluster=2, Npoints=4, ml_sampling="bogus")
     # Uncertainty sampling picks descriptors with a larger GP variance w.r.t. the cluster centroids than random sampling
+    # (seeded, so the test does not depend on the RNG state of earlier tests)
+    Hamster.Random.seed!(1234)
     centroids = [mean(X[:, 1:100], dims=2)[:, 1], mean(X[:, 101:200], dims=2)[:, 1]]
     gp = Hamster.GPVariance([SVector{2, Float64}(c) for c in centroids], 0.5, 1e-3)
     Xsel = reduce(hcat, sel)
     Xrand = reduce(hcat, Hamster.sample_structure_descriptors(X, Ncluster=2, Npoints=4, ml_sampling="random"))
     @test mean(Hamster.gp_variances(gp, Xsel)) > mean(Hamster.gp_variances(gp, Xrand))
+end
+
+@testset "Incremental variance downdate matches fresh variances" begin
+    X = rand(4, 60)
+    σ, noise = 0.7, 1e-3
+    gp = Hamster.GPVariance([SVector{4, Float64}(X[:, 1])], σ, noise)
+    cand = collect(2:60)
+    vars = Hamster.gp_variances(gp, X[:, cand])
+    # add column 2 via the rank-1 downdate used in uncertainty_sampling
+    x_new = SVector{4, Float64}(X[:, 2])
+    v = [Hamster.exp_sim(p, x_new, σ=σ) for p in gp.data_points]
+    u = gp.L.U \ (gp.L.L \ v)
+    s = 1 + noise - dot(v, u)
+    Hamster.downdate_variances!(vars, X, cand, gp.data_points, x_new, u, s, σ)
+    gp2 = Hamster.gp_append(gp, x_new)
+    deleteat!(cand, 1); deleteat!(vars, 1)  # the picked point leaves the candidate set
+    @test vars ≈ Hamster.gp_variances(gp2, X[:, cand]) atol=1e-10
+
+    # selected_nz_mask: nothing when below the cap, a subset of the right size otherwise
+    h_env = [sparse(rand(5, 5) .> 0.5), sparse(rand(5, 5) .> 0.5)]
+    @test Hamster.selected_nz_mask(h_env, 1000, 1) === nothing
+    masks = Hamster.selected_nz_mask(h_env, 4, 1)
+    @test masks isa Vector{BitVector} && sum(sum, masks) == 4
+    @test Hamster.selected_nz_mask(h_env, 4, 1) == masks  # seeded: reproducible
 end
 
 @testset "get_uncertainty of a kernel model" begin

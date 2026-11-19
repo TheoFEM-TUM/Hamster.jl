@@ -91,7 +91,7 @@ function gp_variances(gp::GPVariance, X::AbstractMatrix; chunk::Int=4096)
     d, n = size(X)
     length(gp.data_points) > 0 || return ones(n)
     out = Vector{Float64}(undef, n)
-    tforeach(chunks(1:n, n=min(chunk, n))) do ch
+    tforeach(chunks(1:n, size=chunk)) do ch
         V = Matrix{Float64}(undef, length(gp.data_points), length(ch))
         for (c, t) in enumerate(ch), (r, dpoint) in enumerate(gp.data_points)
             @inbounds V[r, c] = exp_sim(dpoint, view(X, :, t), σ=gp.σ)
@@ -169,6 +169,29 @@ function get_uncertainty(ham::EffectiveHamiltonian, index; kwargs...)
         end
     end
     error("get_uncertainty: the effective Hamiltonian has no ML kernel model (add an ML block).")
+end
+
+"""
+    selected_nz_mask(h_env, cap::Int, seed::Int) -> Union{Nothing, Vector{BitVector}}
+
+For the uncertainty estimate in the model summary: which nonzero positions of each matrix of `h_env` to evaluate.
+Returns `nothing` if there are at most `cap` nonzeros in total (use all), otherwise a `BitVector` per matrix with a
+random subset (proportional to the nonzeros per matrix, at least one each), seeded with `seed` for reproducibility.
+"""
+function selected_nz_mask(h_env, cap::Int, seed::Int)
+    total = sum(nnz, h_env)
+    total ≤ cap && return nothing
+    rng = Random.MersenneTwister(seed)
+    masks = [falses(nnz(R)) for R in h_env]
+    remaining = cap
+    for R in eachindex(h_env)
+        nR = nnz(h_env[R])
+        k = min(max(1, round(Int, cap * nR / total)), nR, remaining)
+        remaining -= k
+        k ≤ 0 && continue
+        masks[R][randperm(rng, nR)[1:k]] .= true
+    end
+    return masks
 end
 
 """
