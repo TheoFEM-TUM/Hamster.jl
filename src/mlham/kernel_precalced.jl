@@ -9,6 +9,7 @@ A precalculated kernel structure for efficient Hamiltonian parameterization with
 - `sim_params :: Float64`: Parameters for the similarity function.
 - `update :: Bool`: Flag indicating whether parameters should be updated during optimization.
 - `sm :: SimMat`: Precomputed similarity matrix containing feature vectors and shapes.
+- `unc_ref :: Float64`: Reference out-of-distribution score of the training structures, `NaN` if unknown.
 """
 mutable struct HamiltonianKernelPrecalced{T1, T2}
     params :: Vector{Float64}
@@ -16,7 +17,12 @@ mutable struct HamiltonianKernelPrecalced{T1, T2}
     sim_params :: Float64
     update :: Bool
     sm :: T2
+    unc_ref :: Float64
 end
+
+# `unc_ref` (reference out-of-distribution score of the training structures, NaN if unknown) defaults to NaN
+HamiltonianKernelPrecalced(params, kp, sim_params, update, sm) =
+    HamiltonianKernelPrecalced(params, kp, sim_params, update, sm, NaN)
 
 
 
@@ -51,7 +57,7 @@ function HamiltonianKernelPrecalced(kernel::HamiltonianKernel, rank, systems, co
     end
     if rank == 0 && verbosity > 1; println(@sprintf("    Finished calculating similarity matrix in %.2f seconds...", time)); end
 
-    return HamiltonianKernelPrecalced(params, kp, kernel.sim_params, kernel.update, sm)
+    return HamiltonianKernelPrecalced(params, kp, kernel.sim_params, kernel.update, sm, kernel.unc_ref)
 end
 
 
@@ -179,6 +185,7 @@ function write_params(kernel::HamiltonianKernelPrecalced, conf=get_empty_config(
         println(file, "  env_scale = ", get_ml_env_scale(conf))
         println(file, "  apply_distortion = ", get_ml_apply_distortion(conf))
         println(file, "  apply_orthogonality = ", get_ml_apply_orthogonality(conf))
+        isfinite(kernel.unc_ref) && println(file, "  unc_ref = ", kernel.unc_ref)
         println(file, "end")
         println(file, "")
         for n in eachindex(kernel.params)

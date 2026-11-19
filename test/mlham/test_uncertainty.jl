@@ -53,12 +53,20 @@ end
     deleteat!(cand, 1); deleteat!(vars, 1)  # the picked point leaves the candidate set
     @test vars ≈ Hamster.gp_variances(gp2, X[:, cand]) atol=1e-10
 
-    # selected_nz_mask: nothing when below the cap, a subset of the right size otherwise
+    # selected_nz_mask: nothing when below the cap, a reproducible subset of the right size otherwise
     h_env = [sparse(rand(5, 5) .> 0.5), sparse(rand(5, 5) .> 0.5)]
-    @test Hamster.selected_nz_mask(h_env, 1000, 1) === nothing
-    masks = Hamster.selected_nz_mask(h_env, 4, 1)
+    @test Hamster.selected_nz_mask(h_env, 1000) === nothing
+    masks = Hamster.selected_nz_mask(h_env, 4)
     @test masks isa Vector{BitVector} && sum(sum, masks) == 4
-    @test Hamster.selected_nz_mask(h_env, 4, 1) == masks  # seeded: reproducible
+    @test Hamster.selected_nz_mask(h_env, 4) == masks  # fixed seed: reproducible, independent of MPI decomposition
+
+    # ood_scores: proxy variance 1 - max_sim², per-atom means, max over atoms
+    # row 1 far from the data point, row 2 equal to it
+    h_env2 = [sparse([1, 2], [1, 1], [SVector{8}(fill(10.0, 8)), SVector{8}(zeros(8))])]
+    per_atom, score = Hamster.ood_scores(h_env2, [SVector{8}(zeros(8))], 0.1, [1, 2], 2)
+    @test per_atom[1] ≈ 1.0 atol=1e-12          # far from the data point
+    @test per_atom[2] ≈ 0.0 atol=1e-12          # equal to the data point
+    @test score == per_atom[1]                  # max over atoms catches the local outlier
 end
 
 @testset "get_uncertainty of a kernel model" begin

@@ -172,16 +172,17 @@ function get_uncertainty(ham::EffectiveHamiltonian, index; kwargs...)
 end
 
 """
-    selected_nz_mask(h_env, cap::Int, seed::Int) -> Union{Nothing, Vector{BitVector}}
+    selected_nz_mask(h_env, cap::Int) -> Union{Nothing, Vector{BitVector}}
 
 For the uncertainty estimate in the model summary: which nonzero positions of each matrix of `h_env` to evaluate.
 Returns `nothing` if there are at most `cap` nonzeros in total (use all), otherwise a `BitVector` per matrix with a
-random subset (proportional to the nonzeros per matrix, at least one each), seeded with `seed` for reproducibility.
+random subset (proportional to the nonzeros per matrix, at least one each). The subset uses a fixed seed, so it does
+not depend on the MPI decomposition of the structures over the ranks.
 """
-function selected_nz_mask(h_env, cap::Int, seed::Int)
+function selected_nz_mask(h_env, cap::Int)
     total = sum(nnz, h_env)
     total ≤ cap && return nothing
-    rng = Random.MersenneTwister(seed)
+    rng = Random.MersenneTwister(0x5eed)
     masks = [falses(nnz(R)) for R in h_env]
     remaining = cap
     for R in eachindex(h_env)
@@ -192,6 +193,47 @@ function selected_nz_mask(h_env, cap::Int, seed::Int)
         masks[R][randperm(rng, nR)[1:k]] .= true
     end
     return masks
+end
+
+"""
+    ood_scores(h_env, data_points, σ, ion_of_orbital, nions) -> (per_atom, score)
+
+Cheap out-of-distribution score of one structure with descriptors `h_env`: for every descriptor, the proxy variance
+`1 - max_k sim(x, d_k)²` (an upper bound of the GP posterior variance, computable in O(N) per descriptor together with
+the coverage `max_similarities`), averaged per atom (`per_atom`); `score` is the maximum over the atoms, so that a
+local out-of-distribution environment (e.g. a defect in a large cell) is not diluted by the average over all atoms.
+"""
+function ood_scores(h_env, data_points, σ, ion_of_orbital, nions)
+    u = zeros(nions)
+    c = zeros(Int, nions)
+    for R in eachindex(h_env)
+        is, js, xs = findnz(h_env[R])
+        isempty(xs) && continue
+        sims = max_similarities(xs, data_points, σ)
+        for (s, i) in zip(sims, is)
+            a = ion_of_orbital[i]
+            u[a] += 1 - s^2
+            c[a] += 1
+        end
+    end
+    per_atom = [u[i] / max(c[i], 1) for i in 1:nions]
+    return per_atom, maximum(per_atom)
+end
+
+"""
+    training_unc_ref(structure_descriptors, data_points, σ, strcs, bases) -> Float64
+
+Reference out-of-distribution score of a training run: the median over the structures of the per-structure score
+(maximum over atoms of the per-atom mean proxy variance, see [`ood_scores`](@ref)). Stored in the header of the ML
+parameter file (`unc_ref`) and used as the reference for the out-of-distribution warning in later runs.
+"""
+function training_unc_ref(structure_descriptors, data_points, σ, strcs, bases)
+    scores = map(eachindex(strcs)) do n
+        ion_of_orbital = [iion for iion in eachindex(bases[n].orbitals) for _ in bases[n].orbitals[iion]]
+        _, score = ood_scores(structure_descriptors[n], data_points, σ, ion_of_orbital, length(strcs[n].ions))
+        score
+    end
+    return median(scores)
 end
 
 """

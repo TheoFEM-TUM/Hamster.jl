@@ -64,7 +64,7 @@ end
             end
             # prediction uncertainty (GP posterior variance) section
             @test occursin("Prediction uncertainty", ml)
-            @test occursin("mean uncertainty per structure", ml)
+            @test occursin("uncertainty per structure", ml)
             u, ū = Hamster.get_uncertainty(ham, 1, noise=Hamster.get_ml_unc_noise(conf))
             @test length(u) == length(basis)
             @test occursin("ML Model Summary (validation set)", out)
@@ -92,7 +92,7 @@ end
             touch("hamster.out")
             EffectiveHamiltonian([strc], [basis], comm, conf)
             ml = summary_block(read("hamster.out", String), "ML Model Summary")
-            @test occursin("Prediction uncertainty", ml) && occursin("mean uncertainty per structure", ml)
+            @test occursin("Prediction uncertainty", ml) && occursin("uncertainty per structure", ml)
             @test !occursin("Warning", ml)
 
             # Low threshold: out-of-distribution warning
