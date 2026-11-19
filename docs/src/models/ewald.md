@@ -135,7 +135,9 @@ the potential is screened, and it is written to the parameter file together with
 taken from a DFPT calculation (e.g. VASP `LEPSILON`, the electronic dielectric tensor including local field effects) or
 from experiment; for the onsite energies to match DFT, the potentials at the nuclei of DFT calculations of distorted
 cells can be used to check both α and ε∞. The cluster dipole correction (`cluster`) is divided by ε∞ as well; the slab
-term has its own factor `slab_scale`.
+term has its own factor `slab_scale`. With polarizable species, the induced dipoles already screen the long range
+(see [Induced Dipoles](#Induced-Dipoles)); `epsilon_inf` then divides their long-range parts as well and should usually
+stay at 1.
 
 The long range only appears in cells larger than about 2π/α and is therefore hardly constrained by small training
 cells: its amplitude follows from ε∞ and the effective charges, not from the fit. It is only physical if the structures
@@ -243,12 +245,27 @@ potential of these dipoles is added to ``\phi_i``:
 ```
 
 Field and dipole potential use the radial derivative ``f = -\mathrm{d}K/\mathrm{d}r`` of the real-space kernel
-(the field of a unit charge) within `rcut`, on the neighbour grid of the potential (linear in the number of atoms). For
-`method = ewald`, this is the real-space (erfc) part: the dipoles respond to the short-range field, while the electronic
-response to the long-range field is the screening by `epsilon_inf` (see
-[Screened Long Range](#Screened-Long-Range-(epsilon_inf))). The dipoles respond only to the charges, not to each other
-(first order), so the potential is linear in the polarizabilities: the dipole potentials ``\Phi`` are computed once per
-structure and centered per species like ``\phi``. Induced dipoles are not available for slabs and clusters.
+(the field of a unit charge) within `rcut`, on the neighbour grid of the potential (linear in the number of atoms). With
+`method = wolf` or `zahn`, this is all: the dipoles respond to the damped short-range field. With `method = ewald`, the
+reciprocal-space parts of the field and of the dipole potential are added (particle mesh Ewald on the mesh of
+`mesh_spacing`), so that field and dipole potential are full Ewald sums with tin-foil boundary conditions, and both
+long-range parts are divided by `epsilon_inf` like the potential of the charges. The dipoles respond only to the charges,
+not to each other (first order), so the potential is linear in the polarizabilities: the dipole potentials ``\Phi`` are
+computed once per structure and centered per species like ``\phi``. Induced dipoles are not available for slabs and
+clusters.
+
+With the full Ewald sum, the induced dipoles screen the long range themselves: a long-wavelength potential of the
+charges induces a polarization ``P = \chi E`` with ``\chi = \sum_j p_j / V``, whose bound charge lowers the potential by
+the factor ``1 - 4\pi\chi`` (first order). The polarizabilities then play the role of the electronic screening, and
+`epsilon_inf` should stay at 1 (the default) or be determined together with the polarizabilities: dividing by the
+dielectric constant of the material on top of the dipoles screens the long range twice. The first-order screening is
+only meaningful for ``4\pi\chi`` clearly below 1. Polarizabilities and couplings can be fitted to the potentials at the
+nuclei of DFT calculations of distorted cells; cells that are long in one direction constrain the long range.
+
+!!! note "Changed in this version"
+    Before this version, `method = ewald` used only the real-space part for the induced dipoles (as Wolf). Models with
+    `method = ewald` and polarizable species give different onsite energies now and should be refitted; Wolf and Zahn
+    models and Ewald models without polarizabilities are unchanged.
 
 Induced dipoles are only used if a species has the tag `polarizability`. The polarizabilities are fixed unless
 `update_polarizability = true` is set in the `Ewald` block (independent of `update`, which fits the couplings). They are

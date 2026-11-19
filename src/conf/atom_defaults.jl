@@ -87,10 +87,12 @@ end
 """
 **polarizability**=0 (not polarizable)
 
-Polarizability (Å³) of the atoms of the species in the Ewald model (`method = wolf` or `zahn`): the field of the
-effective charges induces the dipole `polarizability * E / ke` on every atom of the species, whose potential is added to
-the electrostatic potential of all atoms (first order: the dipoles do not polarize each other). Species without the tag
-are not polarizable; set it (also to 0) to fit the polarizability with `update_polarizability`.
+Polarizability (Å³) of the atoms of the species in the Ewald model: the field of the effective charges induces the
+dipole `polarizability * E / ke` on every atom of the species, whose potential is added to the electrostatic potential
+of all atoms (first order: the dipoles do not polarize each other). With `method = wolf` or `zahn`, field and dipole
+potential are damped real-space sums within `rcut`; with `method = ewald`, full Ewald sums (long-range parts divided by
+`epsilon_inf`). Species without the tag are not polarizable; set it (also to 0) to fit the polarizability with
+`update_polarizability`.
 """
 get_polarizability(conf::Config, type)::Float64 = conf("polarizability", type) == "default" ? 0.0 : conf("polarizability", type)
 
@@ -112,4 +114,4 @@ get_nnaxes(conf::Config, type)::Bool = conf("nnaxes", type) == "default" ? false
 @configtag charge_scale_s Float64 0.0 "coupling of the on-site energies of the s orbitals of the species to the electrostatic potential (coupling = orbital in the Ewald block)." "atom" per_atom=true getter=:custom default_doc="charge_scale of the atom block" category="electrostatics" see_also=["charge_scale"]
 @configtag charge_scale_p Float64 0.0 "coupling of the on-site energies of the p orbitals of the species to the electrostatic potential (coupling = orbital in the Ewald block)." "atom" per_atom=true getter=:custom default_doc="charge_scale of the atom block" category="electrostatics" see_also=["charge_scale"]
 @configtag charge_scale_d Float64 0.0 "coupling of the on-site energies of the d orbitals of the species to the electrostatic potential (coupling = orbital in the Ewald block)." "atom" per_atom=true getter=:custom default_doc="charge_scale of the atom block" category="electrostatics" see_also=["charge_scale"]
-@configtag polarizability Float64 0.0 "polarizability (Å³) of the species: first-order dipoles induced by the field of the effective charges add their potential to the electrostatic on-site model (method = wolf or zahn)." "atom" per_atom=true getter=:custom default_doc="0 (not polarizable)" category="electrostatics" see_also=["qeff", "update_polarizability"]
+@configtag polarizability Float64 0.0 "polarizability (Å³) of the species: first-order dipoles induced by the field of the effective charges add their potential to the electrostatic on-site model (wolf, zahn: damped real-space sums; ewald: full Ewald sums)." "atom" per_atom=true getter=:custom default_doc="0 (not polarizable)" category="electrostatics" see_also=["qeff", "update_polarizability"]

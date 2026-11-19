@@ -188,8 +188,9 @@ end
 Electrostatic data of structure `n` for the atoms with orbitals: species `types`, numbers of orbitals `norb`, orbital
 angular momenta `l` (-1 unless `coupling = orbital`), potentials `φ` of the effective charges (with the slab or cluster
 terms; long range and cluster term divided by `epsilon_inf`) and potentials `Φ` of the induced dipoles of the species
-`pol_labels` (`induced_dipole_potentials`); `grid_rebuilt` if the real-space grid of the structure was too small for
-`rcut`. Adds the charges per site to `site_counts`.
+`pol_labels` (`induced_dipole_potentials`; for `method = ewald` with the long-range parts of field and dipole potential,
+each divided by `epsilon_inf`); `grid_rebuilt` if the real-space grid of the structure was too small for `rcut`. Adds the
+charges per site to `site_counts`.
 """
 function site_potentials_of_structure(strc, basis, conf, n, pol_labels, site_counts; coupling, method, rcut, alpha, mesh_spacing,
                                       epsilon_inf=1.0, slab_axis, slab_scale, cluster, charge_compensation)
@@ -212,7 +213,8 @@ function site_potentials_of_structure(strc, basis, conf, n, pol_labels, site_cou
     cluster && (φ = φ .+ cluster_potentials(pos, charges, strc.lattice; method=method) ./ epsilon_inf)
     groups = [something(findfirst(==(t), pol_labels), 0) for t in ion_types]
     Φ = isempty(pol_labels) ? zeros(length(ion_types), 0) :
-        induced_dipole_potentials(pos, charges, strc.lattice, groups, length(pol_labels); rcut=rcut, alpha=alpha, method=method)
+        induced_dipole_potentials(pos, charges, strc.lattice, groups, length(pol_labels); rcut=rcut, alpha=alpha, method=method,
+                                  mesh_spacing=mesh_spacing, long_range_scale=1 / epsilon_inf)
 
     types_with_orbs = get_ion_types(strc.ions, conf, uniq=true, withorbitals=true)
     ions = filter(i -> ion_types[i] ∈ types_with_orbs, eachindex(ion_types))
