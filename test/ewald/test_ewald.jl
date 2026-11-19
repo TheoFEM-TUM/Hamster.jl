@@ -748,10 +748,9 @@ end
         end
     end
 
-    for (key, value) in ["method" => "ewald", "slab_axis" => 3]
-        bad = cspbbr3_conf(pol=("polarizability", "Pb", 1.0), m=(key, "Ewald", value))
-        @test_throws ErrorException EwaldOnsites([strc], [basis], comm, bad, write_summary=false)
-    end
+    bad = cspbbr3_conf(pol=("polarizability", "Pb", 1.0), m=("slab_axis", "Ewald", 3))
+    @test_throws ErrorException EwaldOnsites([strc], [basis], comm, bad, write_summary=false)
+    @test Hamster.get_field_kernel("ewald") === Hamster.get_field_kernel("wolf")
 
     species = EwaldOnsites([strc], [basis], comm, cspbbr3_conf(), write_summary=false)
     @test all(l -> l[2] == -1, species.coupling_labels) && length(species.coupling_labels) == 3
@@ -774,6 +773,64 @@ end
             @test sort(types) == ["Br", "Cs", "Pb"] && all(≈(0.7), values)
             reread = EwaldOnsites([strc], [basis], comm, cspbbr3_conf(init=("init_params", "Ewald", joinpath(dir, "params.dat"))), write_summary=false)
             @test all(≈(0.7), reread.params)
+        end
+    end
+end
+
+@testset "Screened long range (epsilon_inf)" begin
+    conf = get_empty_config()
+    for (element, orbitals, q) in [("Cs", "s", 1), ("Pb", "s px py pz", 2), ("Br", "px py pz", -1)]
+        set_value!(conf, "orbitals", element, orbitals); set_value!(conf, "qeff", element, q)
+    end
+    for (key, value) in ["poscar" => joinpath(@__DIR__, "..", "model", "test_files/POSCAR_cspbbr3_distorted"), "load_rllm" => true, "rcut" => 5.5,
+                         "rllm_file" => joinpath(@__DIR__, "..", "model", "test_files/rllm_cspbbr3.dat"), "verbosity" => 0]
+        set_value!(conf, key, value)
+    end
+    for (key, value) in ["method" => "ewald", "rcut" => 10.0, "alpha" => 0.3, "epsilon_inf" => 4.5]; set_value!(conf, key, "Ewald", value); end
+    strc = Structure(conf); basis = Basis(strc, conf)
+    pos = Hamster.get_ion_positions(strc.ions, apply_distortion=true)
+    q, _ = Hamster.get_site_charges(strc, conf, positions=pos)
+    types = Hamster.get_ion_types(strc.ions)
+
+    full = Hamster.ewald_sum(pos, q, strc.lattice, rcut=10.0, alpha=0.3)
+    short = Hamster.ewald_sum(pos, q, strc.lattice, rcut=10.0, alpha=0.3, include_long=false, subtract_self=false)
+    screened = Hamster.ewald_sum(pos, q, strc.lattice, rcut=10.0, alpha=0.3, long_range_scale=1 / 4.5)
+    @test screened.potentials ≈ short.potentials .+ (full.potentials .- short.potentials) ./ 4.5
+    @test screened.energy ≈ short.energy + (full.energy - short.energy) / 4.5
+    wolf = Hamster.ewald_sum(pos, q, strc.lattice, rcut=10.0, alpha=0.3, method="wolf")
+    @test maximum(abs.(short.potentials .- wolf.potentials)) < 1e-3
+
+    model = EwaldOnsites([strc], [basis], comm, conf, write_summary=false)
+    φ = copy(screened.potentials)
+    for t in unique(types); φ[types .== t] .-= sum(φ[types .== t]) / count(==(t), types); end
+    @test model.potentials[1] ≈ φ
+
+    @test_throws ErrorException EwaldOnsites([strc], [basis], comm, conf, method="wolf", write_summary=false)
+    @test_throws ErrorException EwaldOnsites([strc], [basis], comm, conf, epsilon_inf=0.0, write_summary=false)
+
+    set_value!(conf, "polarizability", "Br", 1.5)
+    polarizable = EwaldOnsites([strc], [basis], comm, conf, write_summary=false)
+    polarizable_wolf = EwaldOnsites([strc], [basis], comm, conf, method="wolf", epsilon_inf=1.0, write_summary=false)
+    @test polarizable.dipole_potentials[1] ≈ polarizable_wolf.dipole_potentials[1]
+
+    mktempdir() do dir
+        cd(dir) do
+            Hamster.write_params(Hamster.ParameterLabel[], Float64[], conf)
+            Hamster.write_params(model, conf)
+            header = Hamster.read_params("params.dat")[5]
+            @test parse(Float64, header["ewald_epsilon_inf"]) == 4.5 && parse(Float64, header["ewald_alpha"]) == 0.3
+            new = get_empty_config()
+            set_value!(new, "init_params", "Ewald", "params.dat")
+            Hamster.apply_ewald_settings!(new)
+            @test Hamster.get_ewald_epsilon_inf(new) == 4.5 && Hamster.get_ewald_alpha(new) == 0.3
+            different = get_empty_config()
+            set_value!(different, "init_params", "Ewald", "params.dat"); set_value!(different, "epsilon_inf", "Ewald", 5.0)
+            @test_throws ErrorException Hamster.apply_ewald_settings!(different)
+
+            plain = deepcopy(conf); set_value!(plain, "epsilon_inf", "Ewald", 1.0)
+            Hamster.write_params(Hamster.ParameterLabel[], Float64[], plain)
+            Hamster.write_params(EwaldOnsites([strc], [basis], comm, plain, write_summary=false), plain)
+            @test !haskey(Hamster.read_params("params.dat")[5], "ewald_epsilon_inf")
         end
     end
 end

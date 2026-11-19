@@ -107,6 +107,41 @@ and rcut = 17.8 Å. α and rcut are written to the parameter file at the end of 
 uses the same screening in larger cells. Without a fit, `rcut` or `alpha` have to come from the parameter file or the
 config.
 
+### Screened Long Range (`epsilon_inf`)
+
+Wolf and Zahn remove the long range of the electrostatics, the full Ewald sum keeps it unscreened. In a polar crystal
+neither is right: the electrons screen the long-wavelength potential of the ionic charges by the high-frequency dielectric
+constant ε∞, while the potential of the nearby charges is not screened in this way. With `method = ewald`, the tag
+`epsilon_inf` divides the reciprocal-space part of the Ewald sum (the potential of the Gaussian charge clouds of width
+1/α, including the self-interaction correction) by ε∞:
+
+```math
+\phi_i = \sum_j q_j \frac{\mathrm{erfc}(\alpha r_{ij})}{r_{ij}} + \frac{1}{\varepsilon_\infty}
+         \sum_j q_j \frac{\mathrm{erf}(\alpha r_{ij})}{r_{ij}}
+```
+
+```bash
+begin Ewald
+    method = ewald
+    alpha = 0.3
+    rcut = 10.0
+    epsilon_inf = 4.5
+end
+```
+
+The real-space part is the same as Wolf with the same α (the shift erfc(α rcut)/rcut is negligible for α rcut ≳ 3), so
+this model is Wolf plus the screened long range. α is now a physical parameter: it sets the length (≈ 1/α) beyond which
+the potential is screened, and it is written to the parameter file together with `epsilon_inf` (see below). ε∞ can be
+taken from a DFPT calculation (e.g. VASP `LEPSILON`, the electronic dielectric tensor including local field effects) or
+from experiment; for the onsite energies to match DFT, the potentials at the nuclei of DFT calculations of distorted
+cells can be used to check both α and ε∞. The cluster dipole correction (`cluster`) is divided by ε∞ as well; the slab
+term has its own factor `slab_scale`.
+
+The long range only appears in cells larger than about 2π/α and is therefore hardly constrained by small training
+cells: its amplitude follows from ε∞ and the effective charges, not from the fit. It is only physical if the structures
+have the right long-range polarization fluctuations: snapshots of a molecular dynamics without long-range electrostatics
+can have unphysically large long-wavelength polarization, which this term turns into large potential fluctuations.
+
 ---
 
 ## Couplings
@@ -207,11 +242,13 @@ potential of these dipoles is added to ``\phi_i``:
 \Phi_{i,t} = \sum_{j \in t} f(r_{ij}) \, \mathbf{E}_j \cdot \hat{\mathbf{r}}_{ji} \Big|_{p_t = 1}
 ```
 
-Field and dipole potential use the radial derivative ``f = -\mathrm{d}K/\mathrm{d}r`` of the Wolf or Zahn kernel
-(the field of a unit charge) within `rcut`, on the neighbour grid of the potential (linear in the number of atoms). The
-dipoles respond only to the charges, not to each other (first order), so the potential is linear in the
-polarizabilities: the dipole potentials ``\Phi`` are computed once per structure and centered per species like
-``\phi``. Induced dipoles need `method = wolf` or `zahn` and are not available for slabs and clusters.
+Field and dipole potential use the radial derivative ``f = -\mathrm{d}K/\mathrm{d}r`` of the real-space kernel
+(the field of a unit charge) within `rcut`, on the neighbour grid of the potential (linear in the number of atoms). For
+`method = ewald`, this is the real-space (erfc) part: the dipoles respond to the short-range field, while the electronic
+response to the long-range field is the screening by `epsilon_inf` (see
+[Screened Long Range](#Screened-Long-Range-(epsilon_inf))). The dipoles respond only to the charges, not to each other
+(first order), so the potential is linear in the polarizabilities: the dipole potentials ``\Phi`` are computed once per
+structure and centered per species like ``\phi``. Induced dipoles are not available for slabs and clusters.
 
 Induced dipoles are only used if a species has the tag `polarizability`. The polarizabilities are fixed unless
 `update_polarizability = true` is set in the `Ewald` block (independent of `update`, which fits the couplings). They are
@@ -248,7 +285,8 @@ e.g., in larger cells. The adopted settings are printed and appear in the model 
 config and differs from the header, Hamster stops with an error, since the fitted couplings belong to the settings of
 the file. To change them deliberately (e.g., to refit with a different α), set `check_params = false` in the `Ewald`
 block. For `method = ewald`, `rcut` and `alpha` only affect the numerics and are not taken from the file; `method` and
-`qeff` are.
+`qeff` are. With `epsilon_inf ≠ 1`, `ewald_epsilon_inf` is written to the header, and `epsilon_inf` and `alpha` are
+taken from it as well.
 
 ## Mean Centering
 

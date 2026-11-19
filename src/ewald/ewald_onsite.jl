@@ -106,6 +106,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         rcut            = get_ewald_rcut(conf),
         alpha           = get_ewald_alpha(conf),
         mesh_spacing    = get_ewald_mesh_spacing(conf),
+        epsilon_inf     = get_ewald_epsilon_inf(conf),
         slab_axis       = get_ewald_slab_axis(conf),
         slab_scale      = get_ewald_slab_scale(conf),
         cluster         = get_ewald_cluster(conf),
@@ -121,10 +122,11 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     α = ewald_alpha(method, rcut, alpha)
     coupling = lowercase(coupling)
     pol_labels = polarizable_species(conf)
-    check_ewald_options(conf; method=method, slab_axis=slab_axis, cluster=cluster, coupling=coupling, polarizable=!isempty(pol_labels))
+    check_ewald_options(conf; method=method, slab_axis=slab_axis, cluster=cluster, coupling=coupling, polarizable=!isempty(pol_labels),
+                        epsilon_inf=epsilon_inf)
     site_counts = Dict{Tuple{String, Float64}, Int64}()
-    settings = (method=method, rcut=rcut, alpha=α, mesh_spacing=mesh_spacing, slab_axis=slab_axis, slab_scale=slab_scale,
-                cluster=cluster, charge_compensation=charge_compensation)
+    settings = (method=method, rcut=rcut, alpha=α, mesh_spacing=mesh_spacing, epsilon_inf=epsilon_inf, slab_axis=slab_axis,
+                slab_scale=slab_scale, cluster=cluster, charge_compensation=charge_compensation)
     sites = map(enumerate(strcs)) do (n, strc)
         site_potentials_of_structure(strc, bases[n], conf, n, pol_labels, site_counts; coupling=coupling, settings...)
     end
@@ -144,6 +146,7 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     has_sites = any(!isempty(get_site_qeff(conf, type)) for type in keys(conf.blocks))
     write_summary && write_model_summary(model, comm, conf, rank=rank, label=label, species=species, species_mean=species_mean,
                                          structure_means=structure_means, method=method, rcut=rcut, alpha=α, alpha_auto=alpha == 0,
+                                         epsilon_inf=epsilon_inf,
                                          grid_rebuilt=grid_rebuilt && method == "ewald", slab_axis=slab_axis, slab_scale=slab_scale,
                                          cluster=cluster, charge_compensation=charge_compensation, centering=centering,
                                          site_counts=has_sites ? site_counts : nothing)
@@ -151,13 +154,14 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
 end
 
 """
-    check_ewald_options(conf; method, slab_axis, cluster, coupling, polarizable)
+    check_ewald_options(conf; method, slab_axis, cluster, coupling, polarizable, epsilon_inf=1.0)
 
 Stop with an error for settings of the Ewald model that exclude each other: `cluster` with `slab_axis` or without
 `method = ewald`; an unknown `coupling`; `charge_scale` in an atom block with `coupling = global`; `charge_scale_<l>` without
-`coupling = orbital`; polarizable species (`polarizable`) without `method = wolf` or `zahn`, or with slabs and clusters.
+`coupling = orbital`; polarizable species (`polarizable`) with slabs and clusters; `epsilon_inf ≠ 1` without
+`method = ewald` or `epsilon_inf ≤ 0`.
 """
-function check_ewald_options(conf; method, slab_axis, cluster, coupling, polarizable)
+function check_ewald_options(conf; method, slab_axis, cluster, coupling, polarizable, epsilon_inf=1.0)
     if cluster
         slab_axis == 0 || error("cluster and slab_axis = $slab_axis exclude each other: a cluster has vacuum in all directions, a slab along one.")
         method == "ewald" || error("cluster = true needs method = ewald (the full Ewald sum with the dipole correction); " *
@@ -169,24 +173,26 @@ function check_ewald_options(conf; method, slab_axis, cluster, coupling, polariz
         key == "charge_scale" && coupling == "global" && error("charge_scale in the block of $type: coupling = global uses only the charge_scale of the Ewald block.")
         key ≠ "charge_scale" && coupling ≠ "orbital" && error("$key in the block of $type needs coupling = orbital in the Ewald block.")
     end
-    if polarizable
-        method ∈ ("wolf", "zahn") || error("Polarizabilities (induced dipoles) need method = wolf or zahn in the Ewald block, not $method.")
-        (slab_axis > 0 || cluster) && error("Polarizabilities (induced dipoles) are not available for slabs and clusters (slab_axis, cluster).")
-    end
+    polarizable && (slab_axis > 0 || cluster) &&
+        error("Polarizabilities (induced dipoles) are not available for slabs and clusters (slab_axis, cluster).")
+    epsilon_inf > 0 || error("epsilon_inf = $epsilon_inf in the Ewald block: the dielectric constant must be positive.")
+    epsilon_inf == 1 || method == "ewald" || error("epsilon_inf = $epsilon_inf needs method = ewald: Wolf and Zahn have no " *
+        "long-range (reciprocal-space) part to screen.")
     return nothing
 end
 
 """
     site_potentials_of_structure(strc, basis, conf, n, pol_labels, site_counts; coupling, method, rcut, alpha, mesh_spacing,
-                                 slab_axis, slab_scale, cluster, charge_compensation)
+                                 epsilon_inf, slab_axis, slab_scale, cluster, charge_compensation)
 
 Electrostatic data of structure `n` for the atoms with orbitals: species `types`, numbers of orbitals `norb`, orbital
 angular momenta `l` (-1 unless `coupling = orbital`), potentials `φ` of the effective charges (with the slab or cluster
-terms) and potentials `Φ` of the induced dipoles of the species `pol_labels` (`induced_dipole_potentials`); `grid_rebuilt`
-if the real-space grid of the structure was too small for `rcut`. Adds the charges per site to `site_counts`.
+terms; long range and cluster term divided by `epsilon_inf`) and potentials `Φ` of the induced dipoles of the species
+`pol_labels` (`induced_dipole_potentials`); `grid_rebuilt` if the real-space grid of the structure was too small for
+`rcut`. Adds the charges per site to `site_counts`.
 """
 function site_potentials_of_structure(strc, basis, conf, n, pol_labels, site_counts; coupling, method, rcut, alpha, mesh_spacing,
-                                      slab_axis, slab_scale, cluster, charge_compensation)
+                                      epsilon_inf=1.0, slab_axis, slab_scale, cluster, charge_compensation)
     pos = get_ion_positions(strc.ions, apply_distortion=true)
     ion_types = get_ion_types(strc.ions)
     charges, sites = get_site_charges(strc, conf, positions=pos)
@@ -200,9 +206,10 @@ function site_potentials_of_structure(strc, basis, conf, n, pol_labels, site_cou
 
     reuse_grid = rcut ≤ min(strc.point_grid.grid_size, get_rcut(conf))
     grid = method == "ewald" && reuse_grid ? (Rs=strc.Rs, point_grid=strc.point_grid) : (Rs=nothing, point_grid=nothing)
-    φ = ewald_sum(pos, charges, strc.lattice; rcut=rcut, mesh_spacing=mesh_spacing, method=method, alpha=alpha, grid...).potentials
+    φ = ewald_sum(pos, charges, strc.lattice; rcut=rcut, mesh_spacing=mesh_spacing, method=method, alpha=alpha,
+                  long_range_scale=1 / epsilon_inf, grid...).potentials
     slab_axis > 0 && (φ = φ .+ slab_scale .* slab_potentials(pos, slab_charges, strc.lattice, slab_axis; method=method, alpha=alpha))
-    cluster && (φ = φ .+ cluster_potentials(pos, charges, strc.lattice; method=method))
+    cluster && (φ = φ .+ cluster_potentials(pos, charges, strc.lattice; method=method) ./ epsilon_inf)
     groups = [something(findfirst(==(t), pol_labels), 0) for t in ion_types]
     Φ = isempty(pol_labels) ? zeros(length(ion_types), 0) :
         induced_dipole_potentials(pos, charges, strc.lattice, groups, length(pol_labels); rcut=rcut, alpha=alpha, method=method)
@@ -369,9 +376,9 @@ end
 """
     ewald_settings(conf)
 
-Settings that define the Ewald potentials: method, rcut, the damping α actually used and the charges `qeff`, written
-to the header of the parameter file of a fit (see `apply_ewald_settings!`). Site-dependent charges `qeff_<element>` of
-the species `type` are listed as `<type>_<element>`.
+Settings that define the Ewald potentials: method, rcut, the damping α actually used, the dielectric constant
+`epsilon_inf` of the long range and the charges `qeff`, written to the header of the parameter file of a fit (see
+`apply_ewald_settings!`). Site-dependent charges `qeff_<element>` of the species `type` are listed as `<type>_<element>`.
 """
 function ewald_settings(conf)
     method, rcut = ewald_method(get_ewald_method(conf)), get_ewald_rcut(conf)
@@ -380,7 +387,8 @@ function ewald_settings(conf)
         push!(qeff, ("$(type)_$(element)", q))
     end
     sort!(qeff)
-    return (method=method, rcut=rcut, alpha=ewald_alpha(method, rcut, get_ewald_alpha(conf)), qeff=qeff)
+    return (method=method, rcut=rcut, alpha=ewald_alpha(method, rcut, get_ewald_alpha(conf)),
+            epsilon_inf=get_ewald_epsilon_inf(conf), qeff=qeff)
 end
 
 """
@@ -449,6 +457,9 @@ function adopt_ewald_settings!(conf; rank=0, verbosity=get_verbosity(conf))
     settings = [("method", "Ewald", header["ewald_method"])]
     if lowercase(header["ewald_method"]) ∈ ("wolf", "zahn")
         append!(settings, [("rcut", "Ewald", header["ewald_rcut"]), ("alpha", "Ewald", header["ewald_alpha"])])
+    end
+    if haskey(header, "ewald_epsilon_inf")
+        append!(settings, [("epsilon_inf", "Ewald", header["ewald_epsilon_inf"]), ("alpha", "Ewald", header["ewald_alpha"])])
     end
     for (key, value) in header
         startswith(key, "ewald_qeff_") || continue

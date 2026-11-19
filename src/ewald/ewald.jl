@@ -24,6 +24,8 @@ energy components.
 - `include_short`: Include real-space contribution
 - `include_long`: Include reciprocal-space contribution (disabled for Wolf/Zahn by default)
 - `subtract_self`: Subtract Ewald self-interaction (disabled for Wolf/Zahn)
+- `long_range_scale`: Factor of the reciprocal-space contribution and the self-interaction correction, i.e. of the
+  potential of the Gaussian charge clouds of width 1/α (e.g. 1/ε∞ for a long range screened by the electrons)
 
 # Returns
 Named tuple with:
@@ -52,7 +54,8 @@ function ewald_sum(pos, q, lattice;
     method="ewald",
     include_short::Bool=true,
     include_long::Bool=!(method in ("zahn", "wolf")),
-    subtract_self::Bool=!(method in ("zahn", "wolf"))
+    subtract_self::Bool=!(method in ("zahn", "wolf")),
+    long_range_scale=1.0
 )
 
     @assert length(q) == length(pos) "length(q) must equal number of atoms"
@@ -77,11 +80,11 @@ function ewald_sum(pos, q, lattice;
     sr_time = @elapsed Es = include_short ? ke * ewald_real!(phi_s, pos, q, Rs, lattice, point_grid, α, rcut, method=method)  : 0.0
     lr_time = @elapsed El = include_long  ? ke * ewald_recip!(phi_l, pos, q, lattice, lattice_inv, α, mesh_spacing)                     : 0.0
 
-    phi = ke .* (phi_s .+ phi_l)
+    phi = ke .* (phi_s .+ long_range_scale .* phi_l)
 
     Eself = 0.0
     if subtract_self
-        c = ke * α / sqrt(pi)
+        c = long_range_scale * ke * α / sqrt(pi)
         Eself = -c * sum(q .^ 2)
         phi .-= 2c .* q
     end
@@ -91,9 +94,9 @@ function ewald_sum(pos, q, lattice;
         potentials = phi,
         potentials_short = phi_s,
         potentials_long = phi_l,
-        energy = Es + El + Eself,
+        energy = Es + long_range_scale * El + Eself,
         energy_short = Es,
-        energy_long = El,
+        energy_long = long_range_scale * El,
         energy_self = Eself,
         grid_time = grid_time,
         time_short = sr_time,
@@ -212,15 +215,15 @@ zahn_kernel(r, α, rcut) = ewald_kernel(r, α, rcut) - erfc(α * rcut) / rcut +
 """
     get_field_kernel(method)
 
-Radial field kernel `-dk/dr` of the real-space kernel `k` of `method` (`wolf` or `zahn`, see `ewald_real!`): a unit
-charge at distance `r` creates the field `ke * f(r, α, rcut)` along the connecting vector, and a dipole `μ` the potential
-`ke * f(r, α, rcut) * μ ⋅ r̂`. For Wolf, the shift of the potential does not change the field; for Zahn, the field also
-vanishes at `rcut`.
+Radial field kernel `-dk/dr` of the real-space kernel `k` of `method` (`ewald`, `wolf` or `zahn`, see `ewald_real!`): a
+unit charge at distance `r` creates the field `ke * f(r, α, rcut)` along the connecting vector, and a dipole `μ` the
+potential `ke * f(r, α, rcut) * μ ⋅ r̂`. For Ewald, this is the field of the real-space part only; for Wolf, the shift of
+the potential does not change the field; for Zahn, the field also vanishes at `rcut`.
 """
 function get_field_kernel(method)
-    method == "wolf" && return ewald_field_kernel
+    method ∈ ("ewald", "wolf") && return ewald_field_kernel
     method == "zahn" && return zahn_field_kernel
-    error("Induced dipoles (polarizability) need method = wolf or zahn, not $method.")
+    error("Unknown Ewald method $method for induced dipoles (polarizability): use ewald, wolf or zahn.")
 end
 ewald_field_kernel(r, α, rcut) = erfc(α * r) / r^2 + 2α / √π * exp(-(α * r)^2) / r
 zahn_field_kernel(r, α, rcut) = ewald_field_kernel(r, α, rcut) - ewald_field_kernel(rcut, α, rcut)

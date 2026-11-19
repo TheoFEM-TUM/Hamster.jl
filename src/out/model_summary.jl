@@ -67,6 +67,7 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         rcut=get_ewald_rcut(conf),
         alpha=ewald_alpha(method, rcut, get_ewald_alpha(conf)),
         alpha_auto=get_ewald_alpha(conf) == 0,
+        epsilon_inf=1.0,
         grid_rebuilt=false,
         slab_axis=0,
         slab_scale=1.0,
@@ -96,7 +97,7 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         println(io, summary_title("Ewald", label))
         write_separator(io, char='-')
         write_ewald_settings(io, ewald, nstrc; species=species, species_mean=species_mean, method=method, rcut=rcut, alpha=alpha,
-                             alpha_auto=alpha_auto, grid_rebuilt=grid_rebuilt, slab_axis=slab_axis, slab_scale=slab_scale, cluster=cluster,
+                             alpha_auto=alpha_auto, epsilon_inf=epsilon_inf, grid_rebuilt=grid_rebuilt, slab_axis=slab_axis, slab_scale=slab_scale, cluster=cluster,
                              charge_compensation=charge_compensation, centering=centering,
                              site_counts=isnothing(all_site_counts) ? nothing : mergewith(+, all_site_counts...))
         println(io)
@@ -120,11 +121,12 @@ coupling_name((type, l)) = type == 0 ? "all" : l < 0 ? number_to_element(type) :
 Settings part of the Ewald model summary: method, range, slab and cluster terms, couplings, polarizabilities, subtracted
 species means and site charges (`site_counts`, summed over the ranks).
 """
-function write_ewald_settings(io, ewald, nstrc; species, species_mean, method, rcut, alpha, alpha_auto, grid_rebuilt, slab_axis,
-                              slab_scale, cluster, charge_compensation, centering, site_counts)
+function write_ewald_settings(io, ewald, nstrc; species, species_mean, method, rcut, alpha, alpha_auto, epsilon_inf=1.0,
+                              grid_rebuilt, slab_axis, slab_scale, cluster, charge_compensation, centering, site_counts)
     write_summary_line(io, "structures", nstrc)
     write_summary_line(io, "method, rcut", @sprintf("%s, %.2f Å", method, rcut))
     write_summary_line(io, "alpha", @sprintf("%.4f 1/Å", alpha) * (alpha_auto ? " ($(lowercase(method) ∈ ("wolf", "zahn") ? 3 : 4) / rcut)" : ""))
+    epsilon_inf == 1 || write_summary_line(io, "long range (reciprocal part)", @sprintf("screened by ε∞ = %.4g (× %.4f)", epsilon_inf, 1 / epsilon_inf))
     grid_rebuilt && write_summary_line(io, "real-space neighbor grid", "rebuilt (Ewald rcut > TB rcut or grid_size)")
     slab_axis > 0 && write_summary_line(io, "slab (vacuum along a$slab_axis)",
                                         (lowercase(method) == "ewald" ? "dipole correction" : "plane-averaged long range added") *
