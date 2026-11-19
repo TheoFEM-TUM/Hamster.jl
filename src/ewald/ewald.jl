@@ -229,17 +229,22 @@ ewald_field_kernel(r, α, rcut) = erfc(α * r) / r^2 + 2α / √π * exp(-(α * 
 zahn_field_kernel(r, α, rcut) = ewald_field_kernel(r, α, rcut) - ewald_field_kernel(rcut, α, rcut)
 
 """
-    induced_dipole_potentials(pos, q, lattice, groups, ngroups; rcut, alpha, method)
+    induced_dipole_potentials(pos, q, lattice, groups, ngroups; rcut, alpha, method, mesh_spacing=0.5, long_range_scale=1.0)
 
 Potentials (V) of the dipoles that the field of the charges `q` induces on the atoms, to first order and per group of
 atoms: atom `j` belongs to group `groups[j]` (0: not polarizable) and gets the dipole `μ_j = E_j / ke` of polarizability
 1 Å³ in the field `E_j` of all charges (without the induced dipoles). Returns the matrix `Φ` (atoms × `ngroups`) with the
 potential `Φ[i, g]` of the dipoles of group `g` at atom `i`; with the polarizabilities `p_g` (Å³) the potential of all
-induced dipoles is `Φ * p`. Field and dipole potential use the damped real-space kernel of `method` (`wolf` or `zahn`)
-within `rcut`, on a neighbor grid (linear in the number of atoms).
+induced dipoles is `Φ * p`. Field and dipole potential use the damped real-space kernel of `method` within `rcut`, on a
+neighbor grid (linear in the number of atoms). For `method = ewald`, the reciprocal-space parts of the field
+(`ewald_recip_field`) and of the dipole potential (`ewald_recip_dipole_potentials`, mesh `mesh_spacing`) are added, both
+multiplied by `long_range_scale` (as the potential of the charges in `ewald_sum`): with `long_range_scale = 1` this is
+the full Ewald sum of field and dipole potential (tin-foil boundary conditions), with 0 the real-space part only.
 """
-function induced_dipole_potentials(pos, q, lattice, groups, ngroups; rcut, alpha, method)
-    f = get_field_kernel(lowercase(method))
+function induced_dipole_potentials(pos, q, lattice, groups, ngroups; rcut, alpha, method, mesh_spacing=0.5, long_range_scale=1.0)
+    method = lowercase(method)
+    f = get_field_kernel(method)
+    long_range = method == "ewald" && long_range_scale ≠ 0
     N = length(pos)
     Rs = ewald_translation_vectors(pos, lattice, rcut)
     point_grid = PointGrid(reduce(hcat, pos), frac_to_cart(Rs, lattice), grid_size=rcut)
@@ -263,12 +268,92 @@ function induced_dipole_potentials(pos, q, lattice, groups, ngroups; rcut, alpha
             groups[i] > 0 && (E[i] += ke * q[j] * f(r, alpha, rcut) / r * d)
         end
     end
+    if long_range
+        lattice_inv = inv(lattice)
+        green, Gc = pme_green(lattice_inv, alpha, mesh_from_spacing(lattice, mesh_spacing))
+        E .+= ke * long_range_scale .* ewald_recip_field(pos, q, lattice, lattice_inv, green, Gc) .* (groups .> 0)
+    end
     tforeach(cells) do cell
         pairs(cell) do i, j, d, r
             groups[j] > 0 && (Φ[i, groups[j]] += f(r, alpha, rcut) / r * dot(E[j], d))
         end
     end
+    if long_range
+        for g in 1:ngroups
+            μ = [groups[j] == g ? E[j] : zero(E[j]) for j in 1:N]
+            Φ[:, g] .+= long_range_scale .* ewald_recip_dipole_potentials(pos, μ, lattice, lattice_inv, green, Gc)
+        end
+    end
     return Φ
+end
+
+"""
+    pme_green(box_inv, alpha, mesh)
+
+Reciprocal-space factors of the particle mesh Ewald sum on the FFT grid `mesh` (as in `ewald_recip!`): the Ewald
+Green's function divided by the squared spline factors of spreading and interpolation, `4π exp(-G²/4α²) / G² / b²`
+(0 for G = 0: tin-foil boundary conditions), and the three Cartesian components of the reciprocal lattice vectors G of
+the grid points, set to 0 at the Nyquist frequencies so that derivatives of real grids stay real.
+"""
+function pme_green(box_inv, alpha, mesh)
+    Nx, Ny, Nz = mesh
+    Gmat = SMatrix{3, 3}(2π * transpose(box_inv))
+    g1, g2, g3 = Gmat[:, 1], Gmat[:, 2], Gmat[:, 3]
+    p = 4
+    freq(i, N) = (i - 1 <= N ÷ 2) ? (i - 1) : (i - 1 - N)
+    nyquist(i, N) = iseven(N) && i - 1 == N ÷ 2
+    bx = [_sinc(π * freq(i, Nx) / Nx)^p for i in 1:Nx]
+    by = [_sinc(π * freq(j, Ny) / Ny)^p for j in 1:Ny]
+    bz = [_sinc(π * freq(k, Nz) / Nz)^p for k in 1:Nz]
+    inv_4α² = 1 / (4 * alpha^2)
+    green = zeros(Float64, Nx, Ny, Nz)
+    Gc = [zeros(Float64, Nx, Ny, Nz) for _ in 1:3]
+    tforeach(1:Nz) do k
+        for j in 1:Ny, i in 1:Nx
+            G = freq(i, Nx) * g1 + freq(j, Ny) * g2 + freq(k, Nz) * g3
+            G2 = dot(G, G)
+            b2 = (bx[i] * by[j] * bz[k])^2
+            (G2 < 1e-30 || b2 < 1e-28) && continue
+            green[i, j, k] = 4π * exp(-G2 * inv_4α²) / G2 / b2
+            (nyquist(i, Nx) || nyquist(j, Ny) || nyquist(k, Nz)) && continue
+            for c in 1:3; Gc[c][i, j, k] = G[c]; end
+        end
+    end
+    return green, Gc
+end
+
+"""
+    ewald_recip_field(pos, q, box, box_inv, green, Gc)
+
+Reciprocal-space part of the electric field (Gaussian units, e/Å²) of the charges `q` at the atoms, `E = -∇φ` of the
+reciprocal-space potential of `ewald_recip!`, with the factors `green` and `Gc` of `pme_green`: the charges are spread
+on the grid, `-i G φ(G)` is transformed back per Cartesian component and interpolated to the atoms. Without self term
+(the field of a Gaussian charge vanishes at its center).
+"""
+function ewald_recip_field(pos, q, box, box_inv, green, Gc)
+    rho = zeros(Float64, size(green))
+    _spread_bspline4!(rho, pos, q, box, box_inv)
+    phi_k = fft(rho) .* green
+    E = [_gather_bspline4(real(ifft(-im .* Gc[c] .* phi_k)), pos, box_inv) for c in 1:3]
+    return [SVector{3, Float64}(E[1][i], E[2][i], E[3][i]) for i in eachindex(pos)]
+end
+
+"""
+    ewald_recip_dipole_potentials(pos, μ, box, box_inv, green, Gc)
+
+Reciprocal-space part of the potential (Gaussian units, e/Å) of the point dipoles `μ` (e Å, one 3-vector per atom) at
+the atoms, with the factors `green` and `Gc` of `pme_green`: the dipole components are spread on the grid, the charge
+density of the dipoles is `ρ(G) = -i G ⋅ P(G)`, and its potential is interpolated to the atoms. Without self term (the
+potential of a Gaussian dipole vanishes at its center).
+"""
+function ewald_recip_dipole_potentials(pos, μ, box, box_inv, green, Gc)
+    rho_k = zeros(ComplexF64, size(green))
+    P = zeros(Float64, size(green))
+    for c in 1:3
+        _spread_bspline4!(P, pos, [m[c] for m in μ], box, box_inv)
+        rho_k .-= im .* Gc[c] .* fft(P)
+    end
+    return _gather_bspline4(real(ifft(green .* rho_k)), pos, box_inv)
 end
 
 """

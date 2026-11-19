@@ -656,7 +656,7 @@ end
 
 @testset "Induced dipoles and couplings per orbital type" begin
     function cspbbr3_conf(; kwargs...)
-        conf = get_empty_config()
+        local conf = get_empty_config()
         for (element, orbitals, q) in [("Cs", "s", 1), ("Pb", "s px py pz", 2), ("Br", "px py pz", -1)]
             set_value!(conf, "orbitals", element, orbitals); set_value!(conf, "qeff", element, q)
         end
@@ -683,6 +683,26 @@ end
         E = [sum((Hamster.ke * q[j] * f(r, 0.3, 8.0) / r * d for (j, d, r) in neighbours(i)), init=zeros(3)) for i in eachindex(pos)]
         Φ_direct = [sum((f(r, 0.3, 8.0) / r * dot(E[j], d) for (j, d, r) in neighbours(i) if groups[j] == g), init=0.0) for i in eachindex(pos), g in 1:2]
         @test Φ ≈ Φ_direct rtol=1e-10
+        method == "wolf" && @test Hamster.induced_dipole_potentials(pos, q, strc.lattice, groups, 2; rcut=8.0, alpha=0.3, method="ewald",
+                                                                    long_range_scale=0.0) ≈ Φ rtol=1e-10
+    end
+
+    groups = [t == "Pb" ? 1 : t == "Br" ? 2 : 0 for t in types]
+    Φ_ewald(α, s=1.0) = Hamster.induced_dipole_potentials(pos, q, strc.lattice, groups, 2; rcut=3.6 / α, alpha=α, method="ewald",
+                                                          mesh_spacing=0.3, long_range_scale=s)
+    Φ_full = Φ_ewald(0.3)
+    @test Φ_full ≈ Φ_ewald(0.45) rtol=1e-4
+    @test !isapprox(Φ_full, Φ_ewald(0.3, 0.0), rtol=0.05)
+    @test Φ_ewald(0.3, 1.0) - 3Φ_ewald(0.3, 2 / 3) + 3Φ_ewald(0.3, 1 / 3) - Φ_ewald(0.3, 0.0) ≈ zero(Φ_full) atol=1e-10
+
+    screened = cspbbr3_conf(m=("method", "Ewald", "ewald"), e=("epsilon_inf", "Ewald", 2.0), pPb=("polarizability", "Pb", 2.75),
+                            pBr=("polarizability", "Br", 1.5))
+    ewald_model = EwaldOnsites([strc], [basis], comm, screened, write_summary=false)
+    Φ_raw = Hamster.induced_dipole_potentials(pos, q, strc.lattice, [t == "Br" ? 1 : t == "Pb" ? 2 : 0 for t in types], 2; rcut=8.0, alpha=0.3,
+                                              method="ewald", mesh_spacing=Hamster.get_ewald_mesh_spacing(screened), long_range_scale=0.5)
+    for e in ("Cs", "Pb", "Br")
+        w = types .== e
+        @test ewald_model.dipole_potentials[1][w, :] ≈ Φ_raw[w, :] .- sum(Φ_raw[w, :], dims=1) ./ count(w) atol=1e-10
     end
 
     set_value!(conf, "charge_scale", "Ewald", 0.6); set_value!(conf, "charge_scale_p", "Pb", 0.3)
@@ -811,7 +831,11 @@ end
     set_value!(conf, "polarizability", "Br", 1.5)
     polarizable = EwaldOnsites([strc], [basis], comm, conf, write_summary=false)
     polarizable_wolf = EwaldOnsites([strc], [basis], comm, conf, method="wolf", epsilon_inf=1.0, write_summary=false)
-    @test polarizable.dipole_potentials[1] ≈ polarizable_wolf.dipole_potentials[1]
+    Φ = Hamster.induced_dipole_potentials(pos, q, strc.lattice, Int.(types .== Hamster.element_to_number("Br")), 1; rcut=10.0, alpha=0.3,
+                                          method="ewald", mesh_spacing=Hamster.get_ewald_mesh_spacing(conf), long_range_scale=1 / 4.5)
+    for t in unique(types); Φ[types .== t, :] .-= sum(Φ[types .== t, :]) / count(==(t), types); end
+    @test polarizable.dipole_potentials[1] ≈ Φ
+    @test !isapprox(polarizable.dipole_potentials[1], polarizable_wolf.dipole_potentials[1], rtol=0.01)
 
     mktempdir() do dir
         cd(dir) do
