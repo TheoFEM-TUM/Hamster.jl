@@ -112,6 +112,13 @@ end
         header = Hamster.read_ml_header(file)
         @test Set(keys(header)) == Set(Hamster.ML_HEADER_TAGS)
         @test header["key_dims"] == "1 3" && header["strc_scale"] == "0.7"
+        @test !haskey(header, "unc_ref") && isnan(Hamster.ml_header_unc_ref(file))
+
+        # The training out-of-distribution reference unc_ref is stored in the header and read back
+        kernel.unc_ref = 0.123
+        write_params(kernel, fitted, filename=file)
+        @test Hamster.read_ml_header(file)["unc_ref"] == "0.123"
+        @test Hamster.ml_header_unc_ref(file) == 0.123
 
         # Settings not in the ML block are taken from the file
         conf = get_empty_config()

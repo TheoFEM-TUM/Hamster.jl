@@ -94,6 +94,7 @@ if test_all || test_only == "ML"
         include("mlham/test_kernel.jl")
         include("mlham/test_simmat.jl")
         include("mlham/test_kernel_precalced.jl")
+        include("mlham/test_uncertainty.jl")
     end
 end
 

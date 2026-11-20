@@ -98,6 +98,12 @@ end
     @test length(Xout) == num_points
     @test length(Xout[1]) == 3
 
+    # Test 4b: uncertainty sampling returns the requested number of unique descriptors
+    Xout_u = Hamster.sample_structure_descriptors(X, Ncluster=num_cluster, Npoints=num_points, ml_sampling="uncertainty", sim_params=0.1, noise=1e-3)
+    @test length(Xout_u) == num_points
+    @test length(unique(Xout_u)) == num_points
+    @test length(Xout_u[1]) == 3
+
     # Test 5: test orthogonality
     # Different atoms → always false
     @test !Hamster.decide_orthogonal(1.0, 1, 2, 0, 0, apply_orthogonality=true)

@@ -14,7 +14,7 @@ const CONFIG_BLOCKS = [
      ["data", "parameters", "bands and weights", "loss and learning rate", "validation", "output"]),
     ("HyperOpt", "Hyperparameter optimization (together with an Optimizer block).", ["search"]),
     ("ML", "Machine-learned corrections (kernel model); the presence of the block adds the model.",
-     ["model", "parameters", "descriptor", "data points", "precomputed similarities"]),
+     ["model", "parameters", "descriptor", "data points", "precomputed similarities", "uncertainty"]),
     ("SOC", "Spin-orbit coupling; the presence of the block (or soc = true) adds the model.", ["model"]),
     ("Ewald", "Electrostatic on-site corrections; the presence of the block (or ewald = true) adds the model.",
      ["model", "electrostatics"]),

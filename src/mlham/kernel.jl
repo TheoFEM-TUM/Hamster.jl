@@ -7,6 +7,8 @@ A kernel structure used for computing weighted similarity functions.
 - `ws :: Vector{Float64}`: Weights for each sample point.
 - `xs :: Vector{T1}`: Sample points.
 - `sim_params :: T2`: Parameters for the similarity function.
+- `unc_ref :: Float64`: Reference out-of-distribution score of the training structures (median per-structure score),
+  stored in the header of the ML parameter file; `NaN` if unknown (e.g. model loaded from an old file).
 """
 mutable struct HamiltonianKernel{T1, T2, T3}
     params :: Vector{Float64}
@@ -14,7 +16,12 @@ mutable struct HamiltonianKernel{T1, T2, T3}
     sim_params :: T2
     structure_descriptors :: Vector{T3}
     update :: Bool
+    unc_ref :: Float64
 end
+
+# `unc_ref` (reference out-of-distribution score of the training structures, NaN if unknown) defaults to NaN
+HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update) =
+    HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update, NaN)
 
 """
     HamiltonianKernel(strcs, bases, model, comm, conf; 
@@ -79,7 +86,7 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         params = zeros(length(data_points))
     elseif get_init_mode(get_ml_init_params(conf)) ≠ :file
         Npoints_local = floor(Int64, Npoints / nranks)
-        data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf))
+        data_points_local = sample_structure_descriptors(reshape_structure_descriptors(structure_descriptors), Ncluster=Ncluster, Npoints=Npoints_local, ml_sampling=get_ml_sampling(conf), sim_params=sim_params, noise=get_ml_unc_noise(conf))
         local_counts::Int32 = length(data_points_local)
         counts = MPI.Gather(local_counts, 0, comm)
         counts = MPI.bcast(counts, 0, comm)
@@ -104,8 +111,28 @@ function HamiltonianKernel(strcs::Vector{<:Structure}, bases::Vector{<:Basis}, m
         params, data_points = init_ml_params!(data_points, conf, mode=mode, update_ml=update_ml)
     end
     kernel = HamiltonianKernel(params, data_points, sim_params, structure_descriptors, update_ml)
+    if !external_data_points && !get_load_model(conf) && update_ml
+        # Training run: store the reference out-of-distribution score of the training structures in the model
+        # (written to the header of the ML parameter file by write_params)
+        kernel.unc_ref = training_unc_ref(structure_descriptors, data_points, sim_params, strcs, bases)
+    elseif get_init_mode(get_ml_init_params(conf)) == :file
+        kernel.unc_ref = ml_header_unc_ref(get_ml_init_params(conf))
+    elseif mode == "expand"
+        kernel.unc_ref = ml_header_unc_ref(get_ml_filename(conf))
+    end
     write_summary && write_model_summary(kernel, strcs, bases, comm, conf, rank=rank, label=label)
     return sim_mat ? HamiltonianKernelPrecalced(kernel, rank, systems, conf) : kernel
+end
+
+"""
+    ml_header_unc_ref(filename) -> Float64
+
+The reference out-of-distribution score `unc_ref` stored in the header of the ML parameter file `filename`
+(`NaN` if the file has none).
+"""
+function ml_header_unc_ref(filename)
+    header = read_ml_header(filename)
+    return haskey(header, "unc_ref") ? parse(Float64, header["unc_ref"]) : NaN
 end
 
 exp_sim(x₁, x₂; σ=√0.05)::Float64 = exp(-normdiff(x₁, x₂)^2 / (2σ^2))
@@ -224,6 +251,7 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filena
             value isa AbstractVector && isempty(value) && continue
             println(file, "  $key = ", value isa AbstractVector ? join(value, " ") : value)
         end
+        isfinite(kernel.unc_ref) && println(file, "  unc_ref = ", kernel.unc_ref)
         println(file, "end")
         println(file, "")
         for n in eachindex(kernel.params)
