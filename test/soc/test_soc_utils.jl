@@ -23,7 +23,27 @@
     # Test 3: test Msoc in real basis
     Msoc_p = Hamster.trans_lm_spatial("p", p_matrix)
 
-    # Test 4: test block to sparse conversion
+    # Test 4: L·S equals Lx Sx + Ly Sy + Lz Sz with eigenvalues l/2 (j = l+1/2) and -(l+1)/2 (j = l-1/2)
+    for (orb, l, M_real) in [("p", 1, Hamster.get_Msoc_p()), ("d", 2, Hamster.get_Msoc_d())]
+        ms = -l:l
+        Lp = zeros(2l + 1, 2l + 1)
+        for (i, m) in enumerate(ms[1:end-1])
+            Lp[i+1, i] = sqrt((l - m) * (l + m + 1))
+        end
+        Lz = diagm(collect(Float64, ms))
+        Sp = [0.0 0.0; 1.0 0.0]
+        Sz = diagm([-0.5, 0.5])
+        Lx, Ly = (Lp + Lp') / 2, (Lp - Lp') / 2im
+        Sx, Sy = (Sp + Sp') / 2, (Sp - Sp') / 2im
+        LS = kron(Lx, Sx) + kron(Ly, Sy) + kron(Lz, Sz)
+        M_lm = Hamster.get_matrix_lmbasis(Hamster.get_lms_basis(orb))
+        @test M_lm ≈ LS
+        expected = sort([fill(-(l + 1) / 2, 2l); fill(l / 2, 2l + 2)])
+        @test eigvals(Hermitian(M_lm)) ≈ expected
+        @test eigvals(Hermitian(Matrix(M_real))) ≈ expected
+    end
+
+    # Test 5: test block to sparse conversion
     M = BlockDiagonal([rand(2, 2), rand(3, 3)])
     M_sparse = Hamster.convert_block_matrix_to_sparse(M)
     @test abs(sum(M .- M_sparse)) < 1e-10

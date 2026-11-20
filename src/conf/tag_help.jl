@@ -9,7 +9,7 @@ const CONFIG_BLOCKS = [
     ("Options", "General settings of every run.",
      ["input/output", "structure", "basis", "model", "diagonalization", "device and parallelization", "post-processing"]),
     ("Supercell", "Supercells and trajectories (e.g. MD snapshots); switches a standard run to supercell mode.",
-     ["structures"]),
+     ["structure"]),
     ("Optimizer", "Parameter fits; the presence of the block switches to an optimization run.",
      ["data", "parameters", "bands and weights", "loss and learning rate", "validation", "output"]),
     ("HyperOpt", "Hyperparameter optimization (together with an Optimizer block).", ["search"]),
