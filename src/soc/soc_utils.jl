@@ -5,7 +5,6 @@ A dictionary mapping the orbital type to an array of `m` quantum numbers.
 The keys are orbital types as strings ("s", "p", "d") and the values are arrays
 containing the possible `m` values for each orbital type.
 """
-#TODO: Check whether this is already implemented elsewhere in the package
 const num_mdict = Dict("s" => [0], "p" => [-1, 0, 1], "d" => [-2, -1, 0, 1, 2])
 
 """
@@ -133,7 +132,7 @@ function get_matrix_lmbasis(basis::Vector{Vector{Int}})
         end
     end
     
-    LdotS = 0.5 * (MatLpSm + MatLmSp) + MatLzSz #TODO: is this even correct?
+    LdotS = 0.5 * (MatLpSm + MatLmSp) + MatLzSz
     return Complex{Float64}.(LdotS)
 end
 
