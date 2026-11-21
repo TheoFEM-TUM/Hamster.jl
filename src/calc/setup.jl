@@ -47,23 +47,18 @@ function active_communicator(has_data, comm; rank=0)
 end
 
 """
-    build_hamiltonian(conf, comm, local_inds; mode, Rs=zeros(3, 1), reindex=false, rank=0, nranks=1,
+    build_hamiltonian(conf, comm, local_inds; mode, Rs=zeros(3, 1), rank=0, nranks=1,
                       verbosity=get_verbosity(conf), kwargs...) -> (ham, strcs, bases)
 
 Load the local structures (`local_inds`: configuration indices per system), build their bases and the
-`EffectiveHamiltonian`; further keyword arguments are passed to `EffectiveHamiltonian`. With `reindex = true`,
-`local_inds` of a system with fewer structures than requested is reset to `1:n`.
+`EffectiveHamiltonian`; further keyword arguments are passed to `EffectiveHamiltonian`.
 """
-function build_hamiltonian(conf, comm, local_inds; mode, Rs=zeros(3, 1), reindex=false, rank=0, nranks=1,
+function build_hamiltonian(conf, comm, local_inds; mode, Rs=zeros(3, 1), rank=0, nranks=1,
                            verbosity=get_verbosity(conf), kwargs...)
     if rank == 0 && verbosity > 1; println("Getting structures..."); end
     begin_time = MPI.Wtime()
     strcs = mapreduce(vcat, local_inds, init=Structure[]) do (system, inds)
-        system_strcs = get_structures(conf, config_indices=inds, Rs=Rs, mode=mode, system=system)
-        if reindex && length(system_strcs) < length(inds)
-            local_inds[system] = collect(1:length(system_strcs))
-        end
-        return system_strcs
+        get_structures(conf, config_indices=inds, Rs=Rs, mode=mode, system=system)
     end
     strc_time = MPI.Wtime() - begin_time
     if rank == 0 && verbosity > 1; println(" Structure time: $strc_time s"); end

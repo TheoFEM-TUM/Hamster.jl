@@ -40,6 +40,17 @@ The type of calculation is selected according to the configuration:
 - If a [`HyperOpt`](@ref hyperopt-tags) block is present, hyperparameter optimization is performed. This requires an accompanying [`Optimizer`](@ref optim-tags) block (see [here](@ref hyperopt-run)).
 - If neither block is provided, a [standard run](@ref hyperopt-run) is performed.
 
+## Structures from a trajectory
+
+With a `Supercell` block (and `train_mode`/`val_mode = md` in fits), the structures are configurations of the trajectory
+`xdatcar` (an XDATCAR or an HDF5 file), with `poscar` of the `Supercell` block as the reference structure. Configuration
+`n` of the trajectory belongs to structure `n` of the HDF5 data files of a fit (`train_data`, `val_data`). The
+configurations are given by `config_inds` (and `val_config_inds`), and `Nconf` configurations are sampled at random
+between `Nconf_min` and `Nconf_max` (without those of `config_inds`). Before the run starts, all indices are checked:
+the run stops with an error if an index is not in the trajectory or the data file, if `Nconf_max` is larger than the
+number of configurations, or if fewer than `Nconf` configurations are available between `Nconf_min` and `Nconf_max`.
+In universal mode, `Nconf` and `Nconf_max` are reduced to the number of configurations of every system.
+
 
 ## Type of model
 
