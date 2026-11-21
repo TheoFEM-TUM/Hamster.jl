@@ -185,6 +185,30 @@ include("fit_helpers.jl")
     end
 end
 
+@testset "More batches than training structures" begin
+    @test Hamster.get_local_batches(5, 3) == [1:2, 3:4, 5:5]
+    @test Hamster.get_local_batches(2, 3) == [1:1, 2:2, 1:0]
+    @test Hamster.get_local_batches(0, 2) == [1:0, 1:0]
+    @test Hamster.get_number_of_batches(2, 5, comm) == 2
+    @test_throws ErrorException Hamster.get_number_of_batches(0, 5, comm)
+
+    path = joinpath(@__DIR__, "test_files")
+    conf = get_config(filename = joinpath(path, "hconf_md"))
+    set_value!(conf, "poscar", joinpath(path, "POSCAR_md"))
+    set_value!(conf, "poscar", "Supercell", joinpath(path, "POSCAR_md"))
+    set_value!(conf, "xdatcar", "Supercell", joinpath(path, "XDATCAR"))
+    set_value!(conf, "rllm_file", joinpath(path, "rllm.dat"))
+    set_value!(conf, "train_data", "Optimizer", joinpath(path, "eigenval.h5"))
+    set_value!(conf, "init_params", joinpath(path, "params.dat"))
+    set_value!(conf, "nbatch", "Supercell", 5)
+    set_value!(conf, "niter", "Optimizer", 2)
+
+    prof = @test_logs (:warn, r"nbatch = 5 is larger") match_mode=:any Hamster.main(comm, conf, rank=rank)
+    @test size(prof.L_train) == (2, 2)
+    @test all(>(0), prof.L_train)
+    rm("hamster.out"); rm("params.dat"); rm("ml_params.dat")
+end
+
 rm("hamster_out.h5")
 @testset "Sparse diagonalization is rejected in fits" begin
     conf = get_empty_config()

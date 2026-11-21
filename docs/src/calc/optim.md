@@ -15,6 +15,14 @@ With MPI, the training structures are split over the ranks and the validation st
 structures, so a rank can have training structures but no validation structure. The validation loss is the mean over
 all validation structures.
 
+## Batches
+
+With `nbatch` > 1 (`Supercell` block), the parameters are updated `nbatch` times per iteration, each time with the
+gradient of one batch of training structures. With MPI, every rank splits its own training structures into `nbatch`
+batches, and batch `b` of the fit consists of batch `b` of all ranks. A rank with fewer structures than `nbatch` has
+empty batches at the end. If `nbatch` is larger than the number of training structures of every rank, the fit uses as
+many batches as the rank with the most structures has (with a warning).
+
 ## Weights of the bands and k-points
 
 By default, every eigenvalue counts the same in the loss (the mean of |ε - ε_ref|ⁿ over bands and k-points, n = 1 for

@@ -22,6 +22,22 @@ elseif case == "valsplit"
             Hamster.main(comm, conf, rank=rank, nranks=nranks)
         end
     end
+elseif case == "nbatch"
+    cd(dir) do
+        conf = get_config(filename = joinpath(path, "hconf_md"))
+        set_value!(conf, "poscar", joinpath(path, "POSCAR_md"))
+        set_value!(conf, "poscar", "Supercell", joinpath(path, "POSCAR_md"))
+        set_value!(conf, "xdatcar", "Supercell", joinpath(path, "XDATCAR"))
+        set_value!(conf, "rllm_file", joinpath(path, "rllm.dat"))
+        set_value!(conf, "train_data", "Optimizer", joinpath(path, "eigenval.h5"))
+        set_value!(conf, "init_params", joinpath(path, "params.dat"))
+        set_value!(conf, "Nconf", "Supercell", 3)
+        set_value!(conf, "nbatch", "Supercell", 2)
+        set_value!(conf, "niter", "Optimizer", 2)
+        Hamster.abort_on_error(comm) do
+            Hamster.main(comm, conf, rank=rank, nranks=nranks)
+        end
+    end
 elseif case == "runs"
     cd(joinpath(dir, "md")) do
         conf = get_config(filename = joinpath(path, "hconf_std_md"))

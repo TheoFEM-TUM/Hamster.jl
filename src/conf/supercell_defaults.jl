@@ -4,7 +4,7 @@
 @configtag Nconf Int64 1 "number of sample configuration." "Supercell" category="structure"
 @configtag Nconf_min Int64 1 "minimum configuration index for sample." "Supercell" category="structure"
 @configtag Nconf_max Int64 1 "maximum configuration index for sample." "Supercell" category="structure"
-@configtag nbatch Int64 1 "number of batches to split the data set." "Supercell" category="structure"
+@configtag nbatch Int64 1 "number of batches per iteration of a fit (parameter updates per iteration); every MPI rank splits its training structures into this many batches, at most the largest number of training structures of a rank." "Supercell" category="structure"
 
 
 """

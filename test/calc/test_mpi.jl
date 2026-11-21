@@ -48,6 +48,19 @@ include("fit_helpers.jl")
     end
 end
 
+@testset "MPI: batches of a fit with an uneven split of the structures" begin
+    mktempdir() do dir
+        finished, exitcode, output = run_with_two_ranks("nbatch", dir, timeout=900)
+        @test finished && exitcode == 0
+        exitcode == 0 || println(output)
+        if finished && exitcode == 0
+            L_train = h5read(joinpath(dir, "hamster_out.h5"), "L_train")
+            @test size(L_train) == (2, 2)
+            @test all(>(0), L_train)
+        end
+    end
+end
+
 @testset "MPI: standard runs with two ranks" begin
     mktempdir() do dir
         mkdir(joinpath(dir, "md")); mkdir(joinpath(dir, "universal"))
