@@ -210,3 +210,131 @@ function wrap_text(text::AbstractString, width::Int)
     end
     return lines
 end
+"""
+    OutputLogger(logger; filename="hamster.out")
+
+Logger of a run on the first MPI rank. It passes all messages on to `logger` (the console) and also writes warnings and
+errors to `filename`, so that they are not only in the standard error of the job. Messages that come before the header
+of `filename` is written (e.g., the checks of the config file) are kept and written by
+[`start_output_log!`](@ref Hamster.start_output_log!). A message that was already written is not written again (e.g.,
+the same warning in every trial of a hyperparameter optimization). Messages of the group `:hamster_out` are written to
+`filename` by the code that logs them (e.g., inside a model summary) and are only passed on.
+"""
+mutable struct OutputLogger <: Logging.AbstractLogger
+    logger::Logging.AbstractLogger
+    filename::String
+    pending::Vector{String}
+    written::Set{String}
+    started::Bool
+    nwarnings::Int64
+    lock::ReentrantLock
+end
+
+OutputLogger(logger; filename="hamster.out") = OutputLogger(logger, filename, String[], Set{String}(), false, 0, ReentrantLock())
+
+Logging.min_enabled_level(logger::OutputLogger) = min(Logging.min_enabled_level(logger.logger), Logging.Warn)
+
+Logging.shouldlog(logger::OutputLogger, level, _module, group, id) =
+    level ≥ Logging.Warn || Logging.shouldlog(logger.logger, level, _module, group, id)
+
+Logging.catch_exceptions(logger::OutputLogger) = Logging.catch_exceptions(logger.logger)
+
+function Logging.handle_message(logger::OutputLogger, level, message, _module, group, id, file, line; kwargs...)
+    if level ≥ Logging.Warn && group ≠ :hamster_out
+        log_to_output!(logger, output_log_line(level, message; kwargs...), count=level < Logging.Error)
+    elseif level ≥ Logging.Warn
+        lock(() -> logger.nwarnings += 1, logger.lock)
+    end
+    parent = logger.logger
+    if level ≥ Logging.min_enabled_level(parent) && Logging.shouldlog(parent, level, _module, group, id)
+        Logging.handle_message(parent, level, message, _module, group, id, file, line; kwargs...)
+    end
+    return nothing
+end
+
+"""
+    output_log_line(level, message; kwargs...)
+
+Line of a warning or error in `hamster.out`: `Warning: ` or `Error: ` with the message and the values logged with it
+(`key = value`); further lines of the message are indented.
+"""
+function output_log_line(level, message; kwargs...)
+    text = string(message)
+    for (key, value) in kwargs
+        key == :maxlog && continue
+        text *= "\n$key = $value"
+    end
+    prefix = level ≥ Logging.Error ? "Error: " : "Warning: "
+    return prefix * replace(rstrip(text), "\n" => "\n  ")
+end
+
+"""
+    log_to_output!(logger::OutputLogger, line; count=true)
+
+Write `line` to the output file of `logger` (or keep it until [`start_output_log!`](@ref Hamster.start_output_log!)),
+unless it was already written. `count` counts it as a warning for [`finish_output_log`](@ref Hamster.finish_output_log).
+"""
+function log_to_output!(logger::OutputLogger, line; count=true)
+    lock(logger.lock) do
+        line ∈ logger.written && return nothing
+        push!(logger.written, line)
+        count && (logger.nwarnings += 1)
+        logger.started ? append_output_line(line, filename=logger.filename) : push!(logger.pending, line)
+    end
+    return nothing
+end
+
+"""
+    start_output_log!(logger=Logging.current_logger())
+
+Write the warnings and errors that `logger` (an [`OutputLogger`](@ref Hamster.OutputLogger)) has kept to its output
+file and write later ones directly. Called after the header of `hamster.out` is written, or when the run fails before.
+Does nothing for other loggers.
+"""
+start_output_log!(logger=Logging.current_logger()) = nothing
+
+function start_output_log!(logger::OutputLogger)
+    lock(logger.lock) do
+        logger.started = true
+        isempty(logger.pending) && return nothing
+        open(logger.filename, "a") do io
+            foreach(line -> println(io, line), logger.pending)
+        end
+        empty!(logger.pending)
+    end
+    return nothing
+end
+
+"""
+    finish_output_log(logger=Logging.current_logger())
+
+Append the number of warnings of the run to the output file of `logger` (an [`OutputLogger`](@ref Hamster.OutputLogger)),
+if there were any. Does nothing for other loggers.
+"""
+finish_output_log(logger=Logging.current_logger()) = nothing
+
+function finish_output_log(logger::OutputLogger)
+    logger.nwarnings == 0 && return nothing
+    s = logger.nwarnings == 1 ? "" : "s"
+    append_output_line("\nThe run gave $(logger.nwarnings) warning$s, see the lines starting with \"Warning:\" above.",
+                       filename=logger.filename)
+    return nothing
+end
+
+"""
+    output_logger(rank)
+
+The logger of a run: on rank 0 an [`OutputLogger`](@ref Hamster.OutputLogger) around the current logger (the current
+logger itself if it is one already, e.g., installed by the `hamster` command to keep the warnings of the config file),
+otherwise the current logger.
+"""
+function output_logger(rank)
+    logger = Logging.current_logger()
+    rank == 0 || return logger
+    logger isa OutputLogger || return OutputLogger(logger)
+    logger.started = false
+    logger.nwarnings = length(logger.pending)
+    empty!(logger.written)
+    union!(logger.written, logger.pending)
+    return logger
+end

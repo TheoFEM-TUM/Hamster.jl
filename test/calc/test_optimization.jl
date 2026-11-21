@@ -206,6 +206,9 @@ end
     prof = @test_logs (:warn, r"nbatch = 5 is larger") match_mode=:any Hamster.main(comm, conf, rank=rank)
     @test size(prof.L_train) == (2, 2)
     @test all(>(0), prof.L_train)
+    output = read("hamster.out", String)
+    @test occursin("Warning: nbatch = 5 is larger", output)
+    @test occursin(r"The run gave \d+ warnings?, see", output)
     rm("hamster.out"); rm("params.dat"); rm("ml_params.dat")
 end
 

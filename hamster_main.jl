@@ -16,6 +16,9 @@ rank == 0 && @eval using Hamster
 MPI.Barrier(comm)
 rank ≠ 0 && @eval using Hamster
 
+# Warnings from reading the config file go to hamster.out as well (written after its header)
+rank == 0 && Hamster.Logging.global_logger(Hamster.OutputLogger(Hamster.Logging.global_logger()))
+
 num_nodes = parse(Int64, get(ENV, "SLURM_JOB_NUM_NODES", "1"))
 
 args = Hamster.parse_commandline(ARGS)

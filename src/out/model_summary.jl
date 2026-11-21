@@ -189,7 +189,7 @@ function write_ewald_corrections(io, ewald, Δε, structure_means, centering)
                   "together. Compute more structures in one run (or larger cells)."
         println(io)
         write_legend(io, "Warning: " * warning)
-        @warn warning
+        @warn warning _group=:hamster_out
     end
     return nothing
 end

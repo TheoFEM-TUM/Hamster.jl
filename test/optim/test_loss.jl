@@ -191,11 +191,11 @@ end
     # Weights that can not be applied are reported
     d1 = Hamster.EigData(rand(3, 5), rand(3, 5))
     d2 = Hamster.EigData(rand(3, 6), rand(3, 6))
-    @test_logs (:warn, r"training structures differ") Hamster.weight_warning(Hamster.DataLoader([d1, d2], [d1]), 0, 0, false, conf, write_output=false)
-    @test_logs Hamster.weight_warning(Hamster.DataLoader([d1], [d1]), 3, 5, false, conf, write_output=false)
+    @test_logs (:warn, r"training structures differ") Hamster.weight_warning(Hamster.DataLoader([d1, d2], [d1]), 0, 0, false, conf)
+    @test_logs Hamster.weight_warning(Hamster.DataLoader([d1], [d1]), 3, 5, false, conf)
     set_value!(conf, "val_weights", "Optimizer", true)
     set_value!(conf, "validate", "Optimizer", true)
-    @test_logs (:warn, r"not used for validation") Hamster.weight_warning(Hamster.DataLoader([d1], [d2]), 3, 5, false, conf, write_output=false)
+    @test_logs (:warn, r"not used for validation") Hamster.weight_warning(Hamster.DataLoader([d1], [d2]), 3, 5, false, conf)
 end
 
 @testset "Weights of the eigenvalue data" begin

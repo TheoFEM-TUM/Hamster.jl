@@ -34,7 +34,13 @@ differ. Up to version 0.6.4, Hamster used the folder `tmp` and deleted it at the
 
 If one MPI rank stops with an error, `hamster` prints the error and stack trace of that rank, adds the error to
 `hamster.out` and stops all ranks (`MPI.Abort`, exit code 1); before, the other ranks waited until the time limit of
-the job. After such an abort, the temporary folder is kept.
+the job. After such an abort, the temporary folder is kept. With one rank, the error is also added to `hamster.out`.
+
+Warnings are printed to the standard error of the job and also written to `hamster.out` (lines starting with
+`Warning:`), including the warnings from reading the config file, which appear below the header. A warning that is
+given several times with the same text (e.g., in every trial of a hyperparameter optimization) is written once, and
+the end of `hamster.out` gives the number of warnings of the run. Only the warnings of the first MPI rank are written
+to `hamster.out`; most checks of the input run there.
 
 ## Installation
 

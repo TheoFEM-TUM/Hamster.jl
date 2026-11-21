@@ -4,7 +4,8 @@
 Run the calculation of the config `conf` (standard run, optimization or hyperparameter optimization, see
 [`decide_which_task_to_perform`](@ref Hamster.decide_which_task_to_perform)) on all ranks of `comm` and return its
 profiler. The temporary files go to a new folder `hamster_tmp_<random>` in the run folder (see
-[`TEMP_DIR`](@ref Hamster.TEMP_DIR)), which is removed at the end; with one rank also if the run fails.
+[`TEMP_DIR`](@ref Hamster.TEMP_DIR)), which is removed at the end; with one rank also if the run fails. On rank 0, the
+warnings and errors of the run are also written to `hamster.out` (see [`OutputLogger`](@ref Hamster.OutputLogger)).
 """
 function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity(conf))
     # Clear output files from previous Hamster runs
@@ -13,9 +14,13 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity
     temp_dir = rank == 0 ? basename(mktempdir(pwd(), prefix="hamster_tmp_", cleanup=false)) : ""
     temp_dir = MPI.bcast(temp_dir, 0, comm)
     TEMP_DIR[] = temp_dir
+    logger = output_logger(rank)
     out = try
-        run_main(comm, conf, rank=rank, nranks=nranks, num_nodes=num_nodes, verbosity=verbosity)
+        Logging.with_logger(logger) do
+            run_main(comm, conf, rank=rank, nranks=nranks, num_nodes=num_nodes, verbosity=verbosity)
+        end
     catch
+        start_output_log!(logger)
         # No barrier: other ranks may be stuck in another collective call
         MPI.Comm_size(comm) == 1 && rm(temp_dir, recursive=true, force=true)
         TEMP_DIR[] = "tmp"
@@ -24,14 +29,15 @@ function main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbosity
     MPI.Barrier(comm)
     rank == 0 && rm(temp_dir, recursive=true, force=true)
     TEMP_DIR[] = "tmp"
+    finish_output_log(logger)
     return out
 end
 
 """
     abort_on_error(f, comm)
 
-Run `f()`. If it throws an error and `comm` has several ranks, print the error and stack trace of this rank, add the
-error to `hamster.out` and stop all ranks with `MPI.Abort` (exit code 1). Otherwise the other ranks would wait in
+Run `f()`. If it throws an error, add the error to `hamster.out`. With several ranks in `comm`, print the error and
+stack trace of this rank and stop all ranks with `MPI.Abort` (exit code 1). Otherwise the other ranks would wait in
 their next collective call until the job's time limit. With one rank the error is rethrown. Used by the `hamster`
 command; `main` itself throws errors normally.
 """
@@ -39,16 +45,17 @@ function abort_on_error(f, comm)
     try
         return f()
     catch err
-        MPI.Comm_size(comm) == 1 && rethrow()
+        nranks = MPI.Comm_size(comm)
         rank = MPI.Comm_rank(comm)
+        try
+            open(file -> println(file, "\nERROR", nranks > 1 ? " on MPI rank $rank" : "", ": ",
+                                 first(split(sprint(showerror, err), '\n'))), "hamster.out", "a")
+        catch
+        end
+        nranks == 1 && rethrow()
         message = sprint(showerror, err, catch_backtrace())
         println(stderr, "\nERROR on MPI rank $rank (aborting all ranks):\n", message)
         flush(stderr)
-        try
-            open(file -> println(file, "\nERROR on MPI rank $rank: ", first(split(sprint(showerror, err), '\n'))),
-                 "hamster.out", "a")
-        catch
-        end
         MPI.Abort(comm, 1)
     end
 end
@@ -69,6 +76,7 @@ function run_main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbo
     set_threads_per_kpoint!(get_threads_per_kpoint(conf))
     if rank == 0
         generate_output(conf, hostnames=hostnames)
+        start_output_log!()
         julia_num_threads = Threads.nthreads()
         
         # COV_EXCL_START
