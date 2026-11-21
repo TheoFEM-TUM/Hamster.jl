@@ -67,9 +67,9 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       active_size = MPI.Comm_size(comm_active)
       Rs = get_translation_vectors_for_hr_fit(conf)
       ham_train, train_strcs, train_bases = build_hamiltonian(conf, comm_active, local_train_inds, mode=get_train_mode(conf), Rs=Rs,
-                                                    reindex=true, rank=active_rank, nranks=active_size, label="training set",
+                                                    rank=active_rank, nranks=active_size, label="training set",
                                                     write_summary=write_output, training=true)
-      ham_val, val_strcs, val_bases = build_hamiltonian(conf, comm_active, local_val_inds, mode=get_val_mode(conf), Rs=Rs, reindex=true,
+      ham_val, val_strcs, val_bases = build_hamiltonian(conf, comm_active, local_val_inds, mode=get_val_mode(conf), Rs=Rs,
                                                 rank=active_rank, nranks=active_size, label="validation set",
                                                 write_summary=write_output, ml_data_points=get_ml_data_points(ham_train, conf))
       

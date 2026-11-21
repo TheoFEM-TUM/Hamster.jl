@@ -1,9 +1,9 @@
 # ====================
 # Supercell defaults
 # ====================
-@configtag Nconf Int64 1 "number of sample configuration." "Supercell" category="structure"
+@configtag Nconf Int64 1 "number of configurations sampled from the trajectory (between Nconf_min and Nconf_max, in addition to config_inds)." "Supercell" category="structure"
 @configtag Nconf_min Int64 1 "minimum configuration index for sample." "Supercell" category="structure"
-@configtag Nconf_max Int64 1 "maximum configuration index for sample." "Supercell" category="structure"
+@configtag Nconf_max Int64 1 "maximum configuration index for sample (at most the number of configurations of the trajectory)." "Supercell" category="structure"
 @configtag nbatch Int64 1 "number of batches per iteration of a fit (parameter updates per iteration); every MPI rank splits its training structures into this many batches, at most the largest number of training structures of a rank." "Supercell" category="structure"
 
 
@@ -77,5 +77,5 @@ function get_val_config_inds(conf::Config)::Union{String, Vector{Int64}}
     end
 end
 
-@configtag config_inds String "none" "configurations to use: a file with configuration indices, or a list of indices." "Supercell" getter=:custom value=(conf -> string(get_config_inds(conf))) default_doc="none (Nconf configurations between Nconf_min and Nconf_max)" category="structure"
-@configtag val_config_inds String "none" "validation configurations: a file with configuration indices, or a list of indices." "Supercell" getter=:custom value=(conf -> string(get_val_config_inds(conf))) default_doc="none" category="structure"
+@configtag config_inds String "none" "configurations to use: a list of indices separated by spaces, a .dat file (number of indices in the first line, then one index per line) or an HDF5 file with the dataset train_config_inds (e.g. hamster_out.h5 of an earlier fit)." "Supercell" getter=:custom value=(conf -> string(get_config_inds(conf))) default_doc="none (Nconf configurations between Nconf_min and Nconf_max)" category="structure"
+@configtag val_config_inds String "none" "validation configurations: a list of indices, a .dat file or an HDF5 file with the dataset val_config_inds (formats as for config_inds)." "Supercell" getter=:custom value=(conf -> string(get_val_config_inds(conf))) default_doc="none" category="structure"
