@@ -114,6 +114,7 @@ end
 if test_all || test_only == "out"
     @testset "out" begin
         include("out/test_model_summary.jl")
+        include("out/test_output.jl")
     end
 end
 

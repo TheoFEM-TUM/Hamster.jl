@@ -61,13 +61,13 @@ function has_weight_tags(conf)
 end
 
 """
-    weight_warning(dl, Nε, Nk, val_weights, conf; write_output=true)
+    weight_warning(dl, Nε, Nk, val_weights, conf)
 
-Warn (and write a line to `hamster.out` if `write_output`) if band or k-point weights are set but cannot be applied:
+Warn if band or k-point weights are set but cannot be applied:
 in fits to Hamiltonian data, if the training structures differ in the number of bands or k-points (`Nε = Nk = 0`),
 and, with `val_weights = true`, if the validation data has another number of bands or k-points than the training data.
 """
-function weight_warning(dl, Nε, Nk, val_weights, conf; write_output=true)
+function weight_warning(dl, Nε, Nk, val_weights, conf)
     has_weight_tags(conf) || return nothing
     message = if eltype(dl.train_data) <: HrData
         "Band and k-point weights (wE, wk) are ignored in fits to Hamiltonian data."
@@ -79,7 +79,6 @@ function weight_warning(dl, Nε, Nk, val_weights, conf; write_output=true)
         return nothing
     end
     @warn message
-    write_output && append_output_line("Warning: " * message)
     return nothing
 end
 

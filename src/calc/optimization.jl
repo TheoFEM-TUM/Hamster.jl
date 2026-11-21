@@ -86,7 +86,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       Nε, Nk = get_neig_and_nk(dl.train_data, comm_active)
       val_weights = get_val_weights(conf) && get_neig_and_nk(dl.val_data, comm_active) == (Nε, Nk)
       if active_rank == 0
-         weight_warning(dl, Nε, Nk, val_weights, conf, write_output=write_output)
+         weight_warning(dl, Nε, Nk, val_weights, conf)
       end
       data_weight_note(dl, conf, comm_active, rank=active_rank, write_output=write_output)
       optim = GDOptimizer(Nε, Nk, conf, val_weights=val_weights)
