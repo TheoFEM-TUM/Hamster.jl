@@ -7,12 +7,25 @@
 Sample the configuration indices of all systems (training and validation indices if `optimize = true`) and split them
 over the MPI ranks. Returns the local training and validation indices (per system). `config_inds` (training and
 validation indices per system, as returned by `get_config_inds_for_systems`) are used instead of a new sample.
+
+The training structures are split over all ranks; with fewer training structures than ranks, the first ranks get one
+each and the others are idle. The validation structures are split over the ranks with training structures, so a rank
+may have training structures but no validation structure. In a validated fit, an empty validation set is an error.
 """
 function local_structure_indices(conf, comm; optimize, rank=0, nranks=1, write_output=true, config_inds=nothing)
     train_inds, val_inds = isnothing(config_inds) ?
         get_config_inds_for_systems(get_systems(conf), comm, conf, rank=rank, write_output=write_output, optimize=optimize) :
         config_inds
-    return split_indices_into_chunks(train_inds, nranks, rank=rank), split_indices_into_chunks(val_inds, nranks, rank=rank)
+    if optimize && get_validate(conf) && sum(length, values(val_inds), init=0) == 0
+        error("The fit is validated (val_data, val_mode or val_ratio), but the validation set is empty: " *
+              "val_mode = $(get_val_mode(conf)), Nconf = $(get_Nconf(conf)), val_ratio = $(get_val_ratio(conf)), " *
+              "configurations $(get_Nconf_min(conf)) to $(get_Nconf_max(conf)). The validation set has " *
+              "round(Nconf × val_ratio) structures that are not in the training set; increase val_ratio or Nconf_max, " *
+              "or give val_config_inds.")
+    end
+    nactive = min(nranks, sum(length, values(train_inds), init=0))
+    local_val_inds = rank < nactive ? split_indices_into_chunks(val_inds, nactive, rank=rank) : empty(val_inds)
+    return split_indices_into_chunks(train_inds, nranks, rank=rank), local_val_inds
 end
 
 """

@@ -4,6 +4,17 @@
 Hamster.run_calculation(::Val{:optimization}, ::Any, ::Config)
 ```
 
+## Validation set
+
+A fit is validated if `val_data`, `val_mode` or `val_ratio` is set. With `val_mode = pc`, the validation set is the
+primitive cell of `val_data` (also when the training data are MD structures). With `val_mode = md` (or universal), it
+consists of round(`Nconf` × `val_ratio`) configurations between `Nconf_min` and `Nconf_max` that are not in the
+training set, or of `val_config_inds`. If this leaves no validation structure, the fit stops with an error.
+
+With MPI, the training structures are split over the ranks and the validation structures over the ranks with training
+structures, so a rank can have training structures but no validation structure. The validation loss is the mean over
+all validation structures.
+
 ## Batches
 
 With `nbatch` > 1 (`Supercell` block), the parameters are updated `nbatch` times per iteration, each time with the

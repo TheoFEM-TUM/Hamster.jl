@@ -59,7 +59,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    get_sp_diag(conf) isa Sparse && error("sp_diag = true can not be used in fits (the loss needs all eigenvalues); remove sp_diag from the config file.")
    local_train_inds, local_val_inds = local_structure_indices(conf, comm, optimize=true, rank=rank, nranks=nranks,
                                                               write_output=write_output, config_inds=config_inds)
-   has_data = !isempty(local_train_inds) && (!isempty(local_val_inds) || !get_validate(conf))
+   has_data = !isempty(local_train_inds)
    comm_active = active_communicator(has_data, comm, rank=rank)
 
    if has_data
@@ -69,8 +69,12 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       ham_train, train_strcs, train_bases = build_hamiltonian(conf, comm_active, local_train_inds, mode=get_train_mode(conf), Rs=Rs,
                                                     reindex=true, rank=active_rank, nranks=active_size, label="training set",
                                                     write_summary=write_output, training=true)
-      ham_val, val_strcs, val_bases = build_hamiltonian(conf, comm_active, local_val_inds, mode=get_val_mode(conf), Rs=Rs, reindex=true,
-                                                rank=active_rank, nranks=active_size, label="validation set",
+      # Only the ranks with validation structures build the validation model (its constructors use collective calls)
+      has_val = !isempty(local_val_inds)
+      comm_val = MPI.Comm_split(comm_active, has_val ? 1 : nothing, active_rank)
+      val_rank, val_size = has_val ? (MPI.Comm_rank(comm_val), MPI.Comm_size(comm_val)) : (active_rank, active_size)
+      ham_val, val_strcs, val_bases = build_hamiltonian(conf, comm_val, local_val_inds, mode=get_val_mode(conf), Rs=Rs, reindex=true,
+                                                rank=val_rank, nranks=val_size, label="validation set",
                                                 write_summary=write_output, ml_data_points=get_ml_data_points(ham_train, conf))
       
       Nε_train = get_number_of_bands_per_structure(train_bases, local_train_inds, soc=get_soc(conf))

@@ -28,6 +28,26 @@ end
     end
 end
 
+include("fit_helpers.jl")
+@testset "MPI: validated fit with fewer validation structures than ranks" begin
+    mktempdir() do dir
+        finished, exitcode, output = run_with_two_ranks("valsplit", dir, timeout=900)
+        @test finished && exitcode == 0
+        exitcode == 0 || println(output)
+        if finished && exitcode == 0
+            @test !occursin("idle", read(joinpath(dir, "hamster.out"), String))
+            mktempdir() do serial_dir
+                cd(serial_dir) do
+                    Hamster.main(comm, validated_md_fit_config(joinpath(@__DIR__, "test_files")), rank=rank)
+                end
+                for dataset in ("L_train", "L_val")
+                    @test h5read(joinpath(dir, "hamster_out.h5"), dataset) ≈ h5read(joinpath(serial_dir, "hamster_out.h5"), dataset) rtol=1e-8
+                end
+            end
+        end
+    end
+end
+
 @testset "MPI: batches of a fit with an uneven split of the structures" begin
     mktempdir() do dir
         finished, exitcode, output = run_with_two_ranks("nbatch", dir, timeout=900)
