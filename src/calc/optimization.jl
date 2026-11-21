@@ -59,7 +59,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
    get_sp_diag(conf) isa Sparse && error("sp_diag = true can not be used in fits (the loss needs all eigenvalues); remove sp_diag from the config file.")
    local_train_inds, local_val_inds = local_structure_indices(conf, comm, optimize=true, rank=rank, nranks=nranks,
                                                               write_output=write_output, config_inds=config_inds)
-   has_data = !isempty(local_train_inds) && (!isempty(local_val_inds) || !get_validate(conf))
+   has_data = !isempty(local_train_inds)
    comm_active = active_communicator(has_data, comm, rank=rank)
 
    if has_data

@@ -165,6 +165,26 @@ end
     rm("hamster.out"); rm("params.dat"); rm("ml_params.dat")
 end
 
+include("fit_helpers.jl")
+@testset "Validation set of MD fits" begin
+    path = joinpath(@__DIR__, "test_files")
+    conf = validated_md_fit_config(path)
+    set_value!(conf, "Nconf", "Supercell", 2)
+    @test_throws "validation set is empty" Hamster.run_calculation(Val{:optimization}(), comm, conf, write_output=false)
+
+    mktempdir() do dir
+        cd(dir) do
+            conf = validated_md_fit_config(path)
+            set_value!(conf, "poscar", joinpath(path, "POSCAR_gaas"))
+            set_value!(conf, "val_data", "Optimizer", joinpath(path, "EIGENVAL_gaas"))
+            set_value!(conf, "val_mode", "Optimizer", "pc")
+            prof = Hamster.main(comm, conf, rank=rank)
+            @test all(>(0), prof.L_train)
+            @test all(>(0), prof.L_val)
+        end
+    end
+end
+
 rm("hamster_out.h5")
 @testset "Sparse diagonalization is rejected in fits" begin
     conf = get_empty_config()

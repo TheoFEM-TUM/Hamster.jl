@@ -158,9 +158,7 @@ Evaluates the validation loss for a Hamiltonian model over a given validation da
 """
 function val_step!(ham_val, loss, val_data, prof, iter, comm; rank=0, nranks=1, valeachiter=valeachiter)
     val_begin = MPI.Wtime()
-    Ls_val = map(1:ham_val.Nstrc) do index
-        forward(ham_val, index, loss, val_data[index])[1]
-    end
+    Ls_val = Float64[forward(ham_val, index, loss, val_data[index])[1] for index in 1:ham_val.Nstrc]
 
     all_systems = MPI.gather(ham_val.systems, comm, root=0)
     all_losses = MPI.gather(Ls_val, comm, root=0)
@@ -180,10 +178,11 @@ function val_step!(ham_val, loss, val_data, prof, iter, comm; rank=0, nranks=1, 
     
     val_time_local = MPI.Wtime() - val_begin
     val_time = MPI.Reduce(val_time_local, +, comm, root=0)
-    L_val = MPI.Reduce(sum(Ls_val ./ ham_val.Nstrc), +, comm, root=0)
+    L_val = MPI.Reduce(sum(Ls_val, init=0.0), +, comm, root=0)
+    Nstrc_val = MPI.Reduce(ham_val.Nstrc, +, comm, root=0)
     if rank == 0
         prof.val_times[iter] = val_time ./ nranks
-        prof.L_val[iter-valeachiter+1:iter] .= L_val ./ nranks
+        prof.L_val[iter-valeachiter+1:iter] .= L_val ./ Nstrc_val
     end
 end
 
