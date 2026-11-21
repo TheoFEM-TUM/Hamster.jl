@@ -447,7 +447,7 @@ function get_model_gradient(kernel::HamiltonianKernel, indices, reg, dL_dHr; soc
     dparams = zeros(length(kernel.params))
     if kernel.update
         # Collect the descriptors and the gradient w.r.t. their matrix elements once (instead of once per parameter)
-        hins = eltype(eltype(kernel.structure_descriptors[first(indices)]))[]
+        hins = eltype(eltype(first(kernel.structure_descriptors)))[]
         gs = Float64[]
         for (bi, index) in enumerate(indices)
             h_env = kernel.structure_descriptors[index]
