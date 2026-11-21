@@ -187,14 +187,13 @@ function read_eigenvalue_data_from_path(path, inds, band_indices, Nε; system=""
             g = system == "" ? file : file[system]
             kp = read(g["kpoints"])
             Es = read(g["eigenvalues"])
-            inds_ = length(inds) ≤ size(Es, 3) ? inds : collect(1:size(Es, 3))
             check_band_range(path, size(Es, 1), band_indices)
             W = haskey(g, "weights") ? read(g["weights"]) : nothing
             w(n) = eigenvalue_weights(W, size(Es), band_indices, n, path)
             if kp isa Matrix{Float64}
-                return [EigData(kp, Es[band_indices, :, n], w(n)) for n in inds_]
+                return [EigData(kp, Es[band_indices, :, n], w(n)) for n in inds]
             elseif kp isa Array{Float64, 3}
-                return [EigData(kp[:, :, n], Es[band_indices, :, n], w(n)) for n in inds_]
+                return [EigData(kp[:, :, n], Es[band_indices, :, n], w(n)) for n in inds]
             end
         end
     else

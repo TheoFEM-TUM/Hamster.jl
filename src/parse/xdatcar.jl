@@ -20,12 +20,8 @@ function read_xdatcar(xdatcar="XDATCAR"; frac=true, verbosity=1)
     lattices = zeros(3, 3, 0)
     configs = zeros(3, 0, 0)
     open(xdatcar, "r") do io
-        for line in Iterators.reverse(eachline(io))
-            if is_configuration_line(line)
-                Nconfig = parse(Int64, split(line, [' ', '='], keepempty=false)[end])
-                break
-            end
-        end
+        # Counted, not taken from the number of the last configuration (files can be concatenated or subsampled)
+        Nconfig = count(is_configuration_line, eachline(io))
 
         seekstart(io)
         lattice = zeros(3, 3)
@@ -76,6 +72,13 @@ end
 Whether `line` of an XDATCAR file starts a configuration (`Direct configuration= n`, `Cartesian configuration= n`).
 """
 is_configuration_line(line) = occursin("configuration", lowercase(line))
+
+"""
+    count_xdatcar_configurations(xdatcar) -> Int
+
+Number of configurations in the XDATCAR file `xdatcar`.
+"""
+count_xdatcar_configurations(xdatcar) = open(io -> count(is_configuration_line, eachline(io)), xdatcar)
 
 """
     read_xdatcar_header(io, file) -> (a, lattice, Nion)

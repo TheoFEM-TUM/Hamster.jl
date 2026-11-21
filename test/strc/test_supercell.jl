@@ -249,3 +249,55 @@ end
     strcs = get_structures(conf, mode="pc", config_indices=[])
     @test isempty(strcs)
 end
+@testset "Checks of configuration indices" begin
+    calc_path = joinpath(@__DIR__, "..", "calc", "test_files")
+    @test_throws "Nconf = 10 configurations are requested" Hamster.get_config_index_sample(Nconf=10, Nconf_max=5, train_mode="md")
+    @test_throws "validation set needs 4 configurations" Hamster.get_config_index_sample(Nconf=8, Nconf_max=10, val_ratio=0.5,
+                                                                                         validate=true, train_mode="md", val_mode="md")
+    conf = get_empty_config()
+    set_value!(conf, "config_inds", "Supercell", "inds.txt")
+    @test_throws "config_inds = inds.txt: unknown format" Hamster.get_config_index_sample(conf, train_mode="md")
+    conf = get_empty_config()
+    set_value!(conf, "val_config_inds", "Supercell", "2 3 4")
+    _, val_indices = Hamster.get_config_index_sample(conf, Nconf=4, Nconf_max=10, val_ratio=0.25, validate=true,
+                                                     train_mode="md", val_mode="md")
+    @test val_indices == [2, 3, 4]
+
+    conf = get_empty_config()
+    set_value!(conf, "xdatcar", "Supercell", joinpath(calc_path, "XDATCAR"))
+    set_value!(conf, "poscar", "Supercell", joinpath(calc_path, "POSCAR_md"))
+    @test Hamster.number_of_trajectory_frames(joinpath(calc_path, "XDATCAR")) == 10
+    @test Hamster.config_inds_error([1, 10], Int64[], conf, optimize=false) == ""
+    @test occursin("configurations 11 are not in", Hamster.config_inds_error([1, 11], Int64[], conf, optimize=false))
+    set_value!(conf, "Nconf_max", "Supercell", 20)
+    @test occursin("Nconf_max = 20, but", Hamster.config_inds_error([1], Int64[], conf, optimize=false))
+    set_value!(conf, "Nconf_max", "Supercell", 10)
+    set_value!(conf, "train_mode", "Optimizer", "md")
+    set_value!(conf, "train_data", "Optimizer", joinpath(calc_path, "EIGENVAL_gaas"))
+    @test occursin("md mode needs an HDF5 file", Hamster.config_inds_error([1], Int64[], conf, optimize=true))
+    set_value!(conf, "train_data", "Optimizer", joinpath(calc_path, "eigenval.h5"))
+    @test Hamster.config_inds_error([3, 1], Int64[], conf, optimize=true) == ""
+
+    # Structures and eigenvalues follow the order of the indices, also for a list of all configurations
+    inds = collect(10:-1:1)
+    strcs = get_structures(conf, mode="md", config_indices=collect(1:10))
+    strcs_reversed = get_structures(conf, mode="md", config_indices=inds)
+    @test all(n -> strcs_reversed[n].ions[1].dist ≈ strcs[inds[n]].ions[1].dist, eachindex(inds))
+    data = Hamster.read_eigenvalue_data_from_path(joinpath(calc_path, "eigenval.h5"), collect(1:10), 1:32, 32)
+    data_reversed = Hamster.read_eigenvalue_data_from_path(joinpath(calc_path, "eigenval.h5"), inds, 1:32, 32)
+    @test all(n -> data_reversed[n].Es ≈ data[inds[n]].Es, eachindex(inds))
+
+    # Configurations are counted (the numbers in the file can be renumbered, e.g. after subsampling)
+    mktempdir() do dir
+        lines = readlines(joinpath(calc_path, "XDATCAR"))
+        iconfig = 0
+        renumbered = map(lines) do line
+            Hamster.is_configuration_line(line) || return line
+            iconfig += 1
+            return "Direct configuration=     $(3iconfig)"
+        end
+        write(joinpath(dir, "XDATCAR"), join(renumbered, "\n") * "\n")
+        @test Hamster.number_of_trajectory_frames(joinpath(dir, "XDATCAR")) == 10
+        @test Hamster.read_xdatcar(joinpath(dir, "XDATCAR"))[2] ≈ Hamster.read_xdatcar(joinpath(calc_path, "XDATCAR"))[2]
+    end
+end
