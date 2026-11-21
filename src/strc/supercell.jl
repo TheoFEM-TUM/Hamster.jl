@@ -286,8 +286,8 @@ function get_config_index_sample(conf=get_empty_config();
         end
     end
     
-    if Nconf == 1 && validate && lowercase(val_mode) == "pc"
-        val_config_inds = [1] # only one config, e.g., pc
+    if validate && lowercase(val_mode) == "pc"
+        val_config_inds = [1] # the primitive cell of val_data
     elseif !validate
         val_config_inds = Int64[]
     end

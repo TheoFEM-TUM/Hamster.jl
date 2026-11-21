@@ -1,6 +1,7 @@
 # Runs of test/calc/test_mpi.jl with two MPI ranks: julia mpi_run.jl <case> <folder>
 using Hamster, MPI, HDF5
 include(joinpath(@__DIR__, "..", "universal_helpers.jl"))
+include(joinpath(@__DIR__, "..", "fit_helpers.jl"))
 
 MPI.Init()
 comm = MPI.COMM_WORLD
@@ -13,6 +14,13 @@ if case == "abort"
     Hamster.abort_on_error(comm) do
         rank == 1 && error("test error on rank 1")
         MPI.Barrier(comm)
+    end
+elseif case == "valsplit"
+    cd(dir) do
+        conf = validated_md_fit_config(path)
+        Hamster.abort_on_error(comm) do
+            Hamster.main(comm, conf, rank=rank, nranks=nranks)
+        end
     end
 elseif case == "nbatch"
     cd(dir) do
