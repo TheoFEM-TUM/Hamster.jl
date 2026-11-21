@@ -86,9 +86,10 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       end
       data_weight_note(dl, conf, comm_active, rank=active_rank, write_output=write_output)
       optim = GDOptimizer(Nε, Nk, conf, val_weights=val_weights)
-      prof = HamsterProfiler(3, conf)
-      
-      optimize_model!(ham_train, ham_val, optim, dl, prof, comm_active, conf, rank=active_rank, nranks=active_size)
+      Nbatch = get_number_of_batches(get_nbatch(conf), ham_train.Nstrc, comm_active, rank=active_rank)
+      prof = HamsterProfiler(3, conf, Nbatch=Nbatch)
+
+      optimize_model!(ham_train, ham_val, optim, dl, prof, comm_active, conf, Nbatch=Nbatch, rank=active_rank, nranks=active_size)
       if get_save_model(conf)
           save_model(ham_train, train_strcs, train_bases, conf, comm_active; rank=active_rank)
       end

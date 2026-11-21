@@ -12,12 +12,14 @@ Optimizes the model by performing training and optional validation steps.
 - `comm`: The MPI communicator.
 - `conf`: A `Config` instance.
 - `verbosity`: The level of verbosity for logging.
-- `Nbatch`: The number of batches per training iteration.
+- `Nbatch`: The number of batches per training iteration, the same on all ranks (see
+  [`get_number_of_batches`](@ref Hamster.get_number_of_batches)).
 - `validate`: A flag indicating whether to perform validation during training.
 
 # Workflow
 1. Print the start message.
-2. For each training iteration, split the training data into batches and perform training steps.
+2. For each training iteration, split the training data into batches (see
+   [`get_local_batches`](@ref Hamster.get_local_batches)) and perform training steps.
 3. Optionally validate the model after each training iteration.
 4. Print the final status once training is complete.
 
@@ -28,7 +30,7 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_emp
     print_start_message(prof; verbosity=verbosity)
     for iter in 1:optim.Niter
         iter_begin = MPI.Wtime()
-        for (batch_id, indices) in enumerate(chunks(1:ham_train.Nstrc, n=Nbatch))
+        for (batch_id, indices) in enumerate(get_local_batches(ham_train.Nstrc, Nbatch))
             train_step!(ham_train, indices, optim, dl.train_data, prof, iter, batch_id, comm, conf, rank=rank, nranks=nranks)
             print_train_status(prof, iter, batch_id, verbosity=verbosity)
         end
@@ -43,6 +45,34 @@ function optimize_model!(ham_train, ham_val, optim, dl, prof, comm, conf=get_emp
         if verbosity > 1 && rank == 0; println("Iteration time: $iter_time s"); end
     end
     print_final_status(prof; verbosity=verbosity)
+end
+
+"""
+    get_number_of_batches(nbatch, Nstrc, comm; rank=0)
+
+The number of batches per iteration of a fit with `nbatch` batches requested and `Nstrc` training structures on this
+rank. Every rank splits its own structures into batches and every batch ends with collective MPI calls, so all ranks
+must run the same number of batches. It is at most the largest number of training structures of a rank; then every
+batch contains structures of at least one rank. A smaller number than `nbatch` is reported with a warning.
+"""
+function get_number_of_batches(nbatch, Nstrc, comm; rank=0)
+    nbatch ≥ 1 || error("nbatch = $nbatch: the number of batches must be at least 1.")
+    Nstrc_max = MPI.Allreduce(Nstrc, max, comm)
+    if nbatch > Nstrc_max && rank == 0
+        @warn "nbatch = $nbatch is larger than the number of training structures per MPI rank (at most $Nstrc_max); the fit uses $Nstrc_max batches."
+    end
+    return min(nbatch, Nstrc_max)
+end
+
+"""
+    get_local_batches(Nstrc, Nbatch)
+
+Split the local structure indices `1:Nstrc` into `Nbatch` batches. A rank with fewer than `Nbatch` structures gets one
+structure per batch and empty batches at the end, so that it takes part in the collective calls of every batch.
+"""
+function get_local_batches(Nstrc, Nbatch)
+    batches = Nstrc == 0 ? UnitRange{Int64}[] : collect(UnitRange{Int64}, chunks(1:Nstrc, n=min(Nbatch, Nstrc)))
+    return vcat(batches, fill(1:0, Nbatch - length(batches)))
 end
 
 """
