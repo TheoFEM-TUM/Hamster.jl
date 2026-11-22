@@ -185,6 +185,39 @@ include("fit_helpers.jl")
     end
 end
 
+@testset "Validation structures from a trajectory of their own" begin
+    path = joinpath(@__DIR__, "test_files")
+    lattice, positions = Hamster.read_xdatcar(joinpath(path, "XDATCAR"), frac=true)
+    mktempdir() do dir
+        # configurations 8 to 10 of the trajectory and of the data, as files of their own
+        h5open(joinpath(dir, "val_strc.h5"), "w") do f
+            f["positions"] = positions[:, :, 8:10]
+            f["lattice"] = ndims(lattice) == 3 ? lattice[:, :, 8:10] : lattice
+        end
+        h5open(joinpath(dir, "val_data.h5"), "w") do f
+            f["eigenvalues"] = h5read(joinpath(path, "eigenval.h5"), "eigenvalues")[:, :, 8:10]
+            f["kpoints"] = h5read(joinpath(path, "eigenval.h5"), "kpoints")
+        end
+        losses = map(["same", "own"]) do case
+            mkdir(joinpath(dir, case))
+            cd(joinpath(dir, case)) do
+                conf = validated_md_fit_config(path)
+                set_value!(conf, "config_inds", "Supercell", "1 2 3 4")
+                if case == "same"
+                    set_value!(conf, "val_config_inds", "Supercell", "8 9 10")
+                else
+                    set_value!(conf, "val_xdatcar", "Optimizer", joinpath(dir, "val_strc.h5"))
+                    set_value!(conf, "val_data", "Optimizer", joinpath(dir, "val_data.h5"))
+                end
+                prof = Hamster.main(comm, conf, rank=rank)
+                @test h5read("hamster_out.h5", "val_config_inds") == (case == "same" ? [8, 9, 10] : [1, 2, 3])
+                prof.L_val
+            end
+        end
+        @test all(>(0), losses[2]) && losses[2] ≈ losses[1]
+    end
+end
+
 @testset "More batches than training structures" begin
     @test Hamster.get_local_batches(5, 3) == [1:2, 3:4, 5:5]
     @test Hamster.get_local_batches(2, 3) == [1:1, 2:2, 1:0]

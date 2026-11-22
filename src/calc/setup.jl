@@ -47,18 +47,20 @@ function active_communicator(has_data, comm; rank=0)
 end
 
 """
-    build_hamiltonian(conf, comm, local_inds; mode, Rs=zeros(3, 1), rank=0, nranks=1,
-                      verbosity=get_verbosity(conf), kwargs...) -> (ham, strcs, bases)
+    build_hamiltonian(conf, comm, local_inds; mode, Rs=zeros(3, 1), rank=0, nranks=1, verbosity=get_verbosity(conf),
+                      xdatcar=get_xdatcar(conf), sc_poscar=get_sc_poscar(conf), kwargs...) -> (ham, strcs, bases)
 
-Load the local structures (`local_inds`: configuration indices per system), build their bases and the
-`EffectiveHamiltonian`; further keyword arguments are passed to `EffectiveHamiltonian`.
+Load the local structures (`local_inds`: configuration indices per system, of the trajectory `xdatcar` with the
+reference structure `sc_poscar`), build their bases and the `EffectiveHamiltonian`; further keyword arguments are
+passed to `EffectiveHamiltonian`.
 """
 function build_hamiltonian(conf, comm, local_inds; mode, Rs=zeros(3, 1), rank=0, nranks=1,
-                           verbosity=get_verbosity(conf), kwargs...)
+                           verbosity=get_verbosity(conf), xdatcar=get_xdatcar(conf), sc_poscar=get_sc_poscar(conf),
+                           kwargs...)
     if rank == 0 && verbosity > 1; println("Getting structures..."); end
     begin_time = MPI.Wtime()
     strcs = mapreduce(vcat, local_inds, init=Structure[]) do (system, inds)
-        get_structures(conf, config_indices=inds, Rs=Rs, mode=mode, system=system)
+        get_structures(conf, config_indices=inds, Rs=Rs, mode=mode, system=system, xdatcar=xdatcar, sc_poscar=sc_poscar)
     end
     strc_time = MPI.Wtime() - begin_time
     if rank == 0 && verbosity > 1; println(" Structure time: $strc_time s"); end

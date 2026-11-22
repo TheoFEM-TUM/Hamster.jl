@@ -11,6 +11,28 @@ primitive cell of `val_data` (also when the training data are MD structures). Wi
 consists of round(`Nconf` × `val_ratio`) configurations between `Nconf_min` and `Nconf_max` that are not in the
 training set, or of `val_config_inds`. If this leaves no validation structure, the fit stops with an error.
 
+The validation structures can also come from a trajectory of their own, e.g. another temperature or larger cells:
+`val_xdatcar` (and `val_poscar`, its reference structure in md mode) in the `Optimizer` block, with the eigenvalues in
+`val_data` (structure `n` of `val_data` belongs to configuration `n` of `val_xdatcar`). The validation set is then all
+configurations of this file, or those of `val_config_inds`, independent of the training set; `Nconf`, `val_ratio`,
+`Nconf_min` and `Nconf_max` apply only to the training set. Prepared training and validation files (e.g. subsets of a
+larger data set) are used completely with `Nconf` = `Nconf_max` = number of training configurations and `val_xdatcar`.
+
+```
+begin Optimizer
+    train_data = train/eigenval.h5
+    val_data = val/eigenval.h5
+    val_xdatcar = val/structures.h5
+    val_mode = md
+end
+```
+
+In universal mode, `val_xdatcar` has one group per system, like `xdatcar`; it may contain only some of the systems of
+the training set, or other systems whose species are in the training set. The indices of `config_inds` and
+`val_config_inds` given as an HDF5 file are read from the group of each system (`<system>/train_config_inds`,
+`<system>/val_config_inds`, the layout of `hamster_out.h5` of a universal fit), so every system can have its own
+configurations; datasets at the top of the file apply to all systems.
+
 With MPI, the training structures are split over the ranks and the validation structures over the ranks with training
 structures, so a rank can have training structures but no validation structure. The validation loss is the mean over
 all validation structures.

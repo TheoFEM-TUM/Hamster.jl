@@ -301,3 +301,45 @@ end
         @test Hamster.read_xdatcar(joinpath(dir, "XDATCAR"))[2] ≈ Hamster.read_xdatcar(joinpath(calc_path, "XDATCAR"))[2]
     end
 end
+
+@testset "Validation structures from a trajectory of their own" begin
+    calc_path = joinpath(@__DIR__, "..", "calc", "test_files")
+    mktempdir() do dir
+        inds_file = joinpath(dir, "inds.h5")
+        h5open(inds_file, "w") do f
+            f["train_config_inds"] = [1, 2]
+            g = create_group(f, "gaas")
+            g["train_config_inds"] = [3]
+            g["val_config_inds"] = [4, 5]
+        end
+        @test Hamster.read_config_inds(inds_file, "config_inds", "train_config_inds", system="gaas") == [3]
+        @test Hamster.read_config_inds(inds_file, "config_inds", "train_config_inds", system="cspbbr3") == [1, 2]
+        @test Hamster.read_config_inds(inds_file, "config_inds", "train_config_inds") == [1, 2]
+        @test Hamster.read_config_inds(inds_file, "val_config_inds", "val_config_inds", system="gaas") == [4, 5]
+        @test_throws "and no dataset cspbbr3/val_config_inds" Hamster.read_config_inds(inds_file, "val_config_inds",
+                                                                                         "val_config_inds", system="cspbbr3")
+
+        conf = get_empty_config()
+        set_value!(conf, "xdatcar", "Supercell", joinpath(calc_path, "XDATCAR"))
+        set_value!(conf, "poscar", "Supercell", joinpath(calc_path, "POSCAR_md"))
+        set_value!(conf, "Nconf", "Supercell", 10)
+        set_value!(conf, "Nconf_max", "Supercell", 10)
+        set_value!(conf, "train_mode", "Optimizer", "md")
+        set_value!(conf, "train_data", "Optimizer", joinpath(calc_path, "eigenval.h5"))
+        set_value!(conf, "val_data", "Optimizer", joinpath(calc_path, "eigenval.h5"))
+        set_value!(conf, "val_xdatcar", "Optimizer", joinpath(calc_path, "XDATCAR"))
+        @test Hamster.get_validate(conf) && Hamster.separate_val_structures(conf)
+        @test Hamster.get_val_poscar(conf) == joinpath(calc_path, "POSCAR_md")
+        train, val = Hamster.get_config_inds_for_systems([""], comm, conf, rank=rank)
+        @test train[""] == collect(1:10) && val[""] == collect(1:10)
+        set_value!(conf, "val_config_inds", "Supercell", "2 4")
+        @test Hamster.get_config_inds_for_systems([""], comm, conf, rank=rank)[2][""] == [2, 4]
+        set_value!(conf, "val_config_inds", "Supercell", "2 11")
+        @test_throws "validation configurations 11 are not in" Hamster.get_config_inds_for_systems([""], comm, conf, rank=rank)
+        set_value!(conf, "val_config_inds", "Supercell", "none")
+        set_value!(conf, "val_xdatcar", "Optimizer", joinpath(dir, "missing.h5"))
+        @test_throws "val_xdatcar = $(joinpath(dir, "missing.h5")): file not found" Hamster.get_config_inds_for_systems([""], comm, conf, rank=rank)
+        set_value!(conf, "val_mode", "Optimizer", "pc")
+        @test_throws "need val_mode = md or universal" Hamster.get_config_inds_for_systems([""], comm, conf, rank=rank)
+    end
+end

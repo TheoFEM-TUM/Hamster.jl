@@ -41,7 +41,8 @@ The routine iteratively adjusts model parameters to minimize the loss over a tra
   - `train_mode = pc`: see `get_poscar`
 - **Eigenvalue training data**: see `get_train_data`
 - **Eigenvalue validation data** (optional): see `get_val_data`  
-  If not provided, the training data is split according to `val_ratio`.
+  If not provided, the training data is split according to `val_ratio`. The validation structures come from the
+  training trajectory, or from a trajectory of their own (`val_xdatcar`, `val_poscar`).
 
 # Input Tags (`Optimizer`)
 
@@ -75,6 +76,7 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       val_rank, val_size = has_val ? (MPI.Comm_rank(comm_val), MPI.Comm_size(comm_val)) : (active_rank, active_size)
       ham_val, val_strcs, val_bases = build_hamiltonian(conf, comm_val, local_val_inds, mode=get_val_mode(conf), Rs=Rs,
                                                 rank=val_rank, nranks=val_size, label="validation set",
+                                                xdatcar=get_val_xdatcar(conf), sc_poscar=get_val_poscar(conf),
                                                 write_summary=write_output, ml_data_points=get_ml_data_points(ham_train, conf),
                                                 keep_rllm=true)    # the radial tables of the training set stay
       

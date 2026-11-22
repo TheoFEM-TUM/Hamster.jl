@@ -1,17 +1,18 @@
 """
-    get_systems(conf) -> Vector{String}
+    get_systems(conf; xdatcar=get_xdatcar(conf), mode=get_train_mode(conf)) -> Vector{String}
 
 Return the list of system names available for a given configuration `conf`.
 
 # Arguments
 - `conf`: A configuration object.
+- `xdatcar`, `mode`: the structure file and its mode (the validation trajectory `val_xdatcar` with `val_mode`).
 
 # Returns
 - `Vector{String}`: A list of system names (HDF5 group names or a single system).
 """
-function get_systems(conf)
-    strc_file = get_xdatcar(conf)
-    if isfile(strc_file) && get_train_mode(conf) == "universal"
+function get_systems(conf; xdatcar=get_xdatcar(conf), mode=get_train_mode(conf))
+    strc_file = xdatcar
+    if isfile(strc_file) && lowercase(mode) == "universal"
         h5open(strc_file, "r") do file
             systems = keys(file)
             return systems
@@ -22,14 +23,16 @@ function get_systems(conf)
 end
 
 """
-    get_structures(conf=get_empty_config(); index_file="config_inds.dat", xdatcar=get_xdatcar(conf), sc_poscar=get_sc_poscar(conf))
+    get_structures(conf=get_empty_config(); Rs=zeros(3, 1), mode="pc", system="", config_indices=[1],
+                   poscar=get_poscar(conf), xdatcar=get_xdatcar(conf), sc_poscar=get_sc_poscar(conf))
 
-Generates a list of `Structure` objects based on the configurations from an XDATCAR file (or an h5 file) and the initial POSCAR structure. 
+Generates a list of `Structure` objects based on the configurations from an XDATCAR file (or an h5 file) and the initial POSCAR structure.
 
 # Arguments
 - `conf`: A configuration object. By default, `get_empty_config()`.
-- `index_file`: A string specifying the filename containing the configuration indices. If this file exists, the configuration indices are read from it. If not, they are sampled using `get_config_index_sample()`.
-- `xdatcar`: The path to the XDATCAR file, containing configuration data for the system. 
+- `config_indices`: the configurations of the trajectory (md, universal and mixed mode).
+- `poscar`: The path to the POSCAR of the primitive cell (pc mode).
+- `xdatcar`: The path to the XDATCAR file, containing configuration data for the system.
 - `sc_poscar`: The path to the POSCAR file, representing the initial supercell structure.
 
 # Returns
@@ -40,11 +43,13 @@ function get_structures(conf=get_empty_config();
                         mode="pc",
                         system="",
                         config_indices=[1], 
-                        poscar=get_poscar(conf))
-    
+                        poscar=get_poscar(conf),
+                        xdatcar=get_xdatcar(conf),
+                        sc_poscar=get_sc_poscar(conf))
+
 
     if lowercase(mode) == "md" || lowercase(mode) == "mixed" || lowercase(mode) == "universal"
-        rs_0, atom_types, lattice, rs_all = read_structure_file(system, conf, mode=mode)
+        rs_0, atom_types, lattice, rs_all = read_structure_file(system, conf, mode=mode, xdatcar=xdatcar, sc_poscar=sc_poscar)
         lattice_0 = lattice isa AbstractMatrix ? lattice : lattice[:, :, 1]
         Rs = Rs == zeros(3, 1) ? get_translation_vectors(rs_0, lattice_0, rcut=get_rcut(conf)) : Rs
 
@@ -151,7 +156,8 @@ processes, returning training and validation index sets for each system.
 - `(train_config_inds, val_config_inds)`:
   Two dictionaries mapping each system name (`String`) to a vector of integer
   indices (`Vector{Int64}`) representing the selected configurations for training
-  and validation, respectively.
+  and validation, respectively. With `val_xdatcar`, the validation indices are those of
+  [`separate_val_config_inds`](@ref), for the systems of the validation trajectory.
 """
 function get_config_inds_for_systems(
     systems,
@@ -165,6 +171,7 @@ function get_config_inds_for_systems(
     train_config_inds = Dict{String, Vector{Int64}}()
     val_config_inds   = Dict{String, Vector{Int64}}()
 
+    separate = optimize && separate_val_structures(conf)
     file = nothing
     if length(systems) > 1
         file = h5open(get_xdatcar(conf), "r", comm)
@@ -187,7 +194,8 @@ function get_config_inds_for_systems(
         end
 
         system_train_inds, system_val_inds =
-            get_config_index_sample(conf; Nconf=Nconf, Nconf_max=Nconf_max)
+            get_config_index_sample(conf; Nconf=Nconf, Nconf_max=Nconf_max, system=system,
+                                    validate=get_validate(conf) && !separate)
 
         MPI.Bcast!(system_train_inds, comm, root=0)
         MPI.Bcast!(system_val_inds,   comm, root=0)
@@ -207,7 +215,7 @@ function get_config_inds_for_systems(
 
                 if optimize
                     write(g, "train_config_inds", system_train_inds)
-                    write(g, "val_config_inds", system_val_inds)
+                    separate || write(g, "val_config_inds", system_val_inds)
                 else
                     write(g, "config_inds", system_train_inds)
                 end
@@ -215,12 +223,14 @@ function get_config_inds_for_systems(
         end
 
         train_config_inds[system] = system_train_inds
-        val_config_inds[system]   = system_val_inds
+        separate || (val_config_inds[system] = system_val_inds)
     end
 
     if file !== nothing
         close(file)
     end
+
+    separate && merge!(val_config_inds, separate_val_config_inds(conf, comm, rank=rank, write_output=write_output))
 
     return train_config_inds, val_config_inds
 end
@@ -239,6 +249,7 @@ Randomly selects training and validation configuration indices from a given rang
 - `val_ratio`: (Optional) Ratio of validation configurations to training configurations. Used only if `train_mode == val_mode`.
 - `train_mode`: (Optional) Mode identifier for training configurations. Derived from `conf`.
 - `val_mode`: (Optional) Mode identifier for validation configurations. Derived from `conf`.
+- `system`: (Optional) the system (universal mode), for the indices of an HDF5 file with one group per system.
 
 # Returns
 - `train_config_inds`: A vector of indices for training configurations.
@@ -253,10 +264,11 @@ function get_config_index_sample(conf=get_empty_config();
                                 train_mode=get_train_mode(conf), 
                                 val_mode = get_val_mode(conf), 
                                 inds_conf=get_config_inds(conf), 
-                                val_inds_conf=get_val_config_inds(conf)) :: Tuple{Vector{Int64}, Vector{Int64}}
+                                val_inds_conf=get_val_config_inds(conf),
+                                system="") :: Tuple{Vector{Int64}, Vector{Int64}}
 
     # Training config inds
-    train_config_inds = read_config_inds(inds_conf, "config_inds", "train_config_inds")
+    train_config_inds = read_config_inds(inds_conf, "config_inds", "train_config_inds", system=system)
 
     if (lowercase(train_mode) ∈ ["md", "universal"] || lowercase(train_mode) == lowercase(val_mode)) && length(train_config_inds) < Nconf
         candidates = isempty(train_config_inds) ? (Nconf_min:Nconf_max) : setdiff(Nconf_min:Nconf_max, train_config_inds)
@@ -270,7 +282,7 @@ function get_config_index_sample(conf=get_empty_config();
     end
 
     # Validation config inds
-    val_config_inds = read_config_inds(val_inds_conf, "val_config_inds", "val_config_inds")
+    val_config_inds = read_config_inds(val_inds_conf, "val_config_inds", "val_config_inds", system=system)
 
     if length(val_config_inds) < Nconf && (lowercase(val_mode) ∈ ["md", "universal"])
         Nval = train_mode == val_mode ? round(Int64, Nconf * val_ratio) : Nconf
@@ -296,13 +308,15 @@ function get_config_index_sample(conf=get_empty_config();
 end
 
 """
-    read_config_inds(value, tag, dataset) -> Vector{Int64}
+    read_config_inds(value, tag, dataset; system="") -> Vector{Int64}
 
 The configuration indices given by the value of the tag `tag` (`config_inds` or `val_config_inds`): a list of indices,
 `none` (no indices), a `.dat` file (number of indices in the first line, then one index per line) or an HDF5 file with
-the dataset `dataset` (e.g. the `hamster_out.h5` of an earlier fit).
+the dataset `dataset` (e.g. the `hamster_out.h5` of an earlier fit). For a `system` of universal mode, the dataset in
+the group of the system (`<system>/<dataset>`, as in the `hamster_out.h5` of a universal fit) is read if the file has
+one, else the dataset at the top of the file (the same indices for all systems).
 """
-function read_config_inds(value, tag, dataset)
+function read_config_inds(value, tag, dataset; system="")
     value isa Vector{Int64} && return copy(value)
     value == "none" && return Int64[]
     usage = "use a list of indices separated by spaces (e.g. $tag = 1 5 9), a .dat file (number of indices in the " *
@@ -310,8 +324,13 @@ function read_config_inds(value, tag, dataset)
     occursin(".dat", value) || occursin(".h5", value) || error("$tag = $value: unknown format; $usage.")
     isfile(value) || error("$tag = $value: file not found.")
     if occursin(".h5", value)
-        h5open(f -> haskey(f, dataset), value) || error("$tag = $value: the file has no dataset $dataset.")
-        return vec(h5read(value, dataset))
+        path = h5open(value) do f
+            system != "" && haskey(f, system) && f[system] isa HDF5.Group && haskey(f[system], dataset) ?
+                "$system/$dataset" : haskey(f, dataset) ? dataset : ""
+        end
+        isempty(path) && error("$tag = $value: the file has no dataset $dataset" *
+                               (system == "" ? "." : " (and no dataset $system/$dataset)."))
+        return vec(h5read(value, path))
     end
     inds = try
         read_from_file(value, type=Int64)
@@ -323,31 +342,80 @@ function read_config_inds(value, tag, dataset)
 end
 
 """
-    config_inds_error(train_inds, val_inds, conf; optimize, system="", Nframes=nothing) -> String
+    separate_val_config_inds(conf, comm; rank=0, write_output=false) -> Dict{String, Vector{Int64}}
+
+Validation configurations of every system of the validation trajectory `val_xdatcar` (one system unless
+`val_mode = universal`): `val_config_inds` if given (for a universal HDF5 index file, those in the group of the
+system), else all configurations of the trajectory. They are independent of the training configurations. Read and
+checked on rank 0 (written to `hamster_out.h5` with `write_output`) and broadcast to all ranks.
+"""
+function separate_val_config_inds(conf, comm; rank=0, write_output=false)
+    mode, xdatcar = lowercase(get_val_mode(conf)), get_val_xdatcar(conf)
+    mode ∈ ("md", "universal") || error("val_xdatcar = $xdatcar is set, but val_mode = $mode: validation structures " *
+                                        "of a trajectory need val_mode = md or universal.")
+    val_inds, message = Dict{String, Vector{Int64}}(), ""
+    if rank == 0
+        message = try
+            isfile(xdatcar) || error("val_xdatcar = $xdatcar: file not found.")
+            for system in get_systems(conf, xdatcar=xdatcar, mode=mode)
+                Nframes = number_of_trajectory_frames(xdatcar, system)
+                inds = read_config_inds(get_val_config_inds(conf), "val_config_inds", "val_config_inds", system=system)
+                val_inds[system] = isempty(inds) ? collect(1:Nframes) : inds
+                m = config_inds_error(Int64[], val_inds[system], conf, optimize=true, system=system, val_Nframes=Nframes)
+                isempty(m) || error(m)
+            end
+            ""
+        catch e
+            e isa ErrorException ? e.msg : sprint(showerror, e)
+        end
+    end
+    message, val_inds = MPI.bcast((message, val_inds), comm, root=0)
+    isempty(message) || error(message)
+    if rank == 0 && write_output
+        h5open("hamster_out.h5", "cw") do outfile
+            for (system, inds) in val_inds
+                g = system == "" ? outfile : (haskey(outfile, system) ? outfile[system] : create_group(outfile, system))
+                write(g, "val_config_inds", inds)
+            end
+        end
+    end
+    return val_inds
+end
+
+"""
+    config_inds_error(train_inds, val_inds, conf; optimize, system="", Nframes=nothing, val_Nframes=nothing) -> String
 
 Check the configuration indices of `system` (training and validation, or the structures of a standard run) against the
-number of configurations of the trajectory (`xdatcar`) and, in fits, of the data files (`train_data`, `val_data`).
-Returns an error message, or an empty string if all indices are valid. `Nframes` is the number of configurations of
-the trajectory if it is already known. Indices of pc structures are not checked.
+number of configurations of the trajectory (`xdatcar`, for the validation set `val_xdatcar` if it is set) and, in
+fits, of the data files (`train_data`, `val_data`). Returns an error message, or an empty string if all indices are
+valid. `Nframes` (`val_Nframes`) is the number of configurations of the trajectory (of `val_xdatcar`) if it is already
+known. Indices of pc structures are not checked.
 """
-function config_inds_error(train_inds, val_inds, conf; optimize, system="", Nframes=nothing)
+function config_inds_error(train_inds, val_inds, conf; optimize, system="", Nframes=nothing, val_Nframes=nothing)
     sets = if optimize
         [("training", train_inds, lowercase(get_train_mode(conf)), get_train_data(conf), get_hr_fit(conf)),
          ("validation", val_inds, lowercase(get_val_mode(conf)), get_val_data(conf), !get_eig_val(conf))]
     else
         [("", train_inds, haskey(conf, "Supercell") ? "md" : "pc", nothing, false)]
     end
-    xdatcar = get_xdatcar(conf)
+    separate = optimize && separate_val_structures(conf)
     messages = String[]
     for (label, inds, mode, data, hr) in sets
         (mode ∈ ("md", "universal", "mixed") && !isempty(inds)) || continue
-        isfile(xdatcar) || return "xdatcar = $xdatcar: file not found."
-        Nframes = isnothing(Nframes) ? number_of_trajectory_frames(xdatcar, system) : Nframes
-        if system == "" && get_Nconf_max(conf) > Nframes
+        own_file = label == "validation" && separate
+        xdatcar, tag = own_file ? (get_val_xdatcar(conf), "val_xdatcar") : (get_xdatcar(conf), "xdatcar")
+        isfile(xdatcar) || return "$tag = $xdatcar: file not found."
+        if own_file
+            val_Nframes = isnothing(val_Nframes) ? number_of_trajectory_frames(xdatcar, system) : val_Nframes
+        else
+            Nframes = isnothing(Nframes) ? number_of_trajectory_frames(xdatcar, system) : Nframes
+        end
+        Nset = own_file ? val_Nframes : Nframes
+        if system == "" && !own_file && get_Nconf_max(conf) > Nframes
             push!(messages, "Nconf_max = $(get_Nconf_max(conf)), but $xdatcar has $Nframes configurations.")
         end
-        outside = filter(i -> !(1 ≤ i ≤ Nframes), inds)
-        isempty(outside) || push!(messages, "$(lstrip("$label configurations")) $(join(outside, ", ")) are not in $xdatcar ($Nframes configurations).")
+        outside = filter(i -> !(1 ≤ i ≤ Nset), inds)
+        isempty(outside) || push!(messages, "$(lstrip("$label configurations")) $(join(outside, ", ")) are not in $xdatcar ($Nset configurations).")
 
         (isnothing(data) || mode == "mixed") && continue
         if !occursin(".h5", data)
