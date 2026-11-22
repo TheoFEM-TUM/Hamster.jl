@@ -6,10 +6,11 @@
     set_value!(conf, "kpoints", joinpath(path, "EIGENVAL_gaas"))
     set_value!(conf, "init_params", joinpath(path, "params.dat"))
 
-    prof = Hamster.main(comm, conf, rank=rank)
+    prof = withenv(() -> Hamster.main(comm, conf, rank=rank), "OMP_NUM_THREADS" => "4")
     Es_tb = read_from_file("Es.dat")
     _, Es_dft, _ = Hamster.read_eigenval(conf("kpoints"), 8)
     @test mean(abs.(Es_tb .- Es_dft)) < 0.3
+    @test !occursin("OMP_NUM_THREADS", read("hamster.out", String))
     rm("hamster.out"); rm("Es.dat")
 end
 
