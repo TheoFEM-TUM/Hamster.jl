@@ -47,11 +47,13 @@ function TBModel(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=ge
                 filename = get_rllm_file(conf),
                 initas=get_init_params(conf),
                 label="",
-                write_summary=true)
-                
+                write_summary=true,
+                keep_rllm=false)
+
     if get_load_rllm(conf) == false
         rllm_file = get_rllm_file(conf)
-        if isfile(rllm_file) && rank == 0; rm(rllm_file); end
+        # keep_rllm: the tables of the training model of the same run stay (the validation set may lack some systems)
+        if isfile(rllm_file) && rank == 0 && !keep_rllm; rm(rllm_file); end
         precalc_rllm(bases, conf, rank=rank, nranks=nranks, comm=comm)
     end
     file = nothing

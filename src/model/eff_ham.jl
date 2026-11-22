@@ -28,6 +28,7 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
                               label="",
                               write_summary=true,
                               training=false,
+                              keep_rllm=false,
                               sparse_iterators=true)
 
     if isempty(strcs) && isempty(bases)
@@ -51,7 +52,8 @@ function EffectiveHamiltonian(strcs, bases, comm, conf=get_empty_conf();
     if tb_model
         if rank == 0 && verbosity > 1; println("   Getting TB model..."); end
         begin_time = MPI.Wtime()
-        models = (models..., TBModel(strcs, bases, comm, conf, rank=rank, nranks=nranks, label=label, write_summary=write_summary))
+        models = (models..., TBModel(strcs, bases, comm, conf, rank=rank, nranks=nranks, label=label, write_summary=write_summary,
+                                       keep_rllm=keep_rllm))
         tb_time = MPI.Wtime() - begin_time
         if rank == 0 && verbosity > 1; println("    TB time: $tb_time s"); end
     end
