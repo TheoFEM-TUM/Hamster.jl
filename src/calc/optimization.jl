@@ -75,7 +75,8 @@ function run_calculation(::Val{:optimization}, comm, conf::Config; rank=0, nrank
       val_rank, val_size = has_val ? (MPI.Comm_rank(comm_val), MPI.Comm_size(comm_val)) : (active_rank, active_size)
       ham_val, val_strcs, val_bases = build_hamiltonian(conf, comm_val, local_val_inds, mode=get_val_mode(conf), Rs=Rs,
                                                 rank=val_rank, nranks=val_size, label="validation set",
-                                                write_summary=write_output, ml_data_points=get_ml_data_points(ham_train, conf))
+                                                write_summary=write_output, ml_data_points=get_ml_data_points(ham_train, conf),
+                                                keep_rllm=true)    # the radial tables of the training set stay
       
       Nε_train = get_number_of_bands_per_structure(train_bases, local_train_inds, soc=get_soc(conf))
       Nε_val = get_number_of_bands_per_structure(val_bases, local_val_inds, soc=get_soc(conf))

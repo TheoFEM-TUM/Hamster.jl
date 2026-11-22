@@ -93,3 +93,42 @@ end
         end
     end
 end
+
+@testset "Universal fit: radial functions of a system without validation structures" begin
+    mktempdir() do dir
+        cd(dir) do
+            path = joinpath(@__DIR__, "test_files")
+            strc_file, eig_file = joinpath(dir, "strc_file.h5"), joinpath(dir, "eig_file.h5")
+            write_universal_strc_file(strc_file)
+            kp_gaas, Es_gaas, _ = Hamster.read_eigenval(joinpath(path, "EIGENVAL_gaas"))
+            kp_cspbbr3, Es_cspbbr3, _ = Hamster.read_eigenval(joinpath(path, "EIGENVAL_cspbbr3"))
+            h5open(strc_file, "r+") do f                              # three configurations of CsPbBr3, one of GaAs
+                g = f["cspbbr3"]
+                pos, lat = read(g["positions"]), read(g["lattice"])
+                delete_object(g, "positions"); delete_object(g, "lattice")
+                g["positions"] = repeat(pos, 1, 1, 3); g["lattice"] = repeat(lat, 1, 1, 3)
+            end
+            h5open(eig_file, "w") do f
+                g1 = create_group(f, "cspbbr3")
+                g1["kpoints"] = kp_cspbbr3; g1["eigenvalues"] = repeat(reshape(Es_cspbbr3[14:end, :], 17, 84, 1), 1, 1, 3)
+                g2 = create_group(f, "gaas")
+                g2["kpoints"] = kp_gaas; g2["eigenvalues"] = reshape(Es_gaas, 48, 56, 1)
+            end
+            conf = get_config(filename=joinpath(path, "hconf_universal"))
+            set_value!(conf, "load_rllm", false)
+            set_value!(conf, "rllm_file", joinpath(dir, "rllm.h5"))
+            set_value!(conf, "train_data", "Optimizer", eig_file)
+            set_value!(conf, "val_data", "Optimizer", eig_file)
+            set_value!(conf, "val_mode", "Optimizer", "universal")
+            set_value!(conf, "val_ratio", "Optimizer", 0.5)          # CsPbBr3: 2 training, 1 validation; GaAs: 1 training
+            set_value!(conf, "niter", "Optimizer", 1)
+            set_value!(conf, "xdatcar", "Supercell", strc_file)
+            set_value!(conf, "Nconf", "Supercell", 2)
+            set_value!(conf, "Nconf_max", "Supercell", 3)
+            Hamster.main(comm, conf, rank=rank)
+            labels = h5open(keys, joinpath(dir, "rllm.h5"))
+            @test any(l -> occursin("Ga", l), labels) && any(l -> occursin("Pb", l), labels)
+            @test h5read("hamster_out.h5", "gaas/val_config_inds") == Int[]
+        end
+    end
+end
