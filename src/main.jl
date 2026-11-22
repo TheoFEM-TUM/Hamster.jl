@@ -78,12 +78,6 @@ function run_main(comm, conf; rank=0, nranks=1, num_nodes=1, verbosity=get_verbo
         generate_output(conf, hostnames=hostnames)
         start_output_log!()
         julia_num_threads = Threads.nthreads()
-        
-        # COV_EXCL_START
-        if get(ENV, "OMP_NUM_THREADS", "not set") ∉ ["1", "not set"] && rank == 0
-            @warn "OMP_NUM_THREADS is not set to 1 (currently: $(get(ENV, "OMP_NUM_THREADS", "not set"))). This may hurt performance in multi-threaded or distributed settings. Consider setting OMP_NUM_THREADS=1, but test for your case."
-        end
-        # COV_EXCL_STOP
 
         Nconf = get_Nconf(conf)
         write_block_summary("Parallelization", num_nodes=num_nodes, nhamster=nranks, 
