@@ -132,3 +132,61 @@ end
         end
     end
 end
+
+@testset "Universal fit: indices per system and validation structures of their own" begin
+    mktempdir() do dir
+        cd(dir) do
+            path = joinpath(@__DIR__, "test_files")
+            strc_file, eig_file = joinpath(dir, "strc_file.h5"), joinpath(dir, "eig_file.h5")
+            val_strc_file, val_eig_file = joinpath(dir, "val_strc_file.h5"), joinpath(dir, "val_eig_file.h5")
+            write_universal_strc_file(strc_file)
+            kp_gaas, Es_gaas, _ = Hamster.read_eigenval(joinpath(path, "EIGENVAL_gaas"))
+            kp_cspbbr3, Es_cspbbr3, _ = Hamster.read_eigenval(joinpath(path, "EIGENVAL_cspbbr3"))
+            h5open(strc_file, "r+") do f                              # three configurations of CsPbBr3, one of GaAs
+                g = f["cspbbr3"]
+                pos, lat = read(g["positions"]), read(g["lattice"])
+                delete_object(g, "positions"); delete_object(g, "lattice")
+                g["positions"] = repeat(pos, 1, 1, 3); g["lattice"] = repeat(lat, 1, 1, 3)
+            end
+            h5open(eig_file, "w") do f
+                g1 = create_group(f, "cspbbr3")
+                g1["kpoints"] = kp_cspbbr3; g1["eigenvalues"] = repeat(reshape(Es_cspbbr3[14:end, :], 17, 84, 1), 1, 1, 3)
+                g2 = create_group(f, "gaas")
+                g2["kpoints"] = kp_gaas; g2["eigenvalues"] = reshape(Es_gaas, 48, 56, 1)
+            end
+            h5open(val_strc_file, "w") do f                           # validation: GaAs only, two configurations
+                gaas = h5read(strc_file, "gaas/positions")
+                g = create_group(f, "gaas")
+                g["positions"] = repeat(gaas, 1, 1, 2)
+                g["lattice"] = repeat(h5read(strc_file, "gaas/lattice"), 1, 1, 2)
+                g["atom_types"] = h5read(strc_file, "gaas/atom_types")
+            end
+            h5open(val_eig_file, "w") do f
+                g = create_group(f, "gaas")
+                g["kpoints"] = kp_gaas; g["eigenvalues"] = repeat(reshape(Es_gaas, 48, 56, 1), 1, 1, 2)
+            end
+            h5open(joinpath(dir, "inds.h5"), "w") do f
+                create_group(f, "cspbbr3")["train_config_inds"] = [1, 3]
+                create_group(f, "gaas")["train_config_inds"] = [1]
+            end
+            conf = get_config(filename=joinpath(path, "hconf_universal"))
+            set_value!(conf, "load_rllm", false)
+            set_value!(conf, "rllm_file", joinpath(dir, "rllm.h5"))
+            set_value!(conf, "train_data", "Optimizer", eig_file)
+            set_value!(conf, "val_data", "Optimizer", val_eig_file)
+            set_value!(conf, "val_xdatcar", "Optimizer", val_strc_file)
+            set_value!(conf, "val_mode", "Optimizer", "universal")
+            set_value!(conf, "niter", "Optimizer", 1)
+            set_value!(conf, "xdatcar", "Supercell", strc_file)
+            set_value!(conf, "config_inds", "Supercell", joinpath(dir, "inds.h5"))
+            set_value!(conf, "Nconf", "Supercell", 1)
+            set_value!(conf, "Nconf_max", "Supercell", 3)
+            prof = Hamster.main(comm, conf, rank=rank)
+            @test h5read("hamster_out.h5", "cspbbr3/train_config_inds") == [1, 3]
+            @test h5read("hamster_out.h5", "gaas/train_config_inds") == [1]
+            @test h5read("hamster_out.h5", "gaas/val_config_inds") == [1, 2]
+            @test "val_config_inds" ∉ h5open(f -> keys(f["cspbbr3"]), "hamster_out.h5")
+            @test all(isfinite, prof.L_val) && all(>(0), prof.L_val)
+        end
+    end
+end

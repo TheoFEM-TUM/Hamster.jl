@@ -96,6 +96,34 @@ The energies are converted with the same `data_unit` as the training data.
 """
 get_val_data(conf::Config)::String = conf("val_data", "Optimizer") == "default" ? "EIGENVAL" : conf("val_data", "Optimizer")
 @configtag val_data String "EIGENVAL" "path to the validation data (same formats as train_data)." "Optimizer" getter=:custom category="validation" see_also=["val_mode"]
+"""
+    val_xdatcar=XDATCAR (same as xdatcar)
+
+Trajectory of the validation structures, in the formats of `xdatcar` (in universal mode an HDF5 file with one group
+per system; its systems may differ from those of the training set). If it is set, the validation structures come from
+this file instead of the training trajectory: all its configurations, or those of `val_config_inds`, independent of
+the training configurations (`Nconf`, `val_ratio`, `Nconf_min` and `Nconf_max` apply only to the training set).
+Configuration `n` of the file belongs to structure `n` of `val_data`.
+"""
+get_val_xdatcar(conf::Config)::String = separate_val_structures(conf) ? conf("val_xdatcar", "Optimizer") : get_xdatcar(conf)
+@configtag val_xdatcar String "XDATCAR" "trajectory of the validation structures (formats as xdatcar; universal: one group per system): the validation set is then all its configurations (or val_config_inds), independent of the training set." "Optimizer" getter=:custom value=(conf -> get_val_xdatcar(conf)) default_doc="same as xdatcar" category="validation" see_also=["val_poscar", "val_config_inds", "val_data"]
+
+"""
+    separate_val_structures(conf) -> Bool
+
+Whether the validation structures come from a trajectory of their own (`val_xdatcar` is set).
+"""
+separate_val_structures(conf::Config)::Bool = conf("val_xdatcar", "Optimizer") != "default"
+
+"""
+    val_poscar=SC_POSCAR (same as poscar of the Supercell block)
+
+Reference structure (POSCAR) of the validation trajectory `val_xdatcar` in md mode. Not needed in universal mode, where
+the HDF5 file contains the atom types.
+"""
+get_val_poscar(conf::Config)::String = conf("val_poscar", "Optimizer") == "default" ? get_sc_poscar(conf) : conf("val_poscar", "Optimizer")
+@configtag val_poscar String "SC_POSCAR" "reference POSCAR of the validation trajectory val_xdatcar (md mode)." "Optimizer" getter=:custom value=(conf -> get_val_poscar(conf)) default_doc="same as poscar of the Supercell block" category="validation" see_also=["val_xdatcar"]
+
 @configtag data_unit String "eV" "energy unit of train_data and val_data (eV, Hartree, Ry; not case sensitive); the energies are converted to eV when they are read." "Optimizer" category="data" see_also=["train_data", "val_data"] values=["eV", "Hartree", "Ry"]
 
 
@@ -162,12 +190,13 @@ The `validate` tag switches on model validation (usually no need to set this man
 """
 function get_validate(conf::Config)::Bool
     if conf("validate", "Optimizer") == "default"
-       return conf("val_mode", "Optimizer") == "default" && conf("val_data", "Optimizer") == "default" ? false : true
+       return conf("val_mode", "Optimizer") == "default" && conf("val_data", "Optimizer") == "default" &&
+              !separate_val_structures(conf) ? false : true
     else
         conf("validate", "Optimizer")
     end
 end
-@configtag validate Bool false "validate the model during the fit (usually set automatically)." "Optimizer" getter=:custom default_doc="true if val_mode or val_data is set" category="validation"
+@configtag validate Bool false "validate the model during the fit (usually set automatically)." "Optimizer" getter=:custom default_doc="true if val_mode, val_data or val_xdatcar is set" category="validation"
 
 
 @configtag val_ratio Float64 ifelse(get_validate(conf),0.2,0.) "ratio between training and validation set size." "Optimizer" category="validation" default_doc="0.2 if validate = true, else 0"
