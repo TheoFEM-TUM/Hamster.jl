@@ -171,6 +171,10 @@ end
     @test @test_nowarn Hamster.check_consistency(values_fmt, conf)
     values_fmt["Pb_alpha_s"] = "5e1"
     @test @test_nowarn Hamster.check_consistency(values_fmt, conf)
+    values_fmt["Pb_alpha_s"] = "50.000000001" # within rtol=1e-10 of 50.0
+    @test @test_nowarn Hamster.check_consistency(values_fmt, conf)
     values_fmt["Pb_alpha_s"] = "50.5"
+    @test_logs (:warn, r"Pb_alpha_s") !Hamster.check_consistency(values_fmt, conf)
+    values_fmt["Pb_alpha_s"] = "50.00001" # outside rtol=1e-10 of 50.0
     @test_logs (:warn, r"Pb_alpha_s") !Hamster.check_consistency(values_fmt, conf)
 end
