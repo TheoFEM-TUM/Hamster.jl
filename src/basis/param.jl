@@ -369,15 +369,22 @@ Checks the consistency of configuration values from a file with the given `Confi
 
 # Returns
 - `Bool`: Returns `true` if all values in `conf_values` are consistent with the values in `conf`, otherwise returns `false`.
+  Values are compared numerically when both sides parse as numbers (so `6` and `6.0` are consistent), otherwise as strings.
   If any value is inconsistent, a warning lists each mismatched setting together with the value found in the parameter
   file (`params_file`) and the value set in the config file (`hconf`).
 """
 function check_consistency(conf_values, conf::Config; params_file="params.dat")
     mismatches = Tuple{String, String, String}[] # (key, value in parameter file, value in config)
+    function values_match(file_value, conf_value)
+        file_num = tryparse(Float64, file_value)
+        conf_num = tryparse(Float64, conf_value)
+        (file_num !== nothing && conf_num !== nothing) && return file_num == conf_num
+        return file_value == conf_value
+    end
     function check_key(key, expected)
         haskey(conf_values, key) || return
         expected_str = string(expected)
-        conf_values[key] == expected_str || push!(mismatches, (key, conf_values[key], expected_str))
+        values_match(conf_values[key], expected_str) || push!(mismatches, (key, conf_values[key], expected_str))
     end
     check_key("rcut", get_rcut(conf))
     check_key("onsite", get_onsite(conf))

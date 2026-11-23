@@ -163,4 +163,14 @@ end
         @test !Hamster.check_consistency(values, conf, params_file="old_params.dat")
     end
     @test occursin("Pb_alpha_s: old_params.dat = \"50.0\", hconf = \"55.0\"", logs[1].message)
+
+    # numeric comparison: equal numbers with different formatting are consistent
+    set_value!(conf, "alpha_s", "Pb", 50.0)
+    values_fmt = copy(values)
+    values_fmt["Pb_alpha_s"] = "50"
+    @test @test_nowarn Hamster.check_consistency(values_fmt, conf)
+    values_fmt["Pb_alpha_s"] = "5e1"
+    @test @test_nowarn Hamster.check_consistency(values_fmt, conf)
+    values_fmt["Pb_alpha_s"] = "50.5"
+    @test_logs (:warn, r"Pb_alpha_s") !Hamster.check_consistency(values_fmt, conf)
 end
