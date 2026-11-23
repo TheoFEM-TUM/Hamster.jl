@@ -151,4 +151,30 @@ end
     @test @test_nowarn Hamster.check_consistency(values, conf)
     set_value!(conf, "alpha_s", "Pb", 55.0)
     @test_logs (:warn, r"not consistent") !Hamster.check_consistency(values, conf)
+    logs, = Test.collect_test_logs() do
+        @test !Hamster.check_consistency(values, conf)
+    end
+    @test length(logs) == 1 && logs[1].level == Logging.Warn
+    @test occursin("not consistent", logs[1].message)
+    @test occursin("parameter file (params.dat)", logs[1].message)
+    @test occursin("config file (hconf)", logs[1].message)
+    @test occursin("Pb_alpha_s: params.dat = \"50.0\", hconf = \"55.0\"", logs[1].message)
+    logs, = Test.collect_test_logs() do
+        @test !Hamster.check_consistency(values, conf, params_file="old_params.dat")
+    end
+    @test occursin("Pb_alpha_s: old_params.dat = \"50.0\", hconf = \"55.0\"", logs[1].message)
+
+    # numeric comparison: equal numbers with different formatting are consistent
+    set_value!(conf, "alpha_s", "Pb", 50.0)
+    values_fmt = copy(values)
+    values_fmt["Pb_alpha_s"] = "50"
+    @test @test_nowarn Hamster.check_consistency(values_fmt, conf)
+    values_fmt["Pb_alpha_s"] = "5e1"
+    @test @test_nowarn Hamster.check_consistency(values_fmt, conf)
+    values_fmt["Pb_alpha_s"] = "50.000000001" # within rtol=1e-10 of 50.0
+    @test @test_nowarn Hamster.check_consistency(values_fmt, conf)
+    values_fmt["Pb_alpha_s"] = "50.5"
+    @test_logs (:warn, r"Pb_alpha_s") !Hamster.check_consistency(values_fmt, conf)
+    values_fmt["Pb_alpha_s"] = "50.00001" # outside rtol=1e-10 of 50.0
+    @test_logs (:warn, r"Pb_alpha_s") !Hamster.check_consistency(values_fmt, conf)
 end
