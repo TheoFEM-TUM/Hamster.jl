@@ -167,7 +167,7 @@ function init_soc_params(ion_types, conf=get_empty_config(); initas=get_soc_init
     else
         params = zeros(Nparams)
         _, _, unique_ion_types, soc_params, conf_values = read_params(initas)
-        check_consistency(conf_values, conf)
+        check_consistency(conf_values, conf, params_file=initas)
         file_types = element_to_number.(unique_ion_types)
         for (n, type) in enumerate(file_types)
             index = findfirst(t->type==t, ion_types)

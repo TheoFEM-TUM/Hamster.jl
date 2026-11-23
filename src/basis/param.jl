@@ -358,35 +358,47 @@ function read_params(filename="params.dat")
 end
 
 """
-    check_consistency(conf_values, conf::Config) -> Bool
+    check_consistency(conf_values, conf::Config; params_file="params.dat") -> Bool
 
 Checks the consistency of configuration values from a file with the given `Config` object.
 
 # Arguments
 - `conf_values::Dict{String, String}`: A dictionary of configuration values read from the file (e.g., `rcut`, `onsite`, `sepNN`, `_n`, and `_alpha` values).
 - `conf::Config`: A `Config` object containing the expected values for comparison.
+- `params_file::String="params.dat"`: Name of the parameter file the values were read from; only used in the warning message.
 
 # Returns
 - `Bool`: Returns `true` if all values in `conf_values` are consistent with the values in `conf`, otherwise returns `false`.
+  If any value is inconsistent, a warning lists each mismatched setting together with the value found in the parameter
+  file (`params_file`) and the value set in the config file (`hconf`).
 """
-function check_consistency(conf_values, conf::Config)
-    consistent = Bool[]
-    if haskey(conf_values, "rcut"); push!(consistent, conf_values["rcut"] == string(get_rcut(conf))); end
-    if haskey(conf_values, "onsite"); push!(consistent, conf_values["onsite"] == string(get_onsite(conf))); end
-    if haskey(conf_values, "sepNN"); push!(consistent, conf_values["sepNN"] == string(get_sepNN(conf))); end
-    for (key, value) in conf_values
+function check_consistency(conf_values, conf::Config; params_file="params.dat")
+    mismatches = Tuple{String, String, String}[] # (key, value in parameter file, value in config)
+    function check_key(key, expected)
+        haskey(conf_values, key) || return
+        expected_str = string(expected)
+        conf_values[key] == expected_str || push!(mismatches, (key, conf_values[key], expected_str))
+    end
+    check_key("rcut", get_rcut(conf))
+    check_key("onsite", get_onsite(conf))
+    check_key("sepNN", get_sepNN(conf))
+    for key in keys(conf_values)
         startswith(key, "ewald_") && continue
         if occursin("_n", key)
             ion_type = string(split(key, "_")[1])
-            push!(consistent, value == string(get_n(conf, ion_type)))
+            check_key(key, get_n(conf, ion_type))
         elseif occursin(r"_alpha_[spd]$", key)
             ion_type = string(split(key, "_")[1])
-            push!(consistent, value == string(get_alpha(conf, ion_type, findfirst(key[end], "spd") - 1)))
+            check_key(key, get_alpha(conf, ion_type, findfirst(key[end], "spd") - 1))
         elseif occursin("_alpha", key)
             ion_type = string(split(key, "_")[1])
-            push!(consistent, value == string(get_alpha(conf, ion_type)))
+            check_key(key, get_alpha(conf, ion_type))
         end
     end
-    if !all(consistent); @warn "It seems like your parameter file is not consistent with your config file. Check your results!"; end
-    return all(consistent)
+    if !isempty(mismatches)
+        sort!(mismatches, by=first)
+        details = join(("  $key: $params_file = \"$file_value\", hconf = \"$conf_value\"" for (key, file_value, conf_value) in mismatches), "\n")
+        @warn "It seems like your parameter file ($params_file) is not consistent with your config file (hconf). Check your results!\nMismatched settings:\n$details"
+    end
+    return isempty(mismatches)
 end

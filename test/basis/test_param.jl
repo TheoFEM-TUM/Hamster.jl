@@ -151,4 +151,16 @@ end
     @test @test_nowarn Hamster.check_consistency(values, conf)
     set_value!(conf, "alpha_s", "Pb", 55.0)
     @test_logs (:warn, r"not consistent") !Hamster.check_consistency(values, conf)
+    logs, = Test.collect_test_logs() do
+        @test !Hamster.check_consistency(values, conf)
+    end
+    @test length(logs) == 1 && logs[1].level == Logging.Warn
+    @test occursin("not consistent", logs[1].message)
+    @test occursin("parameter file (params.dat)", logs[1].message)
+    @test occursin("config file (hconf)", logs[1].message)
+    @test occursin("Pb_alpha_s: params.dat = \"50.0\", hconf = \"55.0\"", logs[1].message)
+    logs, = Test.collect_test_logs() do
+        @test !Hamster.check_consistency(values, conf, params_file="old_params.dat")
+    end
+    @test occursin("Pb_alpha_s: old_params.dat = \"50.0\", hconf = \"55.0\"", logs[1].message)
 end

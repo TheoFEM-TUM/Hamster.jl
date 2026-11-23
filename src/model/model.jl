@@ -257,7 +257,7 @@ function init_params!(model, conf=get_empty_config(); initas=get_init_params(con
         set_params!(model, zeros(length(model.params)))
     else
         parameters, parameter_values, _, _, conf_values = read_params(initas)
-        check_consistency(conf_values, conf)
+        check_consistency(conf_values, conf, params_file=initas)
         file_values = Dict(zip(parameters, parameter_values))
         missing_labels = similar(model.param_labels, 0)
         for (v, model_param) in enumerate(model.param_labels)
