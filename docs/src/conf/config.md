@@ -53,6 +53,36 @@ In universal mode, `Nconf` and `Nconf_max` are reduced to the number of configur
 files of `config_inds` and `val_config_inds` can give the indices of every system in its group. The validation
 structures of a fit can come from a trajectory of their own (`val_xdatcar`, see [Validation set](@ref)).
 
+## Which positions the pair cutoff is applied to
+
+A pair of ions enters the Hamiltonian only if it is close enough: with the default `rcut_pair_selection = reference`,
+its distance in the **reference** structure (the `poscar` of the `Supercell` block in `md` mode, the first frame of
+each system in universal mode) must be within `rcut`, while its distance in the current (distorted) frame only has
+to be below `rcut + |rcut_tol|` and sets the smooth cutoff. With `rcut_pair_selection = frame`, a pair is included
+iff its distance in the current frame lies in the support of the cutoff function: below `rcut + rcut_tol` for
+`rcut_tol > 0`, below `rcut` for `rcut_tol <= 0`. The Hamiltonian then depends only on the current geometry, not on
+the choice of the reference frame.
+
+The same pair set is used for the TB model and the ML descriptors, and `rcut_pair_selection` is stored in the
+parameter/model files and checked against the config file (like `rcut`), so a model fitted with one setting is not
+silently evaluated with the other. With `frame` and an ML model, `apply_distortion` and `apply_distance_distortion`
+of the `ML` block must be `true` (otherwise the run stops with an error), so that the descriptor uses the distorted
+distances and angles together with the frame pair set. In `frame` mode, `rcut_tol` defaults to `0` (a hard cutoff at
+`rcut` on the frame distance); set it explicitly for a smooth tail beyond `rcut`.
+
+In `frame` mode, the neighbor search must also cover the distorted distances: the grid cells (`grid_size`) and the
+translation vectors are enlarged automatically to `rcut + max(rcut_tol, 0) + 2 dmax`, where `dmax` is the largest
+displacement of an ion in any frame of the system (a warning is printed if `grid_size` is enlarged). In `pc` mode
+there are no distortions, so the distorted positions are the reference positions.
+
+With the default `reference`, a warning is printed in `md`/`universal` runs if bonds are missed, i.e. pairs beyond
+`rcut` in the reference structure whose distorted distance is within the cutoff (listed per element pair over all
+structures). Consider `rcut_pair_selection = frame` if such bonds should have hoppings — in universal mode the
+reference is only the first frame of each system, so `frame` is usually the appropriate choice there.
+
+The default `reference` is kept for compatibility: existing parameter and model files reproduce their Hamiltonians
+exactly.
+
 
 ## Type of model
 

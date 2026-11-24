@@ -230,6 +230,7 @@ function write_params(parameters::Vector, parameter_values::Vector, ion_types::V
     unique_ion_types = get_ion_types_from_parameters(parameters)
     println(file, "begin ", get_system(conf))
     println(file, "  rcut = ", get_rcut(conf))
+    println(file, "  rcut_pair_selection = ", get_rcut_pair_selection(conf))
     println(file, "  onsite = ", get_onsite(conf))
     println(file, "  sepNN = ", get_sepNN(conf))
     for ion_type in unique_ion_types
@@ -388,6 +389,7 @@ function check_consistency(conf_values, conf::Config; params_file="params.dat")
         values_match(conf_values[key], expected_str) || push!(mismatches, (key, conf_values[key], expected_str))
     end
     check_key("rcut", get_rcut(conf))
+    check_key("rcut_pair_selection", get_rcut_pair_selection(conf))
     check_key("onsite", get_onsite(conf))
     check_key("sepNN", get_sepNN(conf))
     for key in keys(conf_values)

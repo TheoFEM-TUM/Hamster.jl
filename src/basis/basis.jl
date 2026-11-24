@@ -74,20 +74,43 @@ Return the number of TB overlap parameters defined in `basis`.
 nparams(basis::Basis) = length(basis.parameters)
 
 """
+    pair_in_cutoff(r_ref, r_dist, rcut, rcut_tol, rcut_pair_selection) -> Bool
+
+Whether a pair of ions with reference distance `r_ref` (positions `pos`) and distorted distance `r_dist` (positions
+`pos - dist`) enters the geometry tensor and Hamiltonian. With `rcut_pair_selection = "reference"` (default), iff
+`r_ref ≤ rcut && r_dist - abs(rcut_tol) < rcut`: the reference positions decide which pairs have hoppings, the
+distorted distance only sets the smooth cutoff. With `"frame"`, iff `r_dist < rcut + max(rcut_tol, 0)`: only the
+current (distorted) positions decide, so the Hamiltonian depends on the current geometry alone.
+
+# Arguments
+- `r_ref`, `r_dist`: distance of the pair in the reference and in the distorted positions.
+- `rcut`, `rcut_tol`: cutoff radius and width of the smooth cutoff (above `rcut` if positive, below if negative).
+- `rcut_pair_selection`: value of the `rcut_pair_selection` tag (`"reference"` or `"frame"`).
+"""
+function pair_in_cutoff(r_ref, r_dist, rcut, rcut_tol, rcut_pair_selection)
+    rcut_pair_selection == "frame" && return r_dist < rcut + max(rcut_tol, 0.0)
+    return r_ref ≤ rcut && r_dist - abs(rcut_tol) < rcut
+end
+
+"""
     get_geometry_tensor(strc, basis, conf=get_empty_config(); file=nothing, comm=nothing, npar=Threads.nthreads(),
-                        rcut=get_rcut(conf), sp_tol=get_sp_tol(conf), rcut_tol=get_rcut_tol(conf))
+                        rcut=get_rcut(conf), sp_tol=get_sp_tol(conf), rcut_tol=get_rcut_tol(conf),
+                        rcut_pair_selection=get_rcut_pair_selection(conf))
 
 Geometry tensor of the structure `strc` in the basis `basis`: a matrix `h[v, R]` of sparse `Nε × Nε` matrices with the
 contribution of parameter `v` to the Hamiltonian between the home cell and the translation `R`, such that
 `H(R) = Σᵥ pᵥ h[v, R]`.
 
-A pair of ions is included if its distance is within `rcut` for the reference positions (`pos`) and within
-`rcut + |rcut_tol|` for the distorted positions (`pos - dist`). The matrix elements use the distorted positions.
+Which pairs of ions are included is decided by [`pair_in_cutoff`](@ref): with `rcut_pair_selection = "reference"`,
+by the reference positions (`pos`) within `rcut` (the distorted positions `pos - dist` only have to be within
+`rcut + |rcut_tol|`); with `"frame"`, by the distorted positions alone. The matrix elements use the distorted
+positions.
 
 # Keyword Arguments
 - `file`, `comm`: HDF5 file and MPI communicator to read the radial functions (rllm) from.
 - `npar`: number of threads; the grid cells are split into `4 npar` chunks.
 - `rcut`, `rcut_tol`: cutoff radius and width of the smooth cutoff (above `rcut` if positive, below if negative).
+- `rcut_pair_selection`: value of the `rcut_pair_selection` tag, see [`pair_in_cutoff`](@ref).
 - `sp_tol`: entries with a smaller absolute value are dropped.
 """
 function get_geometry_tensor(strc, basis, conf=get_empty_config();
@@ -96,7 +119,8 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
                              npar=Threads.nthreads(),
                              rcut=get_rcut(conf),
                              sp_tol=get_sp_tol(conf),
-                             rcut_tol=get_rcut_tol(conf))
+                             rcut_tol=get_rcut_tol(conf),
+                             rcut_pair_selection=get_rcut_pair_selection(conf))
     Ts = frac_to_cart(strc.Rs, strc.lattice)
     lookup = geometry_tensor_lookup(strc, basis, conf, file=file, comm=comm)
     nn_cutoffs = get_nn_cutoffs(strc.ions, Ts, strc.point_grid, conf)
@@ -115,7 +139,7 @@ function get_geometry_tensor(strc, basis, conf=get_empty_config();
             r⃗₁ = ion1.pos - ion1.dist
             r⃗₂ = apply_pbc(ion2.pos, T⃗) - ion2.dist
             r = normdiff(r⃗₁, r⃗₂)
-            (normdiff(ion1.pos, ion2.pos, T⃗) ≤ rcut && r - abs(rcut_tol) < rcut) || continue
+            pair_in_cutoff(normdiff(ion1.pos, ion2.pos, T⃗), r, rcut, rcut_tol, rcut_pair_selection) || continue
 
             ion_label = IonLabel(lookup.ion_types[iion1], lookup.ion_types[iion2], sorted=false)
             nnlabel = get_nn_label(r, nn_cutoffs[ion_label], conf, onsite=onsite, sepNN=sepNN)
@@ -485,6 +509,7 @@ vector connecting a pair of orbitals.
 # Keyword Arguments
 - `rcut`: Real-space cutoff radius for bond construction.
 - `rcut_tol`: Tolerance applied to the cutoff condition.
+- `rcut_pair_selection`: value of the `rcut_pair_selection` tag, see [`pair_in_cutoff`](@ref).
 
 # Returns
 - `bonds::Vector{NTuple{3, SparseMatrixCSC{Float64, Int64}}}`: for each lattice
@@ -493,7 +518,8 @@ vector connecting a pair of orbitals.
 """
 function get_bonds(strc, basis, conf=get_empty_config();
                    rcut=get_rcut(conf),
-                   rcut_tol=get_rcut_tol(conf))
+                   rcut_tol=get_rcut_tol(conf),
+                   rcut_pair_selection=get_rcut_pair_selection(conf))
     Nε = length(basis)
     Ts = frac_to_cart(strc.Rs, strc.lattice)
     nR = size(strc.Rs, 2)
@@ -510,7 +536,7 @@ function get_bonds(strc, basis, conf=get_empty_config();
             r⃗₂ = apply_pbc(strc.ions[iion2].pos, Ts[:, R]) - strc.ions[iion2].dist
             bond = SVector{3, Float64}(r⃗₂ .- r⃗₁)
             
-            (normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, Ts[:, R]) ≤ rcut && norm(bond) - abs(rcut_tol) < rcut) || continue
+            pair_in_cutoff(normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, Ts[:, R]), norm(bond), rcut, rcut_tol, rcut_pair_selection) || continue
             
             for jorb1 in eachindex(basis.orbitals[iion1]), jorb2 in eachindex(basis.orbitals[iion2])
                 push!(is[R], offset[iion1] + jorb1); push!(js[R], offset[iion2] + jorb2); push!(ds[R], bond)

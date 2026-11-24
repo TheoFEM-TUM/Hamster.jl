@@ -138,7 +138,8 @@ Nearest-neighbor cutoff and number of bonds with label 1 (nearest neighbors) and
 (e.g. `"Si+Si"`) of a structure with `sepNN = true`, with the labels assigned as in `get_geometry_tensor` (distances
 with the distortion, cutoffs from `get_nn_cutoffs`). Every bond is counted once. Ions without orbitals are skipped.
 """
-function nn_label_statistics(strc, basis, conf=get_empty_config(); rcut=get_rcut(conf), rcut_tol=get_rcut_tol(conf))
+function nn_label_statistics(strc, basis, conf=get_empty_config(); rcut=get_rcut(conf), rcut_tol=get_rcut_tol(conf),
+                             rcut_pair_selection=get_rcut_pair_selection(conf))
     Ts = frac_to_cart(strc.Rs, strc.lattice)
     cutoffs = get_nn_cutoffs(strc.ions, Ts, strc.point_grid, conf)
     stats = Dict{String, NTuple{3, Float64}}()
@@ -147,7 +148,7 @@ function nn_label_statistics(strc, basis, conf=get_empty_config(); rcut=get_rcut
         T = view(Ts, :, R)
         r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, T)
         r = normdiff(strc.ions[iion1].pos - strc.ions[iion1].dist, apply_pbc(strc.ions[iion2].pos, T) - strc.ions[iion2].dist)
-        (r_nd == 0 || r_nd > rcut || r - abs(rcut_tol) ≥ rcut) && continue
+        (r_nd == 0 || !pair_in_cutoff(r_nd, r, rcut, rcut_tol, rcut_pair_selection)) && continue
         ion_label = IonLabel(strc.ions[iion1].type, strc.ions[iion2].type, sorted=false)
         cutoff = cutoffs[ion_label]
         nnlabel = get_nn_label(r, cutoff, conf, onsite=true, sepNN=true)
@@ -156,4 +157,36 @@ function nn_label_statistics(strc, basis, conf=get_empty_config(); rcut=get_rcut
         stats[key] = (cutoff, n1 + 0.5 * (nnlabel == 1), n2 + 0.5 * (nnlabel == 2))   # every bond appears twice
     end
     return stats
+end
+
+"""
+    missed_bond_statistics(strc, conf=get_empty_config(); rcut=get_rcut(conf), rcut_tol=get_rcut_tol(conf))
+        -> Dict{String, Float64}
+
+Number of bonds per element pair (e.g. `"Si+Si"`, sorted) of a structure that are beyond `rcut` in the reference
+positions but within the cutoff of the distorted positions (`r_dist < rcut + max(rcut_tol, 0)`), i.e. the pairs
+that have no hopping with `rcut_pair_selection = "reference"` but would have one with `"frame"`. Every bond is
+counted once. The neighbor search uses an enlarged grid and translation set ([`rcut_search`](@ref)), so the count
+is independent of the pair selection of `conf`.
+"""
+function missed_bond_statistics(strc, conf=get_empty_config(); rcut=get_rcut(conf), rcut_tol=get_rcut_tol(conf))
+    rs_ref = reduce(hcat, get_ion_positions(strc.ions))
+    dmax = maximum(norm(ion.dist) for ion in strc.ions)
+    r_search = rcut_search(conf, dmax)
+    Rs = get_translation_vectors(rs_ref, strc.lattice, rcut=r_search)
+    Ts = frac_to_cart(Rs, strc.lattice)
+    grid = PointGrid(rs_ref, Ts, grid_size=r_search)
+    R0 = findR0(Rs)
+    missed = Dict{String, Float64}()
+    for (iion1, iion2, R) in iterate_nn_grid_points(grid)
+        (iion1 == iion2 && R == R0) && continue
+        T = view(Ts, :, R)
+        r_ref = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, T)
+        r_ref > rcut || continue
+        r_dist = normdiff(strc.ions[iion1].pos - strc.ions[iion1].dist, apply_pbc(strc.ions[iion2].pos, T) - strc.ions[iion2].dist)
+        r_dist < rcut + max(rcut_tol, 0.0) || continue
+        key = string(IonLabel(strc.ions[iion1].type, strc.ions[iion2].type, sorted=true))
+        missed[key] = get(missed, key, 0.0) + 0.5   # every bond appears twice
+    end
+    return missed
 end

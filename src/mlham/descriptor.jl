@@ -10,7 +10,8 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config;
                             apply_orthogonality = get_ml_apply_orthogonality(conf),
                             env_scale=get_ml_env_scale(conf), 
                             apply_distance_distortion=get_ml_apply_distance_distortion(conf), 
-                            strc_scale=get_ml_strc_scale(conf))
+                            strc_scale=get_ml_strc_scale(conf),
+                            rcut_pair_selection=get_rcut_pair_selection(conf))
 
     Nε = length(basis); Norb_per_ion = size(basis); NR = size(strc.Rs, 2)
 
@@ -45,8 +46,13 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config;
                     ri, rj = ri_d, rj_d
                 end
             end
-            # The cutoff only depends on the pair of ions
-            (Δr ≤ rcut && fcut(Δr_dist, rcut + rcut_tol) > 0) || continue
+            # The cutoff only depends on the pair of ions; with rcut_pair_selection = "frame", the distorted
+            # distance alone decides which pairs are included (same pair set as the TB geometry tensor)
+            if rcut_pair_selection == "frame"
+                Δr_dist < rcut + max(rcut_tol, 0.0) || continue
+            else
+                (Δr ≤ rcut && fcut(Δr_dist, rcut + rcut_tol) > 0) || continue
+            end
             Δr_in = (apply_distance_distortion || apply_distortion) ? Δr_dist : Δr
             if apply_distortion || apply_distance_distortion
                 Δr_in = Δr_in / rcut * strc_scale

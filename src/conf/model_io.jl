@@ -82,7 +82,7 @@ function model_radial_tables(conf, comm, rank)
 end
 
 model_config_option(tag) = tag.block == "Options" && tag.name != "seed" &&
-    (tag.category in ("basis", "model") || tag.name in ("rcut", "rcut_tol"))
+    (tag.category in ("basis", "model") || tag.name in ("rcut", "rcut_tol", "rcut_pair_selection"))
 
 function save_model_config(file, ham, conf)
     conf = deepcopy(conf)

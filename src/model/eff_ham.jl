@@ -219,7 +219,8 @@ function get_ml_data_points(eff_ham, conf=get_empty_config(); tb_model=get_tb_mo
 end
 
 """
-    get_sparse_iterator(strc, basis, conf=get_empty_config(), rcut=get_rcut(conf))
+    get_sparse_iterator(strc, basis, conf=get_empty_config(), rcut=get_rcut(conf), rcut_tol=get_rcut_tol(conf);
+                        soc=get_soc(conf), rcut_pair_selection=get_rcut_pair_selection(conf))
 
 Constructs an iterator that generates sparse matrix indices for interactions within a specified cutoff radius.
 
@@ -228,12 +229,17 @@ Constructs an iterator that generates sparse matrix indices for interactions wit
 - `basis`: A basis object, containing the orbitals associated with each ion.
 - `conf`: Configuration object, which contains relevant simulation parameters.
 - `rcut`: A cutoff radius, that defines the maximum distance for interactions to be included.
+- `rcut_tol`: Width of the smooth cutoff, see [`pair_in_cutoff`](@ref).
+- `rcut_pair_selection`: value of the `rcut_pair_selection` tag; with `"frame"`, the distorted positions decide
+  which pairs are included (same pair set as the geometry tensor), with `"reference"` the reference positions
+  within `rcut`.
 
 # Returns
 - `indices`: A vector of vectors, where each sub-vector corresponds to a specific grid point (denoted by `R`) 
   and contains tuples `(i, j)` representing the sparse matrix indices for interactions within the cutoff radius.
 """
-function get_sparse_iterator(strc, basis, conf=get_empty_config(), rcut=get_rcut(conf); soc=get_soc(conf))
+function get_sparse_iterator(strc, basis, conf=get_empty_config(), rcut=get_rcut(conf), rcut_tol=get_rcut_tol(conf);
+                             soc=get_soc(conf), rcut_pair_selection=get_rcut_pair_selection(conf))
     Norb_per_ion = soc ? 2 .* length.(basis.orbitals) : length.(basis.orbitals)
     offset = cumsum(vcat(0, Norb_per_ion[1:end-1]))
     TRs = [SVector{3, Float64}(T) for T in eachcol(frac_to_cart(strc.Rs, strc.lattice))]
@@ -242,7 +248,12 @@ function get_sparse_iterator(strc, basis, conf=get_empty_config(), rcut=get_rcut
         indices = [Tuple{Int64, Int64}[] for _ in 1:NR]
         for (grid_point, inds) in chunk, nn_grid_point in nn_grid_points(grid_point, strc.point_grid.dictR),
             (jion, R) in strc.point_grid.dictR[nn_grid_point], iion in inds
-            normdiff(strc.ions[iion].pos, strc.ions[jion].pos - TRs[R]) ≤ rcut || continue
+            if rcut_pair_selection == "frame"
+                r_dist = normdiff(strc.ions[iion].pos - strc.ions[iion].dist, strc.ions[jion].pos - TRs[R] - strc.ions[jion].dist)
+                r_dist < rcut + max(rcut_tol, 0.0) || continue
+            else
+                normdiff(strc.ions[iion].pos, strc.ions[jion].pos - TRs[R]) ≤ rcut || continue
+            end
             for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
                 push!(indices[R], (offset[iion] + iorb, offset[jion] + jorb))
             end
