@@ -383,13 +383,15 @@ function check_consistency(conf_values, conf::Config; params_file="params.dat")
         (file_num !== nothing && conf_num !== nothing) && return isapprox(file_num, conf_num, rtol=1e-10)
         return file_value == conf_value
     end
-    function check_key(key, expected)
-        haskey(conf_values, key) || return
+    function check_key(key, expected; missing=nothing)
+        # a missing key counts as `missing` (parameter files written before the key existed)
+        file_value = haskey(conf_values, key) ? conf_values[key] : (isnothing(missing) ? nothing : string(missing))
+        isnothing(file_value) && return
         expected_str = string(expected)
-        values_match(conf_values[key], expected_str) || push!(mismatches, (key, conf_values[key], expected_str))
+        values_match(file_value, expected_str) || push!(mismatches, (key, file_value, expected_str))
     end
     check_key("rcut", get_rcut(conf))
-    check_key("rcut_pair_selection", get_rcut_pair_selection(conf))
+    check_key("rcut_pair_selection", get_rcut_pair_selection(conf), missing="reference")
     check_key("onsite", get_onsite(conf))
     check_key("sepNN", get_sepNN(conf))
     for key in keys(conf_values)

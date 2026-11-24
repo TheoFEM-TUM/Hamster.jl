@@ -12,6 +12,11 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config;
                             apply_distance_distortion=get_ml_apply_distance_distortion(conf), 
                             strc_scale=get_ml_strc_scale(conf),
                             rcut_pair_selection=get_rcut_pair_selection(conf))
+    if rcut_pair_selection == "frame" && get_ml_model(conf) && !(apply_distortion && apply_distance_distortion)
+        error("rcut_pair_selection = \"frame\" requires apply_distortion = true and apply_distance_distortion = true " *
+              "in the ML block (the ML descriptor would otherwise use reference distances or angles together with the " *
+              "frame pair set).")
+    end
 
     Nε = length(basis); Norb_per_ion = size(basis); NR = size(strc.Rs, 2)
 
@@ -229,7 +234,8 @@ function get_environmental_descriptor(h, V, strc, basis, conf::Config; apply_par
 
     R0 = findR0(strc.Rs)
     Ts = frac_to_cart(strc.Rs, strc.lattice)
-    rs_ion = get_ion_positions(strc.ions)
+    # with rcut_pair_selection = "frame", weight the entries by the distorted distances (as the pair set of h)
+    rs_ion = get_ion_positions(strc.ions, apply_distortion=get_rcut_pair_selection(conf) == "frame")
     index_map = get_index_to_ion_orb_map(Norb)
     @views for (R, H) in enumerate(Hr)
         for (i, j, Hval) in zip(findnz(H)...)

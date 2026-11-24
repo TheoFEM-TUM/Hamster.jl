@@ -67,10 +67,12 @@ function get_nn_thresholds(ions, Ts, point_grid, conf=get_empty_config(); sepNN=
             NN_dict[IonLabel(type2, type1, sorted=false)] = 0.
         end
     else
+        distorted = get_rcut_pair_selection(conf) == "frame"
         for (iion1, iion2, R) in iterate_nn_grid_points(point_grid)
             ion_label1 = IonLabel(ions[iion1].type, ions[iion2].type, sorted=false)
             ion_label2 = IonLabel(ions[iion1].type, ions[iion2].type, sorted=true)
-            Δr = normdiff(ions[iion1].pos, ions[iion2].pos, Ts[:, R])
+            pos1, pos2 = distorted ? (ions[iion1].pos - ions[iion1].dist, ions[iion2].pos - ions[iion2].dist) : (ions[iion1].pos, ions[iion2].pos)
+            Δr = normdiff(pos1, pos2, Ts[:, R])
 
             for ion_label in [ion_label1, ion_label2]
                 if !haskey(NN_dict, ion_label) && Δr ≠ 0
@@ -88,7 +90,8 @@ end
     get_nn_cutoffs(ions, Ts, point_grid, conf=get_empty_config(); sepNN=get_sepNN(conf), shell_gap=1.1, bin_width=0.01)
 
 Distance up to which a pair of ions counts as nearest neighbors (label 1 with `sepNN = true`), for every `IonLabel`:
-the midpoint between the first and the second neighbor shell of the reference positions `ion.pos`. Distorted
+the midpoint between the first and the second neighbor shell of the reference positions `ion.pos` (with
+`rcut_pair_selection = "frame"`, of the distorted positions `ion.pos - ion.dist`). Distorted
 structures (MD snapshots, a distorted POSCAR) therefore keep the labels of their bonds as long as no bond is stretched
 or compressed past the midpoint; a bond that crosses it changes its parameters abruptly.
 
@@ -104,9 +107,11 @@ is linear in the number of pairs. A jump by `shell_gap` cannot occur within a bi
 """
 function get_nn_cutoffs(ions, Ts, point_grid, conf=get_empty_config(); sepNN=get_sepNN(conf), shell_gap=1.1, bin_width=0.01)
     sepNN || return get_nn_thresholds(ions, Ts, point_grid, conf, sepNN=false)
+    distorted = get_rcut_pair_selection(conf) == "frame"
     bins = Dict{IonLabel, Dict{Int64, Tuple{Float64, Float64}}}()             # label => (bin => (min, max) distance)
     for (iion1, iion2, R) in iterate_nn_grid_points(point_grid)
-        Δr = normdiff(ions[iion1].pos, ions[iion2].pos, view(Ts, :, R))
+        pos1, pos2 = distorted ? (ions[iion1].pos - ions[iion1].dist, ions[iion2].pos - ions[iion2].dist) : (ions[iion1].pos, ions[iion2].pos)
+        Δr = normdiff(pos1, pos2, view(Ts, :, R))
         Δr == 0 && continue
         b = floor(Int64, Δr / bin_width)
         for ion_label in (IonLabel(ions[iion1].type, ions[iion2].type, sorted=false), IonLabel(ions[iion1].type, ions[iion2].type, sorted=true))
@@ -160,20 +165,24 @@ function nn_label_statistics(strc, basis, conf=get_empty_config(); rcut=get_rcut
 end
 
 """
-    missed_bond_statistics(strc, conf=get_empty_config(); rcut=get_rcut(conf), rcut_tol=get_rcut_tol(conf))
+    missed_bond_statistics(strc, conf=get_empty_config(); rcut=get_rcut(conf), rcut_tol=get_rcut_tol(conf),
+                           Rs_diag=nothing)
         -> Dict{String, Float64}
 
 Number of bonds per element pair (e.g. `"Si+Si"`, sorted) of a structure that are beyond `rcut` in the reference
-positions but within the cutoff of the distorted positions (`r_dist < rcut + max(rcut_tol, 0)`), i.e. the pairs
-that have no hopping with `rcut_pair_selection = "reference"` but would have one with `"frame"`. Every bond is
-counted once. The neighbor search uses an enlarged grid and translation set ([`rcut_search`](@ref)), so the count
-is independent of the pair selection of `conf`.
+positions but below `rcut` in the distorted positions, i.e. the pairs that have no hopping (full cutoff weight)
+with `rcut_pair_selection = "reference"` but would have one with `"frame"`. Every bond is counted once. The
+neighbor search always uses the enlarged radius `rcut + max(rcut_tol, 0) + 2 dmax` (`dmax`: largest ion
+displacement), also in reference mode, so that the pairs beyond `rcut` in the reference are visited; the count is
+therefore independent of the pair selection of `conf`. `Rs_diag`: translation vectors of a previous call (same
+reference positions and lattice), reused for the search.
 """
-function missed_bond_statistics(strc, conf=get_empty_config(); rcut=get_rcut(conf), rcut_tol=get_rcut_tol(conf))
+function missed_bond_statistics(strc, conf=get_empty_config(); rcut=get_rcut(conf), rcut_tol=get_rcut_tol(conf),
+                                Rs_diag=nothing)
     rs_ref = reduce(hcat, get_ion_positions(strc.ions))
     dmax = maximum(norm(ion.dist) for ion in strc.ions)
-    r_search = rcut_search(conf, dmax)
-    Rs = get_translation_vectors(rs_ref, strc.lattice, rcut=r_search)
+    r_search = rcut + max(rcut_tol, 0.0) + 2 * dmax   # always the enlarged radius, also in reference mode
+    Rs = isnothing(Rs_diag) ? get_translation_vectors(rs_ref, strc.lattice, rcut=r_search) : Rs_diag
     Ts = frac_to_cart(Rs, strc.lattice)
     grid = PointGrid(rs_ref, Ts, grid_size=r_search)
     R0 = findR0(Rs)
@@ -184,7 +193,7 @@ function missed_bond_statistics(strc, conf=get_empty_config(); rcut=get_rcut(con
         r_ref = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, T)
         r_ref > rcut || continue
         r_dist = normdiff(strc.ions[iion1].pos - strc.ions[iion1].dist, apply_pbc(strc.ions[iion2].pos, T) - strc.ions[iion2].dist)
-        r_dist < rcut + max(rcut_tol, 0.0) || continue
+        r_dist < rcut || continue
         key = string(IonLabel(strc.ions[iion1].type, strc.ions[iion2].type, sorted=true))
         missed[key] = get(missed, key, 0.0) + 0.5   # every bond appears twice
     end

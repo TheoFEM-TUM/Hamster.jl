@@ -52,7 +52,11 @@ function get_structures(conf=get_empty_config();
         rs_0, atom_types, lattice, rs_all = read_structure_file(system, conf, mode=mode, xdatcar=xdatcar, sc_poscar=sc_poscar)
         lattice_0 = lattice isa AbstractMatrix ? lattice : lattice[:, :, 1]
         dmax = get_rcut_pair_selection(conf) == "frame" ? max_displacement(rs_0, rs_all, lattice) : 0.0
-        Rs = Rs == zeros(3, 1) ? get_translation_vectors(rs_0, lattice_0, rcut=rcut_search(conf, dmax)) : Rs
+        if Rs == zeros(3, 1)
+            Rs = get_translation_vectors(rs_0, lattice_0, rcut=rcut_search(conf, dmax))
+        else
+            warn_if_Rs_too_small(Rs, rs_0, lattice_0, conf, dmax)
+        end
 
         strcs = map(config_indices) do index
             δrs_ion = similar(rs_0)
@@ -68,18 +72,8 @@ function get_structures(conf=get_empty_config();
             Structure(Rs, rs_0, δrs_ion, atom_types, lattice_i, conf, system=system)
         end
 
-        # Warn about bonds that the reference positions exclude although the distorted distance is within the cutoff
-        if get_rcut_pair_selection(conf) == "reference"
-            missed = Dict{String, Float64}()
-            for strc in strcs, (key, n) in missed_bond_statistics(strc, conf)
-                missed[key] = get(missed, key, 0.0) + n
-            end
-            isempty(missed) || @warn "With rcut_pair_selection = \"reference\", pairs beyond rcut in the reference " *
-                "structure have no hopping, even where their distorted distance is within the cutoff. Missed bonds " *
-                "over all structures, per element pair: " *
-                join(("$key: $(missed[key])" for key in sort(collect(keys(missed)))), ", ") *
-                ". Consider rcut_pair_selection = \"frame\"."
-        end
+        # Warn about bonds that the reference positions exclude although the distorted distance is within rcut
+        warn_missed_bonds(strcs, conf)
 
         if lowercase(mode) == "md" || lowercase(mode) == "universal"
             return strcs
@@ -90,11 +84,45 @@ function get_structures(conf=get_empty_config();
     elseif lowercase(mode) == "pc" && length(config_indices) > 0
         pc_poscar = read_poscar(poscar)
         @unpack rs_atom, lattice = pc_poscar
-        Rs = Rs == zeros(3, 1) ? get_translation_vectors(frac_to_cart(rs_atom, lattice), lattice, rcut=rcut_search(conf)) : Rs
+        if Rs == zeros(3, 1)
+            Rs = get_translation_vectors(frac_to_cart(rs_atom, lattice), lattice, rcut=rcut_search(conf))
+        else
+            warn_if_Rs_too_small(Rs, frac_to_cart(rs_atom, lattice), lattice, conf)
+        end
         return [Structure(conf, Rs=Rs)]
     else
         return Structure[]
     end
+end
+
+const MISSED_BONDS_WARNED = Ref{Bool}(false)
+
+"""
+    warn_missed_bonds(strcs, conf=get_empty_config())
+
+With `rcut_pair_selection = "reference"`, warn (once per process, on MPI rank 0) if bonds are missed, i.e. pairs
+beyond `rcut` in the reference structure whose distorted distance is below `rcut` (see
+[`missed_bond_statistics`](@ref)), aggregated over all structures `strcs` and listed per element pair. The enlarged
+translation set of the diagnostic search is built once and reused for all structures.
+"""
+function warn_missed_bonds(strcs, conf=get_empty_config())
+    (get_rcut_pair_selection(conf) == "reference" && !MISSED_BONDS_WARNED[] &&
+     (!MPI.Initialized() || MPI.Comm_rank(MPI.COMM_WORLD) == 0)) || return nothing
+    MISSED_BONDS_WARNED[] = true
+    rcut, rcut_tol = get_rcut(conf), get_rcut_tol(conf)
+    dmax = maximum(norm(ion.dist) for strc in strcs for ion in strc.ions; init=0.0)
+    Rs_diag = get_translation_vectors(reduce(hcat, get_ion_positions(strcs[1].ions)), strcs[1].lattice,
+                                      rcut=rcut + max(rcut_tol, 0.0) + 2 * dmax)
+    missed = Dict{String, Float64}()
+    for strc in strcs, (key, n) in missed_bond_statistics(strc, conf; Rs_diag=Rs_diag)
+        missed[key] = get(missed, key, 0.0) + n
+    end
+    isempty(missed) || @warn "With rcut_pair_selection = \"reference\", pairs beyond rcut in the reference " *
+        "structure have no hopping, even where their distorted distance is below rcut. Missed bonds over all " *
+        "structures, per element pair: " *
+        join(("$key: $(missed[key])" for key in sort(collect(keys(missed)))), ", ") *
+        ". Consider rcut_pair_selection = \"frame\"."
+    return nothing
 end
 
 """

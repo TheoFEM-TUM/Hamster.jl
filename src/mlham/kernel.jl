@@ -224,6 +224,7 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filena
             value isa AbstractVector && isempty(value) && continue
             println(file, "  $key = ", value isa AbstractVector ? join(value, " ") : value)
         end
+        println(file, "  rcut_pair_selection = ", get_rcut_pair_selection(conf))   # Options tag, but defines the ML pair set
         println(file, "end")
         println(file, "")
         for n in eachindex(kernel.params)
@@ -289,6 +290,13 @@ value in `conf`.
 """
 function check_ml_settings(conf, filename)
     for (key, text) in read_ml_header(filename)
+        if key == "rcut_pair_selection"    # Options tag stored in the header because it defines the ML pair set
+            same_ml_setting(get_rcut_pair_selection(conf), text) ||
+                error("The ML model in $filename was fitted with rcut_pair_selection = $text, but the Options block " *
+                      "sets rcut_pair_selection = $(get_rcut_pair_selection(conf)). Remove rcut_pair_selection from the " *
+                      "Options block to use the value of the file.")
+            continue
+        end
         key ∈ ML_HEADER_TAGS || continue
         value = ml_setting(conf, key)
         same_ml_setting(value, text) ||
@@ -313,6 +321,10 @@ function apply_ml_settings!(conf)
     get_ml_mode(conf) == "expand" && push!(files, get_ml_filename(conf))
     for file in files
         for (key, text) in read_ml_header(file)
+            if key == "rcut_pair_selection"    # Options tag stored in the header because it defines the ML pair set
+                haskey(conf.options, "rcut_pair_selection") || set_value!(conf, "rcut_pair_selection", text)
+                continue
+            end
             key ∈ ML_HEADER_TAGS || continue
             conf(key, "ML") == "default" && set_value!(conf, key, "ML", text)
         end

@@ -175,7 +175,16 @@ function load_model!(conf::Config, comm=nothing; filename=nothing, rank=0)
     isnothing(failure) || error("Loading model failed: $failure")
     # Mutate dictionaries because Config itself is immutable.
     for tag in CONFIG_TAGS
-        model_config_option(tag) && delete!(conf.options, lowercase(tag.name))
+        if model_config_option(tag)
+            key = lowercase(tag.name)
+            # warn if the config file sets a value different from the one stored in the model file
+            if haskey(conf.options, key) && haskey(options, key) &&
+               string(get_tag(conf, tag)) != string(options[key])
+                @warn "The model file $filename stores $key = $(options[key]), but the config file sets " *
+                      "$key = $(get_tag(conf, tag)); the value of the model file is used."
+            end
+            delete!(conf.options, key)
+        end
     end
     merge!(conf.options, options)
     for block in collect(keys(conf.blocks))

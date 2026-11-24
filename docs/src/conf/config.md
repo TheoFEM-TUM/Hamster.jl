@@ -63,22 +63,26 @@ iff its distance in the current frame lies in the support of the cutoff function
 `rcut_tol > 0`, below `rcut` for `rcut_tol <= 0`. The Hamiltonian then depends only on the current geometry, not on
 the choice of the reference frame.
 
-The same pair set is used for the TB model and the ML descriptors, and `rcut_pair_selection` is stored in the
-parameter/model files and checked against the config file (like `rcut`), so a model fitted with one setting is not
-silently evaluated with the other. With `frame` and an ML model, `apply_distortion` and `apply_distance_distortion`
-of the `ML` block must be `true` (otherwise the run stops with an error), so that the descriptor uses the distorted
-distances and angles together with the frame pair set. In `frame` mode, `rcut_tol` defaults to `0` (a hard cutoff at
-`rcut` on the frame distance); set it explicitly for a smooth tail beyond `rcut`.
+The same pair set is used for the TB model and the ML descriptors (including the environmental descriptor and the
+`sepNN` shell cutoffs, which use the distorted distances in `frame` mode). With `frame` and an ML model,
+`apply_distortion` and `apply_distance_distortion` of the `ML` block must be `true` (otherwise the run stops with an error), so that the descriptor uses the distorted distances and angles together with the frame pair set. In `frame` mode with `rcut_tol <= 0` the cutoff is hard at `rcut` on the frame distance, so pairs enter and leave the Hamiltonian when they cross `rcut` between frames and H can jump in MD; a warning is printed in this case, and a positive `rcut_tol` (smooth tail beyond `rcut`) is recommended.
 
 In `frame` mode, the neighbor search must also cover the distorted distances: the grid cells (`grid_size`) and the
 translation vectors are enlarged automatically to `rcut + max(rcut_tol, 0) + 2 dmax`, where `dmax` is the largest
-displacement of an ion in any frame of the system (a warning is printed if `grid_size` is enlarged). In `pc` mode
-there are no distortions, so the distorted positions are the reference positions.
+displacement of an ion in any frame of the system (a warning is printed if an explicitly set `grid_size` is
+enlarged; translation vectors passed by the caller are checked with a warning). In `pc` mode there are no
+distortions, so the distorted positions are the reference positions.
 
-With the default `reference`, a warning is printed in `md`/`universal` runs if bonds are missed, i.e. pairs beyond
-`rcut` in the reference structure whose distorted distance is within the cutoff (listed per element pair over all
-structures). Consider `rcut_pair_selection = frame` if such bonds should have hoppings — in universal mode the
-reference is only the first frame of each system, so `frame` is usually the appropriate choice there.
+The setting is stored in the model files and checked against the config file (like `rcut`), so a model fitted with
+one setting is not silently evaluated with the other: `params.dat` headers are compared by `check_consistency`
+(a missing key in files written before this tag existed counts as `reference`), `model.h5` files store the setting
+(a warning is printed if the config file sets a different value; the stored value is used) and `ml_params.dat`
+headers store it as well (a mismatch stops the run with an error).
+
+With the default `reference`, a warning is printed once per run in `md`/`universal` runs if bonds are missed, i.e.
+pairs beyond `rcut` in the reference structure whose distorted distance is below `rcut` (listed per element pair
+over all structures). Consider `rcut_pair_selection = frame` if such bonds should have hoppings — in universal mode
+the reference is only the first frame of each system, so `frame` is usually the appropriate choice there.
 
 The default `reference` is kept for compatibility: existing parameter and model files reproduce their Hamiltonians
 exactly.
