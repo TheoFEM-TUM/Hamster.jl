@@ -72,9 +72,6 @@ function get_structures(conf=get_empty_config();
             Structure(Rs, rs_0, δrs_ion, atom_types, lattice_i, conf, system=system)
         end
 
-        # Warn about bonds that the reference positions exclude although the distorted distance is within rcut
-        warn_missed_bonds(strcs, conf)
-
         if lowercase(mode) == "md" || lowercase(mode) == "universal"
             return strcs
         else
@@ -95,33 +92,46 @@ function get_structures(conf=get_empty_config();
     end
 end
 
-const MISSED_BONDS_WARNED = Ref{Bool}(false)
-
 """
-    warn_missed_bonds(strcs, conf=get_empty_config())
+    missed_bonds(strcs, conf=get_empty_config()) -> Dict{String, Float64}
 
-With `rcut_pair_selection = "reference"`, warn (once per process, on MPI rank 0) if bonds are missed, i.e. pairs
-beyond `rcut` in the reference structure whose distorted distance is below `rcut` (see
-[`missed_bond_statistics`](@ref)), aggregated over all structures `strcs` and listed per element pair. The enlarged
-translation set of the diagnostic search is built once and reused for all structures.
+Missed bonds per element pair ([`missed_bond_statistics`](@ref)), summed over the structures `strcs`. The
+translation vectors of the search are built once per system.
 """
-function warn_missed_bonds(strcs, conf=get_empty_config())
-    (get_rcut_pair_selection(conf) == "reference" && !MISSED_BONDS_WARNED[] &&
-     (!MPI.Initialized() || MPI.Comm_rank(MPI.COMM_WORLD) == 0)) || return nothing
-    MISSED_BONDS_WARNED[] = true
+function missed_bonds(strcs, conf=get_empty_config())
     rcut, rcut_tol = get_rcut(conf), get_rcut_tol(conf)
-    dmax = maximum(norm(ion.dist) for strc in strcs for ion in strc.ions; init=0.0)
-    Rs_diag = get_translation_vectors(reduce(hcat, get_ion_positions(strcs[1].ions)), strcs[1].lattice,
-                                      rcut=rcut + max(rcut_tol, 0.0) + 2 * dmax)
     missed = Dict{String, Float64}()
-    for strc in strcs, (key, n) in missed_bond_statistics(strc, conf; Rs_diag=Rs_diag)
-        missed[key] = get(missed, key, 0.0) + n
+    system_key(strc) = (strc.system, length(strc.ions))   # mixed mode: the unit cell has the system of the frames
+    for skey in unique(system_key.(strcs))
+        sys_strcs = filter(strc -> system_key(strc) == skey, strcs)
+        dmax = maximum(norm(ion.dist) for strc in sys_strcs for ion in strc.ions; init=0.0)
+        Rs_diag = get_translation_vectors(reduce(hcat, get_ion_positions(sys_strcs[1].ions)), sys_strcs[1].lattice,
+                                          rcut=rcut + max(rcut_tol, 0.0) + 2 * dmax)
+        for strc in sys_strcs, (key, n) in missed_bond_statistics(strc, conf; Rs_diag=Rs_diag)
+            missed[key] = get(missed, key, 0.0) + n
+        end
     end
-    isempty(missed) || @warn "With rcut_pair_selection = \"reference\", pairs beyond rcut in the reference " *
-        "structure have no hopping, even where their distorted distance is below rcut. Missed bonds over all " *
-        "structures, per element pair: " *
+    return missed
+end
+
+"""
+    warn_missed_bonds(strcs, conf=get_empty_config(); comm=nothing, rank=0, label=nothing)
+
+With `rcut_pair_selection = "reference"`, warn on `rank` 0 about missed bonds ([`missed_bonds`](@ref)) of the
+structures `strcs` of all ranks of `comm` (collective). `label` names the set, e.g. `"training set"`.
+"""
+function warn_missed_bonds(strcs, conf=get_empty_config(); comm=nothing, rank=0, label=nothing)
+    get_rcut_pair_selection(conf) == "reference" || return nothing
+    missed = missed_bonds(strcs, conf)
+    if !isnothing(comm)
+        all_missed = MPI.gather(missed, comm, root=0)
+        rank == 0 && (missed = mergewith(+, all_missed...))
+    end
+    rank == 0 || return nothing
+    set = isnothing(label) ? "" : " of the $label"
+    isempty(missed) || @warn "Missed bonds over all structures$set (within rcut, but beyond rcut in the reference): " *
         join(("$key: $(missed[key])" for key in sort(collect(keys(missed)))), ", ") *
-        ". Consider rcut_pair_selection = \"frame\"."
+        ". Consider rcut_pair_selection = frame."
     return nothing
 end
 

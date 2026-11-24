@@ -224,7 +224,7 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filena
             value isa AbstractVector && isempty(value) && continue
             println(file, "  $key = ", value isa AbstractVector ? join(value, " ") : value)
         end
-        println(file, "  rcut_pair_selection = ", get_rcut_pair_selection(conf))   # Options tag, but defines the ML pair set
+        println(file, "  rcut_pair_selection = ", get_rcut_pair_selection(conf))
         println(file, "end")
         println(file, "")
         for n in eachindex(kernel.params)
@@ -286,17 +286,15 @@ end
     check_ml_settings(conf, filename)
 
 Throw an error if a setting in the header of the ML parameter file `filename` (see `ML_HEADER_TAGS`) differs from the
-value in `conf`.
+value in `conf`, or if `rcut_pair_selection` differs (`reference` for files without it; not taken from the file, as
+the structures are built before the ML model).
 """
 function check_ml_settings(conf, filename)
-    for (key, text) in read_ml_header(filename)
-        if key == "rcut_pair_selection"    # Options tag stored in the header because it defines the ML pair set
-            same_ml_setting(get_rcut_pair_selection(conf), text) ||
-                error("The ML model in $filename was fitted with rcut_pair_selection = $text, but the Options block " *
-                      "sets rcut_pair_selection = $(get_rcut_pair_selection(conf)). Remove rcut_pair_selection from the " *
-                      "Options block to use the value of the file.")
-            continue
-        end
+    header = read_ml_header(filename)
+    fitted = get(header, "rcut_pair_selection", "reference")
+    fitted == get_rcut_pair_selection(conf) ||
+        error("The ML model in $filename was fitted with rcut_pair_selection = $fitted; set it in the Options block.")
+    for (key, text) in header
         key ∈ ML_HEADER_TAGS || continue
         value = ml_setting(conf, key)
         same_ml_setting(value, text) ||
@@ -321,10 +319,6 @@ function apply_ml_settings!(conf)
     get_ml_mode(conf) == "expand" && push!(files, get_ml_filename(conf))
     for file in files
         for (key, text) in read_ml_header(file)
-            if key == "rcut_pair_selection"    # Options tag stored in the header because it defines the ML pair set
-                haskey(conf.options, "rcut_pair_selection") || set_value!(conf, "rcut_pair_selection", text)
-                continue
-            end
             key ∈ ML_HEADER_TAGS || continue
             conf(key, "ML") == "default" && set_value!(conf, key, "ML", text)
         end

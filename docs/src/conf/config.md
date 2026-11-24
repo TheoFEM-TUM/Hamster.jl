@@ -55,37 +55,28 @@ structures of a fit can come from a trajectory of their own (`val_xdatcar`, see 
 
 ## Which positions the pair cutoff is applied to
 
-A pair of ions enters the Hamiltonian only if it is close enough: with the default `rcut_pair_selection = reference`,
-its distance in the **reference** structure (the `poscar` of the `Supercell` block in `md` mode, the first frame of
-each system in universal mode) must be within `rcut`, while its distance in the current (distorted) frame only has
-to be below `rcut + |rcut_tol|` and sets the smooth cutoff. With `rcut_pair_selection = frame`, a pair is included
-iff its distance in the current frame lies in the support of the cutoff function: below `rcut + rcut_tol` for
-`rcut_tol > 0`, below `rcut` for `rcut_tol <= 0`. The Hamiltonian then depends only on the current geometry, not on
-the choice of the reference frame.
+`rcut_pair_selection` decides which pairs of ions get matrix elements:
 
-The same pair set is used for the TB model and the ML descriptors (including the environmental descriptor and the
-`sepNN` shell cutoffs, which use the distorted distances in `frame` mode). With `frame` and an ML model,
-`apply_distortion` and `apply_distance_distortion` of the `ML` block must be `true` (otherwise the run stops with an error), so that the descriptor uses the distorted distances and angles together with the frame pair set. In `frame` mode with `rcut_tol <= 0` the cutoff is hard at `rcut` on the frame distance, so pairs enter and leave the Hamiltonian when they cross `rcut` between frames and H can jump in MD; a warning is printed in this case, and a positive `rcut_tol` (smooth tail beyond `rcut`) is recommended.
+- `reference` (default): the pair must be within `rcut` in the **reference** structure (the `poscar` of the
+  `Supercell` block in `md` mode, the first frame of each system in universal mode). The current distance only sets
+  the smooth cutoff. A system should then be one trajectory close to its reference; frames from other runs or phases
+  get a wrong set of bonds.
+- `frame`: the pair must be within the cutoff in the **current** frame (below `rcut + rcut_tol`, or below `rcut` for
+  `rcut_tol <= 0`). The Hamiltonian no longer depends on the choice of the reference. Recommended for universal data
+  sets and for frames far from their reference.
 
-In `frame` mode, the neighbor search must also cover the distorted distances: the grid cells (`grid_size`) and the
-translation vectors are enlarged automatically to `rcut + max(rcut_tol, 0) + 2 dmax`, where `dmax` is the largest
-displacement of an ion in any frame of the system (a warning is printed if an explicitly set `grid_size` is
-enlarged; translation vectors passed by the caller are checked with a warning). In `pc` mode there are no
-distortions, so the distorted positions are the reference positions.
+Notes on `frame`:
+- TB model and ML descriptors use the same pairs. With an ML model, `apply_distortion` and
+  `apply_distance_distortion` must be `true`.
+- The `sepNN` shell cutoffs still come from the reference positions, so they are fixed per system.
+- Keep `rcut_tol > 0`: with `rcut_tol <= 0` the cutoff is hard and H jumps when a pair crosses `rcut` (warning).
+- The neighbor search grows to `rcut + max(rcut_tol, 0) + 2 dmax` (`dmax`: largest displacement from the
+  reference), which makes the setup slower for frames far from the reference.
 
-The setting is stored in the model files and checked against the config file (like `rcut`), so a model fitted with
-one setting is not silently evaluated with the other: `params.dat` headers are compared by `check_consistency`
-(a missing key in files written before this tag existed counts as `reference`), `model.h5` files store the setting
-(a warning is printed if the config file sets a different value; the stored value is used) and `ml_params.dat`
-headers store it as well (a mismatch stops the run with an error).
-
-With the default `reference`, a warning is printed once per run in `md`/`universal` runs if bonds are missed, i.e.
-pairs beyond `rcut` in the reference structure whose distorted distance is below `rcut` (listed per element pair
-over all structures). Consider `rcut_pair_selection = frame` if such bonds should have hoppings — in universal mode
-the reference is only the first frame of each system, so `frame` is usually the appropriate choice there.
-
-The default `reference` is kept for compatibility: existing parameter and model files reproduce their Hamiltonians
-exactly.
+The setting is stored in `params.dat`, `ml_params.dat` and `model.h5`. A `params.dat` or `ml_params.dat` that
+differs from the config file (files without the setting count as `reference`) gives a warning or an error;
+`model.h5` uses its stored value. In `reference` mode, a warning lists bonds that are within `rcut` in a frame but
+missing because they are beyond `rcut` in the reference.
 
 
 ## Type of model

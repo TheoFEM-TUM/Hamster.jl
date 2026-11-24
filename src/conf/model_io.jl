@@ -177,11 +177,9 @@ function load_model!(conf::Config, comm=nothing; filename=nothing, rank=0)
     for tag in CONFIG_TAGS
         if model_config_option(tag)
             key = lowercase(tag.name)
-            # warn if the config file sets a value different from the one stored in the model file
-            if haskey(conf.options, key) && haskey(options, key) &&
-               string(get_tag(conf, tag)) != string(options[key])
-                @warn "The model file $filename stores $key = $(options[key]), but the config file sets " *
-                      "$key = $(get_tag(conf, tag)); the value of the model file is used."
+            if rank == 0 && haskey(conf.options, key) && haskey(options, key) &&
+               !same_ml_setting(get_tag(conf, tag), string(options[key]))
+                @warn "$filename: $key = $(options[key]) (config file: $(get_tag(conf, tag))); using the model file value."
             end
             delete!(conf.options, key)
         end

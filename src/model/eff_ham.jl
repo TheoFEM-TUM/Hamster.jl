@@ -230,9 +230,7 @@ Constructs an iterator that generates sparse matrix indices for interactions wit
 - `conf`: Configuration object, which contains relevant simulation parameters.
 - `rcut`: A cutoff radius, that defines the maximum distance for interactions to be included.
 - `rcut_tol`: Width of the smooth cutoff, see [`pair_in_cutoff`](@ref).
-- `rcut_pair_selection`: value of the `rcut_pair_selection` tag; with `"frame"`, the distorted positions decide
-  which pairs are included (same pair set as the geometry tensor), with `"reference"` the reference positions
-  within `rcut`.
+- `rcut_pair_selection`: value of the `rcut_pair_selection` tag, see [`pair_in_cutoff`](@ref).
 
 # Returns
 - `indices`: A vector of vectors, where each sub-vector corresponds to a specific grid point (denoted by `R`) 

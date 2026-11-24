@@ -20,11 +20,9 @@ end
 """
     rcut_search(conf=get_empty_config(), dmax=0.0) -> Float64
 
-Radius that the neighbor search (grid cell size and translation vectors) must cover. With
-`rcut_pair_selection = "reference"`, this is `rcut`. With `"frame"`, it is `rcut + max(rcut_tol, 0) + 2 dmax`, where
-`dmax` is the maximum displacement of an ion from its reference position: a pair within the cutoff of the
-distorted positions has a reference distance of at most `2 dmax` more, and the neighbor grid finds all pairs with
-reference distance up to the grid cell size.
+Radius that the neighbor search (grid cells and translation vectors) must cover: `rcut` with
+`rcut_pair_selection = "reference"`, `rcut + max(rcut_tol, 0) + 2 dmax` with `"frame"` (`dmax`: largest displacement
+of an ion from its reference position).
 
 # Arguments
 - `conf`: A `Config` instance that contains various parameters.
@@ -33,22 +31,18 @@ reference distance up to the grid cell size.
 rcut_search(conf=get_empty_config(), dmax=0.0) =
     get_rcut_pair_selection(conf) == "frame" ? get_rcut(conf) + max(get_rcut_tol(conf), 0.0) + 2 * dmax : get_rcut(conf)
 
-const HARD_CUTOFF_WARNED = Ref{Bool}(false)
-
 """
     warn_if_Rs_too_small(Rs, rs_ion, lattice, conf=get_empty_config(), dmax=0.0)
 
-With `rcut_pair_selection = "frame"`, warn if the translation vectors `Rs` passed by the caller may not cover all
-periodic images within [`rcut_search`](@ref)`(conf, dmax)` of the reference positions `rs_ion` (a 3xN matrix, columns:
-ions), in which case pairs within the cutoff of the distorted positions can be missed without a message.
+With `rcut_pair_selection = "frame"`, warn if the translation vectors `Rs` passed by the caller do not cover
+[`rcut_search`](@ref)`(conf, dmax)` for the reference positions `rs_ion` (3xN).
 """
 function warn_if_Rs_too_small(Rs, rs_ion, lattice, conf=get_empty_config(), dmax=0.0)
     get_rcut_pair_selection(conf) == "frame" || return nothing
     needed = get_translation_vectors(rs_ion, lattice, rcut=rcut_search(conf, dmax))
     missing_Rs = [R for R in eachcol(needed) if !any(R == S for S in eachcol(Rs))]
-    isempty(missing_Rs) || @warn "rcut_pair_selection = \"frame\": the passed translation vectors do not cover all " *
-        "periodic images within the cutoff of the distorted positions ($(length(missing_Rs)) missing, e.g. " *
-        "$(join(missing_Rs[1], ", "))); pairs of distorted positions may be missed."
+    isempty(missing_Rs) || @warn "rcut_pair_selection = frame: $(length(missing_Rs)) translation vectors are " *
+        "missing, pairs within the cutoff may be missed."
     return nothing
 end
 
@@ -110,9 +104,7 @@ function Structure(Rs::M1, rs_ion::M2, δrs_ion::M3, ion_types, lattice::M4, con
     dmax = isempty(δrs_ion) ? 0.0 : maximum(norm, eachcol(δrs_ion))
     r_search = rcut_search(conf, dmax)
     if r_search > grid_size
-        # only warn if the user set grid_size explicitly; the default (rcut) is enlarged silently
-        haskey(conf.options, "grid_size") && @warn "rcut_pair_selection = \"frame\": grid_size = $grid_size is " *
-            "enlarged to $r_search, so that the neighbor search finds all pairs within the cutoff of the distorted positions."
+        haskey(conf.options, "grid_size") && @warn "rcut_pair_selection = frame: grid_size enlarged to $r_search."
         grid_size = r_search
     end
     point_grid = PointGrid(rs_ion, frac_to_cart(Rs, lattice), grid_size=grid_size)
@@ -130,9 +122,7 @@ end
 
 Error if neighbors within a cutoff would be missed: the neighbor grid only searches adjacent grid cells, so
 `grid_size` must be at least `rcut`, and the translations and the grid of a structure are built for `rcut`, so the
-`rcut` of the `ML` block must not be larger. With `rcut_pair_selection = "frame"`, `grid_size` is instead enlarged
-to [`rcut_search`](@ref) if it is smaller (with a warning if `grid_size` was set explicitly), and a one-time warning
-is printed if `rcut_tol <= 0` (hard cutoff at `rcut` on the frame distance).
+`rcut` of the `ML` block must not be larger.
 """
 function check_cutoffs(conf=get_empty_config(); rcut=get_rcut(conf), grid_size=get_grid_size(conf))
     grid_size ≥ rcut || error("grid_size = $grid_size is smaller than rcut = $rcut, neighbors would be missed. " *
@@ -141,11 +131,16 @@ function check_cutoffs(conf=get_empty_config(); rcut=get_rcut(conf), grid_size=g
         error("rcut = $(get_ml_rcut(conf)) of the ML block is larger than rcut = $rcut of the Options block, the ML " *
               "model would miss neighbors. Set rcut in the Options block to at least the ML rcut.")
     end
-    if get_rcut_pair_selection(conf) == "frame" && get_rcut_tol(conf) ≤ 0 && !HARD_CUTOFF_WARNED[] &&
-       (!MPI.Initialized() || MPI.Comm_rank(MPI.COMM_WORLD) == 0)
-        HARD_CUTOFF_WARNED[] = true
-        @warn "rcut_pair_selection = \"frame\" with rcut_tol ≤ 0 is a hard cutoff at rcut on the frame distance: " *
-              "pairs enter and leave the Hamiltonian when they cross rcut between frames, so H can jump between MD " *
-              "frames. Consider a positive rcut_tol (smooth cutoff beyond rcut)."
-    end
+end
+
+"""
+    warn_hard_frame_cutoff(conf=get_empty_config())
+
+Warn if `rcut_pair_selection = "frame"` is used with `rcut_tol <= 0` (hard cutoff: H jumps when a pair crosses `rcut`).
+"""
+function warn_hard_frame_cutoff(conf=get_empty_config())
+    get_rcut_pair_selection(conf) == "frame" && get_rcut_tol(conf) ≤ 0 &&
+        @warn "rcut_pair_selection = frame with rcut_tol ≤ 0 is a hard cutoff: H jumps when a pair crosses rcut. " *
+              "Use rcut_tol > 0."
+    return nothing
 end

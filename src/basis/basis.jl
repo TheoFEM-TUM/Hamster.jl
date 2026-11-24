@@ -76,11 +76,9 @@ nparams(basis::Basis) = length(basis.parameters)
 """
     pair_in_cutoff(r_ref, r_dist, rcut, rcut_tol, rcut_pair_selection) -> Bool
 
-Whether a pair of ions with reference distance `r_ref` (positions `pos`) and distorted distance `r_dist` (positions
-`pos - dist`) enters the geometry tensor and Hamiltonian. With `rcut_pair_selection = "reference"` (default), iff
-`r_ref ≤ rcut && r_dist - abs(rcut_tol) < rcut`: the reference positions decide which pairs have hoppings, the
-distorted distance only sets the smooth cutoff. With `"frame"`, iff `r_dist < rcut + max(rcut_tol, 0)`: only the
-current (distorted) positions decide, so the Hamiltonian depends on the current geometry alone.
+Whether a pair with reference distance `r_ref` and distorted distance `r_dist` enters the Hamiltonian:
+`r_ref ≤ rcut && r_dist - abs(rcut_tol) < rcut` with `rcut_pair_selection = "reference"`,
+`r_dist < rcut + max(rcut_tol, 0)` with `"frame"`.
 
 # Arguments
 - `r_ref`, `r_dist`: distance of the pair in the reference and in the distorted positions.
@@ -101,10 +99,8 @@ Geometry tensor of the structure `strc` in the basis `basis`: a matrix `h[v, R]`
 contribution of parameter `v` to the Hamiltonian between the home cell and the translation `R`, such that
 `H(R) = Σᵥ pᵥ h[v, R]`.
 
-Which pairs of ions are included is decided by [`pair_in_cutoff`](@ref): with `rcut_pair_selection = "reference"`,
-by the reference positions (`pos`) within `rcut` (the distorted positions `pos - dist` only have to be within
-`rcut + |rcut_tol|`); with `"frame"`, by the distorted positions alone. The matrix elements use the distorted
-positions.
+[`pair_in_cutoff`](@ref) decides which pairs of ions are included; the matrix elements use the distorted
+positions (`pos - dist`).
 
 # Keyword Arguments
 - `file`, `comm`: HDF5 file and MPI communicator to read the radial functions (rllm) from.

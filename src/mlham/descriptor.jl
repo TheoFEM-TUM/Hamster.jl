@@ -13,9 +13,8 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config;
                             strc_scale=get_ml_strc_scale(conf),
                             rcut_pair_selection=get_rcut_pair_selection(conf))
     if rcut_pair_selection == "frame" && get_ml_model(conf) && !(apply_distortion && apply_distance_distortion)
-        error("rcut_pair_selection = \"frame\" requires apply_distortion = true and apply_distance_distortion = true " *
-              "in the ML block (the ML descriptor would otherwise use reference distances or angles together with the " *
-              "frame pair set).")
+        error("rcut_pair_selection = frame requires apply_distortion = true and apply_distance_distortion = true " *
+              "in the ML block.")
     end
 
     Nε = length(basis); Norb_per_ion = size(basis); NR = size(strc.Rs, 2)
@@ -51,8 +50,6 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config;
                     ri, rj = ri_d, rj_d
                 end
             end
-            # The cutoff only depends on the pair of ions; with rcut_pair_selection = "frame", the distorted
-            # distance alone decides which pairs are included (same pair set as the TB geometry tensor)
             if rcut_pair_selection == "frame"
                 Δr_dist < rcut + max(rcut_tol, 0.0) || continue
             else

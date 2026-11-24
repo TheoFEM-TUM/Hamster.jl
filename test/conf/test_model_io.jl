@@ -251,6 +251,10 @@ end
             MPI.Barrier(comm)
             if rank == 0
                 @test_logs (:warn, r"lacks the settings rcut") match_mode=:any load_model!(model_io_config(); filename=noopt)
+                @test_logs load_model!(model_io_config(); filename=file)              # rcut 5 vs stored 5.0: same
+                differs = model_io_config()
+                set_value!(differs, "rcut", 6)
+                @test_logs (:warn, r"rcut = 5.*config file: 6\.0") load_model!(differs; filename=file)
             end
             other = get_empty_config()
             set_value!(other, "poscar", joinpath(@__DIR__, "..", "model", "test_files", "POSCAR_cspbbr3"))

@@ -97,11 +97,15 @@ end
         conf_frame = dimer_conf(selection="frame")
         @test_throws ErrorException Hamster.check_ml_settings(conf_ref, file)
         @test Hamster.check_ml_settings(conf_frame, file) === nothing
-        # apply_ml_settings! takes the value from the file if the Options block does not set it
+        # not taken from the file (the structures are built before the ML model): an unset tag is an error
         conf_unset = dimer_conf()
         set_value!(conf_unset, "init_params", "ML", file)
-        Hamster.apply_ml_settings!(conf_unset)
-        @test Hamster.get_rcut_pair_selection(conf_unset) == "frame"
+        @test_throws r"fitted with rcut_pair_selection = frame" Hamster.apply_ml_settings!(conf_unset)
+        # a file without the key was fitted with reference
+        old = joinpath(dir, "ml_params_old.dat")
+        write(old, "begin unknown\nend\n")
+        @test Hamster.check_ml_settings(conf_ref, old) === nothing
+        @test_throws r"fitted with rcut_pair_selection = reference" Hamster.check_ml_settings(conf_frame, old)
     end
 end
 
@@ -129,13 +133,18 @@ end
     # (cell 5.5 in reference mode), the diagnostic search must still find it
     strc_far = dimer_structure(conf_ref, r_ref=12.0, r_dist=4.5)
     @test Hamster.missed_bond_statistics(strc_far, conf_ref) == Dict("Si+Si" => 1.0)
-    # the warning aggregates over structures and is emitted once per process (on MPI rank 0)
-    if !MPI.Initialized() || MPI.Comm_rank(MPI.COMM_WORLD) == 0
-        Hamster.MISSED_BONDS_WARNED[] = false
-        @test_logs (:warn, r"Missed bonds.*Si\+Si: 2\.0") Hamster.warn_missed_bonds([strc, strc], conf_ref)
-        @test_logs Hamster.warn_missed_bonds([strc], conf_ref)                 # only once
-        @test_logs Hamster.warn_missed_bonds([strc], conf_frame)               # not in frame mode
-    end
+    # summed over the structures of all systems (two systems with different reference positions)
+    @test Hamster.missed_bonds([strc, strc, strc_far], conf_ref) == Dict("Si+Si" => 3.0)
+    # one warning per set of structures, only in reference mode and on rank 0
+    @test_logs (:warn, r"Missed bonds over all structures of the training set.*Si\+Si: 2\.0") Hamster.warn_missed_bonds([strc, strc], conf_ref, label="training set")
+    @test_logs Hamster.warn_missed_bonds([strc], conf_ref, rank=1)
+    @test_logs Hamster.warn_missed_bonds([strc], conf_frame)
+end
+
+@testset "hard cutoff warning" begin
+    @test_logs (:warn, r"hard cutoff") Hamster.warn_hard_frame_cutoff(dimer_conf(selection="frame", rcut_tol=-1.0))
+    @test_logs Hamster.warn_hard_frame_cutoff(dimer_conf(selection="frame"))
+    @test_logs Hamster.warn_hard_frame_cutoff(dimer_conf(selection="reference", rcut_tol=-1.0))
 end
 
 @testset "grid_size enlarged warning only for an explicit grid_size" begin
@@ -257,7 +266,7 @@ end
     end
 end
 
-@testset "frame: H and ML descriptors independent of the reference with sepNN and ML" begin
+@testset "frame: H and ML descriptors independent of the reference with ML" begin
     mktempdir() do dir
         mk(selection, r_ref) = begin
             conf = dimer_conf(selection=selection, sepNN=true)
@@ -271,6 +280,9 @@ end
              env=Hamster.get_environmental_descriptor(model.hs, model.params, strc, basis, c))
         end
         a54, a65 = mk("frame", 5.4), mk("frame", 6.5)
+        # the sepNN shell cutoffs come from the reference positions in both modes (the bond is NN1 for both)
+        Ts = Hamster.frac_to_cart(a65.strc.Rs, a65.strc.lattice)
+        @test minimum(values(Hamster.get_nn_cutoffs(a65.strc.ions, Ts, a65.strc.point_grid, a65.c))) ≥ 6.5 - 1e-10
         # frame mode: same geometry tensor, descriptor and environmental descriptor for both references
         @test all(Matrix(x) == Matrix(y) for (x, y) in zip(a54.h, a65.h))
         @test all(Matrix(x) == Matrix(y) for (x, y) in zip(a54.d, a65.d))
