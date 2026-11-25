@@ -62,6 +62,9 @@ function build_hamiltonian(conf, comm, local_inds; mode, Rs=zeros(3, 1), rank=0,
     strcs = mapreduce(vcat, local_inds, init=Structure[]) do (system, inds)
         get_structures(conf, config_indices=inds, Rs=Rs, mode=mode, system=system, xdatcar=xdatcar, sc_poscar=sc_poscar)
     end
+    # ranks without structures (validation set) have no communicator and skip the collective diagnostic
+    isempty(local_inds) || warn_missed_bonds(strcs, conf, comm=comm, rank=rank, label=get(kwargs, :label, nothing))
+    rank == 0 && !isempty(local_inds) && warn_hard_frame_cutoff(conf)
     strc_time = MPI.Wtime() - begin_time
     if rank == 0 && verbosity > 1; println(" Structure time: $strc_time s"); end
 

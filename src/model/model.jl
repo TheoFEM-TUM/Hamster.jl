@@ -246,6 +246,7 @@ Initialize the parameters of a `model` based on the provided configuration and i
 function init_params!(model, conf=get_empty_config(); initas=get_init_params(conf), warn=true)
     if get_load_model(conf)
         set_params!(model, model_parameter_values(conf, "tb", string.(model.param_labels)))
+        zero_excluded_params!(model, conf)
         return
     end
     init_mode = get_init_mode(initas)
@@ -272,6 +273,37 @@ function init_params!(model, conf=get_empty_config(); initas=get_init_params(con
                   join(string.(missing_labels[1:min(end, 10)]), ", ") * (length(missing_labels) > 10 ? ", ..." : "")
         end
     end
+    zero_excluded_params!(model, conf)
+end
+
+"""
+    excluded_pair_param(label, rcuts, onsite) -> Bool
+
+Whether the TB parameter `label` belongs to a pair of elements without interactions (pair cutoff 0, see
+[`get_rcut_matrix`](@ref) for `rcuts`): a parameter between different ions (`nnlabel ≥ 1`). With `onsite = false`,
+the on-site terms of a species use its `nnlabel = 1` parameters, which are kept.
+"""
+function excluded_pair_param(label, rcuts, onsite)
+    t1, t2 = label.ion_label.types
+    iszero(rcuts[t1, t2]) || return false
+    label.nnlabel ≥ 1 || return false
+    return onsite || t1 ≠ t2
+end
+
+"""
+    zero_excluded_params!(model, conf=get_empty_config())
+
+Set the TB parameters of pairs of elements with the pair cutoff `rcut_<A>_<B> = 0` to zero (see
+[`excluded_pair_param`](@ref)). They have no matrix elements, so they stay zero in a fit and in `params.dat`.
+"""
+function zero_excluded_params!(model, conf=get_empty_config())
+    any(iszero, values(get_pair_rcuts(conf))) || return model
+    rcuts = get_rcut_matrix(conf)
+    onsite = get_onsite(conf)
+    for (v, label) in enumerate(model.param_labels)
+        excluded_pair_param(label, rcuts, onsite) && (model.params[v] = 0.0)
+    end
+    return model
 end
 
 """

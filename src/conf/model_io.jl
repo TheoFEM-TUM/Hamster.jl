@@ -82,7 +82,7 @@ function model_radial_tables(conf, comm, rank)
 end
 
 model_config_option(tag) = tag.block == "Options" && tag.name != "seed" &&
-    (tag.category in ("basis", "model") || tag.name in ("rcut", "rcut_tol"))
+    (tag.category in ("basis", "model") || tag.name in ("rcut", "rcut_tol", "rcut_pair_selection"))
 
 function save_model_config(file, ham, conf)
     conf = deepcopy(conf)
@@ -100,6 +100,9 @@ function save_model_config(file, ham, conf)
         if model_config_option(tag)
             options[lowercase(tag.name)] = get(conf.options, lowercase(tag.name), string_value(get_tag(conf, tag)))
         end
+    end
+    for ((a, b), value) in get_pair_rcuts(conf)       # pair cutoffs rcut_<A>_<B>
+        options[lowercase("rcut_$(a)_$(b)")] = string(value)
     end
     # Store atom settings verbatim, including site charges and orbital-specific couplings.
     for (block, values) in conf.blocks
@@ -173,9 +176,28 @@ function load_model!(conf::Config, comm=nothing; filename=nothing, rank=0)
     isnothing(comm) || (result = MPI.bcast(result, 0, comm))
     options, blocks, flags, failure = result
     isnothing(failure) || error("Loading model failed: $failure")
+    conf_pairs = get_pair_rcuts(conf)
     # Mutate dictionaries because Config itself is immutable.
     for tag in CONFIG_TAGS
-        model_config_option(tag) && delete!(conf.options, lowercase(tag.name))
+        if model_config_option(tag)
+            key = lowercase(tag.name)
+            if rank == 0 && haskey(conf.options, key) && haskey(options, key) &&
+               !same_ml_setting(get_tag(conf, tag), string(options[key]))
+                @warn "$filename: $key = $(options[key]) (config file: $(get_tag(conf, tag))); using the model file value."
+            end
+            delete!(conf.options, key)
+        end
+    end
+    # pair cutoffs rcut_<A>_<B>: those of the model file replace those of the config file
+    model_pairs = Dict(pair_rcut_elements(key) => parse(Float64, string(value)) for (key, value) in options
+                       if !isnothing(pair_rcut_elements(key)))
+    if rank == 0 && !isempty(conf_pairs) && conf_pairs != model_pairs
+        @warn "$filename: pair cutoffs " * join(["rcut_$(a)_$(b) = $v" for ((a, b), v) in sort(collect(model_pairs))], ", ") *
+              (isempty(model_pairs) ? "none" : "") * " (config file: " *
+              join(["rcut_$(a)_$(b) = $v" for ((a, b), v) in sort(collect(conf_pairs))], ", ") * "); using the model file values."
+    end
+    for key in collect(keys(conf.options))
+        isnothing(pair_rcut_elements(key)) || delete!(conf.options, key)
     end
     merge!(conf.options, options)
     for block in collect(keys(conf.blocks))

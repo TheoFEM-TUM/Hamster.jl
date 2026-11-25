@@ -224,6 +224,10 @@ function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filena
             value isa AbstractVector && isempty(value) && continue
             println(file, "  $key = ", value isa AbstractVector ? join(value, " ") : value)
         end
+        println(file, "  rcut_pair_selection = ", get_rcut_pair_selection(conf))
+        for ((a, b), value) in sort(collect(get_pair_rcuts(conf)))
+            println(file, "  rcut_$(a)_$(b) = ", value)
+        end
         println(file, "end")
         println(file, "")
         for n in eachindex(kernel.params)
@@ -285,10 +289,27 @@ end
     check_ml_settings(conf, filename)
 
 Throw an error if a setting in the header of the ML parameter file `filename` (see `ML_HEADER_TAGS`) differs from the
-value in `conf`.
+value in `conf`, or if `rcut_pair_selection` or a pair cutoff `rcut_<A>_<B>` differs (`reference` and no pair cutoffs
+for files without them; not taken from the file, as the structures are built before the ML model).
 """
 function check_ml_settings(conf, filename)
-    for (key, text) in read_ml_header(filename)
+    header = read_ml_header(filename)
+    fitted = get(header, "rcut_pair_selection", "reference")
+    fitted == get_rcut_pair_selection(conf) ||
+        error("The ML model in $filename was fitted with rcut_pair_selection = $fitted; set it in the Options block.")
+    # pair cutoffs rcut_<A>_<B> of the Options block, as seen by the ML descriptor (at most the ML rcut)
+    ml_rcut = get_ml_rcut(conf)
+    fitted_pairs = Dict(pair_rcut_elements(key) => parse(Float64, text) for (key, text) in header
+                        if !isnothing(pair_rcut_elements(key)))
+    conf_pairs = get_pair_rcuts(conf)
+    for pair in sort(collect(union(keys(fitted_pairs), keys(conf_pairs))))
+        fitted_value = min(get(fitted_pairs, pair, ml_rcut), ml_rcut)
+        conf_value = min(get(conf_pairs, pair, ml_rcut), ml_rcut)
+        isapprox(fitted_value, conf_value, rtol=1e-10) ||
+            error("The ML model in $filename was fitted with the cutoff $fitted_value of the pair $(pair[1])-$(pair[2]), " *
+                  "but it is $conf_value with the config file; set rcut_$(pair[1])_$(pair[2]) as in the fit.")
+    end
+    for (key, text) in header
         key ∈ ML_HEADER_TAGS || continue
         value = ml_setting(conf, key)
         same_ml_setting(value, text) ||

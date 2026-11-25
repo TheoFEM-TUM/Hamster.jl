@@ -141,6 +141,8 @@ Pretty print configuration tags to an output file in a nicely formatted style.
 - `conf`: Configuration object to read current values.
 - `blocks`: Optional list of block names to print. If `nothing`, all blocks are printed.
 - `show_desc`: If `true`, adds the description as a comment on each line.
+
+The pair cutoffs `rcut_<A>_<B>` that are set follow the tags of the Options block.
 """
 function write_config_tags(conf::Config; blocks=nothing, show_desc=false, filename="hamster.out")
     open(filename, "a") do io
@@ -183,6 +185,12 @@ function write_config_tags(conf::Config; blocks=nothing, show_desc=false, filena
                     end
                 else
                     println(io, tagval_str)
+                end
+            end
+            if blk == "Options"                       # pair cutoffs rcut_<A>_<B> (not in the tag registry)
+                for ((a, b), value) in sort(collect(get_pair_rcuts(conf)))
+                    tagval_str = "    rcut_$(a)_$(b) = $(value)"
+                    println(io, show_desc ? rpad(tagval_str, desc_col_start) * "# cutoff of the pair $a-$b" : tagval_str)
                 end
             end
 

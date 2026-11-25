@@ -18,6 +18,35 @@ struct Structure
 end
 
 """
+    rcut_search(conf=get_empty_config(), dmax=0.0) -> Float64
+
+Radius that the neighbor search (grid cells and translation vectors) must cover: `rcut` with
+`rcut_pair_selection = "reference"`, `rcut + max(rcut_tol, 0) + 2 dmax` with `"frame"` (`dmax`: largest displacement
+of an ion from its reference position).
+
+# Arguments
+- `conf`: A `Config` instance that contains various parameters.
+- `dmax`: Maximum norm of the ion distortions (`dist`) of the structures the search is built for.
+"""
+rcut_search(conf=get_empty_config(), dmax=0.0) =
+    get_rcut_pair_selection(conf) == "frame" ? get_rcut(conf) + max(get_rcut_tol(conf), 0.0) + 2 * dmax : get_rcut(conf)
+
+"""
+    warn_if_Rs_too_small(Rs, rs_ion, lattice, conf=get_empty_config(), dmax=0.0)
+
+With `rcut_pair_selection = "frame"`, warn if the translation vectors `Rs` passed by the caller do not cover
+[`rcut_search`](@ref)`(conf, dmax)` for the reference positions `rs_ion` (3xN).
+"""
+function warn_if_Rs_too_small(Rs, rs_ion, lattice, conf=get_empty_config(), dmax=0.0)
+    get_rcut_pair_selection(conf) == "frame" || return nothing
+    needed = get_translation_vectors(rs_ion, lattice, rcut=rcut_search(conf, dmax))
+    missing_Rs = [R for R in eachcol(needed) if !any(R == S for S in eachcol(Rs))]
+    isempty(missing_Rs) || @warn "rcut_pair_selection = frame: $(length(missing_Rs)) translation vectors are " *
+        "missing, pairs within the cutoff may be missed."
+    return nothing
+end
+
+"""
     Structure(conf=get_empty_config(); poscar_path=get_poscar(conf), rcut=get_rcut(conf), grid_size=get_grid_size(conf))
 
 Create a `Structure` instance from a POSCAR file.
@@ -35,14 +64,18 @@ function Structure(conf=get_empty_config(); Rs=zeros(3, 1), poscar_path=get_posc
     time = @elapsed begin
         poscar = read_poscar(poscar_path)
         @unpack rs_atom, lattice, atom_types = poscar
-        Rs = Rs == zeros(3, 1) ? get_translation_vectors(frac_to_cart(rs_atom, lattice), lattice, rcut=rcut) : Rs
+        if Rs == zeros(3, 1)
+            Rs = get_translation_vectors(frac_to_cart(rs_atom, lattice), lattice, rcut=rcut_search(conf))
+        else
+            warn_if_Rs_too_small(Rs, frac_to_cart(rs_atom, lattice), lattice, conf)
+        end
         strc = Structure(Rs, frac_to_cart(rs_atom, lattice), atom_types, lattice, conf, 
                             rcut=rcut, grid_size=grid_size, system=system)
     end
     if verbosity > 0
         append_output_block("Structure Information:", 
         ["POSCAR", "rcut", "grid_size", "Number of atoms", "Number of R vectors", "Ion interactions", "Ion interaction total", "Structure time"], 
-        [poscar_path, rcut, grid_size, length(strc.ions), size(strc.Rs, 2), count_nn_pairs(strc.point_grid), length(strc.ions)^2 * size(strc.Rs, 2), time])
+        [poscar_path, rcut, strc.point_grid.grid_size, length(strc.ions), size(strc.Rs, 2), count_nn_pairs(strc.point_grid), length(strc.ions)^2 * size(strc.Rs, 2), time])
     end
     return strc
 end
@@ -68,6 +101,12 @@ Create a `Structure` instance from atomic information.
 """
 function Structure(Rs::M1, rs_ion::M2, δrs_ion::M3, ion_types, lattice::M4, conf::Config=get_empty_config(); rcut=get_rcut(conf), grid_size=get_grid_size(conf), system=get_system(conf)) where {M1,M2,M3,M4<:Matrix{Float64}}
     check_cutoffs(conf, rcut=rcut, grid_size=grid_size)
+    dmax = isempty(δrs_ion) ? 0.0 : maximum(norm, eachcol(δrs_ion))
+    r_search = rcut_search(conf, dmax)
+    if r_search > grid_size
+        haskey(conf.options, "grid_size") && @warn "rcut_pair_selection = frame: grid_size enlarged to $r_search."
+        grid_size = r_search
+    end
     point_grid = PointGrid(rs_ion, frac_to_cart(Rs, lattice), grid_size=grid_size)
     ions = get_ions(rs_ion, ion_types, δrs_ion)
 
@@ -92,4 +131,16 @@ function check_cutoffs(conf=get_empty_config(); rcut=get_rcut(conf), grid_size=g
         error("rcut = $(get_ml_rcut(conf)) of the ML block is larger than rcut = $rcut of the Options block, the ML " *
               "model would miss neighbors. Set rcut in the Options block to at least the ML rcut.")
     end
+end
+
+"""
+    warn_hard_frame_cutoff(conf=get_empty_config())
+
+Warn if `rcut_pair_selection = "frame"` is used with `rcut_tol <= 0` (hard cutoff: H jumps when a pair crosses `rcut`).
+"""
+function warn_hard_frame_cutoff(conf=get_empty_config())
+    get_rcut_pair_selection(conf) == "frame" && get_rcut_tol(conf) ≤ 0 &&
+        @warn "rcut_pair_selection = frame with rcut_tol ≤ 0 is a hard cutoff: H jumps when a pair crosses rcut. " *
+              "Use rcut_tol > 0."
+    return nothing
 end

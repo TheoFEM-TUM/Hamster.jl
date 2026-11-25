@@ -51,7 +51,12 @@ function get_structures(conf=get_empty_config();
     if lowercase(mode) == "md" || lowercase(mode) == "mixed" || lowercase(mode) == "universal"
         rs_0, atom_types, lattice, rs_all = read_structure_file(system, conf, mode=mode, xdatcar=xdatcar, sc_poscar=sc_poscar)
         lattice_0 = lattice isa AbstractMatrix ? lattice : lattice[:, :, 1]
-        Rs = Rs == zeros(3, 1) ? get_translation_vectors(rs_0, lattice_0, rcut=get_rcut(conf)) : Rs
+        dmax = get_rcut_pair_selection(conf) == "frame" ? max_displacement(rs_0, rs_all, lattice) : 0.0
+        if Rs == zeros(3, 1)
+            Rs = get_translation_vectors(rs_0, lattice_0, rcut=rcut_search(conf, dmax))
+        else
+            warn_if_Rs_too_small(Rs, rs_0, lattice_0, conf, dmax)
+        end
 
         strcs = map(config_indices) do index
             δrs_ion = similar(rs_0)
@@ -76,11 +81,79 @@ function get_structures(conf=get_empty_config();
     elseif lowercase(mode) == "pc" && length(config_indices) > 0
         pc_poscar = read_poscar(poscar)
         @unpack rs_atom, lattice = pc_poscar
-        Rs = Rs == zeros(3, 1) ? get_translation_vectors(frac_to_cart(rs_atom, lattice), lattice, rcut=get_rcut(conf)) : Rs
+        if Rs == zeros(3, 1)
+            Rs = get_translation_vectors(frac_to_cart(rs_atom, lattice), lattice, rcut=rcut_search(conf))
+        else
+            warn_if_Rs_too_small(Rs, frac_to_cart(rs_atom, lattice), lattice, conf)
+        end
         return [Structure(conf, Rs=Rs)]
     else
         return Structure[]
     end
+end
+
+"""
+    missed_bonds(strcs, conf=get_empty_config()) -> Dict{String, Float64}
+
+Missed bonds per element pair ([`missed_bond_statistics`](@ref)), summed over the structures `strcs`. The
+translation vectors of the search are built once per system.
+"""
+function missed_bonds(strcs, conf=get_empty_config())
+    rcut, rcut_tol = get_rcut(conf), get_rcut_tol(conf)
+    missed = Dict{String, Float64}()
+    system_key(strc) = (strc.system, length(strc.ions))   # mixed mode: the unit cell has the system of the frames
+    for skey in unique(system_key.(strcs))
+        sys_strcs = filter(strc -> system_key(strc) == skey, strcs)
+        dmax = maximum(norm(ion.dist) for strc in sys_strcs for ion in strc.ions; init=0.0)
+        Rs_diag = get_translation_vectors(reduce(hcat, get_ion_positions(sys_strcs[1].ions)), sys_strcs[1].lattice,
+                                          rcut=rcut + max(rcut_tol, 0.0) + 2 * dmax)
+        for strc in sys_strcs, (key, n) in missed_bond_statistics(strc, conf; Rs_diag=Rs_diag)
+            missed[key] = get(missed, key, 0.0) + n
+        end
+    end
+    return missed
+end
+
+"""
+    warn_missed_bonds(strcs, conf=get_empty_config(); comm=nothing, rank=0, label=nothing)
+
+With `rcut_pair_selection = "reference"`, warn on `rank` 0 about missed bonds ([`missed_bonds`](@ref)) of the
+structures `strcs` of all ranks of `comm` (collective). `label` names the set, e.g. `"training set"`.
+"""
+function warn_missed_bonds(strcs, conf=get_empty_config(); comm=nothing, rank=0, label=nothing)
+    get_rcut_pair_selection(conf) == "reference" || return nothing
+    missed = missed_bonds(strcs, conf)
+    if !isnothing(comm)
+        all_missed = MPI.gather(missed, comm, root=0)
+        rank == 0 && (missed = mergewith(+, all_missed...))
+    end
+    rank == 0 || return nothing
+    set = isnothing(label) ? "" : " of the $label"
+    isempty(missed) || @warn "Missed bonds over all structures$set (within rcut, but beyond rcut in the reference): " *
+        join(("$key: $(missed[key])" for key in sort(collect(keys(missed)))), ", ") *
+        ". Consider rcut_pair_selection = frame."
+    return nothing
+end
+
+"""
+    max_displacement(rs_0, rs_all, lattice) -> Float64
+
+Maximum over all frames `rs_all[:, :, n]` and all ions of the norm of the displacement from the reference
+positions `rs_0`, taking the periodic image closest to `rs_0` (as for the distortions of the structures built in
+[`get_structures`](@ref)). `lattice` is a 3x3 matrix or a 3x3xN array with the lattice vectors of each frame.
+Used to size the neighbor search for `rcut_pair_selection = "frame"` (see [`rcut_search`](@ref)).
+"""
+function max_displacement(rs_0, rs_all, lattice)
+    dmax = 0.0
+    for n in axes(rs_all, 3)
+        lattice_n = lattice isa AbstractMatrix ? lattice : lattice[:, :, n]
+        Ts = frac_to_cart(get_translation_vectors(1), lattice_n)
+        @views for iion in axes(rs_0, 2)
+            Rmin = findmin([normdiff(rs_0[:, iion], rs_all[:, iion, n], Ts[:, R]) for R in axes(Ts, 2)])[2]
+            dmax = max(dmax, norm(rs_0[:, iion] - apply_pbc(rs_all[:, iion, n], Ts[:, Rmin])))
+        end
+    end
+    return dmax
 end
 
 """

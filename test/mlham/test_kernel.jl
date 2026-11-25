@@ -110,8 +110,8 @@ end
         kernel = HamiltonianKernel([1.0, 2.0], [SVector(0.1, 0.2), SVector(0.3, 0.4)], 0.2, [], false)
         write_params(kernel, fitted, filename=file)
         header = Hamster.read_ml_header(file)
-        @test Set(keys(header)) == Set(Hamster.ML_HEADER_TAGS)
-        @test header["key_dims"] == "1 3" && header["strc_scale"] == "0.7"
+        @test Set(keys(header)) == Set(vcat(Hamster.ML_HEADER_TAGS, "rcut_pair_selection"))   # + Options tag of the pair set
+        @test header["key_dims"] == "1 3" && header["strc_scale"] == "0.7" && header["rcut_pair_selection"] == "reference"
 
         # Settings not in the ML block are taken from the file
         conf = get_empty_config()

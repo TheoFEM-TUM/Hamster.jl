@@ -1,4 +1,4 @@
-using Hamster, Test, MPI, HDF5, LinearAlgebra
+using Hamster, Test, MPI, HDF5, LinearAlgebra, Logging
 
 # This file can also run directly under mpiexecjl with --project=.
 MPI.Initialized() || MPI.Init()
@@ -177,6 +177,29 @@ end
                 end
             end
         end
+        @testset "pair cutoffs round trip" begin
+            conf = model_io_config()
+            set_value!(conf, "rcut_Ga_Ga", 0)
+            ham, strcs, bases = with_logger(NullLogger()) do                    # params.dat has no pair cutoffs
+                model_io_build(conf, comm)
+            end
+            file = joinpath(dir, "pairs.h5")
+            save_model(ham, strcs, bases, conf, comm; filename=file, rank=rank)
+            loaded = get_empty_config()
+            set_value!(loaded, "poscar", conf("poscar"))
+            set_value!(loaded, "verbosity", 0)
+            set_value!(loaded, "rcut_As_Ga", 3.0)                               # replaced by the pair cutoffs of the file
+            if rank == 0
+                @test_logs (:warn, r"pair cutoffs rcut_Ga_Ga = 0.0") load_model!(loaded, comm; filename=file, rank=rank)
+            else
+                load_model!(loaded, comm; filename=file, rank=rank)
+            end
+            @test Hamster.get_pair_rcuts(loaded) == Dict(("Ga", "Ga") => 0.0)
+            restored, _, _ = model_io_build(loaded, comm)
+            @test get_hamiltonian(restored, 1, zeros(3, 1)) ≈ get_hamiltonian(ham, 1, zeros(3, 1))
+            labels = string.(ham.models[1].param_labels)
+            @test all(iszero(ham.models[1].params[i]) for i in eachindex(labels) if startswith(labels[i], "NN1_Ga+Ga"))
+        end
         if MPI.Comm_size(comm) == 1
             @testset "Optimization exports fitted weights" begin
                 cd(dir) do
@@ -251,6 +274,10 @@ end
             MPI.Barrier(comm)
             if rank == 0
                 @test_logs (:warn, r"lacks the settings rcut") match_mode=:any load_model!(model_io_config(); filename=noopt)
+                @test_logs load_model!(model_io_config(); filename=file)              # rcut 5 vs stored 5.0: same
+                differs = model_io_config()
+                set_value!(differs, "rcut", 6)
+                @test_logs (:warn, r"rcut = 5.*config file: 6\.0") load_model!(differs; filename=file)
             end
             other = get_empty_config()
             set_value!(other, "poscar", joinpath(@__DIR__, "..", "model", "test_files", "POSCAR_cspbbr3"))

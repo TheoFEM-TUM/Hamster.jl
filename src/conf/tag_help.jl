@@ -157,6 +157,8 @@ end
 is_indexed_weight(key, block) = block == "Optimizer" && occursin(r"^w[ek]_[0-9]+(-[0-9]+)?$", lowercase(key))
 # Site-dependent charges qeff_<element> of the atom blocks
 is_site_charge(key, block) = block == "atom" && !isnothing(site_charge_element(key))
+# Cutoffs of element pairs rcut_<A>_<B> of the Options block
+is_pair_rcut(key, block) = block == "Options" && !isnothing(pair_rcut_elements(key))
 is_atom_block(name) = haskey(elements, Symbol(name))
 
 """
@@ -172,6 +174,7 @@ function check_config_tags(conf::Config)
         isempty(find_tags(key, block=block)) || return
         is_indexed_weight(key, block) && return
         is_site_charge(key, block) && return
+        is_pair_rcut(key, block) && return
         elsewhere = find_tags(key)
         if !isempty(elsewhere)
             push!(messages, "Input tag \"$key\" has no effect in the $shown_block block; it belongs in the " *
@@ -224,7 +227,8 @@ end
     check_config_values(conf) -> Vector{String}
 
 Messages for all tags in `conf` whose value is not valid (see `check_tag_value`), e.g. `rcut = 5,5` or
-`loss = RMSE`. Unknown tags are reported by `check_config_tags`.
+`loss = RMSE`, and for invalid pair cutoffs `rcut_<A>_<B>` (see [`get_pair_rcuts`](@ref)). Unknown tags are reported by
+`check_config_tags`.
 """
 function check_config_values(conf::Config)
     messages = String[]
@@ -239,6 +243,13 @@ function check_config_values(conf::Config)
     end
     for (name, block) in conf.blocks, (key, value) in block
         is_atom_block(name) ? check(key, value, "atom", "atom $name") : check(key, value, name, name)
+    end
+    if any(key -> !isnothing(pair_rcut_elements(key)), keys(conf.options))
+        try
+            get_pair_rcuts(conf)                     # pair cutoffs rcut_<A>_<B>: numbers between 0 and rcut
+        catch err                                    # other errors: an invalid rcut, reported above
+            err isa ErrorException && push!(messages, err.msg)
+        end
     end
     return sort(messages)
 end
