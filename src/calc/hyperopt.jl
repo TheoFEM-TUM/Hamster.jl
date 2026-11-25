@@ -69,12 +69,13 @@ end
     hyperopt_tag(label) -> (name, block)
 
 Input tag of the hyperparameter `label` from the `params` tag of the HyperOpt block. A label is the name of a tag of the
-Options block (`rcut`) or of a tag that exists in only one other block (`lr`), `Block_tag` for a tag of a block
-(`ML_rcut`, `Optimizer_val_ratio`), or `Element_tag` for a tag of an atom block (`Ga_alpha`). `block` is `"Options"`,
-the block name or the element. Unknown and ambiguous labels are an error.
+Options block (`rcut`, also a pair cutoff such as `rcut_Cs_Pb`) or of a tag that exists in only one other block (`lr`),
+`Block_tag` for a tag of a block (`ML_rcut`, `Optimizer_val_ratio`), or `Element_tag` for a tag of an atom block
+(`Ga_alpha`). `block` is `"Options"`, the block name or the element. Unknown and ambiguous labels are an error.
 """
 function hyperopt_tag(label)
-    known(name, block) = !isempty(find_tags(name, block=block)) || is_indexed_weight(name, block) || is_site_charge(name, block)
+    known(name, block) = !isempty(find_tags(name, block=block)) || is_indexed_weight(name, block) || is_site_charge(name, block) ||
+                         is_pair_rcut(name, block)
     blocks = [b[1] for b in CONFIG_BLOCKS if b[1] ∉ ("atom", "HyperOpt")]
     candidates = Tuple{String, String}[]
     known(label, "Options") && push!(candidates, (label, "Options"))

@@ -1,7 +1,9 @@
 """
     get_tb_descriptor(model, strc, conf)
 
-Calculate the TB descriptor for a given a TB `model`, a structure `strc` and a TBConfig file `conf`.
+Calculate the TB descriptor for a given a TB `model`, a structure `strc` and a TBConfig file `conf`. The pairs are
+selected as in the geometry tensor (see [`pair_in_cutoff`](@ref)), with the pair cutoffs `rcut_<A>_<B>` at most the
+ML `rcut`.
 """
 function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config; 
                             rcut=get_ml_rcut(conf), 
@@ -24,6 +26,7 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config;
     rs_ion = get_ion_positions(strc.ions)
     Ts = frac_to_cart(strc.Rs, strc.lattice)
     TRs = [Ts[:, R] for R in 1:NR]
+    rcuts = get_rcut_matrix(conf; rcut=rcut)                  # pair cutoffs rcut_<A>_<B>, at most the ML rcut
 
     offset = cumsum(vcat(0, Norb_per_ion[1:end-1]))          # basis index of the orbitals of an ion: offset + iorb
     l_map = [basis.orbitals[iion][iorb].type.l for iion in 1:length(Norb_per_ion) for iorb in 1:Norb_per_ion[iion]]
@@ -50,10 +53,13 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config;
                     ri, rj = ri_d, rj_d
                 end
             end
-            if rcut_pair_selection == "frame"
-                Δr_dist < rcut + max(rcut_tol, 0.0) || continue
+            rcut_pair = rcuts[types[iion], types[jion]]
+            if iszero(rcut_pair)
+                iszero(Δr) || continue
+            elseif rcut_pair_selection == "frame"
+                Δr_dist < rcut_pair + max(rcut_tol, 0.0) || continue
             else
-                (Δr ≤ rcut && fcut(Δr_dist, rcut + rcut_tol) > 0) || continue
+                (Δr ≤ rcut_pair && fcut(Δr_dist, rcut_pair + rcut_tol) > 0) || continue
             end
             Δr_in = (apply_distance_distortion || apply_distortion) ? Δr_dist : Δr
             if apply_distortion || apply_distance_distortion

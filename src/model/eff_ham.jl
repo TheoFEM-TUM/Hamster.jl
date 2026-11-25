@@ -228,7 +228,8 @@ Constructs an iterator that generates sparse matrix indices for interactions wit
 - `strc`: A structure object containing information about ions, positions, lattice, and grid points.
 - `basis`: A basis object, containing the orbitals associated with each ion.
 - `conf`: Configuration object, which contains relevant simulation parameters.
-- `rcut`: A cutoff radius, that defines the maximum distance for interactions to be included.
+- `rcut`: A cutoff radius, that defines the maximum distance for interactions to be included (pair cutoffs
+  `rcut_<A>_<B>` of `conf` up to `rcut`; pairs with cutoff 0 keep only on-site terms).
 - `rcut_tol`: Width of the smooth cutoff, see [`pair_in_cutoff`](@ref).
 - `rcut_pair_selection`: value of the `rcut_pair_selection` tag, see [`pair_in_cutoff`](@ref).
 
@@ -242,15 +243,20 @@ function get_sparse_iterator(strc, basis, conf=get_empty_config(), rcut=get_rcut
     offset = cumsum(vcat(0, Norb_per_ion[1:end-1]))
     TRs = [SVector{3, Float64}(T) for T in eachcol(frac_to_cart(strc.Rs, strc.lattice))]
     NR = size(strc.Rs, 2)
+    rcuts = get_rcut_matrix(conf; rcut=rcut)
     parts = tmap(grid_cell_chunks(strc.point_grid)) do chunk
         indices = [Tuple{Int64, Int64}[] for _ in 1:NR]
         for (grid_point, inds) in chunk, nn_grid_point in nn_grid_points(grid_point, strc.point_grid.dictR),
             (jion, R) in strc.point_grid.dictR[nn_grid_point], iion in inds
-            if rcut_pair_selection == "frame"
+            rcut_pair = rcuts[strc.ions[iion].type, strc.ions[jion].type]
+            r_ref = normdiff(strc.ions[iion].pos, strc.ions[jion].pos - TRs[R])
+            if iszero(rcut_pair)
+                iszero(r_ref) || continue
+            elseif rcut_pair_selection == "frame"
                 r_dist = normdiff(strc.ions[iion].pos - strc.ions[iion].dist, strc.ions[jion].pos - TRs[R] - strc.ions[jion].dist)
-                r_dist < rcut + max(rcut_tol, 0.0) || continue
+                r_dist < rcut_pair + max(rcut_tol, 0.0) || continue
             else
-                normdiff(strc.ions[iion].pos, strc.ions[jion].pos - TRs[R]) ≤ rcut || continue
+                r_ref ≤ rcut_pair || continue
             end
             for iorb in 1:Norb_per_ion[iion], jorb in 1:Norb_per_ion[jion]
                 push!(indices[R], (offset[iion] + iorb, offset[jion] + jorb))

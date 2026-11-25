@@ -231,6 +231,9 @@ function write_params(parameters::Vector, parameter_values::Vector, ion_types::V
     println(file, "begin ", get_system(conf))
     println(file, "  rcut = ", get_rcut(conf))
     println(file, "  rcut_pair_selection = ", get_rcut_pair_selection(conf))
+    for ((a, b), value) in sort(collect(get_pair_rcuts(conf)))
+        println(file, "  rcut_$(a)_$(b) = ", value)
+    end
     println(file, "  onsite = ", get_onsite(conf))
     println(file, "  sepNN = ", get_sepNN(conf))
     for ion_type in unique_ion_types
@@ -359,6 +362,32 @@ function read_params(filename="params.dat")
 end
 
 """
+    check_pair_rcuts!(mismatches, conf_values, conf)
+
+Compare the pair cutoffs `rcut_<A>_<B>` of the header of a parameter file (`conf_values`; a pair without a line has
+the `rcut` of the file) with those of `conf` (default `rcut`), and add `(key, value in file, value in config)` to
+`mismatches` for every pair that differs.
+"""
+function check_pair_rcuts!(mismatches, conf_values, conf)
+    file_rcut = tryparse(Float64, get(conf_values, "rcut", ""))
+    file_pairs = Dict{Tuple{String, String}, Float64}()
+    for (key, value) in conf_values
+        pair = pair_rcut_elements(key)
+        number = tryparse(Float64, value)
+        (isnothing(pair) || isnothing(number)) || (file_pairs[pair] = number)
+    end
+    conf_pairs = get_pair_rcuts(conf)
+    for pair in sort(collect(union(keys(file_pairs), keys(conf_pairs))))
+        file_value = get(file_pairs, pair, file_rcut)
+        isnothing(file_value) && continue
+        conf_value = min(get(conf_pairs, pair, get_rcut(conf)), get_rcut(conf))
+        isapprox(min(file_value, something(file_rcut, Inf)), conf_value, rtol=1e-10) ||
+            push!(mismatches, ("rcut_$(pair[1])_$(pair[2])", string(file_value), string(conf_value)))
+    end
+    return mismatches
+end
+
+"""
     check_consistency(conf_values, conf::Config; params_file="params.dat") -> Bool
 
 Checks the consistency of configuration values from a file with the given `Config` object.
@@ -392,10 +421,12 @@ function check_consistency(conf_values, conf::Config; params_file="params.dat")
     end
     check_key("rcut", get_rcut(conf))
     check_key("rcut_pair_selection", get_rcut_pair_selection(conf), missing="reference")
+    check_pair_rcuts!(mismatches, conf_values, conf)
     check_key("onsite", get_onsite(conf))
     check_key("sepNN", get_sepNN(conf))
     for key in keys(conf_values)
         startswith(key, "ewald_") && continue
+        isnothing(pair_rcut_elements(key)) || continue
         if occursin("_n", key)
             ion_type = string(split(key, "_")[1])
             check_key(key, get_n(conf, ion_type))

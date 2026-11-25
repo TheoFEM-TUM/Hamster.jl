@@ -78,6 +78,37 @@ differs from the config file (files without the setting count as `reference`) gi
 `model.h5` uses its stored value. In `reference` mode, a warning lists bonds that are within `rcut` in a frame but
 missing because they are beyond `rcut` in the reference.
 
+## Cutoffs per pair of elements
+
+`rcut_<A>_<B>` in the Options block sets the cutoff of the pairs of elements `A` and `B` (the order does not matter,
+`rcut_Br_Pb` = `rcut_Pb_Br`); all other pairs use `rcut`:
+
+```
+begin Options
+    rcut       = 6.5
+    rcut_Br_Pb = 4.5     # first Pb-Br shell only
+    rcut_Br_Br = 5.5
+    rcut_Br_Cs = 6.0
+    rcut_Pb_Pb = 0       # no Pb-Pb hopping
+    rcut_Cs_Cs = 0
+end
+```
+
+- A pair cutoff lies between 0 and `rcut`; `rcut` sets the neighbor search and is the largest cutoff.
+- The pair cutoff replaces `rcut` in the pair selection (`rcut_pair_selection`) and in the smooth cutoff
+  (`rcut_tol`) of the TB model and of the ML descriptors (there at most the `rcut` of the ML block).
+- `0` removes all matrix elements between different ions of the pair; the on-site terms stay, without a smooth
+  cutoff. The TB parameters of these pairs are set to zero (also when they come from `init_params`) and stay zero
+  in a fit. With `onsite = false`, the on-site terms of a species use its nearest-neighbor parameters, which are
+  kept.
+- In distorted structures, a cutoff between two neighbor shells of a pair (where no distances occur in any of the
+  structures) makes the set of bonds of this pair the same for the reference and the frames. Pairs with distances
+  around their cutoff need the smooth cutoff (`rcut_tol > 0`) and `rcut_pair_selection = frame`.
+
+The pair cutoffs are written to `params.dat`, `ml_params.dat` and `model.h5`. A `params.dat` with other pair cutoffs
+gives a warning, an `ml_params.dat` an error (a file without them has `rcut` for all pairs), and `model.h5` uses its
+stored values. Pair cutoffs can be hyperparameters (`params = rcut_Br_Pb` in the `HyperOpt` block).
+
 
 ## Type of model
 

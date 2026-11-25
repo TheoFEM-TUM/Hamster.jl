@@ -143,13 +143,15 @@ function nn_label_statistics(strc, basis, conf=get_empty_config(); rcut=get_rcut
                              rcut_pair_selection=get_rcut_pair_selection(conf))
     Ts = frac_to_cart(strc.Rs, strc.lattice)
     cutoffs = get_nn_cutoffs(strc.ions, Ts, strc.point_grid, conf)
+    rcuts = get_rcut_matrix(conf; rcut=rcut)
     stats = Dict{String, NTuple{3, Float64}}()
     for (iion1, iion2, R) in iterate_nn_grid_points(strc.point_grid)
         (isempty(basis.orbitals[iion1]) || isempty(basis.orbitals[iion2])) && continue
         T = view(Ts, :, R)
         r_nd = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, T)
         r = normdiff(strc.ions[iion1].pos - strc.ions[iion1].dist, apply_pbc(strc.ions[iion2].pos, T) - strc.ions[iion2].dist)
-        (r_nd == 0 || !pair_in_cutoff(r_nd, r, rcut, rcut_tol, rcut_pair_selection)) && continue
+        rcut_pair = rcuts[strc.ions[iion1].type, strc.ions[iion2].type]
+        (r_nd == 0 || !pair_in_cutoff(r_nd, r, rcut_pair, rcut_tol, rcut_pair_selection)) && continue
         ion_label = IonLabel(strc.ions[iion1].type, strc.ions[iion2].type, sorted=false)
         cutoff = cutoffs[ion_label]
         nnlabel = get_nn_label(r, cutoff, conf, onsite=true, sepNN=true)
@@ -165,8 +167,9 @@ end
                            Rs_diag=nothing)
         -> Dict{String, Float64}
 
-Number of bonds per element pair (e.g. `"Si+Si"`) that are beyond `rcut` in the reference positions but below `rcut`
-in the distorted positions, i.e. missing with `rcut_pair_selection = "reference"`. The search radius is
+Number of bonds per element pair (e.g. `"Si+Si"`) that are beyond the cutoff of the pair (`rcut` or `rcut_<A>_<B>`)
+in the reference positions but below it in the distorted positions, i.e. missing with
+`rcut_pair_selection = "reference"`. Pairs with cutoff 0 are never counted. The search radius is
 `rcut + max(rcut_tol, 0) + 2 dmax` in both modes. `Rs_diag`: translation vectors to reuse (same system).
 """
 function missed_bond_statistics(strc, conf=get_empty_config(); rcut=get_rcut(conf), rcut_tol=get_rcut_tol(conf),
@@ -178,14 +181,17 @@ function missed_bond_statistics(strc, conf=get_empty_config(); rcut=get_rcut(con
     Ts = frac_to_cart(Rs, strc.lattice)
     grid = PointGrid(rs_ref, Ts, grid_size=r_search)
     R0 = findR0(Rs)
+    rcuts = get_rcut_matrix(conf; rcut=rcut)
     missed = Dict{String, Float64}()
     for (iion1, iion2, R) in iterate_nn_grid_points(grid)
         (iion1 == iion2 && R == R0) && continue
+        rcut_pair = rcuts[strc.ions[iion1].type, strc.ions[iion2].type]
+        iszero(rcut_pair) && continue
         T = view(Ts, :, R)
         r_ref = normdiff(strc.ions[iion1].pos, strc.ions[iion2].pos, T)
-        r_ref > rcut || continue
+        r_ref > rcut_pair || continue
         r_dist = normdiff(strc.ions[iion1].pos - strc.ions[iion1].dist, apply_pbc(strc.ions[iion2].pos, T) - strc.ions[iion2].dist)
-        r_dist < rcut || continue
+        r_dist < rcut_pair || continue
         key = string(IonLabel(strc.ions[iion1].type, strc.ions[iion2].type, sorted=true))
         missed[key] = get(missed, key, 0.0) + 0.5   # every bond appears twice
     end
