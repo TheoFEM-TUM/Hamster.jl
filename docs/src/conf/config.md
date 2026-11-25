@@ -66,8 +66,8 @@ structures of a fit can come from a trajectory of their own (`val_xdatcar`, see 
   sets and for frames far from their reference.
 
 Notes on `frame`:
-- TB model and ML descriptors use the same pairs. With an ML model, `apply_distortion` and
-  `apply_distance_distortion` must be `true`.
+- TB model and ML descriptors use the same pairs. With an ML model, `apply_distortion` must be `true` (distances
+  and angles of the current frame).
 - The `sepNN` shell cutoffs still come from the reference positions, so they are fixed per system.
 - Keep `rcut_tol > 0`: with `rcut_tol <= 0` the cutoff is hard and H jumps when a pair crosses `rcut` (warning).
 - The neighbor search grows to `rcut + max(rcut_tol, 0) + 2 dmax` (`dmax`: largest displacement from the

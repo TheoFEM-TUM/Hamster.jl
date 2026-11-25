@@ -14,9 +14,8 @@ function get_tb_descriptor(h, V, strc::Structure, basis, conf::Config;
                             apply_distance_distortion=get_ml_apply_distance_distortion(conf), 
                             strc_scale=get_ml_strc_scale(conf),
                             rcut_pair_selection=get_rcut_pair_selection(conf))
-    if rcut_pair_selection == "frame" && get_ml_model(conf) && !(apply_distortion && apply_distance_distortion)
-        error("rcut_pair_selection = frame requires apply_distortion = true and apply_distance_distortion = true " *
-              "in the ML block.")
+    if rcut_pair_selection == "frame" && get_ml_model(conf) && !apply_distortion
+        error("rcut_pair_selection = frame requires apply_distortion = true in the ML block.")
     end
 
     Nε = length(basis); Norb_per_ion = size(basis); NR = size(strc.Rs, 2)

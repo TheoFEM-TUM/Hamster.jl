@@ -207,7 +207,6 @@ end
         # the ML descriptor uses the same pair set
         set_value!(c, "model", "ML", true)
         set_value!(c, "apply_distortion", "ML", true)
-        set_value!(c, "apply_distance_distortion", "ML", true)
         model = TBModel(strc, basis, c)
         d_frame = Hamster.get_tb_descriptor(model.hs, model.params, strc, basis, c)
         @test nnz(d_frame[R0]) > 0
@@ -216,7 +215,6 @@ end
         c_ref, basis_ref, model_ref = dimer_model(strc_ref, conf_ref, dir, "ref2")
         set_value!(c_ref, "model", "ML", true)
         set_value!(c_ref, "apply_distortion", "ML", true)
-        set_value!(c_ref, "apply_distance_distortion", "ML", true)
         model_ref = TBModel(strc_ref, basis_ref, c_ref)
         d_ref = Hamster.get_tb_descriptor(model_ref.hs, model_ref.params, strc_ref, basis_ref, c_ref)
         @test nnz(d_frame[R0]) > nnz(d_ref[R0])
@@ -226,17 +224,18 @@ end
     end
 end
 
-@testset "frame requires ML distortion flags" begin
+@testset "frame requires apply_distortion" begin
     mktempdir() do dir
         conf = dimer_conf(selection="frame")
         set_value!(conf, "model", "ML", true)                                  # ML block present, flags default to false
         strc = dimer_structure(conf)                                           # structure construction is fine now
         c, basis, model = dimer_model(strc, conf, dir, "ml")
         @test_throws ErrorException Hamster.get_tb_descriptor(model.hs, model.params, strc, basis, c)
-        set_value!(c, "apply_distance_distortion", "ML", true)
+        set_value!(c, "apply_distance_distortion", "ML", true)                 # distances only: not enough
         @test_throws ErrorException Hamster.get_tb_descriptor(model.hs, model.params, strc, basis, c)
+        set_value!(c, "apply_distance_distortion", "ML", false)
         set_value!(c, "apply_distortion", "ML", true)
-        Hamster.get_tb_descriptor(model.hs, model.params, strc, basis, c)     # both true: no error
+        Hamster.get_tb_descriptor(model.hs, model.params, strc, basis, c)     # apply_distortion alone: no error
         # pure TB run (no ML block): no error
         c_tb, basis_tb, model_tb = dimer_model(strc, dimer_conf(selection="frame"), dir, "tb")
         Hamster.get_tb_descriptor(model_tb.hs, model_tb.params, strc, basis_tb, c_tb)
@@ -272,7 +271,6 @@ end
             conf = dimer_conf(selection=selection, sepNN=true)
             set_value!(conf, "model", "ML", true)
             set_value!(conf, "apply_distortion", "ML", true)
-            set_value!(conf, "apply_distance_distortion", "ML", true)
             strc = dimer_structure(conf, r_ref=r_ref, r_dist=4.5)
             c, basis, model = dimer_model(strc, conf, dir, "$(selection)_$(r_ref)")
             (strc=strc, c=c, basis=basis, h=Hamster.get_geometry_tensor(strc, basis, c),
