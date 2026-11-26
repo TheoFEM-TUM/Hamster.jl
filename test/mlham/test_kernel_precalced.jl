@@ -138,3 +138,24 @@ end
     end
     @test all(dishermitian)
 end
+
+@testset "Precalced ML header" begin
+    mktempdir() do dir
+        conf = get_empty_config()
+        set_value!(conf, "rcut", 5.5)
+        set_value!(conf, "rcut_pair_selection", "frame")
+        set_value!(conf, "rcut_Pb_Pb", 0)
+        set_value!(conf, "key_dims", "ML", "1 2")
+        set_value!(conf, "sim_params", "ML", 0.1)
+        point = SVector{8, Float64}(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8)
+        base_kernel = HamiltonianKernel([1.0], [point], 0.1, [], false)
+        write_params(base_kernel, conf, filename=joinpath(dir, "plain"))
+        write_params(Hamster.HamiltonianKernelPrecalced(base_kernel, 0, ["test"], conf), conf,
+                     filename=joinpath(dir, "precalced"))
+        @test read(joinpath(dir, "precalced.dat"), String) == read(joinpath(dir, "plain.dat"), String)
+
+        header = Hamster.read_ml_header(joinpath(dir, "precalced.dat"))
+        @test header["rcut_pair_selection"] == "frame" && header["rcut_pb_pb"] == "0.0" && header["key_dims"] == "1 2"
+        Hamster.check_ml_settings(conf, joinpath(dir, "precalced.dat"))
+    end
+end
