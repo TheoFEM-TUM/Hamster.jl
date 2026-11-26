@@ -12,17 +12,23 @@ consists of round(`Nconf` × `val_ratio`) configurations between `Nconf_min` and
 training set, or of `val_config_inds`. If this leaves no validation structure, the fit stops with an error.
 
 The validation structures can also come from a trajectory of their own, e.g. another temperature or larger cells:
-`val_xdatcar` (and `val_poscar`, its reference structure in md mode) in the `Optimizer` block, with the eigenvalues in
+`val_xdatcar` (and `val_poscar`, its reference structure in md mode) in the `Supercell` block, with the eigenvalues in
 `val_data` (structure `n` of `val_data` belongs to configuration `n` of `val_xdatcar`). The validation set is then all
 configurations of this file, or those of `val_config_inds`, independent of the training set; `Nconf`, `val_ratio`,
 `Nconf_min` and `Nconf_max` apply only to the training set. Prepared training and validation files (e.g. subsets of a
 larger data set) are used completely with `Nconf` = `Nconf_max` = number of training configurations and `val_xdatcar`.
+Earlier versions read `val_xdatcar` and `val_poscar` from the `Optimizer` block; config files with them there still
+work, with a warning.
 
 ```
+begin Supercell
+    xdatcar = train/structures.h5
+    val_xdatcar = val/structures.h5
+end
+
 begin Optimizer
     train_data = train/eigenval.h5
     val_data = val/eigenval.h5
-    val_xdatcar = val/structures.h5
     val_mode = md
 end
 ```
@@ -32,6 +38,30 @@ the training set, or other systems whose species are in the training set. The in
 `val_config_inds` given as an HDF5 file are read from the group of each system (`<system>/train_config_inds`,
 `<system>/val_config_inds`, the layout of `hamster_out.h5` of a universal fit), so every system can have its own
 configurations; datasets at the top of the file apply to all systems.
+
+Without `val_xdatcar`, the validation structures come from `xdatcar`, whose systems are read with `train_mode`: universal
+validation structures then need `train_mode = universal`. To validate a fit of other training data (e.g. a primitive
+cell, `train_mode = pc`) on a universal file, give the file as `val_xdatcar`; a `Supercell` block that only sets
+`val_xdatcar` (and `val_poscar`) does not change the default `train_mode` (pc).
+
+```
+begin Supercell
+    val_xdatcar = structures.h5
+end
+
+begin Optimizer
+    train_mode = pc
+    train_data = EIGENVAL
+    val_mode = universal
+    val_data = eigenval.h5
+end
+```
+
+Before the structures are read, the trajectories and HDF5 data files are checked against the modes that read them: md
+mode reads a single trajectory (an XDATCAR, or an HDF5 file with `positions` and `lattice` at the top level, data with
+`eigenvalues` at the top level), universal mode an HDF5 file with one group per system (`positions`, `lattice`,
+`atom_types`; data with `eigenvalues` in the group of every system). A file of the other layout stops the run with an
+error that names the input tag, the file and the mode.
 
 With MPI, the training structures are split over the ranks and the validation structures over the ranks with training
 structures, so a rank can have training structures but no validation structure. The validation loss is the mean over

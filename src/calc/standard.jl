@@ -56,7 +56,7 @@ function run_calculation(::Val{:standard}, comm, conf::Config; rank=0, nranks=1,
         active_rank = MPI.Comm_rank(comm_active)
         active_size = MPI.Comm_size(comm_active)
         systems = get_systems(conf)
-        mode = haskey(conf, "Supercell") ? (length(systems) > 1 ? "universal" : "md") : "pc"
+        mode = has_trajectory(conf) ? (systems != [""] ? "universal" : "md") : "pc"
         ham, strcs, bases = build_hamiltonian(conf, comm_active, local_inds, mode=mode, rank=active_rank, nranks=active_size,
                                               verbosity=verbosity, sparse_iterators=false)
 

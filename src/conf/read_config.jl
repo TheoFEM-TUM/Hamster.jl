@@ -120,9 +120,32 @@ function read_config_block!(block::ConfigBlock, conf::Config; source="config")
         if block.header[end] == "Options"
             set_value!(conf, option_key, option_value)
         else
-            set_value!(conf, option_key, block.header[end], option_value)
+            set_value!(conf, option_key, moved_tag_block(option_key, block.header[end]), option_value)
         end
     end
+end
+
+"""
+    MOVED_TAGS
+
+Input tags that moved to another block ((name, old block) => new block). Config files with the old block keep working:
+the value is used in the new block, with a warning.
+"""
+const MOVED_TAGS = Dict(("val_xdatcar", "Optimizer") => "Supercell", ("val_poscar", "Optimizer") => "Supercell")
+
+"""
+    moved_tag_block(key, block)
+
+The block of the input tag `key` given in `block` (see `MOVED_TAGS`); warns (on the first MPI rank) if the tag moved
+from `block` to another block.
+"""
+function moved_tag_block(key, block)
+    new_block = get(MOVED_TAGS, (lowercase(key), block), nothing)
+    isnothing(new_block) && return block
+    if !MPI.Initialized() || MPI.Comm_rank(MPI.COMM_WORLD) == 0
+        @warn "Input tag \"$key\" moved from the $block block to the $new_block block; please update the config file."
+    end
+    return new_block
 end
 
 """

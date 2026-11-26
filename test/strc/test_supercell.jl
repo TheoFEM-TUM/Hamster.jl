@@ -327,7 +327,7 @@ end
         set_value!(conf, "train_mode", "Optimizer", "md")
         set_value!(conf, "train_data", "Optimizer", joinpath(calc_path, "eigenval.h5"))
         set_value!(conf, "val_data", "Optimizer", joinpath(calc_path, "eigenval.h5"))
-        set_value!(conf, "val_xdatcar", "Optimizer", joinpath(calc_path, "XDATCAR"))
+        set_value!(conf, "val_xdatcar", "Supercell", joinpath(calc_path, "XDATCAR"))
         @test Hamster.get_validate(conf) && Hamster.separate_val_structures(conf)
         @test Hamster.get_val_poscar(conf) == joinpath(calc_path, "POSCAR_md")
         train, val = Hamster.get_config_inds_for_systems([""], comm, conf, rank=rank)
@@ -337,9 +337,77 @@ end
         set_value!(conf, "val_config_inds", "Supercell", "2 11")
         @test_throws "validation configurations 11 are not in" Hamster.get_config_inds_for_systems([""], comm, conf, rank=rank)
         set_value!(conf, "val_config_inds", "Supercell", "none")
-        set_value!(conf, "val_xdatcar", "Optimizer", joinpath(dir, "missing.h5"))
+        set_value!(conf, "val_xdatcar", "Supercell", joinpath(dir, "missing.h5"))
         @test_throws "val_xdatcar = $(joinpath(dir, "missing.h5")): file not found" Hamster.get_config_inds_for_systems([""], comm, conf, rank=rank)
         set_value!(conf, "val_mode", "Optimizer", "pc")
         @test_throws "need val_mode = md or universal" Hamster.get_config_inds_for_systems([""], comm, conf, rank=rank)
+    end
+end
+
+@testset "Layout of trajectories and data files" begin
+    calc_path = joinpath(@__DIR__, "..", "calc", "test_files")
+    mktempdir() do dir
+        md_file, universal_file = joinpath(dir, "md.h5"), joinpath(dir, "universal.h5")
+        md_data, universal_data = joinpath(dir, "md_eig.h5"), joinpath(dir, "universal_eig.h5")
+        lattice, configs = Hamster.read_xdatcar(joinpath(calc_path, "XDATCAR"))
+        h5open(md_file, "w") do f
+            f["positions"] = configs[:, :, 1:2]; f["lattice"] = lattice
+        end
+        h5open(universal_file, "w") do f
+            for system in ("a", "b")
+                g = create_group(f, system)
+                g["positions"] = configs[:, :, 1:2]; g["lattice"] = repeat(lattice, 1, 1, 2); g["atom_types"] = ones(UInt8, 8)
+            end
+        end
+        h5open(md_data, "w") do f
+            f["kpoints"] = zeros(3, 1); f["eigenvalues"] = zeros(4, 1, 2)
+        end
+        h5open(universal_data, "w") do f
+            g = create_group(f, "a")
+            g["kpoints"] = zeros(3, 1); g["eigenvalues"] = zeros(4, 1, 2)
+        end
+
+        @test Hamster.h5_layout(universal_file) == (String[], ["a", "b"])
+        @test Hamster.trajectory_layout_error(md_file, "xdatcar", "md", "train_mode") == ""
+        @test Hamster.trajectory_layout_error(joinpath(calc_path, "XDATCAR"), "xdatcar", "md", "train_mode") == ""
+        @test Hamster.trajectory_layout_error(universal_file, "xdatcar", "universal", "train_mode") == ""
+        @test Hamster.trajectory_layout_error(universal_file, "xdatcar", "pc", "train_mode") == ""
+        @test occursin("one group per system (a, b) and no dataset positions at the top level: this is the layout of universal mode, but train_mode = md",
+                       Hamster.trajectory_layout_error(universal_file, "xdatcar", "md", "train_mode"))
+        @test occursin("has a single trajectory (dataset positions at the top level): this is the layout of md mode, but val_mode = universal",
+                       Hamster.trajectory_layout_error(md_file, "val_xdatcar", "universal", "val_mode"))
+        @test occursin("needs an HDF5 file", Hamster.trajectory_layout_error(joinpath(calc_path, "XDATCAR"), "xdatcar", "universal", "train_mode"))
+        h5open(f -> delete_object(f["b"], "atom_types"), universal_file, "r+")
+        @test occursin("missing: b/atom_types", Hamster.trajectory_layout_error(universal_file, "xdatcar", "universal", "train_mode"))
+
+        @test Hamster.data_layout_error(md_data, "train_data", "md", "train_mode", [""]) == ""
+        @test Hamster.data_layout_error(universal_data, "train_data", "universal", "train_mode", ["a"]) == ""
+        @test occursin("has no group for the systems b", Hamster.data_layout_error(universal_data, "train_data", "universal", "train_mode", ["a", "b"]))
+        @test occursin("this is the layout of universal mode, but val_mode = md", Hamster.data_layout_error(universal_data, "val_data", "md", "val_mode", [""]))
+        @test occursin("the layout of md mode), but train_mode = universal", Hamster.data_layout_error(md_data, "train_data", "universal", "train_mode", ["a"]))
+        @test occursin("missing datasets a/Hr", Hamster.data_layout_error(universal_data, "train_data", "universal", "train_mode", ["a"], hr=true))
+
+        h5open(f -> f["b"]["atom_types"] = ones(UInt8, 8), universal_file, "r+")
+        conf = get_empty_config()
+        set_value!(conf, "xdatcar", "Supercell", universal_file)
+        set_value!(conf, "train_mode", "Optimizer", "md")
+        set_value!(conf, "train_data", "Optimizer", md_data)
+        @test_throws "but train_mode = md (a single trajectory)" Hamster.get_config_inds_for_systems([""], comm, conf, rank=rank)
+        @test_throws "but train_mode = md (a single trajectory)" Hamster.get_config_inds_for_systems([""], comm, conf, rank=rank, optimize=false)
+        set_value!(conf, "train_mode", "Optimizer", "pc")
+        set_value!(conf, "train_data", "Optimizer", joinpath(calc_path, "EIGENVAL_cspbbr3"))
+        set_value!(conf, "val_mode", "Optimizer", "universal")
+        set_value!(conf, "val_data", "Optimizer", universal_data)
+        @test_throws "val_mode = universal, but train_mode = pc: without val_xdatcar" Hamster.get_config_inds_for_systems([""], comm, conf, rank=rank)
+        set_value!(conf, "val_xdatcar", "Supercell", universal_file)
+        @test_throws "val_data = $universal_data has no group for the systems b" Hamster.get_config_inds_for_systems([""], comm, conf, rank=rank)
+        h5open(f -> create_group(f, "b"), universal_data, "r+")
+        @test_throws "missing datasets b/eigenvalues" Hamster.get_config_inds_for_systems([""], comm, conf, rank=rank)
+
+        conf = get_empty_config()
+        set_value!(conf, "xdatcar", "Supercell", universal_file)
+        set_value!(conf, "train_mode", "Optimizer", "universal")
+        set_value!(conf, "val_mode", "Optimizer", "md")
+        @test_throws "val_xdatcar is not set, so the validation structures come from xdatcar" Hamster.get_config_inds_for_systems(["a", "b"], comm, conf, rank=rank)
     end
 end

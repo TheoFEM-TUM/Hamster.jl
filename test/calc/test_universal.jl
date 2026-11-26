@@ -84,7 +84,7 @@ end
                 set_value!(conf, "rllm_file", joinpath(path, "rllm_universal.dat"))
                 set_value!(conf, "train_data", "Optimizer", eig_file)
                 set_value!(conf, "xdatcar", "Supercell", strc_file)
-                set_value!(conf, "niter", "Optimizer", 2)
+                set_value!(conf, "niter", "Optimizer", 1)
                 return Hamster.main(comm, conf, rank=rank).L_train
             end
             L = fit(nothing)
@@ -174,7 +174,7 @@ end
             set_value!(conf, "rllm_file", joinpath(dir, "rllm.h5"))
             set_value!(conf, "train_data", "Optimizer", eig_file)
             set_value!(conf, "val_data", "Optimizer", val_eig_file)
-            set_value!(conf, "val_xdatcar", "Optimizer", val_strc_file)
+            set_value!(conf, "val_xdatcar", "Supercell", val_strc_file)
             set_value!(conf, "val_mode", "Optimizer", "universal")
             set_value!(conf, "niter", "Optimizer", 1)
             set_value!(conf, "xdatcar", "Supercell", strc_file)
@@ -186,6 +186,42 @@ end
             @test h5read("hamster_out.h5", "gaas/train_config_inds") == [1]
             @test h5read("hamster_out.h5", "gaas/val_config_inds") == [1, 2]
             @test "val_config_inds" ∉ h5open(f -> keys(f["cspbbr3"]), "hamster_out.h5")
+            @test all(isfinite, prof.L_val) && all(>(0), prof.L_val)
+        end
+    end
+end
+
+@testset "Fit of a primitive cell validated on universal structures" begin
+    mktempdir() do dir
+        cd(dir) do
+            path = joinpath(@__DIR__, "test_files")
+            val_strc_file, val_eig_file = joinpath(dir, "val_strc_file.h5"), joinpath(dir, "val_eig_file.h5")
+            kp, Es, _ = Hamster.read_eigenval(joinpath(path, "EIGENVAL_cspbbr3"))
+            poscar = Hamster.read_poscar(joinpath(path, "POSCAR_cspbbr3"))
+            h5open(val_strc_file, "w") do f
+                g = create_group(f, "cspbbr3")
+                g["positions"] = repeat(poscar.rs_atom, 1, 1, 2)
+                g["lattice"] = repeat(poscar.lattice, 1, 1, 2)
+                g["atom_types"] = poscar.atom_types
+            end
+            h5open(val_eig_file, "w") do f
+                g = create_group(f, "cspbbr3")
+                g["kpoints"] = kp; g["eigenvalues"] = repeat(reshape(Es, size(Es)..., 1), 1, 1, 2)
+            end
+            conf = get_config(filename=joinpath(path, "hconf_universal"))
+            set_value!(conf, "rllm_file", joinpath(path, "rllm_universal.dat"))
+            set_value!(conf, "poscar", joinpath(path, "POSCAR_cspbbr3"))
+            set_value!(conf, "train_mode", "Optimizer", "pc")
+            set_value!(conf, "train_data", "Optimizer", joinpath(path, "EIGENVAL_cspbbr3"))
+            set_value!(conf, "bandmin", "Optimizer", 14)
+            set_value!(conf, "val_mode", "Optimizer", "universal")
+            set_value!(conf, "val_data", "Optimizer", val_eig_file)
+            set_value!(conf, "niter", "Optimizer", 1)
+            @test_throws "val_mode = universal, but train_mode = pc: without val_xdatcar" Hamster.main(comm, conf, rank=rank)
+            set_value!(conf, "val_xdatcar", "Supercell", val_strc_file)
+            @test Hamster.get_train_mode(conf) == "pc"
+            prof = Hamster.main(comm, conf, rank=rank)
+            @test h5read("hamster_out.h5", "cspbbr3/val_config_inds") == [1, 2]
             @test all(isfinite, prof.L_val) && all(>(0), prof.L_val)
         end
     end

@@ -245,6 +245,9 @@ function get_config_inds_for_systems(
     val_config_inds   = Dict{String, Vector{Int64}}()
 
     separate = optimize && separate_val_structures(conf)
+    message = rank == 0 ? structure_files_error(conf, systems, optimize=optimize) : ""
+    message = MPI.bcast(message, comm, root=0)
+    isempty(message) || error(message)
     file = nothing
     if length(systems) > 1
         file = h5open(get_xdatcar(conf), "r", comm)
@@ -469,7 +472,7 @@ function config_inds_error(train_inds, val_inds, conf; optimize, system="", Nfra
         [("training", train_inds, lowercase(get_train_mode(conf)), get_train_data(conf), get_hr_fit(conf)),
          ("validation", val_inds, lowercase(get_val_mode(conf)), get_val_data(conf), !get_eig_val(conf))]
     else
-        [("", train_inds, haskey(conf, "Supercell") ? "md" : "pc", nothing, false)]
+        [("", train_inds, has_trajectory(conf) ? "md" : "pc", nothing, false)]
     end
     separate = optimize && separate_val_structures(conf)
     messages = String[]
@@ -529,6 +532,129 @@ function number_of_data_frames(data, system=""; hr=false)
         values = g[hr ? "Hr" : "eigenvalues"]
         return ndims(values) == (hr ? 4 : 3) ? size(values, ndims(values)) : 1
     end
+end
+
+"""
+    h5_layout(file) -> (datasets, groups)
+
+Names of the datasets and of the groups at the top level of the HDF5 file `file`.
+"""
+function h5_layout(file)
+    h5open(file, "r") do f
+        is_group = [f[key] isa HDF5.Group for key in keys(f)]
+        return keys(f)[.!is_group], keys(f)[is_group]
+    end
+end
+
+"""
+    trajectory_layout_error(file, tag, mode, mode_tag) -> String
+
+Check that the trajectory `file` (given by the input tag `tag`) has the layout that `mode` (set by `mode_tag`) reads:
+in md mode an XDATCAR or an HDF5 file with the dataset `positions` (or `configs`) at the top level, in universal mode
+an HDF5 file with one group per system, each with the datasets `positions`, `lattice` and `atom_types`. Returns an
+error message, or an empty string (also if the file does not exist; that is reported elsewhere).
+"""
+function trajectory_layout_error(file, tag, mode, mode_tag)
+    (mode ∈ ("md", "universal") && isfile(file)) || return ""
+    universal_layout = "one group per system with the datasets positions, lattice and atom_types"
+    if !occursin(".h5", file)
+        mode == "md" && return ""
+        return "$tag = $file: $mode_tag = universal needs an HDF5 file with $universal_layout."
+    end
+    datasets, groups = h5_layout(file)
+    if mode == "md"
+        any(∈(datasets), ("positions", "configs")) && return ""
+        isempty(groups) && return "$tag = $file has no dataset positions (3 × atoms × structures) at the top level."
+        return "$tag = $file has one group per system ($(join(groups, ", "))) and no dataset positions at the top " *
+               "level: this is the layout of universal mode, but $mode_tag = md (a single trajectory). Use " *
+               "$mode_tag = universal, or a file with the datasets positions and lattice at the top level."
+    end
+    if isempty(groups)
+        "positions" ∈ datasets && return "$tag = $file has a single trajectory (dataset positions at the top level): " *
+            "this is the layout of md mode, but $mode_tag = universal needs $universal_layout. Use $mode_tag = md, " *
+            "or put the trajectory into a group named after the system."
+        return "$tag = $file has no groups: $mode_tag = universal needs $universal_layout."
+    end
+    missing_sets = h5open(file, "r") do f
+        ["$group/$name" for group in groups for name in ("positions", "lattice", "atom_types") if !haskey(f[group], name)]
+    end
+    isempty(missing_sets) && return ""
+    return "$tag = $file: $mode_tag = universal needs $universal_layout; missing: $(join(missing_sets, ", "))."
+end
+
+"""
+    data_layout_error(data, tag, mode, mode_tag, systems; hr=false) -> String
+
+Check that the HDF5 data file `data` (input tag `tag`) has the layout that `mode` (set by `mode_tag`) reads: the
+dataset `eigenvalues` (`Hr` if `hr = true`) at the top level in md mode, in a group per system of `systems` in universal
+mode. Returns an error message, or an empty string (also for files that are not HDF5 files or do not exist).
+"""
+function data_layout_error(data, tag, mode, mode_tag, systems; hr=false)
+    (mode ∈ ("md", "universal") && occursin(".h5", data) && isfile(data)) || return ""
+    name = hr ? "Hr" : "eigenvalues"
+    datasets, groups = h5_layout(data)
+    if mode == "md"
+        name ∈ datasets && return ""
+        isempty(groups) && return "$tag = $data has no dataset $name at the top level."
+        return "$tag = $data has one group per system ($(join(groups, ", "))) and no dataset $name at the top level: " *
+               "this is the layout of universal mode, but $mode_tag = md."
+    end
+    missing_systems = setdiff(filter(!isempty, systems), groups)
+    if !isempty(missing_systems)
+        name ∈ datasets && isempty(groups) && return "$tag = $data has the dataset $name at the top level (the layout " *
+            "of md mode), but $mode_tag = universal needs one group per system ($(join(missing_systems, ", ")))."
+        return "$tag = $data has no group for the systems $(join(missing_systems, ", ")) of the structures."
+    end
+    missing_sets = h5open(data, "r") do f
+        ["$system/$name" for system in filter(!isempty, systems) if !haskey(f[system], name)]
+    end
+    isempty(missing_sets) && return ""
+    return "$tag = $data: missing datasets $(join(missing_sets, ", "))."
+end
+
+"""
+    structure_files_error(conf, systems; optimize) -> String
+
+Check that the trajectories (`xdatcar`, `val_xdatcar`) and, in fits, the HDF5 data files (`train_data`, `val_data`)
+have the layout of the modes that read them (`train_mode`, `val_mode`; see [`trajectory_layout_error`](@ref) and
+[`data_layout_error`](@ref)). `systems` are the systems of the training set (or of a standard run). Universal
+validation structures from the trajectory of the training set need `train_mode = universal` (the systems are read
+with the training mode); otherwise they need a trajectory of their own (`val_xdatcar`). Returns an error message, or an
+empty string.
+"""
+function structure_files_error(conf, systems; optimize)
+    messages = String[]
+    add!(message, hint="") = isempty(message) || push!(messages, isempty(hint) ? message : "$message $hint")
+    xdatcar = get_xdatcar(conf)
+    if !optimize
+        has_trajectory(conf) || return ""
+        add!(trajectory_layout_error(xdatcar, "xdatcar", systems == [""] ? "md" : "universal", "train_mode"))
+        return join(messages, "\n")
+    end
+    train_mode, val_mode = lowercase(get_train_mode(conf)), lowercase(get_val_mode(conf))
+    add!(trajectory_layout_error(xdatcar, "xdatcar", train_mode, "train_mode"))
+    add!(data_layout_error(get_train_data(conf), "train_data", train_mode, "train_mode", systems, hr=get_hr_fit(conf)))
+    get_validate(conf) || return join(messages, "\n")
+
+    val_systems = systems
+    if separate_val_structures(conf)
+        val_xdatcar = get_val_xdatcar(conf)
+        add!(trajectory_layout_error(val_xdatcar, "val_xdatcar", val_mode, "val_mode"))
+        isempty(messages) && (val_systems = get_systems(conf, xdatcar=val_xdatcar, mode=val_mode))
+    elseif val_mode == "universal" && train_mode != "universal"
+        add!("val_mode = universal, but train_mode = $train_mode: without val_xdatcar, the validation structures come " *
+             "from the trajectory of the training set (xdatcar = $xdatcar), whose systems are only read with " *
+             "train_mode = universal. Give the validation structures with val_xdatcar (Supercell block), e.g. " *
+             "val_xdatcar = $xdatcar: all its configurations are then validated (or those of val_config_inds).")
+        return join(messages, "\n")
+    elseif val_mode != train_mode
+        add!(trajectory_layout_error(xdatcar, "xdatcar", val_mode, "val_mode"),
+             "(val_xdatcar is not set, so the validation structures come from xdatcar; give a trajectory of their own " *
+             "with val_xdatcar in the Supercell block.)")
+    end
+    isempty(messages) && add!(data_layout_error(get_val_data(conf), "val_data", val_mode, "val_mode", val_systems,
+                                                hr=!get_eig_val(conf)))
+    return join(unique(messages), "\n")
 end
 
 """

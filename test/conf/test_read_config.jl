@@ -56,6 +56,33 @@ end
     end
 end
 
+@testset "Moved input tags" begin
+    mktempdir() do dir
+        file = joinpath(dir, "hconf")
+        write(file, """
+        begin Optimizer
+            val_xdatcar = val.h5
+            val_poscar = POSCAR_val
+            val_mode = universal
+        end
+        """)
+        conf = @test_logs (:warn, r"\"val_xdatcar\" moved from the Optimizer block to the Supercell block") (:warn, r"\"val_poscar\" moved") Hamster.read_config(file)
+        @test Hamster.get_val_xdatcar(conf) == "val.h5" && Hamster.get_val_poscar(conf) == "POSCAR_val"
+        @test Hamster.separate_val_structures(conf)
+        @test !haskey(conf.blocks["Optimizer"], "val_xdatcar")
+        @test Hamster.get_train_mode(conf) == "pc" && !Hamster.has_trajectory(conf)
+        write(file, """
+        begin Supercell
+            val_xdatcar = val.h5
+        end
+        """)
+        conf = @test_logs Hamster.read_config(file)
+        @test Hamster.get_val_xdatcar(conf) == "val.h5" && Hamster.get_train_mode(conf) == "pc"
+        set_value!(conf, "xdatcar", "Supercell", "XDATCAR")
+        @test Hamster.get_train_mode(conf) == "md" && Hamster.has_trajectory(conf)
+    end
+end
+
 @testset "Errors for broken config files" begin
     mktempdir() do dir
         file = joinpath(dir, "hconf")
