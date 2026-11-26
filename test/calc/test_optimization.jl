@@ -206,7 +206,7 @@ end
                 if case == "same"
                     set_value!(conf, "val_config_inds", "Supercell", "8 9 10")
                 else
-                    set_value!(conf, "val_xdatcar", "Optimizer", joinpath(dir, "val_strc.h5"))
+                    set_value!(conf, "val_xdatcar", "Supercell", joinpath(dir, "val_strc.h5"))
                     set_value!(conf, "val_data", "Optimizer", joinpath(dir, "val_data.h5"))
                 end
                 prof = Hamster.main(comm, conf, rank=rank)
