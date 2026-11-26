@@ -172,15 +172,7 @@ Writes the parameters and configuration settings of a HamiltonianKernel object t
 function write_params(kernel::HamiltonianKernelPrecalced, conf=get_empty_config(); filename=get_ml_filename(conf))
     data_points = kernel.kp.datapoints
     open(filename*".dat", "w") do file
-        # Write header to file
-        println(file, "begin ", get_system(conf))
-        println(file, "  rcut = ", get_ml_rcut(conf))
-        println(file, "  sim_params = ", get_ml_sim_params(conf))
-        println(file, "  env_scale = ", get_ml_env_scale(conf))
-        println(file, "  apply_distortion = ", get_ml_apply_distortion(conf))
-        println(file, "  apply_orthogonality = ", get_ml_apply_orthogonality(conf))
-        println(file, "end")
-        println(file, "")
+        write_ml_header(file, conf)
         for n in eachindex(kernel.params)
             print(file, kernel.params[n])
             for data_point in data_points[n]

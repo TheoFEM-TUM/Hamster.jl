@@ -206,6 +206,27 @@ function copy_params!(receiving_model::HamiltonianKernel, sending_model::Hamilto
 end
 
 """
+    write_ml_header(io, conf)
+
+Write the header (`begin` ... `end`) of an ML parameter file: the settings of `ML_HEADER_TAGS`, `rcut_pair_selection`
+and the pair cutoffs `rcut_<A>_<B>` of the Options block (read back by `apply_ml_settings!` and `check_ml_settings`).
+"""
+function write_ml_header(io, conf)
+    println(io, "begin ", get_system(conf))
+    for key in ML_HEADER_TAGS
+        value = ml_setting(conf, key)
+        value isa AbstractVector && isempty(value) && continue
+        println(io, "  $key = ", value isa AbstractVector ? join(value, " ") : value)
+    end
+    println(io, "  rcut_pair_selection = ", get_rcut_pair_selection(conf))
+    for ((a, b), value) in sort(collect(get_pair_rcuts(conf)))
+        println(io, "  rcut_$(a)_$(b) = ", value)
+    end
+    println(io, "end")
+    println(io, "")
+end
+
+"""
     write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filename=get_ml_filename(conf))
 
 Writes the parameters and configuration settings of a HamiltonianKernel object to a file.
@@ -217,19 +238,7 @@ Writes the parameters and configuration settings of a HamiltonianKernel object t
 """
 function write_params(kernel::HamiltonianKernel, conf=get_empty_config(); filename=get_ml_filename(conf))
     open(filename*".dat", "w") do file
-        # Write header to file
-        println(file, "begin ", get_system(conf))
-        for key in ML_HEADER_TAGS
-            value = ml_setting(conf, key)
-            value isa AbstractVector && isempty(value) && continue
-            println(file, "  $key = ", value isa AbstractVector ? join(value, " ") : value)
-        end
-        println(file, "  rcut_pair_selection = ", get_rcut_pair_selection(conf))
-        for ((a, b), value) in sort(collect(get_pair_rcuts(conf)))
-            println(file, "  rcut_$(a)_$(b) = ", value)
-        end
-        println(file, "end")
-        println(file, "")
+        write_ml_header(file, conf)
         for n in eachindex(kernel.params)
             print(file, kernel.params[n])
             for data_point in kernel.data_points[n]
