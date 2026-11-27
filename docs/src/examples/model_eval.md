@@ -58,4 +58,5 @@ in the `version` dataset.
 ```@docs
 Hamster.save_model
 Hamster.load_model!
+Hamster.ML_RUN_SETTINGS
 ```
