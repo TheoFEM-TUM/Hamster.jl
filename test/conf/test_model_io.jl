@@ -210,6 +210,7 @@ end
             set_value!(conf, "sim_params", "ML", 0.4)
             set_value!(conf, "sim_mat", "ML", true)
             set_value!(conf, "key_dims", "ML", "1 2")
+            set_value!(conf, "sim_tol", "ML", 1e-12)             # keep all similarities: same Hamiltonian as direct
             ham, strcs, bases = model_io_build(conf, comm)
             @test any(m -> m isa Hamster.HamiltonianKernelPrecalced, ham.models)
             for model in ham.models
@@ -231,10 +232,10 @@ end
             set_value!(loaded, "verbosity", 0)
             set_value!(loaded, "sim_mat", "ML", false)
             load_model!(loaded, comm; filename=file, rank=rank)
-            @test !loaded("sim_mat", "ML")
+            @test !Hamster.get_ml_sim_mat(loaded)
             restored, _, _ = model_io_build(loaded, comm)
             @test any(m -> m isa Hamster.HamiltonianKernel, restored.models)
-            @test get_hamiltonian(restored, 1, zeros(3, 1)) ≈ get_hamiltonian(ham, 1, zeros(3, 1)) atol=1e-6
+            @test get_hamiltonian(restored, 1, zeros(3, 1)) ≈ get_hamiltonian(ham, 1, zeros(3, 1)) atol=1e-10
             # Older model files stored these settings; they no longer override the config file
             if rank == 0
                 h5open(file, "r+") do f
@@ -247,8 +248,8 @@ end
             set_value!(old, "poscar", conf("poscar"))
             set_value!(old, "verbosity", 0)
             load_model!(old, comm; filename=file, rank=rank)
-            @test !old("sim_mat", "ML")
-            @test isempty(old("key_dims", "ML"))
+            @test !Hamster.get_ml_sim_mat(old)
+            @test isempty(Hamster.get_ml_key_dims(old))
         end
         if MPI.Comm_size(comm) == 1
             @testset "Optimization exports fitted weights" begin
