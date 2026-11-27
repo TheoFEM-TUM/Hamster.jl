@@ -209,7 +209,6 @@ end
             set_value!(conf, "ncluster", "ML", 1)
             set_value!(conf, "sim_params", "ML", 0.4)
             set_value!(conf, "sim_mat", "ML", true)
-            set_value!(conf, "key_dims", "ML", "1 2")
             set_value!(conf, "sim_tol", "ML", 1e-12)             # keep all similarities: same Hamiltonian as direct
             ham, strcs, bases = model_io_build(conf, comm)
             @test any(m -> m isa Hamster.HamiltonianKernelPrecalced, ham.models)
