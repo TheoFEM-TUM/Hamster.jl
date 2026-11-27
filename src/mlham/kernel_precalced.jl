@@ -76,40 +76,22 @@ Retrieve the real-space Hamiltonian matrix for a given structure using precomput
 - If `apply_soc=true`, the spin-orbit coupling basis transformation is applied to each matrix.
 """
 function get_hr(kernel::HamiltonianKernelPrecalced, mode, index; apply_soc=false)
-    @views desc_vec = kernel.sm.feature_vec[index]
+    blocks = kernel.sm.feature_vec[index]
     (NR, Ne) = kernel.sm.feature_shape[1][index]
-    key_ranges = kernel.kp.key_ranges
+    params = kernel.params
     Hr = get_empty_complex_hamiltonians(Ne, NR, mode)
-
     for R in 1:NR
-        nnz_ham = desc_vec[R][2]
-
-        # Per-task storage: each thread writes only to its own slot m, so no contention
-        Is = Vector{Int}(undef, nnz_ham)
-        Js = Vector{Int}(undef, nnz_ham)
-        Vs = Vector{ComplexF64}(undef, nnz_ham)
-        #keep = falses(nnz_ham)
-
-        tforeach(1:nnz_ham) do m
-            desc_vec_single, (i, j, key) = @views desc_vec[R][1][m]
-
-
-            params = @views kernel.params[key_ranges[key]]
-
-            val = dot(desc_vec_single, params)
-
-            Is[m] = i
-            Js[m] = j
-            Vs[m] = val
-            #keep[m] = true
-
+        b = blocks[R]
+        Vs = Vector{ComplexF64}(undef, nelements(b))
+        tforeach(1:nelements(b)) do m
+            s = 0.0
+            @inbounds for k in b.ptr[m]:b.ptr[m+1]-1
+                s += b.val[k] * params[b.idx[k]]
+            end
+            Vs[m] = s
         end
-
-        # Sequential, safe construction of the sparse matrix for this R
-        #Hr[R] = sparse(Is[keep], Js[keep], Vs[keep], Ne, Ne)
-        Hr[R] = sparse(Is, Js, Vs, Ne, Ne)
+        Hr[R] = sparse(Int.(b.i), Int.(b.j), Vs, Ne, Ne)
     end
-
     return apply_soc ? apply_spin_basis.(Hr) : Hr
 end
 
@@ -227,25 +209,19 @@ function get_model_gradient(kernel::HamiltonianKernelPrecalced, indices, reg, dL
     dparams = zeros(length(kernel.params))
     nt = Threads.maxthreadid() 
     dparams_threads = [zeros(length(kernel.params)) for _ in 1:nt]
-    key_ranges = kernel.kp.key_ranges
     weights = kernel.kp.weights
     if kernel.update
         for (bi, index) in enumerate(indices)
-            
             for R in eachindex(dL_dHr[bi])
-                @views desc_vec, nnz_ham = kernel.sm.feature_vec[index][R]
-                tforeach(1:nnz_ham) do m
-                    tid = Threads.threadid()
-                    @views desc_vec_small, (i,j,key) =  desc_vec[m]
-
-                    if !soc
-                        dparams_threads[tid][key_ranges[key]]  .+= weights[key_ranges[key]] .* desc_vec_small .* real(dL_dHr[bi][R][i, j])
-                    else
-                        i1 = 2*i-1; j1 = 2*j-1
-                        i2 = 2*i; j2 = 2*j
-                        dparams_threads[tid][key_ranges[key]] .+= weights[key_ranges[key]] .* desc_vec_small .* real(dL_dHr[bi][R][i1, j1] + dL_dHr[bi][R][i2, j2])
+                b = kernel.sm.feature_vec[index][R]
+                tforeach(1:nelements(b)) do m
+                    dp = dparams_threads[Threads.threadid()]
+                    i, j = b.i[m], b.j[m]
+                    g = soc ? real(dL_dHr[bi][R][2i-1, 2j-1] + dL_dHr[bi][R][2i, 2j]) : real(dL_dHr[bi][R][i, j])
+                    @inbounds for k in b.ptr[m]:b.ptr[m+1]-1
+                        n = b.idx[k]
+                        dp[n] += weights[n] * b.val[k] * g
                     end
-                    
                 end
             end
         end

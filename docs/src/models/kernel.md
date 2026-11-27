@@ -38,6 +38,24 @@ and evaluation models use the data points of the training (or loaded) model, so 
 training data cover new structures, e.g. larger cells.
 
 
+## Precomputed similarities (`sim_mat`)
+
+With `sim_mat = true` in the `ML` block, Hamster computes the similarities between the descriptor of every matrix
+element and the kernel points once, when the model is built, and keeps those above `sim_tol`. With `key_dims`, only the
+kernel points with the same values of these (discrete) descriptor dimensions are compared, e.g. the same pair of
+species. Building a Hamiltonian is then a sparse product of the stored similarities with the parameters, which saves
+the kernel evaluation in every iteration of a fit.
+
+The stored similarities take about 12 bytes each (one `Float64` value and one `Int32` index, packed per lattice
+vector). How many are kept depends on the number of kernel points and their width `sim_params`: with thousands of kernel
+points, every matrix element can keep hundreds of them, and the precomputed matrix then needs far more memory than the
+descriptors themselves (64 bytes per matrix element). For a single evaluation, e.g. a standard run of large cells, the
+direct evaluation (`sim_mat = false`) is therefore usually faster and needs less memory. The direct evaluation is also
+exact, while the precomputed matrix drops the similarities below `sim_tol`.
+
+`sim_mat`, `sim_tol` and `key_dims` only determine how the model is evaluated. They are not stored in model files
+(`save_model`); when a model is loaded, the values of the config file apply.
+
 ## Parameter file
 
 A fit writes the ML parameters and data points to `ml_params.dat` (tag `filename` of the `ML` block). Its header lists

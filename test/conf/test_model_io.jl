@@ -127,6 +127,8 @@ end
                 set_value!(loaded, "verbosity", 0)
                 # Deliberately conflicting settings must be replaced.
                 set_value!(loaded, "alpha", "Ga", 2.0)
+                # How the kernel is evaluated is not stored in the model file but set by the receiving config
+                components == :ml_precalced && set_value!(loaded, "sim_mat", "ML", true)
                 load_model!(loaded, comm; filename=file, rank=rank)
                 @test loaded("alpha", "Ga") == 9
                 @test loaded("rcut") == 5
@@ -199,6 +201,54 @@ end
             @test get_hamiltonian(restored, 1, zeros(3, 1)) ≈ get_hamiltonian(ham, 1, zeros(3, 1))
             labels = string.(ham.models[1].param_labels)
             @test all(iszero(ham.models[1].params[i]) for i in eachindex(labels) if startswith(labels[i], "NN1_Ga+Ga"))
+        end
+        @testset "ML run settings are not stored" begin
+            conf = model_io_config()
+            set_value!(conf, "model", "ML", true)
+            set_value!(conf, "npoints", "ML", 4 * MPI.Comm_size(comm))
+            set_value!(conf, "ncluster", "ML", 1)
+            set_value!(conf, "sim_params", "ML", 0.4)
+            set_value!(conf, "sim_mat", "ML", true)
+            set_value!(conf, "sim_tol", "ML", 1e-12)             # keep all similarities: same Hamiltonian as direct
+            ham, strcs, bases = model_io_build(conf, comm)
+            @test any(m -> m isa Hamster.HamiltonianKernelPrecalced, ham.models)
+            for model in ham.models
+                model isa Hamster.HamiltonianKernelPrecalced && (model.params .= 0.03)
+            end
+            file = joinpath(dir, "ml_run_settings.h5")
+            save_model(ham, strcs, bases, conf, comm; filename=file, rank=rank)
+            if rank == 0
+                h5open(file, "r") do f
+                    stored = keys(f["config/blocks/ML"])
+                    @test !any(k -> k in stored, ("sim_mat", "sim_tol", "key_dims"))
+                    @test "sim_params" in stored
+                end
+            end
+            MPI.Barrier(comm)
+            # The config file decides how the model is evaluated: direct kernel, same Hamiltonian
+            loaded = get_empty_config()
+            set_value!(loaded, "poscar", conf("poscar"))
+            set_value!(loaded, "verbosity", 0)
+            set_value!(loaded, "sim_mat", "ML", false)
+            load_model!(loaded, comm; filename=file, rank=rank)
+            @test !Hamster.get_ml_sim_mat(loaded)
+            restored, _, _ = model_io_build(loaded, comm)
+            @test any(m -> m isa Hamster.HamiltonianKernel, restored.models)
+            @test get_hamiltonian(restored, 1, zeros(3, 1)) ≈ get_hamiltonian(ham, 1, zeros(3, 1)) atol=1e-10
+            # Older model files stored these settings; they no longer override the config file
+            if rank == 0
+                h5open(file, "r+") do f
+                    f["config/blocks/ML/sim_mat"] = "true"
+                    f["config/blocks/ML/key_dims"] = "1 2"
+                end
+            end
+            MPI.Barrier(comm)
+            old = get_empty_config()
+            set_value!(old, "poscar", conf("poscar"))
+            set_value!(old, "verbosity", 0)
+            load_model!(old, comm; filename=file, rank=rank)
+            @test !Hamster.get_ml_sim_mat(old)
+            @test isempty(Hamster.get_ml_key_dims(old))
         end
         if MPI.Comm_size(comm) == 1
             @testset "Optimization exports fitted weights" begin

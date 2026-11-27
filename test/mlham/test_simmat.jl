@@ -77,12 +77,13 @@ end
 	@test sim_mat.feature_shape == ([(1, 1)], 2)
 	@test sim_mat.sim_params == 0.1
 	@test length(sim_mat.feature_vec) == 1
-	@test sim_mat.feature_vec[1][1][2] == 2
-	features = sim_mat.feature_vec[1][1][1]
-	@test features[1][1][1] ≈ 1.0
-	@test features[1][2] == (1, 1, (0,))
-	@test features[2][1][2] ≈ 1.0
-	@test features[2][2] == (1, 2, (0,))
+	block = sim_mat.feature_vec[1][1]
+	@test Hamster.nelements(block) == 2
+	@test (block.i, block.j) == (Int32[1, 1], Int32[1, 2])
+	# each element keeps only its own point (the other one is below the tolerance)
+	@test block.ptr == [1, 2, 3]
+	@test block.idx == Int32[1, 2]
+	@test block.val ≈ [1.0, 1.0]
 
 	@test Hamster.exp_sim2(point, point, σ=0.1) ≈ 1.0
 	@test Hamster.exp_sim_all([point, far_point], point, σ=0.1)[1] ≈ 1.0

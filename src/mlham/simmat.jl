@@ -332,22 +332,52 @@ function verify_kernelpoints(kp::Kernelpoints, conf = get_empty_config();
 end
 
 """
-    struct SimMat{T1, T2}
+    struct SimBlock
 
-A structure storing precomputed similarity matrix features for efficient Hamiltonian evaluation.
+Precomputed similarities of the ML matrix elements of one structure and one lattice vector R, packed into flat arrays
+(compressed by matrix element): matrix element `m` sits at orbital indices `(i[m], j[m])`, and its similarities to the
+kernel points are `val[k]` for the parameters `idx[k]`, `k ∈ ptr[m]:ptr[m+1]-1`, in ascending order of `idx`. Only the
+similarities above the tolerance `sim_tol` are stored.
 
 # Fields
-- `feature_vec :: Vector{T1}`: Feature vectors organized by structure and real-space lattice vectors.
-- `feature_shape :: Tuple{Vector{T2}, Int64}`: Tuple containing (descriptor_sizes, number_of_datapoints).
-- `sim_params :: Float64}`: Similarity function parameter (e.g., Gaussian width σ).
+- `i :: Vector{Int32}`, `j :: Vector{Int32}`: orbital indices of the matrix elements.
+- `ptr :: Vector{Int64}`: start of the similarities of each matrix element in `idx` and `val` (length = elements + 1).
+- `idx :: Vector{Int32}`: global indices of the kernel points (= ML parameters).
+- `val :: Vector{Float64}`: similarities.
+"""
+struct SimBlock
+    i :: Vector{Int32}
+    j :: Vector{Int32}
+    ptr :: Vector{Int64}
+    idx :: Vector{Int32}
+    val :: Vector{Float64}
+end
+
+"""
+    nelements(block::SimBlock)
+
+Number of matrix elements of a [`SimBlock`](@ref).
+"""
+nelements(block::SimBlock) = length(block.i)
+
+"""
+    struct SimMat{T}
+
+Precomputed similarity matrix of the ML descriptors: one [`SimBlock`](@ref) per structure and lattice vector R.
+
+# Fields
+- `feature_vec :: Vector{Vector{SimBlock}}`: blocks, indexed by structure and lattice vector.
+- `feature_shape :: Tuple{Vector{T}, Int64}`: (number of lattice vectors and orbitals of each structure, number of kernel
+  points).
+- `sim_params :: Float64`: width σ of the Gaussian similarity function.
 
 # Notes
-- Feature vectors contain sparse vectors computed as exponential similarities between data points and structure descriptors.
-- The feature vectors are filtered by a tolerance to eliminate small contributions.
+- Only similarities above the tolerance are stored. The packed layout (`Int32` indices, no object per matrix element)
+  keeps the memory at about 12 bytes per stored similarity.
 """
-struct SimMat{T1, T2}
-    feature_vec :: Vector{T1}
-    feature_shape :: Tuple{Vector{T2}, Int64}
+struct SimMat{T}
+    feature_vec :: Vector{Vector{SimBlock}}
+    feature_shape :: Tuple{Vector{T}, Int64}
     sim_params :: Float64
 end
 
@@ -369,21 +399,19 @@ Generates precomputed kernel feature vectors based on structure descriptors and 
 - `key_dims`: Key dimensions from configuration.
 
 # Returns
-- `SimMat{T1, T2}`: Similarity matrix containing feature vectors, descriptor shapes, and parameters.
+- `SimMat`: one [`SimBlock`](@ref) per structure and lattice vector, the descriptor shapes and σ.
 
 # Notes
 - Computes exponential similarities between each structural descriptor element and all data points in its key bucket.
-- Filters features below tolerance to maintain sparsity.
+- Keeps the similarities above the tolerance, packed per lattice vector.
 - Provides detailed logging of coverage statistics (number of non-zero features vs. total elements).
 """
 function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; conf = get_empty_config(), rank = 0, systems = nothing, key_dims = get_ml_key_dims(conf), hyperopt_iter = get_hyperopt_niter(conf), verbosity = get_verbosity(conf))
-    #dim_weights = get_dim_weights(conf)
     data_points = kp.datapoints
     key_ranges = kp.key_ranges
+    length(data_points) <= typemax(Int32) || error("Too many kernel points for Int32 indices ($(length(data_points)))")
 
     nkeys = max(length(key_dims), 1)
-    KeyT = NTuple{nkeys,Int64}
-
     keyfun = if isempty(key_dims)
         hin -> (0,)
     else
@@ -394,43 +422,36 @@ function get_kernel_features(structure_descriptors, kp, sim_params, tol = 0.1; c
     systems = systems === nothing ? [string("system_", i) for i in 1:N_mats] : systems
     N_dp = size(data_points)[1]
     descr_sizes = [(size(structure_descriptors[i])[1], size(structure_descriptors[i][1])[1]) for i in 1:N_mats]
-    Desc_Vec = [
-        [ begin
-            n = nnz(structure_descriptors[i][R])
-            (Vector{Tuple{SparseVector{Float64, Int64}, Tuple{Int64, Int64, KeyT}}}(undef, n), n)
-        end
-        for R in 1:descr_sizes[i][1] ]
-        for i in 1:N_mats
-        ]
-    N_test = zeros(Int64, N_mats)
-    N_total = zeros(Int64, N_mats)
+    blocks = Vector{Vector{SimBlock}}(undef, N_mats)
     for i in 1:N_mats
         N_R, Ne = descr_sizes[i]
+        blocks[i] = Vector{SimBlock}(undef, N_R)
+        N_covered = 0; N_total = 0
         for R in 1:N_R
-            h_env_R = structure_descriptors[i][R]
-            touples = collect(zip(findnz(h_env_R)...))
-            N_total_temp  = length(touples)
-            N_test_temp = zeros(N_total_temp)
-            tforeach(1:length(touples)) do n
-                i_mat, j_mat, hin = touples[n]
-                key = keyfun(hin)
-                data_points_vector = @view data_points[key_ranges[key]]
-                #val_vec = exp_sim_all(data_points_vector, hin, σ=sim_params, dim_weights = dim_weights)
-                val_vec = exp_sim_all(data_points_vector, hin, σ=sim_params)
-                val_vec[abs.(val_vec) .<= tol] .= 0
-                val_vec = sparse(val_vec)
-                covered = nnz(val_vec) > 0 ? 1 : 0
-                N_test_temp[n] = covered
-                Desc_Vec[i][R][1][n] = (val_vec,(i_mat,j_mat, key))
+            is, js, hins = findnz(structure_descriptors[i][R])
+            n = length(hins)
+            idx_el = Vector{Vector{Int32}}(undef, n); val_el = Vector{Vector{Float64}}(undef, n)
+            tforeach(1:n) do m
+                range = key_ranges[keyfun(hins[m])]
+                vals = exp_sim_all(@view(data_points[range]), hins[m], σ=sim_params)
+                keep = findall(v -> abs(v) > tol, vals)
+                idx_el[m] = Int32.(first(range) - 1 .+ keep)
+                val_el[m] = vals[keep]
             end
-            N_test[i] += sum(N_test_temp)
-            N_total[i] += N_total_temp
+            ptr = Vector{Int64}(undef, n + 1); ptr[1] = 1
+            for m in 1:n; ptr[m+1] = ptr[m] + length(idx_el[m]); end
+            idx = Vector{Int32}(undef, ptr[end] - 1); val = Vector{Float64}(undef, ptr[end] - 1)
+            for m in 1:n
+                idx[ptr[m]:ptr[m+1]-1] .= idx_el[m]; val[ptr[m]:ptr[m+1]-1] .= val_el[m]
+            end
+            blocks[i][R] = SimBlock(Int32.(is), Int32.(js), ptr, idx, val)
+            N_covered += count(m -> ptr[m+1] > ptr[m], 1:n); N_total += n
         end
-        if hyperopt_iter < 2 && verbosity > 0; @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Ncovered = ( $(N_test[i]) / $(N_total[i]) ) || $(ceil(Int, N_test[i] / N_total[i] * 100 )) %"; end
+        if hyperopt_iter < 2 && verbosity > 0; @info "Rank $rank: Finished kernel features for mat $(systems[i]) Nr. ($i / $N_mats) with Ncovered = ( $N_covered / $N_total ) || $(ceil(Int, N_covered / max(N_total, 1) * 100 )) %"; end
     end
     structure_descriptors = nothing
     GC.gc()
-    return SimMat(Desc_Vec, (descr_sizes, N_dp), sim_params)
+    return SimMat(blocks, (descr_sizes, N_dp), sim_params)
 end
 
 

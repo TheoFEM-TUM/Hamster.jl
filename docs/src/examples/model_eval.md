@@ -31,7 +31,9 @@ begin Options
 end
 ```
 
-Stored atom and model settings take precedence over the corresponding input tags.
+Stored atom and model settings take precedence over the corresponding input tags. The settings that only control the
+evaluation of the ML kernel (`sim_mat`, `sim_tol` and `key_dims`, see the kernel page) are not stored: the values of the
+config file apply, also for older model files that contain them.
 The receiving configuration supplies calculation inputs such as geometry, k-points,
 and output settings. The model file supplies the fitted parameters and radial tables.
 Every requested TB, SOC and Ewald parameter label must be present in the file.
@@ -56,4 +58,5 @@ in the `version` dataset.
 ```@docs
 Hamster.save_model
 Hamster.load_model!
+Hamster.ML_RUN_SETTINGS
 ```
