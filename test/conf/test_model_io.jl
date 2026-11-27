@@ -127,6 +127,8 @@ end
                 set_value!(loaded, "verbosity", 0)
                 # Deliberately conflicting settings must be replaced.
                 set_value!(loaded, "alpha", "Ga", 2.0)
+                # How the kernel is evaluated is not stored in the model file but set by the receiving config
+                components == :ml_precalced && set_value!(loaded, "sim_mat", "ML", true)
                 load_model!(loaded, comm; filename=file, rank=rank)
                 @test loaded("alpha", "Ga") == 9
                 @test loaded("rcut") == 5
@@ -207,7 +209,7 @@ end
             set_value!(conf, "ncluster", "ML", 1)
             set_value!(conf, "sim_params", "ML", 0.4)
             set_value!(conf, "sim_mat", "ML", true)
-            set_value!(conf, "key_dims", "ML", [1, 2])
+            set_value!(conf, "key_dims", "ML", "1 2")
             ham, strcs, bases = model_io_build(conf, comm)
             @test any(m -> m isa Hamster.HamiltonianKernelPrecalced, ham.models)
             for model in ham.models
