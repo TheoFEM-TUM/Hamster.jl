@@ -858,3 +858,185 @@ end
         end
     end
 end
+
+@testset "Self-consistent induced dipoles" begin
+    function scf_conf(; kwargs...)
+        local conf = get_empty_config()
+        for (element, orbitals, q) in [("Cs", "s", 1), ("Pb", "s px py pz", 2), ("Br", "px py pz", -1)]
+            set_value!(conf, "orbitals", element, orbitals); set_value!(conf, "qeff", element, q)
+        end
+        for (key, value) in ["poscar" => joinpath(@__DIR__, "..", "model", "test_files/POSCAR_cspbbr3_distorted"), "load_rllm" => true, "rcut" => 5.5,
+                             "rllm_file" => joinpath(@__DIR__, "..", "model", "test_files/rllm_cspbbr3.dat"), "verbosity" => 0]
+            set_value!(conf, key, value)
+        end
+        for (key, value) in ["method" => "ewald", "rcut" => 10.0, "alpha" => 0.3]; set_value!(conf, key, "Ewald", value); end
+        set_value!(conf, "polarizability", "Pb", 2.75); set_value!(conf, "polarizability", "Br", 1.5)
+        for (key, block, value) in values(kwargs); set_value!(conf, key, block, value); end
+        return conf
+    end
+    conf = scf_conf()
+    strc = Structure(conf); basis = Basis(strc, conf)
+    pos = Hamster.get_ion_positions(strc.ions, apply_distortion=true)
+    q, _ = Hamster.get_site_charges(strc, conf, positions=pos)
+    ion_types = Hamster.get_ion_types(strc.ions)
+    types = Hamster.number_to_element.(ion_types)
+    groups = [t == "Pb" ? 1 : t == "Br" ? 2 : 0 for t in types]
+    p = [2.75, 1.5]
+    lat = strc.lattice
+    N = length(pos)
+
+    # Default is first order and bit-identical to the explicit tag
+    m_default = EwaldOnsites([strc], [basis], comm, conf, write_summary=false)
+    m_first = EwaldOnsites([strc], [basis], comm, scf_conf(ind=("induced_dipoles", "Ewald", "first_order")), write_summary=false)
+    @test m_default.induced_dipoles == "first_order"
+    @test m_default.potentials == m_first.potentials && m_default.dipole_potentials == m_first.dipole_potentials
+    @test m_default.params == m_first.params && size(m_default.dipole_potentials[1], 2) == 2
+    @test get_hr(m_default, Hamster.Dense(), 1) == get_hr(m_first, Hamster.Dense(), 1)
+
+    # alpha-independence of the self-consistent dipole potentials (real + reciprocal + self term together)
+    Φscf(α) = Hamster.self_consistent_dipoles(pos, q, lat, groups, p; rcut=5 / α, alpha=α, mesh_spacing=0.2, dipole_tol=1e-12)[2]
+    Φa, Φb = Φscf(0.25), Φscf(0.5)
+    @test maximum(abs.(Φa .- Φb)) < 1e-5
+    @test isapprox(Φa, Φb, rtol=1e-4)
+
+    # Reference: field and dipole-dipole energy of fixed deterministic dipoles in a triclinic cell vs Ewalder.jl
+    lat3 = [8.0 0.3 0.1; 0.2 7.5 0.4; 0.1 0.2 9.0]
+    pos3 = [lat3 * [0.11 + 0.13 * sin(i), 0.17 + 0.11 * cos(2i), 0.23 + 0.09 * sin(3i)] for i in 1:6]
+    μ3 = [SVector{3, Float64}(0.02 * sin(1.3i), 0.015 * cos(0.7i), 0.01 * sin(0.9i)) for i in 1:6]
+    E3 = Hamster.ewald_dipole_field(pos3, μ3, lat3; rcut=6.0, alpha=0.6, mesh_spacing=0.25)
+    Vec3 = SVector{3, Float64}
+    sys3 = Ewalder.System(; latvecs=SVector{3, Vec3}(Tuple.(eachcol(lat3))), pos=[Vec3(r...) for r in pos3])
+    h = 1e-6
+    E3_ref = [begin
+        e = zero(Vec3)
+        for c in 1:3
+            ec = Vec3(c == 1, c == 2, c == 3)
+            μp = [i == k ? μ3[i] + h * ec : μ3[i] for i in 1:6]
+            μm = [i == k ? μ3[i] - h * ec : μ3[i] for i in 1:6]
+            e += -Hamster.ke * (Ewalder.energy(sys3; dipoles=μp) - Ewalder.energy(sys3; dipoles=μm)) / (2h) * ec
+        end
+        e
+    end for k in 1:6]
+    @test isapprox(E3, E3_ref, rtol=1e-4, atol=1e-8)
+    U3 = -0.5 * sum(dot.(μ3, E3))
+    @test isapprox(U3, Hamster.ke * Ewalder.energy(sys3; dipoles=μ3), rtol=1e-4)
+
+    # Small-p limit: self-consistent - first order = O(p^2)
+    p_small = [0.01275, 0.0075]
+    Φ_first(pv) = Hamster.induced_dipole_potentials(pos, q, lat, groups, 2; rcut=10.0, alpha=0.3, mesh_spacing=0.5, method="ewald") * pv
+    d(pv) = maximum(abs.(Hamster.self_consistent_dipoles(pos, q, lat, groups, pv; rcut=10.0, alpha=0.3, mesh_spacing=0.5)[2] .- Φ_first(pv)))
+    @test 3.5 < d(p_small) / d(p_small ./ 2) < 4.5
+
+    # Clausius-Mossotti: simple cubic lattice of identical polarizable points, long-wavelength charge modulation
+    a, p0, q0 = 4.0, 2.0, 0.5
+    function screening(n)
+        latn = n * a * Matrix(1.0I, 3, 3)
+        posn = [SVector{3, Float64}(i * a, j * a, k * a) for i in 0:n-1 for j in 0:n-1 for k in 0:n-1]
+        k = 2π / (n * a)
+        qn = [q0 * cos(k * r[1]) for r in posn]
+        φ0 = Hamster.ewald_sum(posn, qn, latn; rcut=8.0, alpha=0.5, mesh_spacing=0.4).potentials
+        _, Φn, _ = Hamster.self_consistent_dipoles(posn, qn, latn, ones(Int, length(posn)), [p0]; rcut=8.0, alpha=0.5,
+                                                   mesh_spacing=0.4, dipole_tol=1e-10)
+        φ = φ0 .+ Φn
+        A(φv) = 2 / length(posn) * sum(φv[i] * cos(k * posn[i][1]) for i in eachindex(posn))
+        return A(φ) / A(φ0)
+    end
+    ns = [8, 10, 12, 14]
+    Rs = screening.(ns)
+    kas2 = [(2π / n)^2 for n in ns]
+    slope = cov(kas2, Rs) / var(kas2)
+    R0 = mean(Rs) - slope * mean(kas2)          # extrapolation k -> 0
+    x = 4π * p0 / (3 * a^3)
+    @test abs(R0 - (1 - x) / (1 + 2x)) < 2e-3    # 1/eps of Clausius-Mossotti, eps = (1 + 2x)/(1 - x)
+    @test all(<(1.0), Rs)                        # the dipoles screen the long range
+
+    # Solver: converges, and errors beyond the polarization catastrophe
+    _, _, it = Hamster.self_consistent_dipoles(pos, q, lat, groups, p; rcut=10.0, alpha=0.3, dipole_tol=1e-8)
+    @test 0 < it ≤ 100
+    @test_throws ErrorException Hamster.self_consistent_dipoles(pos, q, lat, groups, [50.0, 50.0]; rcut=10.0, alpha=0.3,
+                                                                dipole_maxiter=20)
+
+    # Integration in EwaldOnsites: the total dipole potential is merged into the potentials
+    conf_scf = scf_conf(ind=("induced_dipoles", "Ewald", "self_consistent"))
+    scf_model = EwaldOnsites([strc], [basis], comm, conf_scf, update=true, write_summary=false)
+    @test scf_model.induced_dipoles == "self_consistent"
+    @test size(scf_model.dipole_potentials[1], 2) == 0
+    φ_raw = Hamster.ewald_sum(pos, q, lat; rcut=10.0, alpha=0.3, mesh_spacing=0.5, method="ewald").potentials
+    _, Φ_scf, _ = Hamster.self_consistent_dipoles(pos, q, lat, groups, p; rcut=10.0, alpha=0.3, mesh_spacing=0.5)
+    total = φ_raw .+ Φ_scf
+    for t in unique(ion_types)
+        w = ion_types .== t
+        total[w] .-= mean(total[w])
+    end
+    @test scf_model.potentials[1] ≈ total atol=1e-10
+    @test Hamster.site_potentials(scf_model, 1) == scf_model.potentials[1]
+    Hr = get_hr(scf_model, Hamster.Dense(), 1)
+    labels, atoms = Hamster.orbital_labels(strc, basis)
+    γ = Hamster.couplings(scf_model); c = scf_model.coupling_per_strc[1]
+    expected = [-γ[c[o]] * scf_model.potentials[1][atoms[o]] for o in eachindex(labels)]
+    @test diag(Matrix(Hr[Hamster.findR0(strc.Rs)])) ≈ expected
+
+    # Device path: linear in the couplings only, no polarizability gradient
+    terms = Hamster.linear_terms(scf_model, 1; soc=false)
+    v = Hamster.device_param_values(scf_model)
+    @test length(v) == length(scf_model.coupling_labels)
+    hr = zeros(size(Hr[Hamster.findR0(strc.Rs)]))
+    raw = zeros(length(v))
+    G = [randn(ComplexF64, size(H)) for H in Hr]
+    for (key, col, val) in zip(terms.keys, terms.cols, terms.vals)
+        hr[key[2], key[3]] += val * v[col]
+        raw[col] += val * real(G[key[1]][key[2], key[3]])
+    end
+    @test hr ≈ real(Matrix(Hr[Hamster.findR0(strc.Rs)]))
+    reg = Hamster.Regularization(conf, lambda=0.0)
+    grad = Hamster.get_model_gradient(scf_model, [1], reg, [G]; soc=false)
+    @test all(iszero, grad[length(γ)+1:end]) && any(!iszero, grad[1:length(γ)])
+    @test Hamster.get_model_gradient(scf_model, [1], reg, Hamster.RawModelGradient(raw); soc=false) ≈ grad
+    θ0 = copy(scf_model.params)
+    loss(θ) = (scf_model.params .= θ; real(sum(sum(G[R] .* get_hr(scf_model, Hamster.Dense(), 1)[R]) for R in eachindex(G))))
+    fd = [(loss(θ0 .+ 1e-5 .* (eachindex(θ0) .== i)) - loss(θ0 .- 1e-5 .* (eachindex(θ0) .== i))) / 2e-5 for i in eachindex(θ0)]
+    scf_model.params .= θ0
+    @test grad ≈ fd rtol=1e-6
+
+    # Invalid combinations error
+    @test_throws ErrorException EwaldOnsites([strc], [basis], comm, scf_conf(ind=("induced_dipoles", "Ewald", "self_consistent"),
+        m=("method", "Ewald", "wolf")), write_summary=false)
+    @test_throws ErrorException EwaldOnsites([strc], [basis], comm, scf_conf(ind=("induced_dipoles", "Ewald", "self_consistent"),
+        s=("slab_axis", "Ewald", 3)), write_summary=false)
+    @test_throws ErrorException EwaldOnsites([strc], [basis], comm, scf_conf(ind=("induced_dipoles", "Ewald", "self_consistent"),
+        cl=("cluster", "Ewald", true)), write_summary=false)
+    @test_throws ErrorException EwaldOnsites([strc], [basis], comm, conf_scf, update_polarizability=true, write_summary=false)
+    @test_throws ErrorException EwaldOnsites([strc], [basis], comm, scf_conf(ind=("induced_dipoles", "Ewald", "scf")), write_summary=false)
+
+    # Parameter file: polarizabilities and induced_dipoles round trip through params.dat
+    mktempdir() do dir
+        cd(dir) do
+            Hamster.write_params(Hamster.ParameterLabel[], Float64[], conf_scf)
+            Hamster.write_params(scf_model, conf_scf)
+            header = Hamster.read_params("params.dat")[5]
+            @test header["ewald_induced_dipoles"] == "self_consistent"
+            _, _, _, _, _, _, _, pol_types, pol_values = Hamster.read_params("params.dat")
+            @test pol_types == ["Br", "Pb"] && pol_values ≈ [1.5, 2.75]
+            new = scf_conf()
+            set_value!(new, "init_params", "Ewald", "params.dat")
+            Hamster.apply_ewald_settings!(new)
+            @test Hamster.get_ewald_induced_dipoles(new) == "self_consistent"
+            loaded = EwaldOnsites([strc], [basis], comm, new, write_summary=false)
+            @test loaded.induced_dipoles == "self_consistent"
+            @test loaded.params ≈ scf_model.params
+            @test loaded.potentials == scf_model.potentials
+            @test get_hr(loaded, Hamster.Dense(), 1) == get_hr(scf_model, Hamster.Dense(), 1)
+            conflict = scf_conf(ind=("induced_dipoles", "Ewald", "first_order"))
+            set_value!(conflict, "init_params", "Ewald", "params.dat")
+            @test_throws ErrorException Hamster.apply_ewald_settings!(conflict)
+            # first-order files have no ewald_induced_dipoles key: nothing is adopted
+            Hamster.write_params(Hamster.ParameterLabel[], Float64[], conf)
+            Hamster.write_params(m_default, conf)
+            @test !haskey(Hamster.read_params("params.dat")[5], "ewald_induced_dipoles")
+            plain = scf_conf()
+            set_value!(plain, "init_params", "Ewald", "params.dat")
+            Hamster.apply_ewald_settings!(plain)
+            @test Hamster.get_ewald_induced_dipoles(plain) == "first_order"
+        end
+    end
+end

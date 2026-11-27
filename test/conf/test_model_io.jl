@@ -360,3 +360,68 @@ end
         rank == 0 && rm(dir; recursive=true, force=true)
     end
 end
+
+@testset "Self-consistent Ewald model file round trip" begin
+    comm = MPI.COMM_WORLD
+    rank = MPI.Comm_rank(comm)
+    dir = MPI.bcast(rank == 0 ? mktempdir() : nothing, 0, comm)
+    try
+        conf = model_io_config()
+        # Distorted conventional cell gives nonzero centered electrostatics.
+        poscar = joinpath(dir, "scf-POSCAR")
+        if rank == 0
+            write(poscar, """
+                GaAs distorted
+                5.65
+                1 0 0
+                0 1 0
+                0 0 1
+                Ga As
+                4 4
+                Direct
+                0 0 0
+                0 0.5 0.5
+                0.5 0 0.5
+                0.5 0.5 0
+                0.25 0.25 0.25
+                0.25 0.75 0.75
+                0.75 0.25 0.75
+                0.76 0.75 0.25
+                """)
+        end
+        MPI.Barrier(comm)
+        set_value!(conf, "poscar", poscar)
+        set_value!(conf, "method", "Ewald", "ewald")
+        set_value!(conf, "rcut", "Ewald", 6.0)
+        set_value!(conf, "alpha", "Ewald", 0.6)
+        set_value!(conf, "induced_dipoles", "Ewald", "self_consistent")
+        set_value!(conf, "qeff", "Ga", 1.0)
+        set_value!(conf, "qeff", "As", -1.0)
+        set_value!(conf, "polarizability", "As", 0.2)
+        set_value!(conf, "charge_scale", "Ga", 0.7)
+        set_value!(conf, "charge_scale", "As", 0.9)
+        ham, strcs, bases = model_io_build(conf, comm)
+        ewald = only(filter(m -> m isa Hamster.EwaldOnsites, ham.models))
+        @test ewald.induced_dipoles == "self_consistent"
+        @test size(ewald.dipole_potentials[1], 2) == 0
+        @test any(!iszero, ewald.potentials[1])
+        file = joinpath(dir, "scf.h5")
+        save_model(ham, strcs, bases, conf, comm; filename=file, rank=rank)
+        loaded = get_empty_config()
+        set_value!(loaded, "poscar", poscar)
+        set_value!(loaded, "verbosity", 0)
+        load_model!(loaded, comm; filename=file, rank=rank)
+        @test loaded("induced_dipoles", "Ewald") == "self_consistent"
+        @test loaded("polarizability", "As") == 0.2
+        restored, _, _ = model_io_build(loaded, comm)
+        restored_ewald = only(filter(m -> m isa Hamster.EwaldOnsites, restored.models))
+        @test restored_ewald.induced_dipoles == "self_consistent"
+        @test collect(Hamster.polarizabilities(restored_ewald)) ≈ collect(Hamster.polarizabilities(ewald))
+        @test restored_ewald.potentials ≈ ewald.potentials
+        ks = zeros(3, 1)
+        @test get_hamiltonian(restored, 1, ks) ≈ get_hamiltonian(ham, 1, ks)
+    finally
+        MPI.Barrier(comm)
+        rank == 0 && rm(dir; recursive=true, force=true)
+    end
+end

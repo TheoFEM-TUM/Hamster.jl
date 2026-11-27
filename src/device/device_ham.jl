@@ -283,7 +283,12 @@ function get_model_gradient(ewald::EwaldOnsites, indices, reg, g::RawModelGradie
     mask = update_mask(ewald)
     any(!iszero, mask) || return zeros(length(ewald.params))
     nc, np = length(ewald.coupling_labels), length(ewald.pol_labels)
-    Gp = reshape(g.grad[nc+1:end], nc, np)
-    grad = vcat(g.grad[1:nc] .+ Gp * polarizabilities(ewald), Gp' * couplings(ewald))
+    if ewald.induced_dipoles == "self_consistent"
+        # the dipole potential is already in the potentials: the shifts are linear in the couplings only, no p gradient
+        grad = vcat(g.grad[1:nc], zeros(np))
+    else
+        Gp = reshape(g.grad[nc+1:end], nc, np)
+        grad = vcat(g.grad[1:nc] .+ Gp * polarizabilities(ewald), Gp' * couplings(ewald))
+    end
     return mask .* (grad + backward(reg, ewald.params))
 end
