@@ -81,6 +81,15 @@ function model_radial_tables(conf, comm, rank)
     return isnothing(comm) ? [records] : MPI.gather(records, comm; root=0)
 end
 
+"""
+    ML_RUN_SETTINGS
+
+Tags of the ML block that only control how the kernel model is evaluated (precomputed similarity matrix, its
+tolerance and the keys that partition the kernel points for it), not the model itself. They are not stored in model
+files; with `load_model`, the values of the config file apply (also for older model files that contain them).
+"""
+const ML_RUN_SETTINGS = ("sim_mat", "sim_tol", "key_dims")
+
 model_config_option(tag) = tag.block == "Options" && tag.name != "seed" &&
     (tag.category in ("basis", "model") || tag.name in ("rcut", "rcut_tol", "rcut_pair_selection"))
 
@@ -109,6 +118,7 @@ function save_model_config(file, ham, conf)
         if block in ("ML", "SOC", "Ewald") || haskey(elements, Symbol(block))
             group = create_group(file, "config/blocks/$block")
             for (key, value) in values
+                block == "ML" && key in ML_RUN_SETTINGS && continue
                 group[key] = value
             end
         end
@@ -200,6 +210,7 @@ function load_model!(conf::Config, comm=nothing; filename=nothing, rank=0)
         isnothing(pair_rcut_elements(key)) || delete!(conf.options, key)
     end
     merge!(conf.options, options)
+    ml_run_settings = Dict(k => v for (k, v) in get(conf.blocks, "ML", Dict{String,String}()) if k in ML_RUN_SETTINGS)
     for block in collect(keys(conf.blocks))
         (block in ("ML", "SOC", "Ewald") || haskey(elements, Symbol(block))) && delete!(conf.blocks, block)
     end
@@ -212,6 +223,8 @@ function load_model!(conf::Config, comm=nothing; filename=nothing, rank=0)
     flags["ewald"] && get!(conf.blocks, "Ewald", Dict{String,String}())
     if haskey(conf.blocks, "ML")
         set_value!(conf, "model", "ML", flags["ml"])
+        foreach(k -> delete!(conf.blocks["ML"], k), ML_RUN_SETTINGS)    # stored by older versions
+        merge!(conf.blocks["ML"], ml_run_settings)
     end
     # External initialization files are superseded by the embedded weights.
     set_value!(conf, "init_params", "ones")

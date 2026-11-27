@@ -80,17 +80,10 @@ function linear_terms(kernel::HamiltonianKernel, index; soc=false)
 end
 
 function linear_terms(kernel::HamiltonianKernelPrecalced, index; soc=false)
-    desc_vec = kernel.sm.feature_vec[index]
-    key_ranges = kernel.kp.key_ranges
     terms = SparseTerms(Float64, length(kernel.params))
-    for R in eachindex(desc_vec)
-        features, nnz_ham = desc_vec[R]
-        for m in 1:nnz_ham
-            feature, (i, j, key) = features[m]
-            param_range = key_ranges[key]
-            for (n, val) in zip(findnz(feature)...)
-                push_term!(terms, R, i, j, param_range[n], val, soc=soc)
-            end
+    for (R, b) in enumerate(kernel.sm.feature_vec[index])
+        for m in 1:nelements(b), k in b.ptr[m]:b.ptr[m+1]-1
+            push_term!(terms, R, Int(b.i[m]), Int(b.j[m]), Int(b.idx[k]), b.val[k], soc=soc)
         end
     end
     return terms
