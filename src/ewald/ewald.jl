@@ -213,81 +213,6 @@ zahn_kernel(r, α, rcut) = ewald_kernel(r, α, rcut) - erfc(α * rcut) / rcut +
                           (erfc(α * rcut) / rcut^2 + 2α / √π * exp(-(α * rcut)^2) / rcut) * (r - rcut)
 
 """
-    get_field_kernel(method)
-
-Radial field kernel `-dk/dr` of the real-space kernel `k` of `method` (`ewald`, `wolf` or `zahn`, see `ewald_real!`): a
-unit charge at distance `r` creates the field `ke * f(r, α, rcut)` along the connecting vector, and a dipole `μ` the
-potential `ke * f(r, α, rcut) * μ ⋅ r̂`. For Ewald, this is the field of the real-space part only; for Wolf, the shift of
-the potential does not change the field; for Zahn, the field also vanishes at `rcut`.
-"""
-function get_field_kernel(method)
-    method ∈ ("ewald", "wolf") && return ewald_field_kernel
-    method == "zahn" && return zahn_field_kernel
-    error("Unknown Ewald method $method for induced dipoles (polarizability): use ewald, wolf or zahn.")
-end
-ewald_field_kernel(r, α, rcut) = erfc(α * r) / r^2 + 2α / √π * exp(-(α * r)^2) / r
-zahn_field_kernel(r, α, rcut) = ewald_field_kernel(r, α, rcut) - ewald_field_kernel(rcut, α, rcut)
-
-"""
-    induced_dipole_potentials(pos, q, lattice, groups, ngroups; rcut, alpha, method, mesh_spacing=0.5, long_range_scale=1.0)
-
-Potentials (V) of the dipoles that the field of the charges `q` induces on the atoms, to first order and per group of
-atoms: atom `j` belongs to group `groups[j]` (0: not polarizable) and gets the dipole `μ_j = E_j / ke` of polarizability
-1 Å³ in the field `E_j` of all charges (without the induced dipoles). Returns the matrix `Φ` (atoms × `ngroups`) with the
-potential `Φ[i, g]` of the dipoles of group `g` at atom `i`; with the polarizabilities `p_g` (Å³) the potential of all
-induced dipoles is `Φ * p`. Field and dipole potential use the damped real-space kernel of `method` within `rcut`, on a
-neighbor grid (linear in the number of atoms). For `method = ewald`, the reciprocal-space parts of the field
-(`ewald_recip_field`) and of the dipole potential (`ewald_recip_dipole_potentials`, mesh `mesh_spacing`) are added, both
-multiplied by `long_range_scale` (as the potential of the charges in `ewald_sum`): with `long_range_scale = 1` this is
-the full Ewald sum of field and dipole potential (tin-foil boundary conditions), with 0 the real-space part only.
-"""
-function induced_dipole_potentials(pos, q, lattice, groups, ngroups; rcut, alpha, method, mesh_spacing=0.5, long_range_scale=1.0)
-    method = lowercase(method)
-    f = get_field_kernel(method)
-    long_range = method == "ewald" && long_range_scale ≠ 0
-    N = length(pos)
-    Rs = ewald_translation_vectors(pos, lattice, rcut)
-    point_grid = PointGrid(reduce(hcat, pos), frac_to_cart(Rs, lattice), grid_size=rcut)
-    Ts = [SVector{3, Float64}(T) for T in eachcol(frac_to_cart(Rs, lattice))]
-    R0 = [iszero(R) for R in eachcol(Rs)]
-    rs = [SVector{3, Float64}(r) for r in pos]
-    E = zeros(SVector{3, Float64}, N)
-    Φ = zeros(Float64, N, ngroups)
-    cells = collect(point_grid.dict0)
-    function pairs(action, cell)
-        grid_point, inds = cell
-        for nn_grid_point in nn_grid_points(grid_point, point_grid.dictR), (j, R) in point_grid.dictR[nn_grid_point], i in inds
-            (i == j && R0[R]) && continue
-            d = rs[i] - apply_pbc(rs[j], Ts[R])
-            r = norm(d)
-            (r < rcut && r > 1e-14) && action(i, j, d, r)
-        end
-    end
-    tforeach(cells) do cell
-        pairs(cell) do i, j, d, r
-            groups[i] > 0 && (E[i] += ke * q[j] * f(r, alpha, rcut) / r * d)
-        end
-    end
-    if long_range
-        lattice_inv = inv(lattice)
-        green, Gc = pme_green(lattice_inv, alpha, mesh_from_spacing(lattice, mesh_spacing))
-        E .+= ke * long_range_scale .* ewald_recip_field(pos, q, lattice, lattice_inv, green, Gc) .* (groups .> 0)
-    end
-    tforeach(cells) do cell
-        pairs(cell) do i, j, d, r
-            groups[j] > 0 && (Φ[i, groups[j]] += f(r, alpha, rcut) / r * dot(E[j], d))
-        end
-    end
-    if long_range
-        for g in 1:ngroups
-            μ = [groups[j] == g ? E[j] : zero(E[j]) for j in 1:N]
-            Φ[:, g] .+= long_range_scale .* ewald_recip_dipole_potentials(pos, μ, lattice, lattice_inv, green, Gc)
-        end
-    end
-    return Φ
-end
-
-"""
     pme_green(box_inv, alpha, mesh)
 
 Reciprocal-space factors of the particle mesh Ewald sum on the FFT grid `mesh` (as in `ewald_recip!`): the Ewald
@@ -333,27 +258,13 @@ on the grid, `-i G φ(G)` is transformed back per Cartesian component and interp
 function ewald_recip_field(pos, q, box, box_inv, green, Gc)
     rho = zeros(Float64, size(green))
     _spread_bspline4!(rho, pos, q, box, box_inv)
-    phi_k = fft(rho) .* green
-    E = [_gather_bspline4(real(ifft(-im .* Gc[c] .* phi_k)), pos, box_inv) for c in 1:3]
-    return [SVector{3, Float64}(E[1][i], E[2][i], E[3][i]) for i in eachindex(pos)]
+    return _recip_field_from_potential(fft(rho) .* green, pos, box_inv, Gc)
 end
 
-"""
-    ewald_recip_dipole_potentials(pos, μ, box, box_inv, green, Gc)
-
-Reciprocal-space part of the potential (Gaussian units, e/Å) of the point dipoles `μ` (e Å, one 3-vector per atom) at
-the atoms, with the factors `green` and `Gc` of `pme_green`: the dipole components are spread on the grid, the charge
-density of the dipoles is `ρ(G) = -i G ⋅ P(G)`, and its potential is interpolated to the atoms. Without self term (the
-potential of a Gaussian dipole vanishes at its center).
-"""
-function ewald_recip_dipole_potentials(pos, μ, box, box_inv, green, Gc)
-    rho_k = zeros(ComplexF64, size(green))
-    P = zeros(Float64, size(green))
-    for c in 1:3
-        _spread_bspline4!(P, pos, [m[c] for m in μ], box, box_inv)
-        rho_k .-= im .* Gc[c] .* fft(P)
-    end
-    return _gather_bspline4(real(ifft(green .* rho_k)), pos, box_inv)
+# field E = -∇φ of a reciprocal-space potential φ(G) = phi_k: -i G φ(G) per Cartesian component, interpolated to the atoms
+function _recip_field_from_potential(phi_k, pos, box_inv, Gc)
+    E = [_gather_bspline4(real(ifft(-im .* Gc[c] .* phi_k)), pos, box_inv) for c in 1:3]
+    return [SVector{3, Float64}(E[1][i], E[2][i], E[3][i]) for i in eachindex(pos)]
 end
 
 """

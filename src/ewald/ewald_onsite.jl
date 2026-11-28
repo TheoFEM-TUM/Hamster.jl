@@ -53,6 +53,11 @@ onsite parameters.
 - `update_polarizability::Bool`:
     Flag indicating whether the polarizabilities are updated during optimization/training.
 
+- `induced_dipoles::String`:
+    `"first_order"` (default) or `"self_consistent"`: whether the induced dipoles polarize each other
+    (`self_consistent_dipoles`). With `"self_consistent"`, the total dipole potential is already included in
+    `potentials` (not linear in the polarizabilities) and `dipole_potentials` has no columns.
+
 # Description
 The `EwaldOnsites` object encapsulates the electrostatic contribution to
 tight-binding onsite energies, computed from effective charges via Ewald
@@ -98,9 +103,10 @@ mutable struct EwaldOnsites{P, T, N}
     Rs_info :: Matrix{Int64}
     update :: Bool
     update_polarizability :: Bool
+    induced_dipoles :: String
 end
 
-function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=get_empty_config(); 
+function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, conf=get_empty_config();
         rank=0,
         method          = get_ewald_method(conf),
         rcut            = get_ewald_rcut(conf),
@@ -114,6 +120,9 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
         centering       = conf("centering", "Ewald") == "default" ? (slab_axis > 0 || cluster ? "structure" : "global") : get_ewald_centering(conf),
         update          = get_ewald_update(conf),
         update_polarizability = get_ewald_update_polarizability(conf),
+        induced_dipoles = lowercase(string(get_ewald_induced_dipoles(conf))),
+        dipole_tol      = get_ewald_dipole_tol(conf),
+        dipole_maxiter  = get_ewald_dipole_maxiter(conf),
         coupling        = get_ewald_coupling(conf),
         label           = "",
         write_summary   = true)
@@ -123,12 +132,16 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
     coupling = lowercase(coupling)
     pol_labels = polarizable_species(conf)
     check_ewald_options(conf; method=method, slab_axis=slab_axis, cluster=cluster, coupling=coupling, polarizable=!isempty(pol_labels),
-                        epsilon_inf=epsilon_inf)
+                        epsilon_inf=epsilon_inf, induced_dipoles=induced_dipoles, update_polarizability=update_polarizability)
+    # the polarizabilities are needed before the potentials: with self-consistent dipoles they enter the potentials themselves
+    p = init_ewald_polarizabilities(pol_labels, conf)
     site_counts = Dict{Tuple{String, Float64}, Int64}()
     settings = (method=method, rcut=rcut, alpha=α, mesh_spacing=mesh_spacing, epsilon_inf=epsilon_inf, slab_axis=slab_axis,
                 slab_scale=slab_scale, cluster=cluster, charge_compensation=charge_compensation)
     sites = map(enumerate(strcs)) do (n, strc)
-        site_potentials_of_structure(strc, bases[n], conf, n, pol_labels, site_counts; coupling=coupling, settings...)
+        site_potentials_of_structure(strc, bases[n], conf, n, pol_labels, site_counts; coupling=coupling, polarizabilities=p,
+                                     induced_dipoles=induced_dipoles, dipole_tol=dipole_tol, dipole_maxiter=dipole_maxiter,
+                                     verbosity=get_verbosity(conf), settings...)
     end
     types_per_strc = [s.types for s in sites]; norb_per_strc = [s.norb for s in sites]
     potentials = [s.φ for s in sites]; dipole_potentials = [s.Φ for s in sites]
@@ -137,31 +150,35 @@ function EwaldOnsites(strcs::Vector{Structure}, bases::Vector{<:Basis}, comm, co
 
     coupling_labels, coupling_per_strc = ewald_coupling_labels(sites, coupling, comm, rank=rank)
     species = gather_unique(reduce(vcat, types_per_strc, init=UInt8[]), comm, rank=rank)
-    params = init_ewald_params(coupling_labels, pol_labels, conf, species=species)
-    species_mean, structure_means = center_potentials!(potentials, dipole_potentials, types_per_strc, species,
-                                                        params[length(coupling_labels)+1:end], centering, comm)
+    params = vcat(init_ewald_couplings(coupling_labels, conf, species=species), p)
+    species_mean, structure_means = center_potentials!(potentials, dipole_potentials, types_per_strc, species, p, centering, comm)
 
     model = EwaldOnsites(params, coupling_labels, species, pol_labels, potentials, dipole_potentials, types_per_strc, norb_per_strc,
-                         coupling_per_strc, Rs_info, update, update_polarizability)
+                         coupling_per_strc, Rs_info, update, update_polarizability, induced_dipoles)
     has_sites = any(!isempty(get_site_qeff(conf, type)) for type in keys(conf.blocks))
     write_summary && write_model_summary(model, comm, conf, rank=rank, label=label, species=species, species_mean=species_mean,
                                          structure_means=structure_means, method=method, rcut=rcut, alpha=α, alpha_auto=alpha == 0,
                                          epsilon_inf=epsilon_inf,
                                          grid_rebuilt=grid_rebuilt && method == "ewald", slab_axis=slab_axis, slab_scale=slab_scale,
                                          cluster=cluster, charge_compensation=charge_compensation, centering=centering,
+                                         induced_dipoles=induced_dipoles,
                                          site_counts=has_sites ? site_counts : nothing)
     return model
 end
 
 """
-    check_ewald_options(conf; method, slab_axis, cluster, coupling, polarizable, epsilon_inf=1.0)
+    check_ewald_options(conf; method, slab_axis, cluster, coupling, polarizable, epsilon_inf=1.0,
+                        induced_dipoles="first_order", update_polarizability=false)
 
 Stop with an error for settings of the Ewald model that exclude each other: `cluster` with `slab_axis` or without
 `method = ewald`; an unknown `coupling`; `charge_scale` in an atom block with `coupling = global`; `charge_scale_<l>` without
 `coupling = orbital`; polarizable species (`polarizable`) with slabs and clusters; `epsilon_inf ≠ 1` without
-`method = ewald` or `epsilon_inf ≤ 0`.
+`method = ewald` or `epsilon_inf ≤ 0`; an unknown `induced_dipoles`; `induced_dipoles = self_consistent` without
+`method = ewald`, with slabs or clusters, or with `update_polarizability` (the self-consistent dipole potential is not
+linear in the polarizabilities).
 """
-function check_ewald_options(conf; method, slab_axis, cluster, coupling, polarizable, epsilon_inf=1.0)
+function check_ewald_options(conf; method, slab_axis, cluster, coupling, polarizable, epsilon_inf=1.0,
+                             induced_dipoles="first_order", update_polarizability=false)
     if cluster
         slab_axis == 0 || error("cluster and slab_axis = $slab_axis exclude each other: a cluster has vacuum in all directions, a slab along one.")
         method == "ewald" || error("cluster = true needs method = ewald (the full Ewald sum with the dipole correction); " *
@@ -178,22 +195,38 @@ function check_ewald_options(conf; method, slab_axis, cluster, coupling, polariz
     epsilon_inf > 0 || error("epsilon_inf = $epsilon_inf in the Ewald block: the dielectric constant must be positive.")
     epsilon_inf == 1 || method == "ewald" || error("epsilon_inf = $epsilon_inf needs method = ewald: Wolf and Zahn have no " *
         "long-range (reciprocal-space) part to screen.")
+    induced_dipoles ∈ ("first_order", "self_consistent") ||
+        error("induced_dipoles = $induced_dipoles in the Ewald block: use first_order or self_consistent.")
+    if induced_dipoles == "self_consistent"
+        method == "ewald" || error("induced_dipoles = self_consistent needs method = ewald: the dipole-dipole tensor of " *
+            "Wolf and Zahn is not implemented.")
+        (slab_axis > 0 || cluster) && error("induced_dipoles = self_consistent is not available for slabs and clusters (slab_axis, cluster).")
+        update_polarizability && error("induced_dipoles = self_consistent with update_polarizability = true: the self-consistent " *
+            "dipole potential is not linear in the polarizabilities and they cannot be fitted in a Hamster run; fit them offline " *
+            "(e.g. with efit) and set them with polarizability or init_params.")
+    end
     return nothing
 end
 
 """
     site_potentials_of_structure(strc, basis, conf, n, pol_labels, site_counts; coupling, method, rcut, alpha, mesh_spacing,
-                                 epsilon_inf, slab_axis, slab_scale, cluster, charge_compensation)
+                                 epsilon_inf, slab_axis, slab_scale, cluster, charge_compensation,
+                                 polarizabilities=Float64[], induced_dipoles="first_order", dipole_tol=1e-8,
+                                 dipole_maxiter=100, verbosity=0)
 
 Electrostatic data of structure `n` for the atoms with orbitals: species `types`, numbers of orbitals `norb`, orbital
 angular momenta `l` (-1 unless `coupling = orbital`), potentials `φ` of the effective charges (with the slab or cluster
 terms; long range and cluster term divided by `epsilon_inf`) and potentials `Φ` of the induced dipoles of the species
 `pol_labels` (`induced_dipole_potentials`; for `method = ewald` with the long-range parts of field and dipole potential,
-each divided by `epsilon_inf`); `grid_rebuilt` if the real-space grid of the structure was too small for `rcut`. Adds the
-charges per site to `site_counts`.
+each divided by `epsilon_inf`). With `induced_dipoles = "self_consistent"` (method = ewald), the dipoles are solved
+self-consistently (`self_consistent_dipoles` with the polarizabilities `polarizabilities`, tolerances `dipole_tol`,
+`dipole_maxiter`) and their total potential is added to `φ`, so `Φ` has no columns; `grid_rebuilt` if the real-space grid
+of the structure was too small for `rcut`. Adds the charges per site to `site_counts`.
 """
 function site_potentials_of_structure(strc, basis, conf, n, pol_labels, site_counts; coupling, method, rcut, alpha, mesh_spacing,
-                                      epsilon_inf=1.0, slab_axis, slab_scale, cluster, charge_compensation)
+                                      epsilon_inf=1.0, slab_axis, slab_scale, cluster, charge_compensation,
+                                      polarizabilities=Float64[], induced_dipoles="first_order", dipole_tol=1e-8,
+                                      dipole_maxiter=100, verbosity=0)
     pos = get_ion_positions(strc.ions, apply_distortion=true)
     ion_types = get_ion_types(strc.ions)
     charges, sites = get_site_charges(strc, conf, positions=pos)
@@ -212,9 +245,17 @@ function site_potentials_of_structure(strc, basis, conf, n, pol_labels, site_cou
     slab_axis > 0 && (φ = φ .+ slab_scale .* slab_potentials(pos, slab_charges, strc.lattice, slab_axis; method=method, alpha=alpha))
     cluster && (φ = φ .+ cluster_potentials(pos, charges, strc.lattice; method=method) ./ epsilon_inf)
     groups = [something(findfirst(==(t), pol_labels), 0) for t in ion_types]
-    Φ = isempty(pol_labels) ? zeros(length(ion_types), 0) :
-        induced_dipole_potentials(pos, charges, strc.lattice, groups, length(pol_labels); rcut=rcut, alpha=alpha, method=method,
-                                  mesh_spacing=mesh_spacing, long_range_scale=1 / epsilon_inf)
+    if isempty(pol_labels) || induced_dipoles == "first_order"
+        Φ = isempty(pol_labels) ? zeros(length(ion_types), 0) :
+            induced_dipole_potentials(pos, charges, strc.lattice, groups, length(pol_labels); rcut=rcut, alpha=alpha, method=method,
+                                      mesh_spacing=mesh_spacing, long_range_scale=1 / epsilon_inf)
+    else
+        _, Φ_scf, _ = self_consistent_dipoles(pos, charges, strc.lattice, groups, polarizabilities; rcut=rcut, alpha=alpha,
+                                              mesh_spacing=mesh_spacing, long_range_scale=1 / epsilon_inf,
+                                              dipole_tol=dipole_tol, dipole_maxiter=dipole_maxiter, verbosity=verbosity, grid...)
+        φ = φ .+ Φ_scf
+        Φ = zeros(length(ion_types), 0)
+    end
 
     types_with_orbs = get_ion_types(strc.ions, conf, uniq=true, withorbitals=true)
     ions = filter(i -> ion_types[i] ∈ types_with_orbs, eachindex(ion_types))
@@ -257,7 +298,8 @@ before centering (for the model summary).
 function center_potentials!(potentials, dipole_potentials, types_per_strc, species, polarizabilities, centering, comm)
     centering ∈ ("global", "structure") || error("centering = $centering: unknown, use global or structure.")
     index = Dict(t => i for (i, t) in enumerate(species))
-    columns = [potentials, [[Φ[:, t] for Φ in dipole_potentials] for t in eachindex(polarizabilities)]...]
+    ncol = isempty(dipole_potentials) ? 0 : size(dipole_potentials[1], 2)
+    columns = [potentials, [[Φ[:, t] for Φ in dipole_potentials] for t in 1:ncol]...]
     column_means = map(columns) do col
         sums = zeros(length(species)); counts = zeros(Int64, length(species))
         for n in eachindex(col), (v, type) in zip(col[n], types_per_strc[n])
@@ -265,11 +307,11 @@ function center_potentials!(potentials, dipole_potentials, types_per_strc, speci
         end
         MPI.Allreduce(sums, +, comm) ./ max.(MPI.Allreduce(counts, +, comm), 1)
     end
-    species_mean = column_means[1] .+ sum((column_means[1+t] .* p for (t, p) in enumerate(polarizabilities)), init=zeros(length(species)))
+    species_mean = column_means[1] .+ sum((column_means[1+t] .* p for (t, p) in enumerate(polarizabilities[1:ncol])), init=zeros(length(species)))
     structure_means = Tuple{UInt8, Float64}[]
     for n in eachindex(potentials)
         types = types_per_strc[n]
-        total = potentials[n] .+ dipole_potentials[n] * polarizabilities
+        total = potentials[n] .+ dipole_potentials[n] * polarizabilities[1:ncol]
         append!(structure_means, [(type, mean(total[types .== type])) for type in unique(types)])
         for (k, v) in enumerate([potentials[n], eachcol(dipole_potentials[n])...])
             means = Dict(type => mean(v[types .== type]) for type in unique(types))
@@ -379,8 +421,9 @@ end
     ewald_settings(conf)
 
 Settings that define the Ewald potentials: method, rcut, the damping α actually used, the dielectric constant
-`epsilon_inf` of the long range and the charges `qeff`, written to the header of the parameter file of a fit (see
-`apply_ewald_settings!`). Site-dependent charges `qeff_<element>` of the species `type` are listed as `<type>_<element>`.
+`epsilon_inf` of the long range, how the induced dipoles interact (`induced_dipoles`) and the charges `qeff`, written
+to the header of the parameter file of a fit (see `apply_ewald_settings!`). Site-dependent charges `qeff_<element>` of
+the species `type` are listed as `<type>_<element>`.
 """
 function ewald_settings(conf)
     method, rcut = ewald_method(get_ewald_method(conf)), get_ewald_rcut(conf)
@@ -390,7 +433,7 @@ function ewald_settings(conf)
     end
     sort!(qeff)
     return (method=method, rcut=rcut, alpha=ewald_alpha(method, rcut, get_ewald_alpha(conf)),
-            epsilon_inf=get_ewald_epsilon_inf(conf), qeff=qeff)
+            epsilon_inf=get_ewald_epsilon_inf(conf), induced_dipoles=lowercase(string(get_ewald_induced_dipoles(conf))), qeff=qeff)
 end
 
 """
@@ -463,6 +506,9 @@ function adopt_ewald_settings!(conf; rank=0, verbosity=get_verbosity(conf))
     if haskey(header, "ewald_epsilon_inf")
         append!(settings, [("epsilon_inf", "Ewald", header["ewald_epsilon_inf"]), ("alpha", "Ewald", header["ewald_alpha"])])
     end
+    if haskey(header, "ewald_induced_dipoles")
+        push!(settings, ("induced_dipoles", "Ewald", header["ewald_induced_dipoles"]))
+    end
     for (key, value) in header
         startswith(key, "ewald_qeff_") || continue
         type, element = (split(key[12:end], "_", limit=2)..., "")[1:2]   # ewald_qeff_H_N: qeff_N of H
@@ -497,26 +543,53 @@ end
 
 Initial parameters of the Ewald model: the coupling γ of each entry `(species, l)` of `coupling_labels` (`l = -1`: all
 orbitals of the species, `coupling = species`; species 0: all species, `coupling = global`), followed by
-the polarizability of each species in `pol_labels`. From the parameter file `initas` (e.g. the `params.dat` of a fit) if
-given: `ewald_<element>_<l>` (`<l>` = s, p or d) for one orbital type, `ewald_<element>` for all orbital types of the
-species, `polarizability_<element>`. Otherwise (and for entries missing in the file) from the config: `charge_scale_<l>`
-of the atom block, else its `charge_scale`, else the `charge_scale` of the `Ewald` block; the tag `polarizability` of the
-atom block. With `coupling = global`, the file must have the same coupling for all `species`.
+the polarizability of each species in `pol_labels`, i.e. `vcat(init_ewald_couplings(...), init_ewald_polarizabilities(...))`.
+From the parameter file `initas` (e.g. the `params.dat` of a fit) if given: `ewald_<element>_<l>` (`<l>` = s, p or d) for
+one orbital type, `ewald_<element>` for all orbital types of the species, `polarizability_<element>`. Otherwise (and for
+entries missing in the file) from the config: `charge_scale_<l>` of the atom block, else its `charge_scale`, else the
+`charge_scale` of the `Ewald` block; the tag `polarizability` of the atom block. With `coupling = global`, the file must
+have the same coupling for all `species`.
 """
 function init_ewald_params(coupling_labels, pol_labels, conf; species=UInt8[], initas=get_ewald_init_params(conf))
+    return vcat(init_ewald_couplings(coupling_labels, conf; species=species, initas=initas),
+                init_ewald_polarizabilities(pol_labels, conf; initas=initas))
+end
+
+"""
+    init_ewald_couplings(coupling_labels, conf; species=UInt8[], initas=get_ewald_init_params(conf))
+
+Initial couplings γ of the Ewald model (one per entry of `coupling_labels`), as in `init_ewald_params`.
+"""
+function init_ewald_couplings(coupling_labels, conf; species=UInt8[], initas=get_ewald_init_params(conf))
     if get_load_model(conf)
-        labels = vcat(["$t,$l" for (t,l) in coupling_labels], ["pol,$t" for t in pol_labels])
-        return model_parameter_values(conf, "ewald", labels)
+        return model_parameter_values(conf, "ewald", ["$t,$l" for (t, l) in coupling_labels])
     end
     γ = Float64[type == 0 ? get_ewald_charge_scale(conf) : get_charge_scale(conf, number_to_element(type), l) for (type, l) in coupling_labels]
+    if initas ≠ "default"
+        _, _, _, _, _, ewald_types, ewald_parameters, _, _ = read_params(initas)
+        file_γ = Dict(zip(ewald_types, ewald_parameters))
+        γ = Float64[coupling_from_file(file_γ, label, γ[c], species, initas) for (c, label) in enumerate(coupling_labels)]
+    end
+    return γ
+end
+
+"""
+    init_ewald_polarizabilities(pol_labels, conf; initas=get_ewald_init_params(conf))
+
+Initial polarizabilities (Å³, one per species in `pol_labels`) of the Ewald model, as in `init_ewald_params`. Needed
+before the potentials are computed with `induced_dipoles = self_consistent`, where they enter the potentials themselves.
+"""
+function init_ewald_polarizabilities(pol_labels, conf; initas=get_ewald_init_params(conf))
+    if get_load_model(conf)
+        return model_parameter_values(conf, "ewald", ["pol,$t" for t in pol_labels])
+    end
     p = Float64[get_polarizability(conf, number_to_element(type)) for type in pol_labels]
     if initas ≠ "default"
-        _, _, _, _, _, ewald_types, ewald_parameters, pol_types, pol_parameters = read_params(initas)
-        file_γ = Dict(zip(ewald_types, ewald_parameters)); file_p = Dict(zip(pol_types, pol_parameters))
-        γ = Float64[coupling_from_file(file_γ, label, γ[c], species, initas) for (c, label) in enumerate(coupling_labels)]
+        _, _, _, _, _, _, _, pol_types, pol_parameters = read_params(initas)
+        file_p = Dict(zip(pol_types, pol_parameters))
         p = Float64[get(file_p, number_to_element(type), p[t]) for (t, type) in enumerate(pol_labels)]
     end
-    return vcat(γ, p)
+    return p
 end
 
 """
@@ -561,9 +634,13 @@ polarizabilities(ewald::EwaldOnsites) = view(ewald.params, length(ewald.coupling
     site_potentials(ewald::EwaldOnsites, index)
 
 Electrostatic potential at the atoms of structure `index`: the potential of the effective charges plus that of the
-induced dipoles, `φ + Φ p` (centered per species).
+induced dipoles, `φ + Φ p` (centered per species). With self-consistent induced dipoles, the dipole potential is
+already included in `φ` and `Φ` has no columns.
 """
-site_potentials(ewald::EwaldOnsites, index) = ewald.potentials[index] .+ ewald.dipole_potentials[index] * polarizabilities(ewald)
+function site_potentials(ewald::EwaldOnsites, index)
+    Φ = ewald.dipole_potentials[index]
+    return ewald.potentials[index] .+ Φ * polarizabilities(ewald)[1:size(Φ, 2)]
+end
 
 """
     update_mask(ewald::EwaldOnsites)

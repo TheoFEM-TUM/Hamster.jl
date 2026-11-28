@@ -210,7 +210,8 @@ Writes the tight-binding (TB) parameters, system configuration, and optional spi
 - `ewald_types`, `ewald_parameters`: Ewald coupling per ion type or per ion type and orbital angular momentum (optional),
   written as `ewald_<type>` or `ewald_<type>_<l>` lines with `<l>` = s, p or d (e.g. `ewald_Pb_s`).
 - `pol_types`, `pol_parameters`: polarizability per ion type (optional), written as `polarizability_<type>` lines.
-- `ewald_settings`: Ewald method, rcut, α and charges (optional, see `ewald_settings`), written to the header.
+- `ewald_settings`: Ewald method, rcut, α, `epsilon_inf`, `induced_dipoles` and charges (optional, see `ewald_settings`),
+  written to the header.
 
 # File Format
 The file written contains the following:
@@ -248,6 +249,8 @@ function write_params(parameters::Vector, parameter_values::Vector, ion_types::V
         println(file, "  ewald_rcut = ", ewald_settings.rcut)
         println(file, "  ewald_alpha = ", ewald_settings.alpha)
         ewald_settings.epsilon_inf == 1 || println(file, "  ewald_epsilon_inf = ", ewald_settings.epsilon_inf)
+        hasproperty(ewald_settings, :induced_dipoles) && ewald_settings.induced_dipoles ≠ "first_order" &&
+            println(file, "  ewald_induced_dipoles = ", ewald_settings.induced_dipoles)
         for (type, q) in ewald_settings.qeff
             println(file, "  ewald_qeff_$type = ", q)
         end

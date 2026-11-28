@@ -74,6 +74,7 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         cluster=false,
         charge_compensation="global",
         centering="global",
+        induced_dipoles="first_order",
         site_counts=nothing,
         filename="hamster.out")
 
@@ -98,7 +99,7 @@ function write_model_summary(ewald::EwaldOnsites, comm, conf=get_empty_config();
         write_separator(io, char='-')
         write_ewald_settings(io, ewald, nstrc; species=species, species_mean=species_mean, method=method, rcut=rcut, alpha=alpha,
                              alpha_auto=alpha_auto, epsilon_inf=epsilon_inf, grid_rebuilt=grid_rebuilt, slab_axis=slab_axis, slab_scale=slab_scale, cluster=cluster,
-                             charge_compensation=charge_compensation, centering=centering,
+                             charge_compensation=charge_compensation, centering=centering, induced_dipoles=induced_dipoles,
                              site_counts=isnothing(all_site_counts) ? nothing : mergewith(+, all_site_counts...))
         println(io)
         write_ewald_corrections(io, ewald, Δε, reduce(vcat, all_structure_means), centering)
@@ -122,7 +123,8 @@ Settings part of the Ewald model summary: method, range, slab and cluster terms,
 species means and site charges (`site_counts`, summed over the ranks).
 """
 function write_ewald_settings(io, ewald, nstrc; species, species_mean, method, rcut, alpha, alpha_auto, epsilon_inf=1.0,
-                              grid_rebuilt, slab_axis, slab_scale, cluster, charge_compensation, centering, site_counts)
+                              grid_rebuilt, slab_axis, slab_scale, cluster, charge_compensation, centering,
+                              induced_dipoles="first_order", site_counts)
     write_summary_line(io, "structures", nstrc)
     write_summary_line(io, "method, rcut", @sprintf("%s, %.2f Å", method, rcut))
     write_summary_line(io, "alpha", @sprintf("%.4f 1/Å", alpha) * (alpha_auto ? " ($(lowercase(method) ∈ ("wolf", "zahn") ? 3 : 4) / rcut)" : ""))
@@ -139,7 +141,7 @@ function write_ewald_settings(io, ewald, nstrc; species, species_mean, method, r
                        join(["$(coupling_name(label)) $(@sprintf("%.4g", g))" for (label, g) in zip(ewald.coupling_labels, couplings(ewald))], ", "))
     isempty(ewald.pol_labels) || write_summary_line(io, "polarizabilities (Å³)" * (ewald.update_polarizability ? " (fitted)" : ""),
         join(["$(number_to_element(t)) $(@sprintf("%.4g", p))" for (t, p) in zip(ewald.pol_labels, polarizabilities(ewald))], ", ") *
-        " (first-order induced dipoles)")
+        (induced_dipoles == "self_consistent" ? " (self-consistent induced dipoles)" : " (first-order induced dipoles)"))
     means = join(["$(number_to_element(e)) $(@sprintf("%.4f", m)) V" for (e, m) in zip(species, species_mean)], ", ")
     write_summary_line(io, "subtracted species mean φ̄", centering == "structure" ? "per structure (mean over all: $means)" : means)
     isnothing(site_counts) || write_summary_line(io, "site charges (sites)", join(["$site $q ($n)" for ((site, q), n) in sort(collect(site_counts))], ", "))

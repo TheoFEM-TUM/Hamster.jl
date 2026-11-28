@@ -24,7 +24,7 @@ include("basis/label.jl"); include("basis/orbital.jl"); include("basis/overlap.j
 include("basis/basis.jl")
 
 include("device/threads.jl"); include("model/ham.jl"); include("model/chebyshev.jl"); include("model/ham_grad.jl"); include("model/ham_write.jl"); include("model/model.jl")
-include("ewald/ewald_helper.jl"); include("ewald/ewald.jl"); include("ewald/ewald_slab.jl"); include("ewald/ewald_onsite.jl"); include("model/eff_ham.jl")
+include("ewald/ewald_helper.jl"); include("ewald/ewald.jl"); include("ewald/ewald_dipoles.jl"); include("ewald/ewald_slab.jl"); include("ewald/ewald_onsite.jl"); include("model/eff_ham.jl")
 
 include("soc/soc_utils.jl"); include("soc/soc_matrix.jl"); include("soc/soc_model.jl")
 

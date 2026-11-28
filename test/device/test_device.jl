@@ -166,6 +166,28 @@ end
         @test all(!iszero, grad_cpu)
         @test grad_cpu ≈ grad_dev atol=1e-8
     end
+
+    # Self-consistent induced dipoles (method = ewald): shifts linear in the couplings only (no p gradient), device matches CPU
+    for (key, value) in ["method" => "ewald", "rcut" => 10.0, "alpha" => 0.3, "induced_dipoles" => "self_consistent"]
+        set_value!(conf, key, "Ewald", value)
+    end
+    set_value!(conf, "update_polarizability", "Ewald", false)
+    ham_cpu, ham_dev = get_device_test_hams(conf, ArrayDevice(JLArray))
+    @test maxdiff(Matrix.(get_hr(ham_cpu, 1)), get_dense_device_hr(ham_dev, 1)) < 1e-10
+    i = findfirst(m -> m isa EwaldOnsites, ham_cpu.models)
+    @test ham_cpu.models[i].induced_dipoles == "self_consistent" && size(ham_cpu.models[i].dipole_potentials[1], 2) == 0
+    loss = Loss(2); reg = Regularization(conf)
+    Es, _ = diagonalize(get_hamiltonian(ham_cpu, 1, ks_device_test))
+    data = Hamster.EigData(ks_device_test, Es .+ 0.1 .* randn(size(Es)))
+    _, cache_cpu = Hamster.forward(ham_cpu, 1, loss, data)
+    _, cache_dev = Hamster.forward(ham_dev, 1, loss, data)
+    dL_dHr = Hamster.backward(ham_cpu, 1, loss, data, cache_cpu, conf)
+    g_dev = Hamster.backward(ham_dev, 1, loss, data, cache_dev, conf)
+    grad_cpu = Hamster.get_model_gradient(ham_cpu.models[i], [1], reg, [dL_dHr]; soc=ham_cpu.soc)
+    grad_dev = Hamster.get_model_gradient(ham_dev.models[i], [1], reg, Hamster.model_gradient_input([g_dev], i); soc=ham_dev.soc)
+    nc = length(ham_cpu.models[i].coupling_labels)
+    @test all(!iszero, grad_cpu[1:nc]) && all(iszero, grad_cpu[nc+1:end])
+    @test grad_cpu ≈ grad_dev atol=1e-8
 end
 
 @testset "Device gradients with SOC match finite differences" begin

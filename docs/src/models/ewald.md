@@ -262,6 +262,45 @@ dielectric constant of the material on top of the dipoles screens the long range
 only meaningful for ``4\pi\chi`` clearly below 1. Polarizabilities and couplings can be fitted to the potentials at the
 nuclei of DFT calculations of distorted cells; cells that are long in one direction constrain the long range.
 
+### Self-Consistent Induced Dipoles (`induced_dipoles`)
+
+The first-order expansion in the polarizabilities converges slowly when ``4\pi\chi`` is not small (the screening of
+the long range alternates in sign order by order, and over-screens for large polarizabilities). With
+`induced_dipoles = self_consistent` in the `Ewald` block (`method = ewald`), the induced dipoles polarize each other:
+atom ``i`` of a polarizable species gets the dipole
+
+```math
+\boldsymbol{\mu}_i = \frac{p_i}{k_e}\Big(\mathbf{E}^0_i + \sum_j \mathbf{T}_{ij} \boldsymbol{\mu}_j\Big),
+```
+
+where ``\mathbf{E}^0`` is the field of the effective charges and ``\mathbf{T}_{ij}`` the Ewald dipole tensor of all
+periodic images (tin-foil boundary conditions): the real-space part on the neighbour grid, the reciprocal-space part on
+the PME mesh of `mesh_spacing` (both linear in the number of atoms), with the self term of the Gaussian dipoles
+subtracted, and the reciprocal-space parts divided by `epsilon_inf` as above. The symmetric linear system over the
+polarizable atoms is solved with preconditioned conjugate gradient (Jacobi preconditioner) once per structure, starting
+from the first-order solution, until the relative residual is below `dipole_tol` (an error after `dipole_maxiter`
+iterations, usually a polarization catastrophe: use smaller polarizabilities), and the potential of the converged
+dipoles is added to ``\phi_i``:
+
+```bash
+begin Ewald
+    method = ewald
+    rcut = 10
+    induced_dipoles = self_consistent
+    dipole_tol = 1e-8
+    dipole_maxiter = 100
+end
+```
+
+Because the converged dipoles are not linear in the polarizabilities, the total dipole potential is computed once per
+structure with the polarizabilities of the model (from `polarizability` or `init_params`) and stored with ``\phi``:
+`update_polarizability` is not available with `self_consistent` (fit the polarizabilities offline, e.g. to the
+electrostatic potentials at the nuclei of DFT calculations, and set them via `polarizability` or `init_params`), and
+the couplings remain linear and can still be fitted with `update`. Self-consistent dipoles are only available for
+`method = ewald` and not for slabs and clusters. The cost is a few field evaluations per structure (one conjugate
+gradient iteration costs about a third to a half of the first-order dipole potentials), negligible for standard runs
+where the potentials are computed once per structure.
+
 !!! note "Changed in this version"
     Before this version, `method = ewald` used only the real-space part for the induced dipoles (as Wolf). Models with
     `method = ewald` and polarizable species give different onsite energies now and should be refitted; Wolf and Zahn
@@ -294,7 +333,8 @@ end
 ```
 
 Site-dependent charges are written as `ewald_qeff_<species>_<element>`, e.g. `ewald_qeff_H_N = 0.349` for `qeff_N` in
-the block of H.
+the block of H. `induced_dipoles = self_consistent` is written as `ewald_induced_dipoles = self_consistent` (the default
+`first_order` is not written) and, like the other settings, taken over from the file when it is not set in the config.
 
 When a model is built from this file (`init_params` of the `Ewald` block, otherwise `init_params`), settings that are
 not set in the config are taken from the header, so that a fitted model is used with the settings it was fitted with,

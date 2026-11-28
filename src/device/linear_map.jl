@@ -127,10 +127,15 @@ end
 
 Parameters of `model` in the device code path, which builds the Hamiltonian as `A * device_param_values(model)` with the
 linear terms `A` of `linear_terms`: the parameters of the model, except for `EwaldOnsites`, whose shifts are bilinear in
-the couplings `γ` and polarizabilities `p`: `[γ; vec(γ p')]`.
+the couplings `γ` and polarizabilities `p`: `[γ; vec(γ p')]`. With self-consistent induced dipoles
+(`induced_dipoles = "self_consistent"`), the dipole potential is already included in the potentials of the model and the
+shifts are linear in the couplings only: `γ`.
 """
 device_param_values(model) = get_params(model)
-device_param_values(ewald::EwaldOnsites) = vcat(couplings(ewald), vec(couplings(ewald) * polarizabilities(ewald)'))
+function device_param_values(ewald::EwaldOnsites)
+    ewald.induced_dipoles == "self_consistent" && return vcat(couplings(ewald))
+    return vcat(couplings(ewald), vec(couplings(ewald) * polarizabilities(ewald)'))
+end
 
 """
     DeviceSparseBlock
